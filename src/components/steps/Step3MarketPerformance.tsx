@@ -595,8 +595,8 @@ export function Step3MarketPerformance() {
 
   const handleSaveSPIData = async () => {
     // Validate all SPI fields are filled
-    if (!formData_SPI.priceChange3Year || !formData_SPI.priceChange5Year || !formData_SPI.url) {
-      alert('Please fill in all SPI fields (3 year, 5 year, and URL)');
+    if (!formData_SPI.priceChange3Year || !formData_SPI.priceChange5Year) {
+      alert('Please fill in all SPI fields (3 year and 5 year)');
       return;
     }
 
