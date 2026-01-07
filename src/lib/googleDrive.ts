@@ -179,3 +179,54 @@ export async function listFilesInFolder(folderId: string): Promise<Array<{ id: s
   }
 }
 
+/**
+ * Copy entire folder structure (recursively copy folder and all contents)
+ */
+export async function copyFolderStructure(
+  sourceFolderId: string,
+  destinationParentFolderId: string,
+  newFolderName: string
+): Promise<{ id: string; name: string; webViewLink: string }> {
+  try {
+    const drive = getDriveClient();
+    
+    // Get source folder metadata
+    const sourceFolder = await drive.files.get({
+      fileId: sourceFolderId,
+      fields: 'name, mimeType',
+    });
+    
+    // Create new folder in destination
+    const newFolder = await createFolder(newFolderName, destinationParentFolderId);
+    
+    // List all items in source folder
+    const items = await listFilesInFolder(sourceFolderId);
+    
+    // Copy each item
+    for (const item of items) {
+      if (item.mimeType === 'application/vnd.google-apps.folder') {
+        // Recursively copy subfolders
+        await copyFolderStructure(item.id, newFolder.id, item.name);
+      } else {
+        // Copy files
+        await copyFileToFolder(item.id, newFolder.id);
+      }
+    }
+    
+    // Get the webViewLink for the new folder
+    const folderDetails = await drive.files.get({
+      fileId: newFolder.id,
+      fields: 'webViewLink',
+    });
+    
+    return {
+      id: newFolder.id,
+      name: newFolder.name,
+      webViewLink: folderDetails.data.webViewLink || '',
+    };
+  } catch (error) {
+    console.error('Error copying folder structure:', error);
+    throw error;
+  }
+}
+
