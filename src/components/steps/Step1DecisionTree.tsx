@@ -685,7 +685,7 @@ export function Step1DecisionTree() {
                   }}
                   className="input-field"
                   placeholder="e.g., 2, 1-8, A,B,C, or A-C"
-                  required
+                  required={true}
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Enter single unit (e.g., "2" or "A"), range (e.g., "1-8" or "A-C"), or comma-separated list (e.g., "1,2,3" or "A,B,C")
