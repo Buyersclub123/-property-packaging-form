@@ -1221,8 +1221,6 @@ export function Step0AddressAndRisk() {
                 readOnly={!addressFieldsEditable}
               />
             </div>
-            {/* LGA - Show with address fields */}
-            <LGADisplay />
             </div>
             
             {/* Edit Address Fields Button - Below Post Code */}
@@ -1244,6 +1242,11 @@ export function Step0AddressAndRisk() {
               >
                 {addressFieldsEditable ? 'Lock Address Fields' : 'Edit Address Fields'}
               </button>
+            </div>
+            
+            {/* LGA - Show with address fields */}
+            <div className="mt-4">
+              <LGADisplay />
             </div>
           </div>
 
