@@ -1882,7 +1882,7 @@ function ProjectLotsView() {
   };
   
   const expandAllLots = () => {
-    setExpandedLots(new Set(lots.map((_, i) => i)));
+    setExpandedLots(new Set((lots || []).map((_, i) => i)));
   };
   
   const collapseAllLots = () => {
@@ -1899,6 +1899,7 @@ function ProjectLotsView() {
   }, [lots]);
   
   const handleReplicateSection = (sourceIndex: number, section: 'propertyDescription' | 'purchasePrice' | 'rentalAssessment', targetType?: 'same' | 'all') => {
+    if (!lots || lots.length === 0) return;
     const sourceLot = lots[sourceIndex];
     const isSourceDual = sourceLot?.singleOrDual === 'Yes';
     
@@ -1921,6 +1922,7 @@ function ProjectLotsView() {
   };
   
   const handleReplicateEntireLot = (sourceIndex: number, targetType?: 'same' | 'all') => {
+    if (!lots || lots.length === 0) return;
     const sourceLot = lots[sourceIndex];
     const isSourceDual = sourceLot?.singleOrDual === 'Yes';
     
@@ -1985,7 +1987,7 @@ function ProjectLotsView() {
         }
       });
     }
-  }, [hasCashbackRebate, purchasePrice?.cashbackRebateValue, purchasePrice?.cashbackRebateType, lots.length, updateLotPurchasePrice]);
+  }, [hasCashbackRebate, purchasePrice?.cashbackRebateValue, purchasePrice?.cashbackRebateType, lots?.length, updateLotPurchasePrice]);
   
   if (!lots || lots.length === 0) {
     return (
@@ -2325,7 +2327,7 @@ function ProjectLotsView() {
       {/* Lots Accordion */}
       <div className="space-y-4">
         
-        {lots.map((lot, lotIndex) => {
+        {(lots || []).map((lot, lotIndex) => {
           const isExpanded = expandedLots.has(lotIndex);
           const isDualOccupancy = lot.singleOrDual === 'Yes';
           const lotPropertyDescription = lot.propertyDescription || {};
