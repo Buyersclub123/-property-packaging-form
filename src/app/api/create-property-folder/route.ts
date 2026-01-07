@@ -19,11 +19,11 @@ export async function POST(request: Request) {
     // Shared Drive ID (Packaging Shared Drive)
     const SHARED_DRIVE_ID = '0AFVxBPJiTmjPUk9PVA';
     
-    // Template folder ID (Master Folder Template - now inside Properties in Shared Drive)
-    const TEMPLATE_FOLDER_ID = '1kHZKwA_qLd8oDKtoLYD-wFeUBwurmcHZ';
+    // Template folder ID (00 - Master Folder Template - inside Properties in Shared Drive)
+    const TEMPLATE_FOLDER_ID = '1R2g9dbaaQooocgV3FZe9KR-0F0C1xNh5';
     
     // Properties folder ID (where property folders go - inside Shared Drive)
-    const PROPERTIES_FOLDER_ID = '1Bs9ndWkDSm5tFTiBbSNa4obAbJrNi4mQ';
+    const PROPERTIES_FOLDER_ID = '1RFOBoJKBVIBDZsMUih3tWJ-yOE8YLKoZ';
     
     // Step 1: Copy template folder to Properties folder (creates new property folder in Shared Drive)
     const propertyFolder = await copyFolderStructure(
