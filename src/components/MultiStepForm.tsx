@@ -311,10 +311,22 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             }
           }
           
-          // For unit numbers: if totalUnitsAtAddress > 0, unitNumber must be provided
-          if (address?.totalUnitsAtAddress && address.totalUnitsAtAddress > 0) {
+          // For unit numbers: if hasUnitNumbers is true, unitNumber must be provided
+          if (address?.hasUnitNumbers === true) {
             if (!address?.unitNumber || address.unitNumber.trim() === '') {
               setValidationError('Please enter which unit(s) you are buying.');
+              return false;
+            }
+          }
+          
+          // For dual occupancy: hasUnitNumbers must be true (it's auto-selected, but validate anyway)
+          if (decisionTree.dualOccupancy === 'Yes') {
+            if (address?.hasUnitNumbers !== true) {
+              setValidationError('Dual occupancy properties must have unit numbers. Please select "Yes" for unit numbers.');
+              return false;
+            }
+            if (!address?.unitNumber || address.unitNumber.trim() === '') {
+              setValidationError('Please enter which unit(s) you are buying for this dual occupancy property.');
               return false;
             }
           }

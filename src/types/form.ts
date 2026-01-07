@@ -30,7 +30,7 @@ export interface AddressData {
   lotNumber?: string; // Lot number for new developments (empty string means "Not Applicable" was selected)
   lotNumberNotApplicable?: boolean; // Flag to track if "Not Applicable" was explicitly selected
   unitNumber?: string; // Unit number(s) - can be single (e.g., "2"), range (e.g., "1-8"), or list (e.g., "A,B,C")
-  totalUnitsAtAddress?: number; // Total number of units at the address
+  hasUnitNumbers?: boolean; // Does this property have unit numbers? (Yes/No)
   streetNumber?: string; // Project Address components (for validation/LGA lookup)
   streetName?: string; // Project Address components
   suburbName?: string; // Project Address components
