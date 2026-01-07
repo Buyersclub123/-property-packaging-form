@@ -322,6 +322,28 @@ All analysis files: `C:\Users\User\.cursor\JT FOLDER\`
 
 ---
 
+## 📋 Planned Features
+
+### Google Drive Integration
+- [ ] Create property folders automatically
+- [ ] Set folder permissions (view/download only)
+- [ ] Copy template files to property folders
+- [ ] Display folder link in form header
+
+### GHL Integration
+- [ ] Custom Objects API integration
+- [ ] Webhook for form submission
+- [ ] User list sync
+- [ ] Address uniqueness check before submission
+
+### Cashflow Spreadsheets
+- [ ] Convert Excel templates to Google Sheets
+- [ ] Fix charts in Google Sheets
+- [ ] Auto-generate copy URLs
+- [ ] Link to property folders
+
+---
+
 ## 🔗 Important Links / References
 
 ### Files Location
