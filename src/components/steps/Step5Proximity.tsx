@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useFormStore } from '@/store/formStore';
-import { CashflowLinksSection } from './CashflowLinksSection';
 
 export function Step5Proximity() {
   const { formData, updateFormData } = useFormStore();
@@ -106,11 +105,6 @@ export function Step5Proximity() {
             placeholder="• Major infrastructure projects&#10;• Population growth trends&#10;• Economic development initiatives&#10;• Transport improvements"
             required
           />
-        </div>
-        
-        {/* Cashflow Spreadsheets Section */}
-        <div className="mt-8 pt-8 border-t border-gray-200">
-          <CashflowLinksSection />
         </div>
       </div>
     </div>
