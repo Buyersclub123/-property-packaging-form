@@ -280,33 +280,45 @@ export function Step1DecisionTree() {
                   type="text"
                   value={lotNumber}
                   onChange={(e) => {
-                    const value = e.target.value.trim();
-                    setLotNumber(value);
-                    setLotNumberNotApplicable(false);
+                    const value = e.target.value;
+                    const upperValue = value.toUpperCase();
                     
-                    // Update address in Step 0
-                    if (value) {
-                      const originalAddress = address?.propertyAddress || '';
-                      // Remove existing "Lot X, " prefix if present (case insensitive)
-                      const addressWithoutLot = originalAddress.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
-                      const newAddress = addressWithoutLot ? `Lot ${value}, ${addressWithoutLot}` : `Lot ${value}`;
-                      updateAddress({ 
-                        lotNumber: value,
-                        lotNumberNotApplicable: false,
-                        propertyAddress: newAddress 
-                      });
-                    } else {
-                      // Remove lot prefix from address
-                      const addressWithoutLot = (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
-                      updateAddress({ 
-                        lotNumber: '',
-                        lotNumberNotApplicable: false,
-                        propertyAddress: addressWithoutLot || address?.propertyAddress || ''
-                      });
+                    // Allow: empty, numbers only, or TBC (allow typing T, TB, TBC)
+                    const isNumber = /^\d+$/.test(value);
+                    const isTBC = value.toUpperCase() === 'T' || 
+                                 value.toUpperCase() === 'TB' || 
+                                 value.toUpperCase() === 'TBC';
+                    
+                    if (value === '' || isNumber || isTBC) {
+                      // Convert TBC to uppercase, keep numbers as-is
+                      const finalValue = isTBC ? upperValue : value;
+                      setLotNumber(finalValue);
+                      setLotNumberNotApplicable(false);
+                      
+                      // Update address in Step 0
+                      if (finalValue) {
+                        const originalAddress = address?.propertyAddress || '';
+                        // Remove existing "Lot X, " prefix if present (case insensitive)
+                        const addressWithoutLot = originalAddress.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                        const newAddress = addressWithoutLot ? `Lot ${finalValue}, ${addressWithoutLot}` : `Lot ${finalValue}`;
+                        updateAddress({ 
+                          lotNumber: finalValue,
+                          lotNumberNotApplicable: false,
+                          propertyAddress: newAddress 
+                        });
+                      } else {
+                        // Remove lot prefix from address
+                        const addressWithoutLot = (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                        updateAddress({ 
+                          lotNumber: '',
+                          lotNumberNotApplicable: false,
+                          propertyAddress: addressWithoutLot || address?.propertyAddress || ''
+                        });
+                      }
                     }
                   }}
                   className="input-field"
-                  placeholder="e.g., 17, 5, 12"
+                  placeholder="e.g., 17, 5, 12, or TBC"
                   disabled={lotNumberNotApplicable}
                   required={!lotNumberNotApplicable}
                 />
