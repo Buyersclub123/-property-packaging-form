@@ -706,8 +706,8 @@ export function Step3MarketPerformance() {
   const handleSaveREIData = async () => {
     // Validate all REI fields are filled
     if (!formData_REI.priceChange3Months || !formData_REI.priceChange1Year || !formData_REI.medianYield ||
-        !formData_REI.rentChange1Year || !formData_REI.rentalPopulation || !formData_REI.vacancyRate || !formData_REI.url) {
-      alert('Please fill in all REI fields (Vacancy Rate, Rental Population, 3 months, 1 year, Yield, Rent Change, and URL)');
+        !formData_REI.rentChange1Year || !formData_REI.rentalPopulation || !formData_REI.vacancyRate) {
+      alert('Please fill in all REI fields (Vacancy Rate, Rental Population, 3 months, 1 year, Yield, and Rent Change)');
       return;
     }
 
