@@ -310,6 +310,14 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
               return false;
             }
           }
+          
+          // For unit numbers: if totalUnitsAtAddress > 0, unitNumber must be provided
+          if (address?.totalUnitsAtAddress && address.totalUnitsAtAddress > 0) {
+            if (!address?.unitNumber || address.unitNumber.trim() === '') {
+              setValidationError('Please enter which unit(s) you are buying.');
+              return false;
+            }
+          }
         }
         
         // Check for duplicate lot numbers (only for Projects with Multiple lots)
