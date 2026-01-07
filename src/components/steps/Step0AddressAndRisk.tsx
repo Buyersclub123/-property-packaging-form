@@ -1239,7 +1239,7 @@ export function Step0AddressAndRisk() {
                 className="input-field"
                 readOnly={!addressFieldsEditable}
               />
-              <div className="mt-2">
+              <div className="mt-2 flex justify-start">
                 <button
                   type="button"
                   onClick={() => {
@@ -1258,12 +1258,10 @@ export function Step0AddressAndRisk() {
                   {addressFieldsEditable ? 'Lock Address Fields' : 'Edit Address Fields'}
                 </button>
               </div>
-            </div>
-            </div>
-            
-            {/* LGA - Show with address fields */}
-            <div className="mt-4">
+              
+              {/* LGA - Show with address fields */}
               <LGADisplay />
+            </div>
             </div>
           </div>
 
