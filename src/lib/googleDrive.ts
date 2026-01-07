@@ -65,7 +65,8 @@ function getDriveClient() {
  */
 export async function createFolder(
   folderName: string,
-  parentFolderId?: string
+  parentFolderId?: string,
+  driveId?: string
 ): Promise<{ id: string; webViewLink: string; name: string }> {
   try {
     const drive = getDriveClient();
@@ -79,10 +80,18 @@ export async function createFolder(
       fileMetadata.parents = [parentFolderId];
     }
 
-    const response = await drive.files.create({
+    const requestOptions: any = {
       requestBody: fileMetadata,
       fields: 'id, name, webViewLink',
-    });
+    };
+
+    // If driveId is provided, create in Shared Drive
+    if (driveId) {
+      requestOptions.supportsAllDrives = true;
+      requestOptions.driveId = driveId;
+    }
+
+    const response = await drive.files.create(requestOptions);
 
     if (!response.data.id) {
       throw new Error('Failed to create folder: No ID returned');
@@ -159,14 +168,22 @@ export async function copyFileToFolder(
 /**
  * List files in a folder
  */
-export async function listFilesInFolder(folderId: string): Promise<Array<{ id: string; name: string; mimeType: string }>> {
+export async function listFilesInFolder(folderId: string, driveId?: string): Promise<Array<{ id: string; name: string; mimeType: string }>> {
   try {
     const drive = getDriveClient();
     
-    const response = await drive.files.list({
+    const listOptions: any = {
       q: `'${folderId}' in parents and trashed=false`,
       fields: 'files(id, name, mimeType)',
-    });
+    };
+    if (driveId) {
+      listOptions.supportsAllDrives = true;
+      listOptions.includeItemsFromAllDrives = true;
+      listOptions.driveId = driveId;
+      listOptions.corpora = 'drive';
+    }
+    
+    const response = await drive.files.list(listOptions);
 
     return (response.data.files || []).map(file => ({
       id: file.id || '',

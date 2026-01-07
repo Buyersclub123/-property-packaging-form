@@ -16,17 +16,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Template folder ID (Master Folder Template - now inside Properties)
+    // Shared Drive ID (Packaging Shared Drive)
+    const SHARED_DRIVE_ID = '0AFVxBPJiTmjPUk9PVA';
+    
+    // Template folder ID (Master Folder Template - now inside Properties in Shared Drive)
     const TEMPLATE_FOLDER_ID = '1kHZKwA_qLd8oDKtoLYD-wFeUBwurmcHZ';
     
-    // Properties folder ID (where property folders go)
+    // Properties folder ID (where property folders go - inside Shared Drive)
     const PROPERTIES_FOLDER_ID = '1Bs9ndWkDSm5tFTiBbSNa4obAbJrNi4mQ';
     
-    // Step 1: Copy template folder to Properties folder (creates new property folder)
+    // Step 1: Copy template folder to Properties folder (creates new property folder in Shared Drive)
     const propertyFolder = await copyFolderStructure(
       TEMPLATE_FOLDER_ID,
       PROPERTIES_FOLDER_ID,
-      propertyAddress
+      propertyAddress,
+      SHARED_DRIVE_ID
     );
     
     console.log('Created property folder:', propertyFolder.id);
