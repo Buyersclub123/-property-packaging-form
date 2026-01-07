@@ -1891,11 +1891,11 @@ function ProjectLotsView() {
   
   // Find first lot index of each type (single vs dual)
   const firstSingleIndex = useMemo(() => {
-    return lots.findIndex(lot => lot.singleOrDual !== 'Yes');
+    return (lots || []).findIndex(lot => lot.singleOrDual !== 'Yes');
   }, [lots]);
   
   const firstDualIndex = useMemo(() => {
-    return lots.findIndex(lot => lot.singleOrDual === 'Yes');
+    return (lots || []).findIndex(lot => lot.singleOrDual === 'Yes');
   }, [lots]);
   
   const handleReplicateSection = (sourceIndex: number, section: 'propertyDescription' | 'purchasePrice' | 'rentalAssessment', targetType?: 'same' | 'all') => {
