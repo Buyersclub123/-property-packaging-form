@@ -1240,10 +1240,9 @@ export function Step0AddressAndRisk() {
                 </button>
               </div>
             </div>
-            </div>
-            
             {/* LGA - Show with address fields */}
             <LGADisplay />
+            </div>
           </div>
 
           {/* Google Maps Link */}
