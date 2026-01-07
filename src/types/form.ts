@@ -9,6 +9,7 @@ export type YesNo = 'Yes' | 'No' | '';
 export type AskingType = 'On-market' | 'Off-market' | 'Pre-launch' | 'Coming Soon' | 'N/A' | 'TBC';
 export type OccupancyType = 'Owner Occupied' | 'Tenanted' | 'Vacant';
 export type TitleType = 'Individual' | 'Green' | 'Torrens' | 'Strata' | 'Owners Corp (Community)' | 'Survey Strata' | 'Built Strata' | 'TBC';
+export type CashbackRebateType = 'Cashback' | 'Rebate on Land' | 'Rebate on Build';
 export type DealType = '01 H&L Comms' | '02 Single Comms' | '03 Internal with Comms' | '04 Internal No-Comms' | '05 Established';
 export type StatusType = '01 Available' | '02 EOI' | '03 Contr\' Exchanged' | '05 Remove no interest' | '06 Remove lost';
 
@@ -117,7 +118,7 @@ export interface PurchasePrice {
   buildPrice?: string; // For H&L (not Single Contract): Build price
   totalPrice?: string; // For Single Contract (02 Single Comms): Total price
   cashbackRebateValue?: string; // For Contract Types 01, 02, 03: Cashback/Rebate value
-  cashbackRebateType?: 'Cashback' | 'Rebate on Land' | 'Rebate on Build'; // Type of cashback/rebate
+  cashbackRebateType?: CashbackRebateType; // Type of cashback/rebate
   purchasePriceAdditionalDialogue?: string;
 }
 
