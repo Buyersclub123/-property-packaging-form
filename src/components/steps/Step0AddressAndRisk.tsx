@@ -319,6 +319,13 @@ function ZoningDisplay() {
   // Check if zone and zoneDesc are the same (duplicate)
   const isDuplicate = stashData?.zone && stashData?.zoneDesc && 
     stashData.zone.trim() === stashData.zoneDesc.trim();
+  
+  // Check if Stash was checked but doesn't have zoning information
+  const stashCheckedButNoZoning = stashData && 
+    !stashData.zone && 
+    !stashData.zoneDesc && 
+    !stashData.zoning && 
+    !zoningValue;
 
   return (
     <div>
@@ -333,6 +340,11 @@ function ZoningDisplay() {
       {isDuplicate && (
         <p className="text-xs text-gray-500 mt-1">
           Note: Zone code and description are identical, showing single value to avoid duplication.
+        </p>
+      )}
+      {stashCheckedButNoZoning && (
+        <p className="text-xs text-yellow-600 mt-1 font-medium">
+          ⚠️ Stash did not return zoning information for this address. Please enter zoning manually if known.
         </p>
       )}
       {stashData?.zone && !zoningValue && (
@@ -747,6 +759,47 @@ export function Step0AddressAndRisk() {
         addressUpdates.addressFieldsEditable = false; // Lock fields after verification
         addressUpdates.addressSource = 'stash'; // Set default to Stash address
         updateAddress(addressUpdates);
+        
+        // Check GHL for existing address at the same time
+        const verifiedAddress = addressUpdates.propertyAddress || address.propertyAddress;
+        if (verifiedAddress) {
+          console.log('Starting GHL address check for:', verifiedAddress);
+          try {
+            const checkResponse = await fetch('/api/ghl/check-address', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ propertyAddress: verifiedAddress }),
+            });
+            
+            console.log('GHL check response status:', checkResponse.status);
+            
+            if (!checkResponse.ok) {
+              console.error('GHL check failed with status:', checkResponse.status);
+              const errorText = await checkResponse.text();
+              console.error('GHL check error response:', errorText);
+              return; // Don't block, just log
+            }
+            
+            const checkResult = await checkResponse.json();
+            console.log('GHL check result:', checkResult);
+            
+            if (checkResult.exists && checkResult.matchingRecords && checkResult.matchingRecords.length > 0) {
+              const matches = checkResult.matchingRecords;
+              const matchInfo = matches.map((m: any) => 
+                `Address: ${m.address}\nPackager: ${m.packager || 'N/A'}\nSourcer: ${m.sourcer || 'N/A'}`
+              ).join('\n\n');
+              
+              alert(`⚠️ This address already exists in GHL:\n\n${matchInfo}\n\nYou can still proceed, but this may be a duplicate.`);
+            } else {
+              console.log('GHL check: No matching addresses found');
+            }
+          } catch (ghlError) {
+            // Don't block the flow if GHL check fails - just log it
+            console.error('GHL address check error (non-blocking):', ghlError);
+          }
+        } else {
+          console.log('GHL check skipped: No verified address available');
+        }
       } else {
         console.log('WARNING: No address components returned from Geoscape. Address may be invalid.');
         setStashError('Address not found. Please check the address and try again.');
@@ -837,13 +890,58 @@ export function Step0AddressAndRisk() {
       return;
     }
 
-    // TODO: Create folder for documents
-    // This will be implemented when we work out attachments/links system
-    // For now, just set the flag to prevent multiple creations
+    // Step 1: Check if address already exists in GHL
+    const propertyAddress = address.propertyAddress || address.stashPropertyAddress;
+    if (!propertyAddress) {
+      alert('Please enter and verify an address first');
+      return;
+    }
+
     try {
-      // Placeholder for folder creation API call
-      // await fetch('/api/create-property-folder', { ... });
-      
+      // Check address in GHL
+      const checkResponse = await fetch('/api/ghl/check-address', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyAddress }),
+      });
+
+      const checkResult = await checkResponse.json();
+
+      if (checkResult.exists && checkResult.matchingRecords && checkResult.matchingRecords.length > 0) {
+        // Address already exists - show warning
+        const matches = checkResult.matchingRecords;
+        const matchInfo = matches.map((m: any) => 
+          `Address: ${m.address}\nPackager: ${m.packager || 'N/A'}\nSourcer: ${m.sourcer || 'N/A'}`
+        ).join('\n\n');
+        
+        const proceed = confirm(
+          `This address already exists in GHL:\n\n${matchInfo}\n\nDo you want to proceed with creating a new folder anyway?`
+        );
+        
+        if (!proceed) {
+          return; // User cancelled
+        }
+      }
+
+      // Step 2: Create folder
+      const folderResponse = await fetch('/api/create-property-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyAddress }),
+      });
+
+      const folderResult = await folderResponse.json();
+
+      if (!folderResult.success) {
+        throw new Error(folderResult.error || 'Failed to create folder');
+      }
+
+      // Store folder link in form data
+      updateAddress({
+        folderLink: folderResult.folderLink,
+        folderName: folderResult.folderName,
+      });
+
       // Mark folder as created
       setFolderCreated(true);
       
@@ -851,6 +949,7 @@ export function Step0AddressAndRisk() {
       setPackagingEnabled(true);
     } catch (error) {
       console.error('Error creating folder:', error);
+      alert(`Error creating folder: ${error instanceof Error ? error.message : 'Unknown error'}`);
       // Still show fields even if folder creation fails
       setPackagingEnabled(true);
     }
@@ -1239,30 +1338,32 @@ export function Step0AddressAndRisk() {
                 className="input-field"
                 readOnly={!addressFieldsEditable}
               />
-              <div className="mt-2 flex justify-start">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (address.addressVerified && !addressFieldsEditable) {
-                      if (confirm('You are about to edit a verified address. Continue?')) {
-                        setAddressFieldsEditable(true);
-                        updateAddress({ addressFieldsEditable: true });
-                      }
-                    } else {
-                      setAddressFieldsEditable(!addressFieldsEditable);
-                      updateAddress({ addressFieldsEditable: !addressFieldsEditable });
-                    }
-                  }}
-                  className="btn-secondary text-sm"
-                >
-                  {addressFieldsEditable ? 'Lock Address Fields' : 'Edit Address Fields'}
-                </button>
-              </div>
             </div>
-            {/* LGA - Show with address fields */}
+            {/* LGA - Show with address fields in same row as Post Code */}
             <div>
               <LGADisplay />
             </div>
+            </div>
+            
+            {/* Edit Address Fields button - below the grid */}
+            <div className="mt-2 flex justify-start">
+              <button
+                type="button"
+                onClick={() => {
+                  if (address.addressVerified && !addressFieldsEditable) {
+                    if (confirm('You are about to edit a verified address. Continue?')) {
+                      setAddressFieldsEditable(true);
+                      updateAddress({ addressFieldsEditable: true });
+                    }
+                  } else {
+                    setAddressFieldsEditable(!addressFieldsEditable);
+                    updateAddress({ addressFieldsEditable: !addressFieldsEditable });
+                  }
+                }}
+                className="btn-secondary text-sm"
+              >
+                {addressFieldsEditable ? 'Lock Address Fields' : 'Edit Address Fields'}
+              </button>
             </div>
           </div>
 
