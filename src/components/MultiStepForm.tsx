@@ -310,6 +310,16 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
               return false;
             }
           }
+        }
+        
+        // Unit numbers validation - applies to all property types except Projects
+        if (decisionTree?.propertyType !== null && 
+            !(decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple')) {
+          // hasUnitNumbers must be selected (true or false, not undefined)
+          if (address?.hasUnitNumbers === undefined) {
+            setValidationError('Please select "Yes" or "No" for "Does this property have unit numbers?".');
+            return false;
+          }
           
           // For unit numbers: if hasUnitNumbers is true, unitNumber must be provided
           if (address?.hasUnitNumbers === true) {
@@ -320,7 +330,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           }
           
           // For dual occupancy: hasUnitNumbers must be true (it's auto-selected, but validate anyway)
-          if (decisionTree.dualOccupancy === 'Yes') {
+          if (decisionTree?.dualOccupancy === 'Yes') {
             if (address?.hasUnitNumbers !== true) {
               setValidationError('Dual occupancy properties must have unit numbers. Please select "Yes" for unit numbers.');
               return false;
