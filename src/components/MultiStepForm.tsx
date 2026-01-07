@@ -298,6 +298,12 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             setValidationError('Single or Dual Occupancy is required for H&L properties.');
             return false;
           }
+          // For H&L, lot number must be provided OR "Not Applicable" must be selected
+          // If lotNumber is undefined, user hasn't made a choice yet
+          if (decisionTree.lotType === 'Individual' && address?.lotNumber === undefined) {
+            setValidationError('Please enter a Lot Number or select "Not Applicable" for H&L properties.');
+            return false;
+          }
         }
         
         // Check for duplicate lot numbers (only for Projects with Multiple lots)

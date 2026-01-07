@@ -5,12 +5,42 @@ import { useFormStore } from '@/store/formStore';
 import { PropertyType, ContractType, LotType, DualOccupancy, StatusType, LotDetails } from '@/types/form';
 
 export function Step1DecisionTree() {
-  const { formData, updateDecisionTree, updateLots, clearStep2Data, setCurrentStep } = useFormStore();
-  const { decisionTree } = formData;
+  const { formData, updateDecisionTree, updateLots, clearStep2Data, setCurrentStep, updateAddress } = useFormStore();
+  const { decisionTree, address } = formData;
   const [numberOfLots, setNumberOfLots] = useState<string>('');
   const [lots, setLots] = useState<LotDetails[]>(formData.lots || []);
+  const [lotNumber, setLotNumber] = useState<string>(address?.lotNumber || '');
+  const [lotNumberNotApplicable, setLotNumberNotApplicable] = useState<boolean>(!address?.lotNumber);
 
   const isProject = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple';
+  const isHAndL = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual';
+  
+  // Debug log
+  console.log('Step1DecisionTree - isHAndL:', isHAndL, 'propertyType:', decisionTree.propertyType, 'lotType:', decisionTree.lotType);
+
+  // Sync lotNumber state with address
+  useEffect(() => {
+    if (address?.lotNumber) {
+      setLotNumber(address.lotNumber);
+      setLotNumberNotApplicable(false);
+    } else {
+      setLotNumber('');
+      setLotNumberNotApplicable(true);
+    }
+  }, [address?.lotNumber]);
+
+  // Clear lot number if user switches away from H&L
+  useEffect(() => {
+    if (!isHAndL && address?.lotNumber) {
+      const addressWithoutLot = (address.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+      updateAddress({ 
+        lotNumber: '',
+        propertyAddress: addressWithoutLot || address.propertyAddress || ''
+      });
+      setLotNumber('');
+      setLotNumberNotApplicable(true);
+    }
+  }, [isHAndL, address?.lotNumber, address?.propertyAddress, updateAddress]);
 
   // Clear lots if they change from Project to something else
   useEffect(() => {
@@ -230,6 +260,82 @@ export function Step1DecisionTree() {
             Only "01 Available" triggers BA Auto select email
           </p>
         </div>
+
+        {/* Lot Number Section - Only for H&L */}
+        {isHAndL && (
+          <div className="pt-6 border-t">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Lot Number</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Enter the lot number if available. If the land is already registered and you have the full address, select "Not Applicable".
+            </p>
+
+            <div className="flex items-start gap-4">
+              <div className="flex-1">
+                <label className="label-field">Lot Number *</label>
+                <input
+                  type="text"
+                  value={lotNumber}
+                  onChange={(e) => {
+                    const value = e.target.value.trim();
+                    setLotNumber(value);
+                    setLotNumberNotApplicable(false);
+                    
+                    // Update address in Step 0
+                    if (value) {
+                      const originalAddress = address?.propertyAddress || '';
+                      // Remove existing "Lot X, " prefix if present (case insensitive)
+                      const addressWithoutLot = originalAddress.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                      const newAddress = addressWithoutLot ? `Lot ${value}, ${addressWithoutLot}` : `Lot ${value}`;
+                      updateAddress({ 
+                        lotNumber: value,
+                        propertyAddress: newAddress 
+                      });
+                    } else {
+                      // Remove lot prefix from address
+                      const addressWithoutLot = (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                      updateAddress({ 
+                        lotNumber: '',
+                        propertyAddress: addressWithoutLot || address?.propertyAddress || ''
+                      });
+                    }
+                  }}
+                  className="input-field"
+                  placeholder="e.g., 17, 5, 12"
+                  disabled={lotNumberNotApplicable}
+                  required={!lotNumberNotApplicable}
+                />
+              </div>
+              <div className="flex items-center pt-8">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={lotNumberNotApplicable}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setLotNumberNotApplicable(checked);
+                      if (checked) {
+                        // Clear lot number and remove from address
+                        setLotNumber('');
+                        const addressWithoutLot = (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                        updateAddress({ 
+                          lotNumber: '',
+                          propertyAddress: addressWithoutLot || address?.propertyAddress || ''
+                        });
+                      }
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Not Applicable</span>
+                </label>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              {lotNumberNotApplicable 
+                ? 'Lot number will not be added to the address.' 
+                : 'Lot number will be prepended to the address (e.g., "Lot 17, 123 Main Street...")'}
+            </p>
+          </div>
+        )}
 
         {/* Lots Section - Only for Projects */}
         {isProject && (
