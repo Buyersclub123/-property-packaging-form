@@ -299,6 +299,12 @@ All analysis files: `C:\Users\User\.cursor\JT FOLDER\`
   - Impact: Confusing UX - user edits fields but main address stays unchanged
   - Decision needed: Should we auto-rebuild `propertyAddress` when individual fields are edited? Or remove edit capability?
 
+### Stash Address Format
+- ⚠️ **Concern:** Stash API address format/response may not match requirements
+  - Impact: May require changes to Step 0 (Address & Risk Overlays)
+  - Status: Under review - awaiting confirmation on what needs to change
+  - Example: User entered "Lot 93 Ocean Rise Estate, Urangan, QLD 4655" but Stash returned "91-93 OCEAN OTLK, RIVER HEADS QLD 4655" (official registered address)
+
 ### Market Performance
 - Data age checking refreshes from Google Sheet on navigation
 - Verification workflow: Click "Check data" → Verify → Can proceed
