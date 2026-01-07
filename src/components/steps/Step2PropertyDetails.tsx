@@ -1977,7 +1977,7 @@ function ProjectLotsView() {
   
   // Auto-populate cashback/rebate for lots that don't have values yet
   useEffect(() => {
-    if (hasCashbackRebate && purchasePrice?.cashbackRebateValue && purchasePrice?.cashbackRebateType) {
+    if (hasCashbackRebate && purchasePrice?.cashbackRebateValue && purchasePrice?.cashbackRebateType && lots) {
       lots.forEach((lot, index) => {
         // Only populate if lot doesn't already have values
         if (!lot.purchasePrice?.cashbackRebateValue || !lot.purchasePrice?.cashbackRebateType) {
@@ -2142,9 +2142,11 @@ function ProjectLotsView() {
                       // Update project-level comparable sales
                       updatePurchasePrice({ comparableSales: value });
                       // Also update all lots
-                      lots.forEach((_, index) => {
-                        updateLotPurchasePrice(index, { comparableSales: value });
-                      });
+                      if (lots) {
+                        lots.forEach((_, index) => {
+                          updateLotPurchasePrice(index, { comparableSales: value });
+                        });
+                      }
                     }}
                     onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;
@@ -2241,11 +2243,13 @@ function ProjectLotsView() {
                       // Update project-level
                       updatePurchasePrice({ cashbackRebateValue: valueToSet });
                       // Auto-populate all lots (only if lot doesn't already have a value)
-                      lots.forEach((lot, index) => {
-                        if (!lot.purchasePrice?.cashbackRebateValue) {
-                          updateLotPurchasePrice(index, { cashbackRebateValue: valueToSet });
-                        }
-                      });
+                      if (lots) {
+                        lots.forEach((lot, index) => {
+                          if (!lot.purchasePrice?.cashbackRebateValue) {
+                            updateLotPurchasePrice(index, { cashbackRebateValue: valueToSet });
+                          }
+                        });
+                      }
                     }
                   }}
                   onBlur={(e) => {
@@ -2255,11 +2259,13 @@ function ProjectLotsView() {
                       if (formatted !== e.target.value) {
                         updatePurchasePrice({ cashbackRebateValue: rawValue });
                         // Auto-populate all lots (only if lot doesn't already have a value)
-                        lots.forEach((lot, index) => {
-                          if (!lot.purchasePrice?.cashbackRebateValue) {
-                            updateLotPurchasePrice(index, { cashbackRebateValue: rawValue });
-                          }
-                        });
+                        if (lots) {
+                          lots.forEach((lot, index) => {
+                            if (!lot.purchasePrice?.cashbackRebateValue) {
+                              updateLotPurchasePrice(index, { cashbackRebateValue: rawValue });
+                            }
+                          });
+                        }
                       }
                     }
                   }}
@@ -2276,11 +2282,13 @@ function ProjectLotsView() {
                     // Update project-level
                     updatePurchasePrice({ cashbackRebateType: value });
                     // Auto-populate all lots (only if lot doesn't already have a value)
-                    lots.forEach((lot, index) => {
-                      if (!lot.purchasePrice?.cashbackRebateType) {
-                        updateLotPurchasePrice(index, { cashbackRebateType: value });
-                      }
-                    });
+                    if (lots) {
+                      lots.forEach((lot, index) => {
+                        if (!lot.purchasePrice?.cashbackRebateType) {
+                          updateLotPurchasePrice(index, { cashbackRebateType: value });
+                        }
+                      });
+                    }
                   }}
                   className="input-field"
                 >
