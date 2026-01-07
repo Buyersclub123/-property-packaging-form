@@ -137,7 +137,7 @@ export const useFormStore = create<FormStore>()(
       
       updateLotPropertyDescription: (lotIndex, description) =>
         set((state) => {
-          const updatedLots = [...state.formData.lots];
+          const updatedLots = [...(state.formData.lots || [])];
           if (updatedLots[lotIndex]) {
             updatedLots[lotIndex] = {
               ...updatedLots[lotIndex],
@@ -157,7 +157,7 @@ export const useFormStore = create<FormStore>()(
       
       updateLotPurchasePrice: (lotIndex, price) =>
         set((state) => {
-          const updatedLots = [...state.formData.lots];
+          const updatedLots = [...(state.formData.lots || [])];
           if (updatedLots[lotIndex]) {
             updatedLots[lotIndex] = {
               ...updatedLots[lotIndex],
@@ -177,7 +177,7 @@ export const useFormStore = create<FormStore>()(
       
       updateLotRentalAssessment: (lotIndex, assessment) =>
         set((state) => {
-          const updatedLots = [...state.formData.lots];
+          const updatedLots = [...(state.formData.lots || [])];
           if (updatedLots[lotIndex]) {
             updatedLots[lotIndex] = {
               ...updatedLots[lotIndex],
@@ -197,6 +197,7 @@ export const useFormStore = create<FormStore>()(
       
       replicateLotData: (sourceLotIndex, targetLotIndices, sections) =>
         set((state) => {
+          if (!state.formData.lots || state.formData.lots.length === 0) return state;
           const sourceLot = state.formData.lots[sourceLotIndex];
           if (!sourceLot) return state;
           
