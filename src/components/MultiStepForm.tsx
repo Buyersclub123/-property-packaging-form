@@ -299,10 +299,16 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             return false;
           }
           // For H&L, lot number must be provided OR "Not Applicable" must be selected
-          // If lotNumber is undefined, user hasn't made a choice yet
-          if (decisionTree.lotType === 'Individual' && address?.lotNumber === undefined) {
-            setValidationError('Please enter a Lot Number or select "Not Applicable" for H&L properties.');
-            return false;
+          if (decisionTree.lotType === 'Individual') {
+            // User must either:
+            // 1. Enter a lot number (lotNumber has a value), OR
+            // 2. Select "Not Applicable" (lotNumberNotApplicable is true)
+            const hasLotNumber = address?.lotNumber && address.lotNumber.trim() !== '';
+            const hasNotApplicable = address?.lotNumberNotApplicable === true;
+            if (!hasLotNumber && !hasNotApplicable) {
+              setValidationError('Please enter a Lot Number or select "Not Applicable" for H&L properties.');
+              return false;
+            }
           }
         }
         

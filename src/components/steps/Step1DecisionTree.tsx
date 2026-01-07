@@ -10,7 +10,7 @@ export function Step1DecisionTree() {
   const [numberOfLots, setNumberOfLots] = useState<string>('');
   const [lots, setLots] = useState<LotDetails[]>(formData.lots || []);
   const [lotNumber, setLotNumber] = useState<string>(address?.lotNumber || '');
-  const [lotNumberNotApplicable, setLotNumberNotApplicable] = useState<boolean>(!address?.lotNumber);
+  const [lotNumberNotApplicable, setLotNumberNotApplicable] = useState<boolean>(address?.lotNumberNotApplicable || false);
 
   const isProject = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple';
   const isHAndL = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual';
@@ -23,11 +23,14 @@ export function Step1DecisionTree() {
     if (address?.lotNumber) {
       setLotNumber(address.lotNumber);
       setLotNumberNotApplicable(false);
-    } else {
+    } else if (address?.lotNumberNotApplicable) {
       setLotNumber('');
       setLotNumberNotApplicable(true);
+    } else {
+      setLotNumber('');
+      setLotNumberNotApplicable(false);
     }
-  }, [address?.lotNumber]);
+  }, [address?.lotNumber, address?.lotNumberNotApplicable]);
 
   // Clear lot number if user switches away from H&L
   useEffect(() => {
@@ -35,10 +38,11 @@ export function Step1DecisionTree() {
       const addressWithoutLot = (address.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
       updateAddress({ 
         lotNumber: '',
+        lotNumberNotApplicable: false,
         propertyAddress: addressWithoutLot || address.propertyAddress || ''
       });
       setLotNumber('');
-      setLotNumberNotApplicable(true);
+      setLotNumberNotApplicable(false);
     }
   }, [isHAndL, address?.lotNumber, address?.propertyAddress, updateAddress]);
 
@@ -288,6 +292,7 @@ export function Step1DecisionTree() {
                       const newAddress = addressWithoutLot ? `Lot ${value}, ${addressWithoutLot}` : `Lot ${value}`;
                       updateAddress({ 
                         lotNumber: value,
+                        lotNumberNotApplicable: false,
                         propertyAddress: newAddress 
                       });
                     } else {
@@ -295,6 +300,7 @@ export function Step1DecisionTree() {
                       const addressWithoutLot = (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
                       updateAddress({ 
                         lotNumber: '',
+                        lotNumberNotApplicable: false,
                         propertyAddress: addressWithoutLot || address?.propertyAddress || ''
                       });
                     }
@@ -319,6 +325,7 @@ export function Step1DecisionTree() {
                         const addressWithoutLot = (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
                         updateAddress({ 
                           lotNumber: '',
+                          lotNumberNotApplicable: true,
                           propertyAddress: addressWithoutLot || address?.propertyAddress || ''
                         });
                       }

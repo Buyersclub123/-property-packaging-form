@@ -27,7 +27,8 @@ export interface AddressData {
   propertyAddress: string; // Overlay/Google Maps address (can be approximate)
   unitLotPrimary?: string;
   unitLotSecondary?: string;
-  lotNumber?: string; // Lot number for new developments
+  lotNumber?: string; // Lot number for new developments (empty string means "Not Applicable" was selected)
+  lotNumberNotApplicable?: boolean; // Flag to track if "Not Applicable" was explicitly selected
   streetNumber?: string; // Project Address components (for validation/LGA lookup)
   streetName?: string; // Project Address components
   suburbName?: string; // Project Address components
@@ -56,6 +57,10 @@ export interface AddressData {
   addressFieldsEditable?: boolean; // True when user clicks "Edit Address Fields"
   addressSource?: 'stash' | 'individual'; // Which address source to use for propertyAddress
   stashPropertyAddress?: string; // Store original Stash/Geoscape validated address for restoration
+  
+  // Google Drive folder (created when "Continue with Packaging" is clicked)
+  folderLink?: string; // Link to property folder in Google Drive
+  folderName?: string; // Name of the property folder
 }
 
 // Step 2: Stash Risk Overlays
