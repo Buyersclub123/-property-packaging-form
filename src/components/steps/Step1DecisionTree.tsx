@@ -318,9 +318,15 @@ export function Step1DecisionTree() {
                           } else {
                             unitPrefix = `Unit ${address.unitNumber}`;
                           }
-                          // Remove unit prefix from addressWithoutLot if present
-                          addressWithoutLot = addressWithoutLot.replace(/^(Units?)\s+[^,]+,\s*/i, '').trim();
-                          newAddress = `Lot ${finalValue}, ${unitPrefix}, ${addressWithoutLot}`;
+                          // Remove unit prefix from addressWithoutLot if present (need to handle comma-separated units)
+                          addressWithoutLot = addressWithoutLot.replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+                          // Ensure we preserve the street address - if addressWithoutLot is empty or too short, use original
+                          if (!addressWithoutLot || addressWithoutLot.length < 3) {
+                            // Try to get base address by removing both lot and unit from original
+                            const baseAddress = originalAddress.replace(/^Lot\s+[\d\w]+,\s*/i, '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+                            addressWithoutLot = baseAddress || addressWithoutLot;
+                          }
+                          newAddress = addressWithoutLot ? `Lot ${finalValue}, ${unitPrefix}, ${addressWithoutLot}` : `Lot ${finalValue}, ${unitPrefix}`;
                         } else {
                           newAddress = addressWithoutLot ? `Lot ${finalValue}, ${addressWithoutLot}` : `Lot ${finalValue}`;
                         }
@@ -487,12 +493,22 @@ export function Step1DecisionTree() {
                       // Remove existing lot prefix if present, then add lot + unit
                       let addressWithoutLot = addressWithoutUnit.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
                       
+                      // Ensure we preserve the street address - if addressWithoutLot is empty or too short, use original without prefixes
+                      if (!addressWithoutLot || addressWithoutLot.length < 3) {
+                        // Try to get base address by removing both lot and unit from original
+                        const baseAddress = originalAddress
+                          .replace(/^Lot\s+[\d\w]+,\s*/i, '')
+                          .replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '')
+                          .trim();
+                        addressWithoutLot = baseAddress || addressWithoutLot || originalAddress;
+                      }
+                      
                       // Build new address: Lot (if exists) + Unit + Street
                       let newAddress = '';
                       if (address?.lotNumber && !address.lotNumberNotApplicable) {
-                        newAddress = `Lot ${address.lotNumber}, ${unitPrefix}, ${addressWithoutLot}`;
+                        newAddress = addressWithoutLot ? `Lot ${address.lotNumber}, ${unitPrefix}, ${addressWithoutLot}` : `Lot ${address.lotNumber}, ${unitPrefix}`;
                       } else {
-                        newAddress = `${unitPrefix}, ${addressWithoutLot}`;
+                        newAddress = addressWithoutLot ? `${unitPrefix}, ${addressWithoutLot}` : unitPrefix;
                       }
                       
                       updateAddress({ 
