@@ -254,7 +254,50 @@ All analysis files: `C:\Users\User\.cursor\JT FOLDER\`
 
 ---
 
-## 🐛 Known Issues / Notes
+## 🎯 Production Features (For Show & Tell)
+
+### Address Validation
+- ✅ Stash API integration for address validation
+- ✅ Geoscape API for address correction
+- ✅ Auto-populates individual address fields (streetNumber, streetName, suburbName, state, postCode)
+- ✅ Google Maps link generation
+- ✅ Risk overlay auto-population from Stash
+
+### Market Performance
+- ✅ Google Sheets integration for data storage
+- ✅ SPI (Smart Property Investment) data entry
+- ✅ REI (Real Estate Investar) data entry
+- ✅ Data freshness tracking (10-day threshold)
+- ✅ Mock data fallback
+
+### Form Steps
+- ✅ Step 0: Address & Risk Overlays
+- ✅ Step 1: Decision Tree
+- ✅ Step 2: Property Details (supports multiple lots)
+- ✅ Step 3: Market Performance
+- ✅ Step 4: Comparable Sales
+- ✅ Step 5: Proximity
+- ✅ Step 6: Investment Highlights
+- ✅ Step 7: Review & Submit
+
+### Excel Export
+- ✅ Full form data export
+- ✅ Separate sheets for different sections
+- ✅ Overview sheet with key fields
+
+### Deployment
+- ✅ Deployed to Vercel
+- ✅ Environment variables configured
+- ✅ Google Sheets API access working
+
+---
+
+## 🐛 Known Issues / Questions
+
+### Address Field Editing
+- ⚠️ **Issue:** Individual address fields can be edited, but editing them doesn't update the main `propertyAddress` field
+  - Impact: Confusing UX - user edits fields but main address stays unchanged
+  - Decision needed: Should we auto-rebuild `propertyAddress` when individual fields are edited? Or remove edit capability?
 
 ### Market Performance
 - Data age checking refreshes from Google Sheet on navigation
@@ -271,6 +314,11 @@ All analysis files: `C:\Users\User\.cursor\JT FOLDER\`
 ### Spell Check & Auto-Grow
 - All "Additional Dialogue" fields have spell check and auto-grow
 - Collapsed by default (non-mandatory fields)
+
+### Planned Features Not Yet Implemented
+1. **Cashflow Spreadsheet Links** - Currently manual entry, automation planned
+2. **Google Drive Folder Creation** - Planned but not yet implemented
+3. **GHL Integration** - Planned but not yet implemented
 
 ---
 
@@ -319,6 +367,14 @@ All analysis files: `C:\Users\User\.cursor\JT FOLDER\`
 
 ---
 
+## 💡 Product Decisions Needed
+
+1. **Address Editing:** Should individual address fields be editable? If yes, should they auto-update `propertyAddress`?
+2. **Folder Creation:** When should folders be created? (On "Continue with Packaging" click?)
+3. **Cashflow Templates:** Should we auto-copy templates to folders or require manual upload?
+
+---
+
 ## 💡 Important Context
 
 ### User Workflow
@@ -341,6 +397,17 @@ All analysis files: `C:\Users\User\.cursor\JT FOLDER\`
 - **Project:** Multiple lots, shared project overview, project address
 - **H&L:** Single or dual occupancy, land/build price split
 - **Established:** Year built, existing property details
+
+---
+
+## 📝 Notes for Show & Tell
+
+- Form is fully functional and deployed to Vercel
+- Address validation works but has UX issue with field editing (see Known Issues)
+- Market Performance data saves to Google Sheets successfully
+- Excel export includes all form data
+- Multi-lot support working for Projects
+- All form steps functional and validated
 
 ---
 
