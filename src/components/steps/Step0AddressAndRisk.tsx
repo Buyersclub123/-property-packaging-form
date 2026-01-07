@@ -654,6 +654,9 @@ export function Step0AddressAndRisk() {
         return;
       }
       
+      // Store the original address BEFORE validation (for restoration when switching back)
+      const originalAddress = address.propertyAddress || queryAddress;
+      
       // Step 1: Call Geoscape directly to get validated address components
       console.log('Calling Geoscape API to validate address:', queryAddress);
       const geocodeResult = await geocodeAddress(queryAddress);
@@ -670,6 +673,10 @@ export function Step0AddressAndRisk() {
       // Step 3: Populate address fields from Geoscape validated data
       // ALWAYS overwrite with validated data to fix capitalization, missing postcodes, etc.
       const addressUpdates: any = {};
+      
+      // Store the validated Stash address for restoration
+      const validatedAddress = geocodeResult.bestMatch?.formattedAddress || stashQueryAddress;
+      addressUpdates.stashPropertyAddress = validatedAddress;
       
       // Use Geoscape's validated address components (most reliable)
       // Always overwrite to ensure correct capitalization and completeness
@@ -710,8 +717,7 @@ export function Step0AddressAndRisk() {
         if (geocoded.formattedAddress) {
           console.log('Updating property address with Geoscape corrected version:', geocoded.formattedAddress);
           addressUpdates.propertyAddress = geocoded.formattedAddress;
-          // Store original Stash address for restoration
-          addressUpdates.stashPropertyAddress = geocoded.formattedAddress;
+          // stashPropertyAddress already set above
         }
       }
       
@@ -726,6 +732,11 @@ export function Step0AddressAndRisk() {
       // Use Stash postcode if Geoscape didn't provide it
       if (!addressUpdates.postCode && stashResponse.postCode) {
         addressUpdates.postCode = stashResponse.postCode;
+      }
+      
+      // Ensure stashPropertyAddress is always set (fallback to original if no formatted address)
+      if (!addressUpdates.stashPropertyAddress) {
+        addressUpdates.stashPropertyAddress = validatedAddress || originalAddress;
       }
       
       // Update address fields with validated data
@@ -1248,11 +1259,10 @@ export function Step0AddressAndRisk() {
                 </button>
               </div>
             </div>
-            </div>
-            
             {/* LGA - Show with address fields */}
-            <div className="mt-4">
+            <div className="col-span-2">
               <LGADisplay />
+            </div>
             </div>
           </div>
 
