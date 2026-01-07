@@ -1027,31 +1027,14 @@ export function Step0AddressAndRisk() {
           {/* Property Info from Stash */}
           <PropertyInfoFromStash />
 
-          {/* Edit Address Fields Button & Verified Badge - Below Stash Status */}
-          <div className="mt-3 flex items-center gap-3">
-            {address.addressVerified && !addressFieldsEditable && (
+          {/* Verified Badge - Below Stash Status */}
+          {address.addressVerified && !addressFieldsEditable && (
+            <div className="mt-3">
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
                 ✓ Verified
               </span>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                if (address.addressVerified && !addressFieldsEditable) {
-                  if (confirm('You are about to edit a verified address. Continue?')) {
-                    setAddressFieldsEditable(true);
-                    updateAddress({ addressFieldsEditable: true });
-                  }
-                } else {
-                  setAddressFieldsEditable(!addressFieldsEditable);
-                  updateAddress({ addressFieldsEditable: !addressFieldsEditable });
-                }
-              }}
-              className="btn-secondary text-sm"
-            >
-              {addressFieldsEditable ? 'Lock Address Fields' : 'Edit Address Fields'}
-            </button>
-          </div>
+            </div>
+          )}
 
           {/* Property Address - Used for Risk Overlays & Google Maps */}
           <div className="mt-4">
