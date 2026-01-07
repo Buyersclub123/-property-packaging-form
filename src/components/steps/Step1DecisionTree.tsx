@@ -23,7 +23,7 @@ export function Step1DecisionTree() {
     // Clear local state
     setLotNumber('');
     setLotNumberNotApplicable(false);
-    setHasUnitNumbers(false);
+    setHasUnitNumbers(undefined); // Reset to undefined (unselected)
     setUnitNumber('');
     setNumberOfLots('');
     setLots([]);
@@ -45,7 +45,7 @@ export function Step1DecisionTree() {
       lotNumber: '',
       lotNumberNotApplicable: false,
       unitNumber: '',
-      hasUnitNumbers: false,
+      hasUnitNumbers: undefined, // Reset to undefined (unselected)
       propertyAddress: cleanedAddress || address?.propertyAddress || '',
     });
     updateLots([]); // Clear project lots
