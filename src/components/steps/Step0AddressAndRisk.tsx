@@ -1122,7 +1122,21 @@ export function Step0AddressAndRisk() {
               <input
                 type="text"
                 value={address.streetNumber || ''}
-                onChange={(e) => updateAddress({ streetNumber: e.target.value })}
+                onChange={(e) => {
+                  const updates: any = { streetNumber: e.target.value };
+                  // If using individual fields, rebuild propertyAddress
+                  if (address.addressSource === 'individual') {
+                    const individualAddress = [
+                      e.target.value,
+                      address.streetName,
+                      address.suburbName,
+                      address.state,
+                      address.postCode
+                    ].filter(Boolean).join(', ');
+                    updates.propertyAddress = individualAddress || address.propertyAddress;
+                  }
+                  updateAddress(updates);
+                }}
                 className="input-field"
                 readOnly={!addressFieldsEditable}
               />
@@ -1132,7 +1146,21 @@ export function Step0AddressAndRisk() {
               <input
                 type="text"
                 value={address.streetName || ''}
-                onChange={(e) => updateAddress({ streetName: e.target.value })}
+                onChange={(e) => {
+                  const updates: any = { streetName: e.target.value };
+                  // If using individual fields, rebuild propertyAddress
+                  if (address.addressSource === 'individual') {
+                    const individualAddress = [
+                      address.streetNumber,
+                      e.target.value,
+                      address.suburbName,
+                      address.state,
+                      address.postCode
+                    ].filter(Boolean).join(', ');
+                    updates.propertyAddress = individualAddress || address.propertyAddress;
+                  }
+                  updateAddress(updates);
+                }}
                 className="input-field"
                 readOnly={!addressFieldsEditable}
               />
@@ -1142,7 +1170,21 @@ export function Step0AddressAndRisk() {
               <input
                 type="text"
                 value={address.suburbName || ''}
-                onChange={(e) => updateAddress({ suburbName: e.target.value })}
+                onChange={(e) => {
+                  const updates: any = { suburbName: e.target.value };
+                  // If using individual fields, rebuild propertyAddress
+                  if (address.addressSource === 'individual') {
+                    const individualAddress = [
+                      address.streetNumber,
+                      address.streetName,
+                      e.target.value,
+                      address.state,
+                      address.postCode
+                    ].filter(Boolean).join(', ');
+                    updates.propertyAddress = individualAddress || address.propertyAddress;
+                  }
+                  updateAddress(updates);
+                }}
                 className="input-field"
                 readOnly={!addressFieldsEditable}
               />
@@ -1152,7 +1194,21 @@ export function Step0AddressAndRisk() {
               <input
                 type="text"
                 value={address.state || ''}
-                onChange={(e) => updateAddress({ state: e.target.value })}
+                onChange={(e) => {
+                  const updates: any = { state: e.target.value };
+                  // If using individual fields, rebuild propertyAddress
+                  if (address.addressSource === 'individual') {
+                    const individualAddress = [
+                      address.streetNumber,
+                      address.streetName,
+                      address.suburbName,
+                      e.target.value,
+                      address.postCode
+                    ].filter(Boolean).join(', ');
+                    updates.propertyAddress = individualAddress || address.propertyAddress;
+                  }
+                  updateAddress(updates);
+                }}
                 className="input-field"
                 placeholder="e.g., QLD, NSW, VIC"
                 readOnly={!addressFieldsEditable}
@@ -1163,7 +1219,21 @@ export function Step0AddressAndRisk() {
               <input
                 type="text"
                 value={address.postCode || ''}
-                onChange={(e) => updateAddress({ postCode: e.target.value })}
+                onChange={(e) => {
+                  const updates: any = { postCode: e.target.value };
+                  // If using individual fields, rebuild propertyAddress
+                  if (address.addressSource === 'individual') {
+                    const individualAddress = [
+                      address.streetNumber,
+                      address.streetName,
+                      address.suburbName,
+                      address.state,
+                      e.target.value
+                    ].filter(Boolean).join(', ');
+                    updates.propertyAddress = individualAddress || address.propertyAddress;
+                  }
+                  updateAddress(updates);
+                }}
                 className="input-field"
                 readOnly={!addressFieldsEditable}
               />
