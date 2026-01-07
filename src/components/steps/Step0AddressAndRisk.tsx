@@ -1061,8 +1061,8 @@ export function Step0AddressAndRisk() {
             {address.addressVerified && address.propertyAddress && (
               <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm font-medium text-gray-700 mb-3">Choose which address to use:</p>
-                <div className="space-y-2">
-                  <label className="flex items-start gap-2 cursor-pointer">
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="flex items-start gap-2 cursor-pointer p-3 bg-white rounded border-2 border-transparent hover:border-blue-300 transition-colors" style={{ borderColor: address.addressSource !== 'individual' ? '#3b82f6' : 'transparent' }}>
                     <input
                       type="radio"
                       name="addressSource"
@@ -1082,7 +1082,7 @@ export function Step0AddressAndRisk() {
                       <p className="text-xs text-gray-600 mt-1">{address.propertyAddress}</p>
                     </div>
                   </label>
-                  <label className="flex items-start gap-2 cursor-pointer">
+                  <label className="flex items-start gap-2 cursor-pointer p-3 bg-white rounded border-2 border-transparent hover:border-blue-300 transition-colors" style={{ borderColor: address.addressSource === 'individual' ? '#3b82f6' : 'transparent' }}>
                     <input
                       type="radio"
                       name="addressSource"
