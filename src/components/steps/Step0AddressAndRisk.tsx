@@ -1223,8 +1223,8 @@ export function Step0AddressAndRisk() {
             </div>
             </div>
             
-            {/* Edit Address Fields Button - Directly below Post Code field */}
-            <div className="mt-2 flex justify-end">
+            {/* Edit Address Fields Button - Directly below Post Code field (left column) */}
+            <div className="mt-2 flex justify-start">
               <button
                 type="button"
                 onClick={() => {
@@ -1245,9 +1245,7 @@ export function Step0AddressAndRisk() {
             </div>
             
             {/* LGA - Show with address fields */}
-            <div className="mt-4">
-              <LGADisplay />
-            </div>
+            <LGADisplay />
           </div>
 
           {/* Google Maps Link */}
