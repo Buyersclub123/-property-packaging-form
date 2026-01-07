@@ -18,6 +18,39 @@ export function Step1DecisionTree() {
   const isHAndL = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual';
   const hasPropertyType = decisionTree.propertyType !== null; // Show unit number for all property types
   
+  // Helper function to clear dependent address fields (lot/unit numbers) and rebuild address
+  const clearDependentAddressFields = () => {
+    // Clear local state
+    setLotNumber('');
+    setLotNumberNotApplicable(false);
+    setNumberOfUnits('');
+    setUnitNumber('');
+    setNumberOfLots('');
+    setLots([]);
+    
+    // Rebuild address from individual fields (remove lot/unit prefixes)
+    const baseAddressParts: string[] = [];
+    if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+    if (address?.streetName) baseAddressParts.push(address.streetName);
+    if (address?.suburbName) baseAddressParts.push(address.suburbName);
+    if (address?.state) baseAddressParts.push(address.state);
+    if (address?.postCode) baseAddressParts.push(address.postCode);
+    
+    const cleanedAddress = baseAddressParts.length > 0 
+      ? baseAddressParts.join(' ')
+      : (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+    
+    // Update address to remove lot/unit numbers and clear lots
+    updateAddress({
+      lotNumber: '',
+      lotNumberNotApplicable: false,
+      unitNumber: '',
+      totalUnitsAtAddress: undefined,
+      propertyAddress: cleanedAddress || address?.propertyAddress || '',
+    });
+    updateLots([]); // Clear project lots
+  };
+  
   // Debug log
   console.log('Step1DecisionTree - isHAndL:', isHAndL, 'propertyType:', decisionTree.propertyType, 'lotType:', decisionTree.lotType);
 
@@ -208,7 +241,13 @@ export function Step1DecisionTree() {
             value={decisionTree.propertyType || ''}
             onChange={(e) => {
               const newType = e.target.value as PropertyType;
-              updateDecisionTree({ propertyType: newType });
+              // If changing property type, clear dependent fields
+              updateDecisionTree({ 
+                propertyType: newType,
+                lotType: null, // Clear lot type when property type changes
+                dualOccupancy: null, // Clear dual occupancy when property type changes
+              });
+              clearDependentAddressFields(); // Clear lot/unit numbers from address
             }}
             className="input-field"
             required
@@ -227,7 +266,12 @@ export function Step1DecisionTree() {
               value={decisionTree.lotType || ''}
               onChange={(e) => {
                 const newLotType = e.target.value as LotType;
-                updateDecisionTree({ lotType: newLotType });
+                // If changing H&L/Project, clear dependent fields
+                updateDecisionTree({ 
+                  lotType: newLotType,
+                  dualOccupancy: null, // Clear dual occupancy when H&L/Project changes
+                });
+                clearDependentAddressFields(); // Clear lot/unit numbers from address
               }}
               className="input-field"
               required
