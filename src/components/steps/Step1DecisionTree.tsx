@@ -90,6 +90,27 @@ export function Step1DecisionTree() {
     }
   }, [decisionTree.dualOccupancy]);
 
+  // Clear dependent fields when property type changes
+  useEffect(() => {
+    // If propertyType is null or changes, reset local state
+    if (decisionTree.propertyType === null) {
+      setLotNumber('');
+      setLotNumberNotApplicable(false);
+      setHasUnitNumbers(false);
+      setUnitNumber('');
+    }
+    // If changing to Established or from Project, clear lot/unit fields
+    if (decisionTree.propertyType === 'Established' || (decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple')) {
+      // Project doesn't have lot numbers or unit numbers in Step 2, they're handled in Project Lots
+      if (decisionTree.lotType === 'Multiple') {
+        setLotNumber('');
+        setLotNumberNotApplicable(false);
+        setHasUnitNumbers(false);
+        setUnitNumber('');
+      }
+    }
+  }, [decisionTree.propertyType, decisionTree.lotType]);
+
   // Note: Lot number now shows for H&L and Established, so we don't clear it when switching property types
 
   // Clear lots if they change from Project to something else
