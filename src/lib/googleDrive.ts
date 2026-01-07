@@ -76,22 +76,33 @@ export async function createFolder(
       mimeType: 'application/vnd.google-apps.folder',
     };
     
-    if (parentFolderId) {
+    // For Shared Drives, don't use parents - create then move
+    if (parentFolderId && !driveId) {
       fileMetadata.parents = [parentFolderId];
     }
 
     const requestOptions: any = {
       requestBody: fileMetadata,
       fields: 'id, name, webViewLink',
+      supportsAllDrives: true,
     };
 
-    // If driveId is provided, create in Shared Drive
+    // If driveId is provided, create in Shared Drive root first
     if (driveId) {
-      requestOptions.supportsAllDrives = true;
       requestOptions.driveId = driveId;
     }
 
     const response = await drive.files.create(requestOptions);
+
+    // If parentFolderId and driveId both provided, move folder to parent
+    if (parentFolderId && driveId && response.data.id) {
+      await drive.files.update({
+        fileId: response.data.id!,
+        addParents: parentFolderId,
+        supportsAllDrives: true,
+        fields: 'id, name, webViewLink',
+      });
+    }
 
     if (!response.data.id) {
       throw new Error('Failed to create folder: No ID returned');
