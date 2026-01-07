@@ -682,7 +682,13 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           .map(field => field.name);
         
         if (missingMarketFields.length > 0) {
-          setValidationError(`Please fill in the following Market Performance fields: ${missingMarketFields.join(', ')}. You can use "N/A" if data is not available.`);
+          setValidationError(`Please fill in the following Market Performance fields: ${missingMarketFields.join(', ')}. You can use "N/A" if data is not available. IMPORTANT: If you entered data in the forms above, you must click "Save Market Performance Data" button first before proceeding.`);
+          return false;
+        }
+        
+        // Check if data has been saved (if forms were shown, data must be saved)
+        if (!marketPerformance?.isSaved && marketPerformance?.isVerified === false) {
+          setValidationError('Please click "Save Market Performance Data" button if you have entered or updated any data. This saves the data to the Google Sheet before proceeding.');
           return false;
         }
         

@@ -65,13 +65,24 @@ export function Step3MarketPerformance() {
       return '';
     }
     
-    // Check for N/A (case insensitive, with or without spaces)
-    const naValue = trimmed.toUpperCase();
-    if (naValue === 'N/A' || naValue === 'NA' || naValue === 'N A') {
-      return 'N/A';
+    // Remove % signs and spaces for N/A checking (but preserve the original for partial matches)
+    const cleanedForNA = trimmed.replace(/%/g, '').replace(/\s/g, '').toUpperCase();
+    
+    // Check for N/A patterns - allow partial while typing: "N", "N/", "NA", "N/A"
+    const naPatterns = ['N', 'N/', 'NA', 'N/A'];
+    const isNAPattern = naPatterns.some(pattern => cleanedForNA === pattern || cleanedForNA.startsWith(pattern));
+    
+    if (isNAPattern) {
+      // If it's a complete N/A variant, return standardized "N/A"
+      if (cleanedForNA === 'NA' || cleanedForNA === 'N/A') {
+        return 'N/A';
+      }
+      // Allow partial typing - preserve input but normalize spaces and remove %
+      // This allows user to type "N", "N/", "N/A" without the "/" being stripped
+      return trimmed.replace(/%/g, '').replace(/\s+/g, '').toUpperCase();
     }
     
-    // Remove % signs and spaces
+    // Remove % signs and spaces for numeric processing
     let cleaned = value.replace(/%/g, '').replace(/\s/g, '');
     
     // If after cleaning it's empty or just a decimal point, return empty
@@ -1497,11 +1508,14 @@ export function Step3MarketPerformance() {
               <input
                 type="text"
                 value={marketPerformance?.medianPriceChange3Year || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, medianPriceChange3Year: e.target.value },
-                })}
+                onChange={(e) => {
+                  const cleaned = cleanNumericInput(e.target.value, false);
+                  updateFormData({
+                    marketPerformance: { ...marketPerformance, medianPriceChange3Year: cleaned },
+                  });
+                }}
                 className="input-field"
-                placeholder="% (2 decimal places)"
+                placeholder="e.g., 20.10 or N/A"
               />
             </div>
             <div>
@@ -1509,11 +1523,14 @@ export function Step3MarketPerformance() {
               <input
                 type="text"
                 value={marketPerformance?.medianPriceChange5Year || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, medianPriceChange5Year: e.target.value },
-                })}
+                onChange={(e) => {
+                  const cleaned = cleanNumericInput(e.target.value, false);
+                  updateFormData({
+                    marketPerformance: { ...marketPerformance, medianPriceChange5Year: cleaned },
+                  });
+                }}
                 className="input-field"
-                placeholder="% (2 decimal places)"
+                placeholder="e.g., 49.83 or N/A"
               />
             </div>
           </div>
@@ -1528,11 +1545,14 @@ export function Step3MarketPerformance() {
               <input
                 type="text"
                 value={marketPerformance?.medianPriceChange3Months || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, medianPriceChange3Months: e.target.value },
-                })}
+                onChange={(e) => {
+                  const cleaned = cleanNumericInput(e.target.value, false);
+                  updateFormData({
+                    marketPerformance: { ...marketPerformance, medianPriceChange3Months: cleaned },
+                  });
+                }}
                 className="input-field"
-                placeholder="% (2 decimal places)"
+                placeholder="e.g., 3.02 or N/A"
               />
             </div>
             <div>
@@ -1540,11 +1560,14 @@ export function Step3MarketPerformance() {
               <input
                 type="text"
                 value={marketPerformance?.medianPriceChange1Year || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, medianPriceChange1Year: e.target.value },
-                })}
+                onChange={(e) => {
+                  const cleaned = cleanNumericInput(e.target.value, false);
+                  updateFormData({
+                    marketPerformance: { ...marketPerformance, medianPriceChange1Year: cleaned },
+                  });
+                }}
                 className="input-field"
-                placeholder="% (2 decimal places)"
+                placeholder="e.g., 15.00 or N/A"
               />
             </div>
             <div>
@@ -1552,11 +1575,14 @@ export function Step3MarketPerformance() {
               <input
                 type="text"
                 value={marketPerformance?.medianYield || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, medianYield: e.target.value },
-                })}
+                onChange={(e) => {
+                  const cleaned = cleanNumericInput(e.target.value, false);
+                  updateFormData({
+                    marketPerformance: { ...marketPerformance, medianYield: cleaned },
+                  });
+                }}
                 className="input-field"
-                placeholder="% (2 decimal places)"
+                placeholder="e.g., 3.39 or N/A"
               />
             </div>
             <div>
@@ -1564,11 +1590,14 @@ export function Step3MarketPerformance() {
               <input
                 type="text"
                 value={marketPerformance?.medianRentChange1Year || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, medianRentChange1Year: e.target.value },
-                })}
+                onChange={(e) => {
+                  const cleaned = cleanNumericInput(e.target.value, false);
+                  updateFormData({
+                    marketPerformance: { ...marketPerformance, medianRentChange1Year: cleaned },
+                  });
+                }}
                 className="input-field"
-                placeholder="% (2 decimal places)"
+                placeholder="e.g., 7.14 or N/A"
               />
             </div>
             <div>
@@ -1576,11 +1605,14 @@ export function Step3MarketPerformance() {
               <input
                 type="text"
                 value={marketPerformance?.rentalPopulation || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, rentalPopulation: e.target.value },
-                })}
+                onChange={(e) => {
+                  const cleaned = cleanNumericInput(e.target.value, false);
+                  updateFormData({
+                    marketPerformance: { ...marketPerformance, rentalPopulation: cleaned },
+                  });
+                }}
                 className="input-field"
-                placeholder="% (2 decimal places)"
+                placeholder="e.g., 36.61 or N/A"
               />
             </div>
             <div>
@@ -1588,11 +1620,14 @@ export function Step3MarketPerformance() {
               <input
                 type="text"
                 value={marketPerformance?.vacancyRate || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, vacancyRate: e.target.value },
-                })}
+                onChange={(e) => {
+                  const cleaned = cleanNumericInput(e.target.value, false);
+                  updateFormData({
+                    marketPerformance: { ...marketPerformance, vacancyRate: cleaned },
+                  });
+                }}
                 className="input-field"
-                placeholder="% (2 decimal places)"
+                placeholder="e.g., 1.13 or N/A"
               />
             </div>
           </div>
