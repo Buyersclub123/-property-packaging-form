@@ -326,6 +326,12 @@ All analysis files: `C:\Users\User\.cursor\JT FOLDER\`
 2. **Google Drive Folder Creation** - Planned but not yet implemented
 3. **GHL Integration** - Planned but not yet implemented
 
+### Google Drive Permissions Management
+- **Master Folder Template:** Currently manually shared with specific @buyersclub.com.au users as Editors
+- **Future:** Consider using `packaging@buyersclub.com.au` Google Group for Editor access (simpler management)
+- **Note:** Editors can add new users to folders - team members with Editor access can manage permissions themselves
+- **Production Management:** If all-staff email group becomes available, update to use group-based permissions
+
 ---
 
 ## 📋 Planned Features
