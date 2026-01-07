@@ -1056,6 +1056,66 @@ export function Step0AddressAndRisk() {
           {/* Property Address - Used for Risk Overlays & Google Maps */}
           <div className="mt-4">
             <h4 className="font-semibold text-gray-900 mb-3">Property Address</h4>
+            
+            {/* Address Source Selection */}
+            {address.addressVerified && address.propertyAddress && (
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm font-medium text-gray-700 mb-3">Choose which address to use:</p>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="addressSource"
+                      value="stash"
+                      checked={address.addressSource !== 'individual'}
+                      onChange={() => {
+                        // Use Stash/Geoscape address
+                        updateAddress({ 
+                          addressSource: 'stash',
+                          propertyAddress: address.propertyAddress // Keep current Stash address
+                        });
+                      }}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-700">Stash Address (Validated)</span>
+                      <p className="text-xs text-gray-600 mt-1">{address.propertyAddress}</p>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="addressSource"
+                      value="individual"
+                      checked={address.addressSource === 'individual'}
+                      onChange={() => {
+                        // Build address from individual fields
+                        const individualAddress = [
+                          address.streetNumber,
+                          address.streetName,
+                          address.suburbName,
+                          address.state,
+                          address.postCode
+                        ].filter(Boolean).join(', ');
+                        updateAddress({ 
+                          addressSource: 'individual',
+                          propertyAddress: individualAddress || address.propertyAddress
+                        });
+                      }}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-700">Individual Fields Address</span>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {[address.streetNumber, address.streetName, address.suburbName, address.state, address.postCode]
+                          .filter(Boolean).join(', ') || 'Edit fields below'}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+            
             <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label-field">Street Number</label>
