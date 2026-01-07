@@ -1946,6 +1946,7 @@ function ProjectLotsView() {
   
   // Check if we have a mixture of single and dual lots
   const hasMixedOccupancy = useMemo(() => {
+    if (!lots || lots.length === 0) return false;
     const hasSingle = lots.some(lot => lot.singleOrDual !== 'Yes');
     const hasDual = lots.some(lot => lot.singleOrDual === 'Yes');
     return hasSingle && hasDual;
