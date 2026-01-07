@@ -137,19 +137,25 @@ export async function setFolderPermissions(
 export async function copyFileToFolder(
   fileId: string,
   destinationFolderId: string,
+  driveId?: string,
   newFileName?: string
 ): Promise<{ id: string; name: string }> {
   try {
     const drive = getDriveClient();
     
-    const copiedFile = await drive.files.copy({
+    const copyOptions: any = {
       fileId: fileId,
       requestBody: {
         name: newFileName,
         parents: [destinationFolderId],
       },
       fields: 'id, name',
-    });
+    };
+    if (driveId) {
+      copyOptions.supportsAllDrives = true;
+    }
+    
+    const copiedFile = await drive.files.copy(copyOptions);
 
     if (!copiedFile.data.id) {
       throw new Error('Failed to copy file: No ID returned');
@@ -202,39 +208,48 @@ export async function listFilesInFolder(folderId: string, driveId?: string): Pro
 export async function copyFolderStructure(
   sourceFolderId: string,
   destinationParentFolderId: string,
-  newFolderName: string
+  newFolderName: string,
+  driveId?: string
 ): Promise<{ id: string; name: string; webViewLink: string }> {
   try {
     const drive = getDriveClient();
     
     // Get source folder metadata
-    const sourceFolder = await drive.files.get({
+    const getOptions: any = {
       fileId: sourceFolderId,
       fields: 'name, mimeType',
-    });
+    };
+    if (driveId) {
+      getOptions.supportsAllDrives = true;
+    }
+    const sourceFolder = await drive.files.get(getOptions);
     
     // Create new folder in destination
-    const newFolder = await createFolder(newFolderName, destinationParentFolderId);
+    const newFolder = await createFolder(newFolderName, destinationParentFolderId, driveId);
     
     // List all items in source folder
-    const items = await listFilesInFolder(sourceFolderId);
+    const items = await listFilesInFolder(sourceFolderId, driveId);
     
     // Copy each item
     for (const item of items) {
       if (item.mimeType === 'application/vnd.google-apps.folder') {
         // Recursively copy subfolders
-        await copyFolderStructure(item.id, newFolder.id, item.name);
+        await copyFolderStructure(item.id, newFolder.id, item.name, driveId);
       } else {
         // Copy files
-        await copyFileToFolder(item.id, newFolder.id);
+        await copyFileToFolder(item.id, newFolder.id, driveId);
       }
     }
     
     // Get the webViewLink for the new folder
-    const folderDetails = await drive.files.get({
+    const folderDetailsOptions: any = {
       fileId: newFolder.id,
       fields: 'webViewLink',
-    });
+    };
+    if (driveId) {
+      folderDetailsOptions.supportsAllDrives = true;
+    }
+    const folderDetails = await drive.files.get(folderDetailsOptions);
     
     return {
       id: newFolder.id,
