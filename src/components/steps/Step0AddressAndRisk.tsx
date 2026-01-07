@@ -439,6 +439,7 @@ export function Step0AddressAndRisk() {
     if (!value || value.trim() === '') {
       updateAddress({ 
         propertyAddress: '',
+        stashPropertyAddress: '',
         streetNumber: '',
         streetName: '',
         suburbName: '',
@@ -446,6 +447,7 @@ export function Step0AddressAndRisk() {
         postCode: '',
         lga: '',
         googleMap: '',
+        addressSource: undefined,
       });
       // Also clear Stash data and risk overlays when address is cleared
       setStashData(null);
@@ -708,6 +710,8 @@ export function Step0AddressAndRisk() {
         if (geocoded.formattedAddress) {
           console.log('Updating property address with Geoscape corrected version:', geocoded.formattedAddress);
           addressUpdates.propertyAddress = geocoded.formattedAddress;
+          // Store original Stash address for restoration
+          addressUpdates.stashPropertyAddress = geocoded.formattedAddress;
         }
       }
       
@@ -730,6 +734,7 @@ export function Step0AddressAndRisk() {
         // Mark address as verified if we got data from Geoscape
         addressUpdates.addressVerified = true;
         addressUpdates.addressFieldsEditable = false; // Lock fields after verification
+        addressUpdates.addressSource = 'stash'; // Set default to Stash address
         updateAddress(addressUpdates);
       } else {
         console.log('WARNING: No address components returned from Geoscape. Address may be invalid.');
@@ -987,6 +992,7 @@ export function Step0AddressAndRisk() {
                         // Clear only address and risk overlay fields (not Decision Tree)
                         updateAddress({ 
                           propertyAddress: '',
+                          stashPropertyAddress: '',
                           streetNumber: '',
                           streetName: '',
                           suburbName: '',
@@ -996,6 +1002,7 @@ export function Step0AddressAndRisk() {
                           googleMap: '',
                           addressFieldsEditable: false,
                           addressVerified: false,
+                          addressSource: undefined,
                         });
                         updateRiskOverlays({
                           zoning: '',
@@ -1052,17 +1059,18 @@ export function Step0AddressAndRisk() {
                       value="stash"
                       checked={address.addressSource !== 'individual'}
                       onChange={() => {
-                        // Use Stash/Geoscape address
+                        // Restore original Stash address
+                        const stashAddress = address.stashPropertyAddress || address.propertyAddress;
                         updateAddress({ 
                           addressSource: 'stash',
-                          propertyAddress: address.propertyAddress // Keep current Stash address
+                          propertyAddress: stashAddress
                         });
                       }}
                       className="mt-1"
                     />
                     <div className="flex-1">
                       <span className="text-sm font-medium text-gray-700">Stash Address (Validated)</span>
-                      <p className="text-xs text-gray-600 mt-1">{address.propertyAddress}</p>
+                      <p className="text-xs text-gray-600 mt-1">{address.stashPropertyAddress || address.propertyAddress}</p>
                     </div>
                   </label>
                   <label className="flex items-start gap-2 cursor-pointer p-3 bg-white rounded border-2 border-transparent hover:border-blue-300 transition-colors" style={{ borderColor: address.addressSource === 'individual' ? '#3b82f6' : 'transparent' }}>

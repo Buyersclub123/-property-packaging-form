@@ -55,6 +55,7 @@ export interface AddressData {
   addressVerified?: boolean; // True when verified via Stash/Geoscape
   addressFieldsEditable?: boolean; // True when user clicks "Edit Address Fields"
   addressSource?: 'stash' | 'individual'; // Which address source to use for propertyAddress
+  stashPropertyAddress?: string; // Store original Stash/Geoscape validated address for restoration
 }
 
 // Step 2: Stash Risk Overlays
