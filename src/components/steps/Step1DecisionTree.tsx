@@ -11,7 +11,7 @@ export function Step1DecisionTree() {
   const [lots, setLots] = useState<LotDetails[]>(formData.lots || []);
   const [lotNumber, setLotNumber] = useState<string>(address?.lotNumber || '');
   const [lotNumberNotApplicable, setLotNumberNotApplicable] = useState<boolean>(address?.lotNumberNotApplicable || false);
-  const [hasUnitNumbers, setHasUnitNumbers] = useState<boolean>(address?.hasUnitNumbers || false);
+  const [hasUnitNumbers, setHasUnitNumbers] = useState<boolean | undefined>(address?.hasUnitNumbers);
   const [unitNumber, setUnitNumber] = useState<string>(address?.unitNumber || '');
 
   const isProject = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple';
@@ -75,41 +75,103 @@ export function Step1DecisionTree() {
     } else {
       setUnitNumber('');
     }
+    // Only sync if address has a value - don't default to false
     if (address?.hasUnitNumbers !== undefined) {
       setHasUnitNumbers(address.hasUnitNumbers);
     } else {
-      setHasUnitNumbers(false);
+      setHasUnitNumbers(undefined); // Keep as undefined (unselected)
     }
   }, [address?.unitNumber, address?.hasUnitNumbers]);
   
   // Auto-select "Yes" for hasUnitNumbers if Dual Occupancy is selected
+  // Clear to undefined if Dual Occupancy is not "Yes" and was previously auto-set
   useEffect(() => {
-    if (decisionTree.dualOccupancy === 'Yes' && !hasUnitNumbers) {
-      setHasUnitNumbers(true);
-      updateAddress({ hasUnitNumbers: true });
+    if (decisionTree.dualOccupancy === 'Yes') {
+      // Dual Occupancy always requires unit numbers
+      if (hasUnitNumbers !== true) {
+        setHasUnitNumbers(true);
+        updateAddress({ hasUnitNumbers: true });
+      }
+    } else if (decisionTree.dualOccupancy === 'No' || decisionTree.dualOccupancy === null) {
+      // If Dual Occupancy changes away from Yes, reset to undefined (unless user explicitly set it)
+      // Only reset if it was true (could have been auto-set)
+      if (hasUnitNumbers === true && !address?.unitNumber) {
+        // Only auto-clear if no unit number was entered (meaning it was just auto-set)
+        setHasUnitNumbers(undefined);
+        updateAddress({ hasUnitNumbers: undefined });
+      }
     }
   }, [decisionTree.dualOccupancy]);
 
-  // Clear dependent fields when property type changes
+  // Clear dependent fields when property type or lot type changes
   useEffect(() => {
-    // If propertyType is null or changes, reset local state
+    // Clear lot/unit fields when switching property types
+    // This runs whenever propertyType or lotType changes
     if (decisionTree.propertyType === null) {
       setLotNumber('');
       setLotNumberNotApplicable(false);
-      setHasUnitNumbers(false);
+      setHasUnitNumbers(undefined);
       setUnitNumber('');
+      // Also clear from address
+      clearDependentAddressFields();
+      return;
     }
-    // If changing to Established or from Project, clear lot/unit fields
-    if (decisionTree.propertyType === 'Established' || (decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple')) {
-      // Project doesn't have lot numbers or unit numbers in Step 2, they're handled in Project Lots
-      if (decisionTree.lotType === 'Multiple') {
-        setLotNumber('');
-        setLotNumberNotApplicable(false);
-        setHasUnitNumbers(false);
+    
+    // If changing to Established, clear lot number (Established doesn't have lot numbers)
+    if (decisionTree.propertyType === 'Established') {
+      setLotNumber('');
+      setLotNumberNotApplicable(false);
+      // Clear unit numbers too when switching to Established (unless Dual is selected)
+      if (decisionTree.dualOccupancy !== 'Yes') {
+        setHasUnitNumbers(undefined);
         setUnitNumber('');
+        // Update address to remove unit numbers
+        const baseAddressParts: string[] = [];
+        if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+        if (address?.streetName) baseAddressParts.push(address.streetName);
+        if (address?.suburbName) baseAddressParts.push(address.suburbName);
+        if (address?.state) baseAddressParts.push(address.state);
+        if (address?.postCode) baseAddressParts.push(address.postCode);
+        
+        const cleanedAddress = baseAddressParts.length > 0 
+          ? baseAddressParts.join(' ')
+          : (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+        
+        updateAddress({
+          hasUnitNumbers: undefined,
+          unitNumber: '',
+          propertyAddress: cleanedAddress || address?.propertyAddress || '',
+        });
       }
     }
-  }, [decisionTree.propertyType, decisionTree.lotType]);
+    
+    // If changing to Project (Multiple), clear lot/unit fields (handled in Project Lots section)
+    if (decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple') {
+      setLotNumber('');
+      setLotNumberNotApplicable(false);
+      setHasUnitNumbers(undefined);
+      setUnitNumber('');
+      // Update address to remove lot/unit numbers
+      const baseAddressParts: string[] = [];
+      if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+      if (address?.streetName) baseAddressParts.push(address.streetName);
+      if (address?.suburbName) baseAddressParts.push(address.suburbName);
+      if (address?.state) baseAddressParts.push(address.state);
+      if (address?.postCode) baseAddressParts.push(address.postCode);
+      
+      const cleanedAddress = baseAddressParts.length > 0 
+        ? baseAddressParts.join(' ')
+        : (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+      
+      updateAddress({
+        lotNumber: '',
+        lotNumberNotApplicable: false,
+        hasUnitNumbers: undefined,
+        unitNumber: '',
+        propertyAddress: cleanedAddress || address?.propertyAddress || '',
+      });
+    }
+  }, [decisionTree.propertyType, decisionTree.lotType, decisionTree.dualOccupancy]);
 
   // Note: Lot number now shows for H&L and Established, so we don't clear it when switching property types
 
@@ -227,7 +289,7 @@ export function Step1DecisionTree() {
               });
               
               // Clear unit number fields
-              setHasUnitNumbers(false);
+              setHasUnitNumbers(undefined); // Reset to undefined (unselected)
               setUnitNumber('');
               
               // Clear lot number fields
@@ -251,7 +313,7 @@ export function Step1DecisionTree() {
                 lotNumber: '',
                 lotNumberNotApplicable: false,
                 unitNumber: '',
-                hasUnitNumbers: false,
+                hasUnitNumbers: undefined, // Reset to undefined (unselected)
                 propertyAddress: cleanedAddress || address?.propertyAddress || '',
               });
             }
@@ -616,6 +678,9 @@ export function Step1DecisionTree() {
                   <span className="text-sm font-medium text-gray-700">No</span>
                 </label>
               </div>
+              {hasUnitNumbers === undefined && (
+                <p className="text-xs text-gray-500 mt-1">Please select Yes or No</p>
+              )}
             </div>
 
             {/* Which unit(s) are we buying? */}
