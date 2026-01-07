@@ -1241,6 +1241,27 @@ export function Step0AddressAndRisk() {
             {/* LGA - Show with address fields */}
             <LGADisplay />
             </div>
+            
+            {/* Edit Address Fields Button - Below Post Code */}
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (address.addressVerified && !addressFieldsEditable) {
+                    if (confirm('You are about to edit a verified address. Continue?')) {
+                      setAddressFieldsEditable(true);
+                      updateAddress({ addressFieldsEditable: true });
+                    }
+                  } else {
+                    setAddressFieldsEditable(!addressFieldsEditable);
+                    updateAddress({ addressFieldsEditable: !addressFieldsEditable });
+                  }
+                }}
+                className="btn-secondary text-sm"
+              >
+                {addressFieldsEditable ? 'Lock Address Fields' : 'Edit Address Fields'}
+              </button>
+            </div>
           </div>
 
           {/* Google Maps Link */}
