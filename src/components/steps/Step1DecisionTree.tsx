@@ -155,12 +155,42 @@ export function Step1DecisionTree() {
           type="button"
           onClick={() => {
             if (confirm('Are you sure you want to clear all Decision Tree data?')) {
+              // Clear decision tree fields
               updateDecisionTree({
                 propertyType: null,
                 contractType: null,
                 lotType: null,
                 dualOccupancy: null,
                 status: null,
+              });
+              
+              // Clear unit number fields
+              setNumberOfUnits('');
+              setUnitNumber('');
+              
+              // Clear lot number fields
+              setLotNumber('');
+              setLotNumberNotApplicable(false);
+              
+              // Remove lot/unit prefixes from address, rebuild from individual fields
+              const baseAddressParts: string[] = [];
+              if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+              if (address?.streetName) baseAddressParts.push(address.streetName);
+              if (address?.suburbName) baseAddressParts.push(address.suburbName);
+              if (address?.state) baseAddressParts.push(address.state);
+              if (address?.postCode) baseAddressParts.push(address.postCode);
+              
+              const cleanedAddress = baseAddressParts.length > 0 
+                ? baseAddressParts.join(' ')
+                : (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+              
+              // Update address to remove lot/unit numbers
+              updateAddress({
+                lotNumber: '',
+                lotNumberNotApplicable: false,
+                unitNumber: '',
+                totalUnitsAtAddress: undefined,
+                propertyAddress: cleanedAddress || address?.propertyAddress || '',
               });
             }
           }}
