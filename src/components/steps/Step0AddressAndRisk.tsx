@@ -1220,27 +1220,28 @@ export function Step0AddressAndRisk() {
                 className="input-field"
                 readOnly={!addressFieldsEditable}
               />
-              {/* Edit Address Fields Button - Directly below Post Code */}
-              <div className="mt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (address.addressVerified && !addressFieldsEditable) {
-                      if (confirm('You are about to edit a verified address. Continue?')) {
-                        setAddressFieldsEditable(true);
-                        updateAddress({ addressFieldsEditable: true });
-                      }
-                    } else {
-                      setAddressFieldsEditable(!addressFieldsEditable);
-                      updateAddress({ addressFieldsEditable: !addressFieldsEditable });
-                    }
-                  }}
-                  className="btn-secondary text-sm"
-                >
-                  {addressFieldsEditable ? 'Lock Address Fields' : 'Edit Address Fields'}
-                </button>
-              </div>
             </div>
+            </div>
+            
+            {/* Edit Address Fields Button - Directly below Post Code field */}
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (address.addressVerified && !addressFieldsEditable) {
+                    if (confirm('You are about to edit a verified address. Continue?')) {
+                      setAddressFieldsEditable(true);
+                      updateAddress({ addressFieldsEditable: true });
+                    }
+                  } else {
+                    setAddressFieldsEditable(!addressFieldsEditable);
+                    updateAddress({ addressFieldsEditable: !addressFieldsEditable });
+                  }
+                }}
+                className="btn-secondary text-sm"
+              >
+                {addressFieldsEditable ? 'Lock Address Fields' : 'Edit Address Fields'}
+              </button>
             </div>
             
             {/* LGA - Show with address fields */}
