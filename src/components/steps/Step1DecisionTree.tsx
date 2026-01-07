@@ -270,8 +270,8 @@ export function Step1DecisionTree() {
           </p>
         </div>
 
-        {/* Lot Number Section - For H&L and Established */}
-        {(isHAndL || decisionTree.propertyType === 'Established') && (
+        {/* Lot Number Section - Only for H&L */}
+        {isHAndL && (
           <div className="pt-6 border-t">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Lot Number</h3>
             <p className="text-sm text-gray-600 mb-4">
@@ -302,9 +302,18 @@ export function Step1DecisionTree() {
                       
                       // Update address in Step 0
                       if (finalValue) {
-                        const originalAddress = address?.propertyAddress || '';
-                        // Remove existing "Lot X, " prefix if present (case insensitive)
-                        let addressWithoutLot = originalAddress.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                        // Build base address from individual fields to ensure we preserve everything
+                        const baseAddressParts: string[] = [];
+                        if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+                        if (address?.streetName) baseAddressParts.push(address.streetName);
+                        if (address?.suburbName) baseAddressParts.push(address.suburbName);
+                        if (address?.state) baseAddressParts.push(address.state);
+                        if (address?.postCode) baseAddressParts.push(address.postCode);
+                        
+                        // If we don't have individual fields, fall back to propertyAddress but remove lot/unit prefixes
+                        let baseAddress = baseAddressParts.length > 0 
+                          ? baseAddressParts.join(' ')
+                          : (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
                         
                         // Build address: Lot + Unit (if exists) + Street
                         let newAddress = '';
@@ -318,17 +327,9 @@ export function Step1DecisionTree() {
                           } else {
                             unitPrefix = `Unit ${address.unitNumber}`;
                           }
-                          // Remove unit prefix from addressWithoutLot if present (need to handle comma-separated units)
-                          addressWithoutLot = addressWithoutLot.replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
-                          // Ensure we preserve the street address - if addressWithoutLot is empty or too short, use original
-                          if (!addressWithoutLot || addressWithoutLot.length < 3) {
-                            // Try to get base address by removing both lot and unit from original
-                            const baseAddress = originalAddress.replace(/^Lot\s+[\d\w]+,\s*/i, '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
-                            addressWithoutLot = baseAddress || addressWithoutLot;
-                          }
-                          newAddress = addressWithoutLot ? `Lot ${finalValue}, ${unitPrefix}, ${addressWithoutLot}` : `Lot ${finalValue}, ${unitPrefix}`;
+                          newAddress = baseAddress ? `Lot ${finalValue}, ${unitPrefix}, ${baseAddress}` : `Lot ${finalValue}, ${unitPrefix}`;
                         } else {
-                          newAddress = addressWithoutLot ? `Lot ${finalValue}, ${addressWithoutLot}` : `Lot ${finalValue}`;
+                          newAddress = baseAddress ? `Lot ${finalValue}, ${baseAddress}` : `Lot ${finalValue}`;
                         }
                         updateAddress({ 
                           lotNumber: finalValue,
@@ -337,25 +338,56 @@ export function Step1DecisionTree() {
                         });
                       } else {
                         // Remove lot prefix from address, preserve unit if exists
-                        let addressWithoutLot = (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
-                        if (address?.unitNumber) {
-                          // Keep unit in address
-                          let unitPrefix = '';
-                          if (address.unitNumber.includes('-')) {
-                            unitPrefix = `Units ${address.unitNumber}`;
-                          } else if (address.unitNumber.includes(',')) {
-                            unitPrefix = `Units ${address.unitNumber}`;
+                        // Build base address from individual fields to ensure we preserve everything
+                        const baseAddressParts: string[] = [];
+                        if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+                        if (address?.streetName) baseAddressParts.push(address.streetName);
+                        if (address?.suburbName) baseAddressParts.push(address.suburbName);
+                        if (address?.state) baseAddressParts.push(address.state);
+                        if (address?.postCode) baseAddressParts.push(address.postCode);
+                        
+                        let finalAddress = '';
+                        if (baseAddressParts.length > 0) {
+                          // Use individual fields
+                          const baseAddress = baseAddressParts.join(' ');
+                          if (address?.unitNumber) {
+                            // Format unit number
+                            let unitPrefix = '';
+                            if (address.unitNumber.includes('-')) {
+                              unitPrefix = `Units ${address.unitNumber}`;
+                            } else if (address.unitNumber.includes(',')) {
+                              unitPrefix = `Units ${address.unitNumber}`;
+                            } else {
+                              unitPrefix = `Unit ${address.unitNumber}`;
+                            }
+                            finalAddress = `${unitPrefix}, ${baseAddress}`;
                           } else {
-                            unitPrefix = `Unit ${address.unitNumber}`;
+                            finalAddress = baseAddress;
                           }
-                          // Remove unit prefix to get base address
-                          const baseAddress = addressWithoutLot.replace(/^(Units?)\s+[^,]+,\s*/i, '').trim();
-                          addressWithoutLot = `${unitPrefix}, ${baseAddress}`;
+                        } else {
+                          // Fall back to propertyAddress, remove lot/unit prefixes
+                          let addressWithoutLot = (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                          if (address?.unitNumber) {
+                            // Keep unit in address
+                            let unitPrefix = '';
+                            if (address.unitNumber.includes('-')) {
+                              unitPrefix = `Units ${address.unitNumber}`;
+                            } else if (address.unitNumber.includes(',')) {
+                              unitPrefix = `Units ${address.unitNumber}`;
+                            } else {
+                              unitPrefix = `Unit ${address.unitNumber}`;
+                            }
+                            // Remove unit prefix to get base address
+                            const baseAddress = addressWithoutLot.replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+                            finalAddress = `${unitPrefix}, ${baseAddress}`;
+                          } else {
+                            finalAddress = addressWithoutLot;
+                          }
                         }
                         updateAddress({ 
                           lotNumber: '',
                           lotNumberNotApplicable: false,
-                          propertyAddress: addressWithoutLot || address?.propertyAddress || ''
+                          propertyAddress: finalAddress || address?.propertyAddress || ''
                         });
                       }
                     }
@@ -472,10 +504,18 @@ export function Step1DecisionTree() {
                     
                     // Update address with unit number
                     if (value) {
-                      const originalAddress = address?.propertyAddress || '';
-                      // Remove existing unit prefixes (Unit X, Units X-Y, Units X,Y,Z)
-                      // Match "Unit X, " or "Units X-Y, " or "Units X,Y,Z, " - match until the comma after the unit info
-                      const addressWithoutUnit = originalAddress.replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+                      // Build base address from individual fields to ensure we preserve everything
+                      const baseAddressParts: string[] = [];
+                      if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+                      if (address?.streetName) baseAddressParts.push(address.streetName);
+                      if (address?.suburbName) baseAddressParts.push(address.suburbName);
+                      if (address?.state) baseAddressParts.push(address.state);
+                      if (address?.postCode) baseAddressParts.push(address.postCode);
+                      
+                      // If we don't have individual fields, fall back to propertyAddress but remove lot/unit prefixes
+                      let baseAddress = baseAddressParts.length > 0 
+                        ? baseAddressParts.join(' ')
+                        : (address?.propertyAddress || '').replace(/^Lot\s+[\d\w]+,\s*/i, '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
                       
                       // Format unit number for address
                       let unitPrefix = '';
@@ -490,25 +530,12 @@ export function Step1DecisionTree() {
                         unitPrefix = `Unit ${value}`;
                       }
                       
-                      // Remove existing lot prefix if present, then add lot + unit
-                      let addressWithoutLot = addressWithoutUnit.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
-                      
-                      // Ensure we preserve the street address - if addressWithoutLot is empty or too short, use original without prefixes
-                      if (!addressWithoutLot || addressWithoutLot.length < 3) {
-                        // Try to get base address by removing both lot and unit from original
-                        const baseAddress = originalAddress
-                          .replace(/^Lot\s+[\d\w]+,\s*/i, '')
-                          .replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '')
-                          .trim();
-                        addressWithoutLot = baseAddress || addressWithoutLot || originalAddress;
-                      }
-                      
                       // Build new address: Lot (if exists) + Unit + Street
                       let newAddress = '';
                       if (address?.lotNumber && !address.lotNumberNotApplicable) {
-                        newAddress = addressWithoutLot ? `Lot ${address.lotNumber}, ${unitPrefix}, ${addressWithoutLot}` : `Lot ${address.lotNumber}, ${unitPrefix}`;
+                        newAddress = baseAddress ? `Lot ${address.lotNumber}, ${unitPrefix}, ${baseAddress}` : `Lot ${address.lotNumber}, ${unitPrefix}`;
                       } else {
-                        newAddress = addressWithoutLot ? `${unitPrefix}, ${addressWithoutLot}` : unitPrefix;
+                        newAddress = baseAddress ? `${unitPrefix}, ${baseAddress}` : unitPrefix;
                       }
                       
                       updateAddress({ 
@@ -517,13 +544,32 @@ export function Step1DecisionTree() {
                       });
                     } else {
                       // Remove unit prefix from address
-                      // Match "Unit X, " or "Units X-Y, " or "Units X,Y,Z, " - match until the comma after the unit info
-                      const addressWithoutUnit = (address?.propertyAddress || '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
-                      // Preserve lot number if it exists
-                      let finalAddress = addressWithoutUnit;
-                      if (address?.lotNumber && !address.lotNumberNotApplicable) {
-                        const addressWithoutLot = addressWithoutUnit.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
-                        finalAddress = `Lot ${address.lotNumber}, ${addressWithoutLot}`;
+                      // Build base address from individual fields to ensure we preserve everything
+                      const baseAddressParts: string[] = [];
+                      if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+                      if (address?.streetName) baseAddressParts.push(address.streetName);
+                      if (address?.suburbName) baseAddressParts.push(address.suburbName);
+                      if (address?.state) baseAddressParts.push(address.state);
+                      if (address?.postCode) baseAddressParts.push(address.postCode);
+                      
+                      let finalAddress = '';
+                      if (baseAddressParts.length > 0) {
+                        // Use individual fields
+                        const baseAddress = baseAddressParts.join(' ');
+                        if (address?.lotNumber && !address.lotNumberNotApplicable) {
+                          finalAddress = `Lot ${address.lotNumber}, ${baseAddress}`;
+                        } else {
+                          finalAddress = baseAddress;
+                        }
+                      } else {
+                        // Fall back to propertyAddress, remove unit prefix
+                        const addressWithoutUnit = (address?.propertyAddress || '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+                        // Preserve lot number if it exists
+                        finalAddress = addressWithoutUnit;
+                        if (address?.lotNumber && !address.lotNumberNotApplicable) {
+                          const addressWithoutLot = addressWithoutUnit.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                          finalAddress = `Lot ${address.lotNumber}, ${addressWithoutLot}`;
+                        }
                       }
                       updateAddress({ 
                         unitNumber: '',
