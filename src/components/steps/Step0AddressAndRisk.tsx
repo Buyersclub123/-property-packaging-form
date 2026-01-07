@@ -1259,11 +1259,10 @@ export function Step0AddressAndRisk() {
                 </button>
               </div>
             </div>
-            </div>
-            
             {/* LGA - Show with address fields */}
-            <div className="mt-4">
+            <div>
               <LGADisplay />
+            </div>
             </div>
           </div>
 
