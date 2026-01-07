@@ -271,7 +271,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         }
         // Sourcer is required (must click "Continue with Packaging" first)
         if (!formData.sourcer || formData.sourcer.trim() === '') {
-          setValidationError('Please click "Continue with Packaging" and fill in the Sourcer field before proceeding.');
+          setValidationErrorWithRef('Please click "Continue with Packaging" and fill in the Sourcer field before proceeding.');
           return false;
         }
         return true;
@@ -279,23 +279,23 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       case 2: // Decision Tree
         // All decision tree fields are required
         if (!decisionTree?.propertyType || !decisionTree?.status) {
-          setValidationError('Property Type and Status are required.');
+          setValidationErrorWithRef('Property Type and Status are required.');
           return false;
         }
         // If Property Type is New, Contract Type and Lot Type are required
         if (decisionTree.propertyType === 'New') {
           if (!decisionTree?.contractType || !decisionTree?.lotType) {
-            setValidationError('Contract Type and Lot Type are required for New properties.');
+            setValidationErrorWithRef('Contract Type and Lot Type are required for New properties.');
             return false;
           }
           // If Lot Type is Multiple, need at least one lot
           if (decisionTree.lotType === 'Multiple' && (!lots || lots.length === 0)) {
-            setValidationError('At least one lot is required for Project properties.');
+            setValidationErrorWithRef('At least one lot is required for Project properties.');
             return false;
           }
           // If Lot Type is Individual, Dual Occupancy is required
           if (decisionTree.lotType === 'Individual' && !decisionTree?.dualOccupancy) {
-            setValidationError('Single or Dual Occupancy is required for H&L properties.');
+            setValidationErrorWithRef('Single or Dual Occupancy is required for H&L properties.');
             return false;
           }
           // For H&L, lot number must be provided OR "Not Applicable" must be selected
@@ -306,7 +306,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             const hasLotNumber = address?.lotNumber && address.lotNumber.trim() !== '';
             const hasNotApplicable = address?.lotNumberNotApplicable === true;
             if (!hasLotNumber && !hasNotApplicable) {
-              setValidationError('Please enter a Lot Number or select "Not Applicable" for H&L properties.');
+              setValidationErrorWithRef('Please enter a Lot Number or select "Not Applicable" for H&L properties.');
               return false;
             }
           }
@@ -317,14 +317,14 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             !(decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple')) {
           // hasUnitNumbers must be selected (true or false, not undefined)
           if (address?.hasUnitNumbers === undefined) {
-            setValidationError('Please select "Yes" or "No" for "Does this property have unit numbers?".');
+            setValidationErrorWithRef('Please select "Yes" or "No" for "Does this property have unit numbers?".');
             return false;
           }
           
           // For unit numbers: if hasUnitNumbers is true, unitNumber must be provided
           if (address?.hasUnitNumbers === true) {
             if (!address?.unitNumber || address.unitNumber.trim() === '') {
-              setValidationError('Please enter which unit(s) you are buying.');
+              setValidationErrorWithRef('Please enter which unit(s) you are buying.');
               return false;
             }
           }
@@ -332,11 +332,11 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           // For dual occupancy: hasUnitNumbers must be true (it's auto-selected, but validate anyway)
           if (decisionTree?.dualOccupancy === 'Yes') {
             if (address?.hasUnitNumbers !== true) {
-              setValidationError('Dual occupancy properties must have unit numbers. Please select "Yes" for unit numbers.');
+              setValidationErrorWithRef('Dual occupancy properties must have unit numbers. Please select "Yes" for unit numbers.');
               return false;
             }
             if (!address?.unitNumber || address.unitNumber.trim() === '') {
-              setValidationError('Please enter which unit(s) you are buying for this dual occupancy property.');
+              setValidationErrorWithRef('Please enter which unit(s) you are buying for this dual occupancy property.');
               return false;
             }
           }
@@ -358,7 +358,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           
           // Check for empty lot numbers
           if (emptyLotNumbers.length > 0) {
-            setValidationError(`Lot Number is required for all lots. Missing for Lot ${emptyLotNumbers.join(', ')}.`);
+            setValidationErrorWithRef(`Lot Number is required for all lots. Missing for Lot ${emptyLotNumbers.join(', ')}.`);
             return false;
           }
           
@@ -371,7 +371,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           });
           
           if (duplicates.length > 0) {
-            setValidationError(`Duplicate lot numbers detected: ${duplicates.join(', ')}. Each lot must have a unique number.`);
+            setValidationErrorWithRef(`Duplicate lot numbers detected: ${duplicates.join(', ')}. Each lot must have a unique number.`);
             return false;
           }
           
@@ -384,7 +384,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           });
           
           if (missingOccupancy.length > 0) {
-            setValidationError(`Single or Dual Occupancy is required for all lots. Missing for Lot ${missingOccupancy.join(', ')}.`);
+            setValidationErrorWithRef(`Single or Dual Occupancy is required for all lots. Missing for Lot ${missingOccupancy.join(', ')}.`);
             return false;
           }
         }
@@ -402,19 +402,19 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         if (isProject) {
           // Project Address is required at project level
           if (isEmpty(address?.projectAddress)) {
-            setValidationError('Project Address is required.');
+            setValidationErrorWithRef('Project Address is required.');
             return false;
           }
           
           // Comparable Sales is required at project level
           if (isEmpty(purchasePrice?.comparableSales)) {
-            setValidationError('Comparable Sales (Shared) is required.');
+            setValidationErrorWithRef('Comparable Sales (Shared) is required.');
             return false;
           }
           
           // Validate each lot
           if (!lots || lots.length === 0) {
-            setValidationError('At least one lot is required.');
+            setValidationErrorWithRef('At least one lot is required.');
             return false;
           }
           
@@ -429,19 +429,19 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             if (isEmpty(lotPropertyDescription?.bedsPrimary) || isEmpty(lotPropertyDescription?.bathPrimary) || 
                 isEmpty(lotPropertyDescription?.garagePrimary) || isEmpty(lotPropertyDescription?.landSize) || 
                 isEmpty(lotPropertyDescription?.title)) {
-              setValidationError(`Lot ${lot.lotNumber || i + 1}: Beds, Bath, Garage, Land Size, and Title are required.`);
+              setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Beds, Bath, Garage, Land Size, and Title are required.`);
               return false;
             }
             
             // Land Registration is required
             if (isEmpty(lotPropertyDescription?.landRegistration)) {
-              setValidationError(`Lot ${lot.lotNumber || i + 1}: Land Registration is required.`);
+              setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Land Registration is required.`);
               return false;
             }
             
             // Build Size is required
             if (isEmpty(lotPropertyDescription?.buildSize)) {
-              setValidationError(`Lot ${lot.lotNumber || i + 1}: Build Size is required.`);
+              setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Build Size is required.`);
               return false;
             }
             
@@ -449,14 +449,14 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             const titleLower = lotPropertyDescription?.title?.toLowerCase() || '';
             if ((titleLower.includes('strata') || titleLower.includes('owners corp')) && 
                 isEmpty(lotPropertyDescription?.bodyCorpPerQuarter)) {
-              setValidationError(`Lot ${lot.lotNumber || i + 1}: Body Corp Per Quarter is required for Strata/Owners Corp titles.`);
+              setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Body Corp Per Quarter is required for Strata/Owners Corp titles.`);
               return false;
             }
             
             // For dual occupancy, secondary beds, bath, and garage are required
             if (lotIsDualOccupancy) {
               if (isEmpty(lotPropertyDescription?.bedsSecondary) || isEmpty(lotPropertyDescription?.bathSecondary) || isEmpty(lotPropertyDescription?.garageSecondary)) {
-                setValidationError(`Lot ${lot.lotNumber || i + 1}: Secondary Beds, Bath, and Garage are required for Dual Occupancy.`);
+                setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Secondary Beds, Bath, and Garage are required for Dual Occupancy.`);
                 return false;
               }
             }
@@ -464,26 +464,26 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             // Purchase Price - For Single Contract: Total Price required, Otherwise: Land Price and Build Price required
             if (isSingleContract) {
               if (isEmpty(lotPurchasePrice?.totalPrice)) {
-                setValidationError(`Lot ${lot.lotNumber || i + 1}: Total Price is required for Single Contract.`);
+                setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Total Price is required for Single Contract.`);
                 return false;
               }
             } else {
               if (isEmpty(lotPurchasePrice?.landPrice) || isEmpty(lotPurchasePrice?.buildPrice)) {
-                setValidationError(`Lot ${lot.lotNumber || i + 1}: Land Price and Build Price are required.`);
+                setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Land Price and Build Price are required.`);
                 return false;
               }
             }
             
             // Rental Assessment - Rent Appraisal From & To are required
             if (isEmpty(lotRentalAssessment?.rentAppraisalPrimaryFrom) || isEmpty(lotRentalAssessment?.rentAppraisalPrimaryTo)) {
-              setValidationError(`Lot ${lot.lotNumber || i + 1}: Rent Appraisal From and To (Primary) are required.`);
+              setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Rent Appraisal From and To (Primary) are required.`);
               return false;
             }
             
             // For dual occupancy, secondary rent appraisal is also required
             if (lotIsDualOccupancy) {
               if (isEmpty(lotRentalAssessment?.rentAppraisalSecondaryFrom) || isEmpty(lotRentalAssessment?.rentAppraisalSecondaryTo)) {
-                setValidationError(`Lot ${lot.lotNumber || i + 1}: Rent Appraisal From and To (Secondary) are required for Dual Occupancy.`);
+                setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Rent Appraisal From and To (Secondary) are required for Dual Occupancy.`);
                 return false;
               }
             }
@@ -503,12 +503,12 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         // Year Built required for Established, Land Registration required for H&L/Projects
         if (decisionTree?.propertyType === 'Established') {
           if (isEmpty(propertyDescription?.yearBuilt)) {
-            setValidationError('Year Built is required for Established properties.');
+            setValidationErrorWithRef('Year Built is required for Established properties.');
             return false;
           }
         } else if (decisionTree?.propertyType === 'New') {
           if (isEmpty(propertyDescription?.landRegistration)) {
-            setValidationError('Land Registration is required for H&L/Project properties.');
+            setValidationErrorWithRef('Land Registration is required for H&L/Project properties.');
             return false;
           }
         }
@@ -516,7 +516,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         // Build Size required for H&L
         if (isHAndL) {
           if (isEmpty(propertyDescription?.buildSize)) {
-            setValidationError('Build Size is required for H&L properties.');
+            setValidationErrorWithRef('Build Size is required for H&L properties.');
             return false;
           }
         }
@@ -539,7 +539,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         // Asking and Asking Text only required for Established
         if (decisionTree?.propertyType === 'Established') {
           if (isEmpty(purchasePrice?.asking) || isEmpty(purchasePrice?.askingText) || isEmpty(purchasePrice?.comparableSales)) {
-            setValidationError('Asking, Asking Text, and Comparable Sales are required for Established properties.');
+            setValidationErrorWithRef('Asking, Asking Text, and Comparable Sales are required for Established properties.');
             return false;
           }
         }
@@ -548,20 +548,20 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         if (isHAndL) {
           if (isSingleContract) {
             if (isEmpty(purchasePrice?.totalPrice)) {
-              setValidationError('Total Price is required for Single Contract (H&L).');
+              setValidationErrorWithRef('Total Price is required for Single Contract (H&L).');
               return false;
             }
           } else {
             // For H&L (not Single Contract), Land Price, Build Price, and Comparable Sales are required
             if (isEmpty(purchasePrice?.landPrice) || isEmpty(purchasePrice?.buildPrice) || isEmpty(purchasePrice?.comparableSales)) {
-              setValidationError('Land Price, Build Price, and Comparable Sales are required for H&L properties.');
+              setValidationErrorWithRef('Land Price, Build Price, and Comparable Sales are required for H&L properties.');
               return false;
             }
           }
         } else {
           // For Projects, only Comparable Sales is required
           if (isEmpty(purchasePrice?.comparableSales)) {
-            setValidationError('Comparable Sales is required.');
+            setValidationErrorWithRef('Comparable Sales is required.');
             return false;
           }
         }
@@ -569,7 +569,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         // Acceptable Acquisition From & To are required for Established
         if (decisionTree?.propertyType === 'Established') {
           if (isEmpty(purchasePrice?.acceptableAcquisitionFrom) || isEmpty(purchasePrice?.acceptableAcquisitionTo)) {
-            setValidationError('Acceptable Acquisition From and To are required for Established properties.');
+            setValidationErrorWithRef('Acceptable Acquisition From and To are required for Established properties.');
             return false;
           }
         }
@@ -578,14 +578,14 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         // Occupancy only required for Established properties
         if (isEstablished) {
           if (isEmpty(rentalAssessment?.occupancy)) {
-            setValidationError('Occupancy is required for Established properties.');
+            setValidationErrorWithRef('Occupancy is required for Established properties.');
             return false;
           }
           
           // If Occupancy is Tenanted, Current Rent and Expiry are required
           if (rentalAssessment?.occupancy === 'Tenanted') {
             if (isEmpty(rentalAssessment?.currentRentPrimary)) {
-              setValidationError('Current Rent (Primary) is required when Occupancy is "Tenanted".');
+              setValidationErrorWithRef('Current Rent (Primary) is required when Occupancy is "Tenanted".');
               return false;
             }
             // Expiry must be either TBC or have a valid format (month/year or partial)
@@ -595,14 +595,14 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
                                          (expiryPrimary.trim().endsWith(' ') && expiryPrimary.trim().length > 0) || // "October "
                                          (expiryPrimary.trim().startsWith(' ') && /^\s+\d{4}$/.test(expiryPrimary)); // " 2025"
             if (isEmpty(expiryPrimary) || !isValidExpiryPrimary) {
-              setValidationError('Expiry (Primary) must be "TBC" or have both month and year selected when Occupancy is "Tenanted".');
+              setValidationErrorWithRef('Expiry (Primary) must be "TBC" or have both month and year selected when Occupancy is "Tenanted".');
               return false;
             }
             
             // For dual occupancy, secondary rent and expiry are also required
             if (isDualOccupancy) {
               if (isEmpty(rentalAssessment?.currentRentSecondary)) {
-                setValidationError('Current Rent (Secondary) is required for Dual Occupancy when Occupancy is "Tenanted".');
+                setValidationErrorWithRef('Current Rent (Secondary) is required for Dual Occupancy when Occupancy is "Tenanted".');
                 return false;
               }
               const expirySecondary = rentalAssessment?.expirySecondary || '';
@@ -611,7 +611,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
                                             (expirySecondary.trim().endsWith(' ') && expirySecondary.trim().length > 0) || // "October "
                                             (expirySecondary.trim().startsWith(' ') && /^\s+\d{4}$/.test(expirySecondary)); // " 2025"
               if (isEmpty(expirySecondary) || !isValidExpirySecondary) {
-                setValidationError('Expiry (Secondary) must be "TBC" or have both month and year selected for Dual Occupancy when Occupancy is "Tenanted".');
+                setValidationErrorWithRef('Expiry (Secondary) must be "TBC" or have both month and year selected for Dual Occupancy when Occupancy is "Tenanted".');
                 return false;
               }
             }
@@ -627,7 +627,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         // For dual occupancy, secondary rent appraisal is also required
         if (isDualOccupancy) {
           if (isEmpty(rentalAssessment?.rentAppraisalSecondaryFrom) || isEmpty(rentalAssessment?.rentAppraisalSecondaryTo)) {
-            setValidationError('Rent Appraisal From and To (Secondary) are required for Dual Occupancy.');
+            setValidationErrorWithRef('Rent Appraisal From and To (Secondary) are required for Dual Occupancy.');
             return false;
           }
         }
