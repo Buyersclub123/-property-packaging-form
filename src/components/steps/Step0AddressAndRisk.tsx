@@ -397,7 +397,6 @@ export function Step0AddressAndRisk() {
   const { address, riskOverlays, sourcer, sellingAgentName, sellingAgentEmail, sellingAgentMobile } = formData;
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [packagingEnabled, setPackagingEnabled] = useState(false);
-  const [folderCreated, setFolderCreated] = useState(false);
   const [addressFieldsEditable, setAddressFieldsEditable] = useState(address.addressFieldsEditable || false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [sourcerOptions, setSourcerOptions] = useState<string[]>([]);
@@ -885,14 +884,12 @@ export function Step0AddressAndRisk() {
   };
 
   const handleContinueWithPackaging = async () => {
-    // Prevent multiple folder creations
-    if (folderCreated) {
-      // Folder already created, just show fields
-      setPackagingEnabled(true);
+    // If already enabled, just return
+    if (packagingEnabled) {
       return;
     }
 
-    // Step 1: Check if address already exists in GHL
+    // Check if address exists (for GHL duplicate check - informational only)
     const propertyAddress = address.propertyAddress || address.stashPropertyAddress;
     if (!propertyAddress) {
       alert('Please enter and verify an address first');
@@ -900,7 +897,7 @@ export function Step0AddressAndRisk() {
     }
 
     try {
-      // Check address in GHL
+      // Check address in GHL (informational - don't block if duplicate found)
       const checkResponse = await fetch('/api/ghl/check-address', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -910,49 +907,23 @@ export function Step0AddressAndRisk() {
       const checkResult = await checkResponse.json();
 
       if (checkResult.exists && checkResult.matchingRecords && checkResult.matchingRecords.length > 0) {
-        // Address already exists - show warning
+        // Address already exists - show warning but don't block
         const matches = checkResult.matchingRecords;
         const matchInfo = matches.map((m: any) => 
           `Address: ${m.address}\nPackager: ${m.packager || 'N/A'}\nSourcer: ${m.sourcer || 'N/A'}`
         ).join('\n\n');
         
-        const proceed = confirm(
-          `This address already exists in GHL:\n\n${matchInfo}\n\nDo you want to proceed with creating a new folder anyway?`
+        alert(
+          `Note: This address already exists in GHL:\n\n${matchInfo}\n\nYou can continue. Folder will be created when you submit the form.`
         );
-        
-        if (!proceed) {
-          return; // User cancelled
-        }
       }
 
-      // Step 2: Create folder
-      const folderResponse = await fetch('/api/create-property-folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ propertyAddress }),
-      });
-
-      const folderResult = await folderResponse.json();
-
-      if (!folderResult.success) {
-        throw new Error(folderResult.error || 'Failed to create folder');
-      }
-
-      // Store folder link in form data
-      updateAddress({
-        folderLink: folderResult.folderLink,
-        folderName: folderResult.folderName,
-      });
-
-      // Mark folder as created
-      setFolderCreated(true);
-      
       // Show Sourcer and Selling Agent fields
+      // Folder will be created at final submission (Step 5) when address is complete
       setPackagingEnabled(true);
     } catch (error) {
-      console.error('Error creating folder:', error);
-      alert(`Error creating folder: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      // Still show fields even if folder creation fails
+      console.error('Error checking address:', error);
+      // Don't block progression if check fails - just show fields
       setPackagingEnabled(true);
     }
   };
@@ -1653,13 +1624,13 @@ export function Step0AddressAndRisk() {
         <div className="pt-6 border-t">
           <button
             onClick={handleContinueWithPackaging}
-            disabled={!address.propertyAddress.trim() || riskOverlays.dueDiligenceAcceptance === 'No' || folderCreated}
+            disabled={!address.propertyAddress.trim() || riskOverlays.dueDiligenceAcceptance === 'No' || packagingEnabled}
             className="btn-primary w-full text-lg py-3 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {folderCreated ? 'Folder Created - Fields Shown Below' : 'Continue with Packaging'}
+            {packagingEnabled ? 'Fields Shown Below' : 'Continue with Packaging'}
           </button>
           <p className="text-xs text-gray-500 mt-2 text-center">
-            "Continue with Packaging" will create a folder for documents and enable the next steps
+            "Continue with Packaging" will enable the Sourcer and Selling Agent fields below
           </p>
         </div>
       )}
@@ -1742,7 +1713,6 @@ export function Step0AddressAndRisk() {
                 // Also clear Step 2 data
                 store.clearStep2Data();
                 setPackagingEnabled(false);
-                setFolderCreated(false);
                 if (typeof window !== 'undefined') {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
@@ -1765,7 +1735,7 @@ export function Step0AddressAndRisk() {
       {packagingEnabled && (
         <div className="mt-4 p-4 bg-gray-50 rounded-lg">
           <p className="text-sm text-gray-700">
-            <strong>📁 CMI Reports:</strong> Please save CMI reports in the property folder created when you clicked "Continue with Packaging".
+            <strong>📁 CMI Reports:</strong> Please save CMI reports in the property folder. The folder will be created when you submit the form at the end.
           </p>
         </div>
       )}
