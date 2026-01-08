@@ -329,13 +329,14 @@ function ZoningDisplay() {
 
   return (
     <div>
-      <label className="label-field">Zoning</label>
+      <label className="label-field">Zoning *</label>
       <input
         type="text"
         value={zoningValue}
         onChange={(e) => updateRiskOverlays({ zoning: e.target.value })}
         className="input-field"
         placeholder="Auto-populated from Stash"
+        required
       />
       {isDuplicate && (
         <p className="text-xs text-gray-500 mt-1">

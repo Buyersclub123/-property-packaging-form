@@ -263,8 +263,9 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         if (!address?.propertyAddress || address.propertyAddress.trim() === '') {
           return false;
         }
-        // All risk overlay fields are required
-        if (!riskOverlays?.flood || !riskOverlays?.bushfire || !riskOverlays?.mining || 
+        // All risk overlay fields are required (including zoning)
+        if (!riskOverlays?.zoning || riskOverlays.zoning.trim() === '' ||
+            !riskOverlays?.flood || !riskOverlays?.bushfire || !riskOverlays?.mining || 
             !riskOverlays?.otherOverlay || !riskOverlays?.specialInfrastructure || 
             !riskOverlays?.dueDiligenceAcceptance) {
           return false;
