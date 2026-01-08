@@ -861,7 +861,25 @@ export function Step0AddressAndRisk() {
   };
 
   const handleOverlayChange = (field: keyof typeof riskOverlays, value: YesNo) => {
-    updateRiskOverlays({ [field]: value });
+    const updates: Partial<RiskOverlays> = { [field]: value };
+    
+    // Clear dialogue text when changing to "No" or any non-"Yes" value
+    // Set to undefined to ensure proper clearing (empty string might not clear properly)
+    if (value !== 'Yes') {
+      if (field === 'flood') {
+        updates.floodDialogue = undefined;
+      } else if (field === 'bushfire') {
+        updates.bushfireDialogue = undefined;
+      } else if (field === 'mining') {
+        updates.miningDialogue = undefined;
+      } else if (field === 'otherOverlay') {
+        updates.otherOverlayDialogue = undefined;
+      } else if (field === 'specialInfrastructure') {
+        updates.specialInfrastructureDialogue = undefined;
+      }
+    }
+    
+    updateRiskOverlays(updates);
     checkDialogueWarning(field, value);
   };
 
@@ -880,6 +898,11 @@ export function Step0AddressAndRisk() {
       mining: 'No',
       otherOverlay: 'No',
       specialInfrastructure: 'No',
+      floodDialogue: undefined,
+      bushfireDialogue: undefined,
+      miningDialogue: undefined,
+      otherOverlayDialogue: undefined,
+      specialInfrastructureDialogue: undefined,
     });
   };
 
