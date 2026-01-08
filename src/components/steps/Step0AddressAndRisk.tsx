@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react';
 import { useFormStore } from '@/store/formStore';
 import { getStashData } from '@/lib/stash';
 import { geocodeAddress } from '@/lib/geocoder';
-import { YesNo } from '@/types/form';
+import { YesNo, RiskOverlays } from '@/types/form';
 import { getSourcerNames } from '@/lib/sourcerList';
 // TODO: Address validation with suggestions - to be implemented later
 
