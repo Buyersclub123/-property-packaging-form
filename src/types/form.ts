@@ -37,6 +37,7 @@ export interface AddressData {
   state?: string; // Project Address components
   postCode?: string; // Project Address components
   projectAddress?: string; // Combined Project Address (used in email template)
+  usePropertyAddressForProject?: boolean; // If true, use propertyAddress for projectAddress
   projectName?: string; // Project name (for projects)
   googleMap?: string;
   latitude?: number;

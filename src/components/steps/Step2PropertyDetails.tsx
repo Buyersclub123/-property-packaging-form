@@ -1742,6 +1742,13 @@ function ProjectLotsView() {
     }
   }, [lots?.length]);
   
+  // Sync propertyAddress to projectAddress when checkbox is checked
+  useEffect(() => {
+    if (formData.address?.usePropertyAddressForProject && formData.address?.propertyAddress) {
+      updateAddress({ projectAddress: formData.address.propertyAddress });
+    }
+  }, [formData.address?.propertyAddress, formData.address?.usePropertyAddressForProject, updateAddress]);
+  
   const toggleLotSection = (lotIndex: number, sectionType: 'propertyDescription' | 'purchasePrice' | 'rentalAssessment') => {
     const newExpanded = new Map(expandedLotSections);
     const lotSections = newExpanded.get(lotIndex) || new Set<string>();
@@ -2057,30 +2064,68 @@ function ProjectLotsView() {
               </button>
               {expandedProjectSections.has('address') && (
                 <div className="p-4 bg-white">
+                  {/* Checkbox to use property address */}
+                  <div className="mb-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.address?.usePropertyAddressForProject || false}
+                        onChange={(e) => {
+                          const usePropertyAddress = e.target.checked;
+                          updateAddress({ 
+                            usePropertyAddressForProject: usePropertyAddress,
+                            // If checked, copy property address; if unchecked, keep current value
+                            projectAddress: usePropertyAddress 
+                              ? (formData.address?.propertyAddress || '')
+                              : (formData.address?.projectAddress || '')
+                          });
+                        }}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-medium text-gray-700">
+                        Use Property Address from Step 1
+                      </span>
+                    </label>
+                  </div>
+                  
                   <input
                     type="text"
-                    value={formData.address?.projectAddress || ''}
+                    value={
+                      formData.address?.usePropertyAddressForProject
+                        ? (formData.address?.propertyAddress || '')
+                        : (formData.address?.projectAddress || '')
+                    }
                     onChange={(e) => {
-                      updateAddress({ projectAddress: e.target.value });
+                      if (!formData.address?.usePropertyAddressForProject) {
+                        updateAddress({ projectAddress: e.target.value });
+                      }
                     }}
                     onBlur={(e) => {
-                      // Trim whitespace on blur
-                      const trimmed = e.target.value.trim();
-                      if (trimmed !== e.target.value) {
-                        updateAddress({ projectAddress: trimmed });
+                      if (!formData.address?.usePropertyAddressForProject) {
+                        // Trim whitespace on blur
+                        const trimmed = e.target.value.trim();
+                        if (trimmed !== e.target.value) {
+                          updateAddress({ projectAddress: trimmed });
+                        }
                       }
                     }}
                     onPaste={(e) => {
-                      // Trim whitespace on paste
-                      e.preventDefault();
-                      const pastedText = e.clipboardData.getData('text');
-                      const trimmed = pastedText.trim();
-                      updateAddress({ projectAddress: trimmed });
+                      if (!formData.address?.usePropertyAddressForProject) {
+                        // Trim whitespace on paste
+                        e.preventDefault();
+                        const pastedText = e.clipboardData.getData('text');
+                        const trimmed = pastedText.trim();
+                        updateAddress({ projectAddress: trimmed });
+                      } else {
+                        e.preventDefault();
+                      }
                     }}
                     className="input-field"
-                    placeholder="Enter project address"
+                    placeholder={formData.address?.usePropertyAddressForProject ? "Using Property Address from Step 1" : "Enter project address"}
                     spellCheck={true}
                     required
+                    disabled={formData.address?.usePropertyAddressForProject || false}
+                    readOnly={formData.address?.usePropertyAddressForProject || false}
                   />
                   
                   {/* Project Name - Non-mandatory */}
