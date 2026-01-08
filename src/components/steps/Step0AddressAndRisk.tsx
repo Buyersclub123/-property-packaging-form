@@ -329,8 +329,9 @@ function ZoningDisplay() {
 
   return (
     <div>
-      <label className="label-field">Zoning *</label>
+      <label className="label-field" htmlFor="zoning-input">Zoning *</label>
       <input
+        id="zoning-input"
         type="text"
         value={zoningValue}
         onChange={(e) => updateRiskOverlays({ zoning: e.target.value })}
@@ -957,12 +958,38 @@ export function Step0AddressAndRisk() {
   };
 
   const handleProceedToStep2 = () => {
+    // Validate that Address is filled (required)
+    if (!address?.propertyAddress || address.propertyAddress.trim() === '') {
+      alert('Please enter a property address before proceeding.');
+      return;
+    }
+    
+    // Validate that all risk overlay fields are filled (required)
+    if (!riskOverlays?.zoning || riskOverlays.zoning.trim() === '') {
+      alert('Please enter the Zoning field before proceeding.');
+      // Focus on zoning input
+      const zoningInput = document.getElementById('zoning-input') as HTMLInputElement;
+      if (zoningInput) {
+        zoningInput.focus();
+        zoningInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+    
+    if (!riskOverlays?.flood || !riskOverlays?.bushfire || !riskOverlays?.mining || 
+        !riskOverlays?.otherOverlay || !riskOverlays?.specialInfrastructure || 
+        !riskOverlays?.dueDiligenceAcceptance) {
+      alert('Please fill in all Risk Overlay fields (Flood, Bushfire, Mining, Other Overlay, Special Infrastructure, and Due Diligence Acceptance) before proceeding.');
+      return;
+    }
+    
     // Validate that Sourcer is filled (required)
     if (!sourcer || sourcer.trim() === '') {
       alert('Please enter the Sourcer name before proceeding.');
       return;
     }
-    // Move to next step after Sourcer is filled
+    
+    // Move to next step after all validations pass
     setCurrentStep(2);
   };
 
