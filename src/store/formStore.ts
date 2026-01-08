@@ -120,12 +120,27 @@ export const useFormStore = create<FormStore>()(
         })),
       
       updateRiskOverlays: (overlays) =>
-        set((state) => ({
-          formData: {
-            ...state.formData,
-            riskOverlays: { ...state.formData.riskOverlays, ...overlays },
-          },
-        })),
+        set((state) => {
+          // Create new riskOverlays object, explicitly removing properties set to undefined
+          const newRiskOverlays: RiskOverlays = { ...state.formData.riskOverlays };
+          Object.keys(overlays).forEach((key) => {
+            const typedKey = key as keyof RiskOverlays;
+            const value = overlays[typedKey];
+            if (value === undefined) {
+              // Explicitly delete the property if set to undefined
+              delete newRiskOverlays[typedKey];
+            } else {
+              // Otherwise, update the property
+              newRiskOverlays[typedKey] = value as any;
+            }
+          });
+          return {
+            formData: {
+              ...state.formData,
+              riskOverlays: newRiskOverlays,
+            },
+          };
+        }),
       
       updateLots: (lots) =>
         set((state) => ({
