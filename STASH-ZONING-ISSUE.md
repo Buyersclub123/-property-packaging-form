@@ -24,3 +24,5 @@ When clicking "Check Stash" on Step 0 (Address & Risk), the zoning field is not 
 - `src/components/steps/Step0AddressAndRisk.tsx` - Stash integration and data population
 - Stash API response structure - check if zoning field exists in response
 
+
+

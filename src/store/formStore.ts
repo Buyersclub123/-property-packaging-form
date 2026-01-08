@@ -154,12 +154,22 @@ export const useFormStore = create<FormStore>()(
         set((state) => {
           const updatedLots = [...(state.formData.lots || [])];
           if (updatedLots[lotIndex]) {
+            // Create new propertyDescription object, explicitly removing properties set to undefined
+            const newPropertyDescription: PropertyDescription = { ...updatedLots[lotIndex].propertyDescription };
+            Object.keys(description).forEach((key) => {
+              const typedKey = key as keyof PropertyDescription;
+              const value = description[typedKey];
+              if (value === undefined) {
+                // Explicitly delete the property if set to undefined
+                delete newPropertyDescription[typedKey];
+              } else {
+                // Otherwise, update the property
+                newPropertyDescription[typedKey] = value as any;
+              }
+            });
             updatedLots[lotIndex] = {
               ...updatedLots[lotIndex],
-              propertyDescription: {
-                ...updatedLots[lotIndex].propertyDescription,
-                ...description,
-              },
+              propertyDescription: newPropertyDescription,
             };
           }
           return {
@@ -245,12 +255,27 @@ export const useFormStore = create<FormStore>()(
         }),
       
       updatePropertyDescription: (description) =>
-        set((state) => ({
-          formData: {
-            ...state.formData,
-            propertyDescription: { ...state.formData.propertyDescription, ...description },
-          },
-        })),
+        set((state) => {
+          // Create new propertyDescription object, explicitly removing properties set to undefined
+          const newPropertyDescription: PropertyDescription = { ...state.formData.propertyDescription };
+          Object.keys(description).forEach((key) => {
+            const typedKey = key as keyof PropertyDescription;
+            const value = description[typedKey];
+            if (value === undefined) {
+              // Explicitly delete the property if set to undefined
+              delete newPropertyDescription[typedKey];
+            } else {
+              // Otherwise, update the property
+              newPropertyDescription[typedKey] = value as any;
+            }
+          });
+          return {
+            formData: {
+              ...state.formData,
+              propertyDescription: newPropertyDescription,
+            },
+          };
+        }),
       
       updatePurchasePrice: (price) =>
         set((state) => ({
