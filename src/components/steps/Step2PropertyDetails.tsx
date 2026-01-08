@@ -1773,34 +1773,38 @@ function ProjectLotsView() {
     }
   }, [formData.address?.propertyAddress, formData.address?.usePropertyAddressForProject, updateAddress]);
 
-  // Clear lot-level secondary fields when dualOccupancy changes from "Yes" to "No" or empty
+  // Clear lot-level secondary fields when lot's singleOrDual changes from "Yes" to "No" or empty
   useEffect(() => {
-    if (decisionTree.dualOccupancy !== 'Yes' && lots && lots.length > 0) {
-      // Check if any lot has secondary fields
-      const lotsWithSecondaryFields = lots.map((lot, index) => {
-        const hasSecondaryFields = 
-          lot.propertyDescription?.bedsSecondary ||
-          lot.propertyDescription?.bathSecondary ||
-          lot.propertyDescription?.garageSecondary ||
-          lot.propertyDescription?.carportSecondary ||
-          lot.propertyDescription?.carspaceSecondary;
-        return hasSecondaryFields ? index : null;
-      }).filter((index): index is number => index !== null);
-      
-      // Clear secondary fields for all lots that have them
-      if (lotsWithSecondaryFields.length > 0) {
-        lotsWithSecondaryFields.forEach(lotIndex => {
-          updateLotPropertyDescription(lotIndex, {
-            bedsSecondary: undefined,
-            bathSecondary: undefined,
-            garageSecondary: undefined,
-            carportSecondary: undefined,
-            carspaceSecondary: undefined,
-          });
-        });
-      }
+    if (lots && lots.length > 0) {
+      lots.forEach((lot, lotIndex) => {
+        // For projects, check each lot's singleOrDual field
+        // For non-projects, check decisionTree.dualOccupancy
+        const isDual = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple'
+          ? lot.singleOrDual === 'Yes'
+          : decisionTree.dualOccupancy === 'Yes';
+        
+        // If this lot is NOT dual occupancy, clear its secondary fields
+        if (!isDual) {
+          const hasSecondaryFields = 
+            lot.propertyDescription?.bedsSecondary ||
+            lot.propertyDescription?.bathSecondary ||
+            lot.propertyDescription?.garageSecondary ||
+            lot.propertyDescription?.carportSecondary ||
+            lot.propertyDescription?.carspaceSecondary;
+          
+          if (hasSecondaryFields) {
+            updateLotPropertyDescription(lotIndex, {
+              bedsSecondary: undefined,
+              bathSecondary: undefined,
+              garageSecondary: undefined,
+              carportSecondary: undefined,
+              carspaceSecondary: undefined,
+            });
+          }
+        }
+      });
     }
-  }, [decisionTree.dualOccupancy, lots, updateLotPropertyDescription]);
+  }, [decisionTree.dualOccupancy, decisionTree.propertyType, decisionTree.lotType, lots, updateLotPropertyDescription]);
   
   const toggleLotSection = (lotIndex: number, sectionType: 'propertyDescription' | 'purchasePrice' | 'rentalAssessment') => {
     const newExpanded = new Map(expandedLotSections);
