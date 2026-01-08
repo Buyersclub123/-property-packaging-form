@@ -2799,6 +2799,7 @@ interface LotPropertyDescriptionFieldsProps {
 
 function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOccupancy, updateLotPropertyDescription, formatCurrency, parseCurrency, parseExpiry, formatExpiry, getYearOptions }: LotPropertyDescriptionFieldsProps) {
   return (
+    <>
     <div className={`grid gap-4 ${isDualOccupancy ? 'grid-cols-2' : 'grid-cols-1 max-w-md'}`}>
       {/* Beds */}
       <div>
@@ -3191,27 +3192,29 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
         </div>
       )}
 
-      {/* Body Corp Description */}
-      {propertyDescription?.bodyCorpPerQuarter && (
-        <div className={`max-w-md ${isDualOccupancy ? 'col-span-2' : ''}`}>
-          <label className="label-field">Body Corp Description (Text will appear exactly as typed in email template)</label>
-          <textarea
-            value={propertyDescription?.bodyCorpDescription || ''}
-            onChange={(e) => updateLotPropertyDescription(lotIndex, { bodyCorpDescription: e.target.value })}
-            onInput={(e) => {
-              const target = e.target as HTMLTextAreaElement;
-              target.style.height = 'auto';
-              target.style.height = `${target.scrollHeight}px`;
-            }}
-            className="input-field resize-none overflow-hidden"
-            rows={3}
-            placeholder="Describe what's included in body corp"
-            spellCheck={true}
-          />
-        </div>
-      )}
-
     </div>
+    
+    {/* Body Corp Description - Only show if Title contains "strata" or "owners corp" - Outside grid for full width like H&L view */}
+    {(propertyDescription?.title?.toLowerCase().includes('strata') || 
+      propertyDescription?.title?.toLowerCase().includes('owners corp')) && (
+      <div className="mt-4">
+        <label className="label-field">Body Corp Description (Text will appear exactly as typed in email template)</label>
+        <textarea
+          value={propertyDescription?.bodyCorpDescription || ''}
+          onChange={(e) => updateLotPropertyDescription(lotIndex, { bodyCorpDescription: e.target.value })}
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement;
+            target.style.height = 'auto';
+            target.style.height = `${target.scrollHeight}px`;
+          }}
+          className="input-field resize-none overflow-hidden"
+          rows={3}
+          placeholder="Describe what's included in body corp"
+          spellCheck={true}
+        />
+      </div>
+    )}
+    </>
   );
 }
 
