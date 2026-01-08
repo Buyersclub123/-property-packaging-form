@@ -1441,6 +1441,7 @@ export function Step0AddressAndRisk() {
               </select>
               {riskOverlays.flood === 'Yes' && (
                 <div className="flex-1">
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.floodDialogue || ''}
                     onChange={(e) => handleDialogueChange('floodDialogue', e.target.value)}
@@ -1476,6 +1477,7 @@ export function Step0AddressAndRisk() {
               </select>
               {riskOverlays.bushfire === 'Yes' && (
                 <div className="flex-1">
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.bushfireDialogue || ''}
                     onChange={(e) => handleDialogueChange('bushfireDialogue', e.target.value)}
@@ -1511,6 +1513,7 @@ export function Step0AddressAndRisk() {
               </select>
               {riskOverlays.mining === 'Yes' && (
                 <div className="flex-1">
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.miningDialogue || ''}
                     onChange={(e) => handleDialogueChange('miningDialogue', e.target.value)}
@@ -1545,6 +1548,7 @@ export function Step0AddressAndRisk() {
               </select>
               {riskOverlays.otherOverlay === 'Yes' && (
                 <div className="flex-1">
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.otherOverlayDialogue || ''}
                     onChange={(e) => handleDialogueChange('otherOverlayDialogue', e.target.value)}
@@ -1579,6 +1583,7 @@ export function Step0AddressAndRisk() {
               </select>
               {riskOverlays.specialInfrastructure === 'Yes' && (
                 <div className="flex-1">
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.specialInfrastructureDialogue || ''}
                     onChange={(e) => handleDialogueChange('specialInfrastructureDialogue', e.target.value)}

@@ -61,6 +61,7 @@ export function Step5Proximity() {
             onChange={(e) => handleWhyThisPropertyChange(e.target.value)}
             className="input-field min-h-[150px]"
             placeholder="• **Location** - Prime location in growing suburb&#10;• **Growth Potential** - Strong capital growth expected&#10;• **Rental Yield** - Excellent rental yield of X%"
+            spellCheck={true}
             required
           />
         </div>
@@ -84,6 +85,7 @@ export function Step5Proximity() {
             onChange={(e) => handleProximityChange(e.target.value)}
             className="input-field min-h-[200px]"
             placeholder={`${address?.propertyAddress || 'Property Address'}&#10;• 0.5 km (5 mins), Local Kindergarten&#10;• 1.2 km (10 mins), Primary School&#10;• 2.5 km (15 mins), Supermarket&#10;• 5.0 km (20 mins), Hospital`}
+            spellCheck={true}
             required
           />
         </div>
@@ -103,6 +105,7 @@ export function Step5Proximity() {
             onChange={(e) => handleInvestmentHighlightsChange(e.target.value)}
             className="input-field min-h-[150px]"
             placeholder="• Major infrastructure projects&#10;• Population growth trends&#10;• Economic development initiatives&#10;• Transport improvements"
+            spellCheck={true}
             required
           />
         </div>
