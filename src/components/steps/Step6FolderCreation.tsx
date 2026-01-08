@@ -158,48 +158,37 @@ export function Step6FolderCreation() {
         folderLink: folderLink,
       };
 
-      // Step 1: Submit to GHL
-      const ghlResponse = await fetch('/api/ghl/submit-property', {
+      // Send all data to Make.com webhook (Make.com will create GHL record)
+      const makeResponse = await fetch('https://hook.eu1.make.com/2xbtucntvnp3wfmkjk0ecuxj4q4c500h', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submissionData),
+        body: JSON.stringify({
+          source: 'form_app',
+          action: 'submit_new_property',
+          formData: submissionData,
+          folderLink: folderLink,
+        }),
       });
 
-      if (!ghlResponse.ok) {
-        const errorData = await ghlResponse.json();
-        throw new Error(errorData.error || 'Failed to submit to GHL');
+      if (!makeResponse.ok) {
+        const errorData = await makeResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Make.com error: ${makeResponse.status} ${makeResponse.statusText}`);
       }
 
-      const ghlResult = await ghlResponse.json();
-      setGhlRecordId(ghlResult.recordId);
-
-      // Step 2: Send email via Make.com webhook
-      try {
-        const emailResponse = await fetch('https://hook.eu1.make.com/bkq23g13n4ae6qpkdbdwpnu7h1ac16d', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...submissionData,
-            ghlRecordId: ghlResult.recordId,
-            action: 'submit',
-          }),
-        });
-
-        if (emailResponse.ok) {
-          setEmailStatus('sent');
-        } else {
-          setEmailStatus('failed');
-          const errorData = await emailResponse.json().catch(() => ({}));
-          setEmailError(errorData.error || 'Failed to send email');
-        }
-      } catch (emailError) {
-        console.error('Error sending email:', emailError);
-        setEmailStatus('failed');
-        setEmailError(emailError instanceof Error ? emailError.message : 'Failed to send email');
+      const makeResult = await makeResponse.json().catch(() => ({}));
+      
+      // Extract GHL record ID from Make.com response (if provided)
+      const recordId = makeResult.recordId || makeResult.id || makeResult.ghlRecordId;
+      if (recordId) {
+        setGhlRecordId(recordId);
       }
+
+      // Email status - assume sent if Make.com succeeds
+      setEmailStatus('sent');
 
       // Show success screen
-      setShowSuccess(true);
+      // TEMPORARILY DISABLED FOR TESTING - allows multiple submissions
+      // setShowSuccess(true);
     } catch (error) {
       console.error('Error submitting property:', error);
       setSubmitError(error instanceof Error ? error.message : 'Failed to submit property');
