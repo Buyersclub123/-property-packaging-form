@@ -9,6 +9,7 @@ import { Step1DecisionTree } from './steps/Step1DecisionTree';
 import { Step2PropertyDetails } from './steps/Step2PropertyDetails';
 import { Step3MarketPerformance } from './steps/Step3MarketPerformance';
 import { Step5Proximity } from './steps/Step5Proximity';
+import { Step6FolderCreation } from './steps/Step6FolderCreation';
 import { Step4Review } from './steps/Step4Review';
 import { getUserEmail } from '@/lib/userAuth';
 
@@ -19,6 +20,7 @@ const STEPS = [
   { number: 3, title: 'Property Details', component: Step2PropertyDetails },
   { number: 4, title: 'Market Performance', component: Step3MarketPerformance },
   { number: 5, title: 'Proximity & Content', component: Step5Proximity },
+  { number: 6, title: 'Folder Creation', component: Step6FolderCreation },
 ];
 
 interface MultiStepFormProps {
@@ -799,19 +801,21 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       }
     }
     
-    // If on last step (Step 5), submit the form
+    // If on last step (Step 6), the form submission is handled in Step6FolderCreation component
+    // Step 5 (Proximity & Content) is no longer the last step
     if (currentStep === STEPS.length) {
+      // This should not happen now - Step 6 handles submission
+      return;
+    }
+    
+    // Legacy submission code (kept for reference, but Step 6 handles submission now)
+    if (false && currentStep === 5) {
       // Combine selling agent fields before export
-      const sellingAgentParts: string[] = [];
-      if (formData.sellingAgentName?.trim()) {
-        sellingAgentParts.push(formData.sellingAgentName.trim());
-      }
-      if (formData.sellingAgentEmail?.trim()) {
-        sellingAgentParts.push(formData.sellingAgentEmail.trim());
-      }
-      if (formData.sellingAgentMobile?.trim()) {
-        sellingAgentParts.push(formData.sellingAgentMobile.trim());
-      }
+      const sellingAgentParts: string[] = [
+        formData.sellingAgentName?.trim(),
+        formData.sellingAgentEmail?.trim(),
+        formData.sellingAgentMobile?.trim(),
+      ].filter((item): item is string => !!item && item.length > 0);
       
       // Update formData with combined sellingAgent field
       if (sellingAgentParts.length > 0) {
