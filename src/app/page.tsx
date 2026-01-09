@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from 'react-error-boundary';
 import { UserEmailPrompt } from '@/components/UserEmailPrompt';
+import { loadMockData } from '@/utils/mockData';
 
 // Dynamically import MultiStepForm with SSR disabled
 const MultiStepForm = dynamic(
@@ -43,6 +44,19 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
 
 export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  // Auto-load mock data if ?mock=project or ?mock=single in URL (development only)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+      const params = new URLSearchParams(window.location.search);
+      const mockType = params.get('mock');
+      if (mockType === 'project' || mockType === 'single') {
+        setTimeout(() => {
+          loadMockData(mockType === 'project' ? 'project' : 'single');
+        }, 500); // Small delay to ensure store is ready
+      }
+    }
+  }, []);
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>

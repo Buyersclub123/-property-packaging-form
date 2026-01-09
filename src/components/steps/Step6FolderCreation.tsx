@@ -14,7 +14,7 @@ interface ChecklistItem {
 }
 
 export function Step6FolderCreation() {
-  const { formData, updateAddress, setCurrentStep } = useFormStore();
+  const { formData, updateAddress, setCurrentStep, resetForm } = useFormStore();
   const { address, decisionTree } = formData;
   
   const [folderName, setFolderName] = useState('');
@@ -317,6 +317,20 @@ export function Step6FolderCreation() {
               </ul>
             </div>
           </div>
+
+          {/* Clear Form Button */}
+          <div className="mt-6 pt-6 border-t border-green-200">
+            <button
+              onClick={() => {
+                resetForm();
+                setShowSuccess(false);
+                setCurrentStep(1);
+              }}
+              className="btn-primary w-full"
+            >
+              Clear Form and Create a New Property Package
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -397,17 +411,8 @@ export function Step6FolderCreation() {
       {showChecklist && (
         <div className="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
           <h3 className="text-lg font-semibold mb-4">Pre-Submission Checklist</h3>
-          
-          <div className="mb-4">
-            <button
-              onClick={handleTickAll}
-              className="btn-secondary text-sm"
-            >
-              Tick All
-            </button>
-          </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 mb-4">
             {checklist.map((item) => (
               <label key={item.id} className="flex items-start gap-3 cursor-pointer">
                 <input
@@ -424,11 +429,22 @@ export function Step6FolderCreation() {
           </div>
 
           {submitError && (
-            <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="mt-4 mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-sm text-red-700">{submitError}</p>
             </div>
           )}
 
+          {/* Tick All button - moved to bottom, just above Submit button */}
+          <div className="mb-4">
+            <button
+              onClick={handleTickAll}
+              className="btn-secondary text-sm"
+            >
+              Tick All
+            </button>
+          </div>
+
+          {/* Submit button - shown after folder is created and checklist is displayed */}
           <div className="mt-6">
             <button
               onClick={handleSubmit}

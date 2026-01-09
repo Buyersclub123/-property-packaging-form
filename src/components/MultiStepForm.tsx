@@ -943,11 +943,8 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             Step {currentStep} of {STEPS.length}
           </div>
 
-          {currentStep === STEPS.length ? (
-            <button onClick={handleNext} className="btn-primary bg-green-600 hover:bg-green-700">
-              Submit
-            </button>
-          ) : (
+          {/* Submit button removed - submission only happens in Step6FolderCreation after folder is created */}
+          {currentStep < STEPS.length && (
             <button onClick={handleNext} className="btn-primary">
               Next
             </button>

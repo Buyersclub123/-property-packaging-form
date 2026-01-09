@@ -364,9 +364,12 @@ export function Step2PropertyDetails() {
                       required
                     >
                 <option value="">Select...</option>
-                {Array.from({ length: 11 }, (_, i) => (
-                  <option key={i} value={String(i)}>{i}</option>
-                ))}
+                {Array.from({ length: 21 }, (_, i) => {
+                  const value = i / 2;
+                  return (
+                    <option key={i} value={String(value)}>{value}</option>
+                  );
+                })}
                 <option value="TBC">TBC</option>
               </select>
             </div>
@@ -381,9 +384,12 @@ export function Step2PropertyDetails() {
                   required
                 >
                   <option value="">Select...</option>
-                  {Array.from({ length: 11 }, (_, i) => (
-                    <option key={i} value={String(i)}>{i}</option>
-                  ))}
+                  {Array.from({ length: 21 }, (_, i) => {
+                    const value = i / 2;
+                    return (
+                      <option key={i} value={String(value)}>{value}</option>
+                    );
+                  })}
                   <option value="TBC">TBC</option>
                 </select>
               </div>
@@ -2903,9 +2909,12 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
           required
         >
           <option value="">Select...</option>
-          {Array.from({ length: 11 }, (_, i) => (
-            <option key={i} value={String(i)}>{i}</option>
-          ))}
+          {Array.from({ length: 21 }, (_, i) => {
+            const value = i / 2;
+            return (
+              <option key={i} value={String(value)}>{value}</option>
+            );
+          })}
           <option value="TBC">TBC</option>
         </select>
       </div>
@@ -2920,9 +2929,12 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
             required
           >
             <option value="">Select...</option>
-            {Array.from({ length: 11 }, (_, i) => (
-              <option key={i} value={String(i)}>{i}</option>
-            ))}
+            {Array.from({ length: 21 }, (_, i) => {
+              const value = i / 2;
+              return (
+                <option key={i} value={String(value)}>{value}</option>
+              );
+            })}
             <option value="TBC">TBC</option>
           </select>
         </div>
