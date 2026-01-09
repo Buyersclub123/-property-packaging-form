@@ -14,7 +14,7 @@ interface ChecklistItem {
 }
 
 export function Step6FolderCreation() {
-  const { formData, updateAddress, setCurrentStep, resetForm } = useFormStore();
+  const { formData, updateAddress, updateFormData, setCurrentStep, resetForm } = useFormStore();
   const { address, decisionTree } = formData;
   
   const [folderName, setFolderName] = useState('');
@@ -442,6 +442,21 @@ export function Step6FolderCreation() {
             >
               Tick All
             </button>
+          </div>
+
+          {/* Message for BA Section */}
+          <div className="mb-6">
+            <label className="label-field">Message for BA (Optional)</label>
+            <p className="text-xs text-gray-500 mb-2">
+              This message will appear at the beginning of the email sent to the Business Analyst. Use it to provide any additional context or instructions.
+            </p>
+            <textarea
+              value={formData.messageForBA || ''}
+              onChange={(e) => updateFormData({ messageForBA: e.target.value })}
+              className="input-field min-h-[120px] resize-y"
+              placeholder="Enter any additional information or instructions for the BA..."
+              spellCheck={true}
+            />
           </div>
 
           {/* Submit button - shown after folder is created and checklist is displayed */}
