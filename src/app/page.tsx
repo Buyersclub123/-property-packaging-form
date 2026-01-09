@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { ErrorBoundary } from 'react-error-boundary';
 import { UserEmailPrompt } from '@/components/UserEmailPrompt';
-import { loadMockData } from '@/utils/mockData';
 
 // Dynamically import MultiStepForm with SSR disabled
 const MultiStepForm = dynamic(
@@ -51,9 +50,12 @@ export default function Home() {
       const params = new URLSearchParams(window.location.search);
       const mockType = params.get('mock');
       if (mockType === 'project' || mockType === 'single') {
-        setTimeout(() => {
-          loadMockData(mockType === 'project' ? 'project' : 'single');
-        }, 500); // Small delay to ensure store is ready
+        // Dynamically import to avoid SSR issues
+        import('@/utils/mockData').then(({ loadMockData }) => {
+          setTimeout(() => {
+            loadMockData(mockType === 'project' ? 'project' : 'single');
+          }, 500);
+        });
       }
     }
   }, []);
