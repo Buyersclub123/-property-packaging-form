@@ -302,9 +302,9 @@ export function Step2PropertyDetails() {
     return <ProjectLotsView />;
   }
 
-        // For H&L or Established - show property details form
-        return (
-          <div data-step2-form>
+  // For H&L or Established - show property details form
+  return (
+    <div data-step2-form>
       <div className="mb-6">
         <h2 className="text-2xl font-bold mb-2">Property Details</h2>
         <p className="text-gray-600">
@@ -1151,39 +1151,106 @@ export function Step2PropertyDetails() {
           <div className="space-y-4">
             {/* Occupancy - Only for Established properties */}
             {isEstablished && (
-              <div>
-                <label className="label-field">Occupancy *</label>
-                <select
-                  value={rentalAssessment?.occupancyPrimary || ''}
-                  onChange={(e) => {
-                    const newOccupancy = e.target.value as OccupancyType;
-                    // Clear Current Rent and Expiry fields if changing away from Tenanted
-                    if (newOccupancy !== 'Tenanted') {
-                      updateRentalAssessment({
-                        occupancyPrimary: newOccupancy,
-                        currentRentPrimary: '',
-                        currentRentSecondary: '',
-                        expiryPrimary: '',
-                        expirySecondary: '',
-                        yield: '', // Clear Current Yield too since it's based on Current Rent
-                      });
-                    } else {
-                      updateRentalAssessment({ occupancyPrimary: newOccupancy });
-                    }
-                  }}
-                  className="input-field"
-                  required
-                >
-                  <option value="">Select...</option>
-                  <option value="Owner Occupied">Owner Occupied</option>
-                  <option value="Tenanted">Tenanted</option>
-                  <option value="Vacant">Vacant</option>
-                </select>
-              </div>
+              <>
+                {isDualOccupancy ? (
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Unit A Occupancy */}
+                    <div>
+                      <label className="label-field">Occupancy (Unit A) *</label>
+                      <select
+                        value={rentalAssessment?.occupancyPrimary || ''}
+                        onChange={(e) => {
+                          const newOccupancy = e.target.value as OccupancyType;
+                          // Clear Current Rent and Expiry fields if changing away from Tenanted
+                          if (newOccupancy !== 'Tenanted') {
+                            updateRentalAssessment({
+                              occupancyPrimary: newOccupancy,
+                              currentRentPrimary: '',
+                              expiryPrimary: '',
+                              yield: '', // Clear Current Yield too since it's based on Current Rent
+                            });
+                          } else {
+                            updateRentalAssessment({ occupancyPrimary: newOccupancy });
+                          }
+                        }}
+                        className="input-field"
+                        required
+                      >
+                        <option value="">Select...</option>
+                        <option value="Owner Occupied">Owner Occupied</option>
+                        <option value="Tenanted">Tenanted</option>
+                        <option value="Vacant">Vacant</option>
+                      </select>
+                    </div>
+
+                    {/* Unit B Occupancy */}
+                    <div>
+                      <label className="label-field">Occupancy (Unit B) *</label>
+                      <select
+                        value={rentalAssessment?.occupancySecondary || ''}
+                        onChange={(e) => {
+                          const newOccupancy = e.target.value as OccupancyType;
+                          // Clear Current Rent and Expiry fields if changing away from Tenanted
+                          if (newOccupancy !== 'Tenanted') {
+                            updateRentalAssessment({
+                              occupancySecondary: newOccupancy,
+                              currentRentSecondary: '',
+                              expirySecondary: '',
+                              yield: '', // Clear Current Yield too since it's based on Current Rent
+                            });
+                          } else {
+                            updateRentalAssessment({ occupancySecondary: newOccupancy });
+                          }
+                        }}
+                        className="input-field"
+                        required
+                      >
+                        <option value="">Select...</option>
+                        <option value="Owner Occupied">Owner Occupied</option>
+                        <option value="Tenanted">Tenanted</option>
+                        <option value="Vacant">Vacant</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="label-field">Occupancy *</label>
+                    <select
+                      value={rentalAssessment?.occupancyPrimary || ''}
+                      onChange={(e) => {
+                        const newOccupancy = e.target.value as OccupancyType;
+                        // Clear Current Rent and Expiry fields if changing away from Tenanted
+                        if (newOccupancy !== 'Tenanted') {
+                          updateRentalAssessment({
+                            occupancyPrimary: newOccupancy,
+                            currentRentPrimary: '',
+                            currentRentSecondary: '',
+                            expiryPrimary: '',
+                            expirySecondary: '',
+                            yield: '', // Clear Current Yield too since it's based on Current Rent
+                          });
+                        } else {
+                          updateRentalAssessment({ occupancyPrimary: newOccupancy });
+                        }
+                      }}
+                      className="input-field"
+                      required
+                    >
+                      <option value="">Select...</option>
+                      <option value="Owner Occupied">Owner Occupied</option>
+                      <option value="Tenanted">Tenanted</option>
+                      <option value="Vacant">Vacant</option>
+                    </select>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Current Rent and Expiry - Only show if Occupancy is Tenanted AND Established */}
-            {isEstablished && rentalAssessment?.occupancyPrimary === 'Tenanted' && (
+            {isEstablished && (
+              (isDualOccupancy 
+                ? (rentalAssessment?.occupancyPrimary === 'Tenanted' || rentalAssessment?.occupancySecondary === 'Tenanted')
+                : rentalAssessment?.occupancyPrimary === 'Tenanted') && (
               <div>
                 {isDualOccupancy ? (
                   <div className="grid grid-cols-2 gap-6">
@@ -1482,6 +1549,7 @@ export function Step2PropertyDetails() {
                   </div>
                 )}
               </div>
+              )
             )}
 
             {/* Rent Appraisal - Boxed sections for dual occupancy */}
