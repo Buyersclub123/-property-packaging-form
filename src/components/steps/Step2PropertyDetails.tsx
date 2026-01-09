@@ -208,24 +208,32 @@ export function Step2PropertyDetails() {
   }, [isEstablished, isHAndL, purchasePrice?.acceptableAcquisitionTo, totalPrice]);
 
   // Calculate Current Yield
-  // For dual occupancy: use combined rental (Primary + Secondary)
-  // For single: use Primary only
+  // For dual occupancy: use combined rental (Primary + Secondary) if either is Tenanted
+  // For single: use Primary only if Tenanted
   const currentYield = useMemo(() => {
-    if (rentalAssessment?.occupancyPrimary !== 'Tenanted' || !propertyPrice || !rentalAssessment?.currentRentPrimary) {
+    // Check if at least one unit is Tenanted
+    const isPrimaryTenanted = rentalAssessment?.occupancyPrimary === 'Tenanted';
+    const isSecondaryTenanted = isDualOccupancy && rentalAssessment?.occupancySecondary === 'Tenanted';
+    const isAnyUnitTenanted = isPrimaryTenanted || isSecondaryTenanted;
+    
+    if (!isAnyUnitTenanted || !propertyPrice) {
       return null;
     }
     
-    // Get Primary rent - handle currency formatting ($ and commas)
-    const rentPrimaryStr = parseCurrency(rentalAssessment.currentRentPrimary);
-    if (rentPrimaryStr.toUpperCase() === 'TBC') return null;
-    const weeklyRentPrimary = parseFloat(rentPrimaryStr);
-    if (isNaN(weeklyRentPrimary) || weeklyRentPrimary <= 0) {
-      return null;
+    // Get Primary rent if Unit A is Tenanted
+    let totalWeeklyRent = 0;
+    if (isPrimaryTenanted && rentalAssessment?.currentRentPrimary) {
+      const rentPrimaryStr = parseCurrency(rentalAssessment.currentRentPrimary);
+      if (rentPrimaryStr.toUpperCase() !== 'TBC') {
+        const weeklyRentPrimary = parseFloat(rentPrimaryStr);
+        if (!isNaN(weeklyRentPrimary) && weeklyRentPrimary > 0) {
+          totalWeeklyRent += weeklyRentPrimary;
+        }
+      }
     }
     
-    // For dual occupancy, add Secondary rent if available
-    let totalWeeklyRent = weeklyRentPrimary;
-    if (isDualOccupancy && rentalAssessment?.currentRentSecondary) {
+    // For dual occupancy, add Secondary rent if Unit B is Tenanted
+    if (isSecondaryTenanted && rentalAssessment?.currentRentSecondary) {
       const rentSecondaryStr = parseCurrency(rentalAssessment.currentRentSecondary);
       if (rentSecondaryStr.toUpperCase() !== 'TBC') {
         const weeklyRentSecondary = parseFloat(rentSecondaryStr);
@@ -235,10 +243,15 @@ export function Step2PropertyDetails() {
       }
     }
     
+    // Only calculate if we have valid rent
+    if (totalWeeklyRent <= 0) {
+      return null;
+    }
+    
     const annualRent = totalWeeklyRent * 52;
     const yieldValue = (annualRent / propertyPrice) * 100;
     return yieldValue.toFixed(2);
-  }, [rentalAssessment?.occupancyPrimary, rentalAssessment?.currentRentPrimary, rentalAssessment?.currentRentSecondary, isDualOccupancy, propertyPrice]);
+  }, [rentalAssessment?.occupancyPrimary, rentalAssessment?.occupancySecondary, rentalAssessment?.currentRentPrimary, rentalAssessment?.currentRentSecondary, isDualOccupancy, propertyPrice]);
 
   // Calculate Appraised Yield
   const appraisedYield = useMemo(() => {
@@ -278,11 +291,17 @@ export function Step2PropertyDetails() {
       if (rentalAssessment?.yield !== newValue) {
         updateRentalAssessment({ yield: newValue });
       }
-    } else if (rentalAssessment?.occupancyPrimary !== 'Tenanted' && rentalAssessment?.yield) {
-      updateRentalAssessment({ yield: '' });
+    } else {
+      // Only clear if BOTH units are not Tenanted (for dual occupancy) or Primary is not Tenanted (for single)
+      const isPrimaryTenanted = rentalAssessment?.occupancyPrimary === 'Tenanted';
+      const isSecondaryTenanted = isDualOccupancy && rentalAssessment?.occupancySecondary === 'Tenanted';
+      const isAnyUnitTenanted = isPrimaryTenanted || isSecondaryTenanted;
+      if (!isAnyUnitTenanted && rentalAssessment?.yield) {
+        updateRentalAssessment({ yield: '' });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentYield, rentalAssessment?.occupancyPrimary, rentalAssessment?.yield]);
+  }, [currentYield, rentalAssessment?.occupancyPrimary, rentalAssessment?.occupancySecondary, rentalAssessment?.yield, isDualOccupancy]);
 
   useEffect(() => {
     if (!updateRentalAssessment) return;
@@ -1742,8 +1761,8 @@ export function Step2PropertyDetails() {
               </div>
             )}
 
-            {/* Current Yield - Auto-calculated, only show if Tenanted AND Established */}
-            {isEstablished && rentalAssessment?.occupancyPrimary === 'Tenanted' && (
+            {/* Current Yield - Auto-calculated, only show if any unit is Tenanted AND Established */}
+            {isEstablished && (rentalAssessment?.occupancyPrimary === 'Tenanted' || (isDualOccupancy && rentalAssessment?.occupancySecondary === 'Tenanted')) && (
               <div>
                 <label className="label-field">Current Yield (%)</label>
                 <input
