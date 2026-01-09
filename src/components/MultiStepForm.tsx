@@ -580,13 +580,13 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         // Rental Assessment - mandatory fields
         // Occupancy only required for Established properties
         if (isEstablished) {
-          if (isEmpty(rentalAssessment?.occupancy)) {
+          if (isEmpty(rentalAssessment?.occupancyPrimary)) {
             setValidationErrorWithRef('Occupancy is required for Established properties.');
             return false;
           }
           
           // If Occupancy is Tenanted, Current Rent and Expiry are required
-          if (rentalAssessment?.occupancy === 'Tenanted') {
+          if (rentalAssessment?.occupancyPrimary === 'Tenanted') {
             if (isEmpty(rentalAssessment?.currentRentPrimary)) {
               setValidationErrorWithRef('Current Rent (Primary) is required when Occupancy is "Tenanted".');
               return false;
@@ -598,14 +598,14 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
                                          (expiryPrimary.trim().endsWith(' ') && expiryPrimary.trim().length > 0) || // "October "
                                          (expiryPrimary.trim().startsWith(' ') && /^\s+\d{4}$/.test(expiryPrimary)); // " 2025"
             if (isEmpty(expiryPrimary) || !isValidExpiryPrimary) {
-              setValidationErrorWithRef('Expiry (Primary) must be "TBC" or have both month and year selected when Occupancy is "Tenanted".');
+                setValidationErrorWithRef('Expiry (Primary) must be "TBC" or have both month and year selected when Occupancy (Primary) is "Tenanted".');
               return false;
             }
             
             // For dual occupancy, secondary rent and expiry are also required
             if (isDualOccupancy) {
               if (isEmpty(rentalAssessment?.currentRentSecondary)) {
-                setValidationErrorWithRef('Current Rent (Secondary) is required for Dual Occupancy when Occupancy is "Tenanted".');
+                setValidationErrorWithRef('Current Rent (Secondary) is required for Dual Occupancy when Occupancy (Primary) is "Tenanted".');
                 return false;
               }
               const expirySecondary = rentalAssessment?.expirySecondary || '';

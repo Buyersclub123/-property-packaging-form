@@ -134,7 +134,8 @@ export interface PurchasePrice {
 
 // Rental Assessment
 export interface RentalAssessment {
-  occupancy?: OccupancyType;
+  occupancyPrimary?: OccupancyType;
+  occupancySecondary?: OccupancyType;
   currentRentPrimary?: string;
   currentRentSecondary?: string;
   expiryPrimary?: string;

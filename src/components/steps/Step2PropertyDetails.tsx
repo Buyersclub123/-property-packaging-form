@@ -211,7 +211,7 @@ export function Step2PropertyDetails() {
   // For dual occupancy: use combined rental (Primary + Secondary)
   // For single: use Primary only
   const currentYield = useMemo(() => {
-    if (rentalAssessment?.occupancy !== 'Tenanted' || !propertyPrice || !rentalAssessment?.currentRentPrimary) {
+    if (rentalAssessment?.occupancyPrimary !== 'Tenanted' || !propertyPrice || !rentalAssessment?.currentRentPrimary) {
       return null;
     }
     
@@ -238,7 +238,7 @@ export function Step2PropertyDetails() {
     const annualRent = totalWeeklyRent * 52;
     const yieldValue = (annualRent / propertyPrice) * 100;
     return yieldValue.toFixed(2);
-  }, [rentalAssessment?.occupancy, rentalAssessment?.currentRentPrimary, rentalAssessment?.currentRentSecondary, isDualOccupancy, propertyPrice]);
+  }, [rentalAssessment?.occupancyPrimary, rentalAssessment?.currentRentPrimary, rentalAssessment?.currentRentSecondary, isDualOccupancy, propertyPrice]);
 
   // Calculate Appraised Yield
   const appraisedYield = useMemo(() => {
@@ -278,11 +278,11 @@ export function Step2PropertyDetails() {
       if (rentalAssessment?.yield !== newValue) {
         updateRentalAssessment({ yield: newValue });
       }
-    } else if (rentalAssessment?.occupancy !== 'Tenanted' && rentalAssessment?.yield) {
+    } else if (rentalAssessment?.occupancyPrimary !== 'Tenanted' && rentalAssessment?.yield) {
       updateRentalAssessment({ yield: '' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentYield, rentalAssessment?.occupancy, rentalAssessment?.yield]);
+  }, [currentYield, rentalAssessment?.occupancyPrimary, rentalAssessment?.yield]);
 
   useEffect(() => {
     if (!updateRentalAssessment) return;
@@ -1154,13 +1154,13 @@ export function Step2PropertyDetails() {
               <div>
                 <label className="label-field">Occupancy *</label>
                 <select
-                  value={rentalAssessment?.occupancy || ''}
+                  value={rentalAssessment?.occupancyPrimary || ''}
                   onChange={(e) => {
                     const newOccupancy = e.target.value as OccupancyType;
                     // Clear Current Rent and Expiry fields if changing away from Tenanted
                     if (newOccupancy !== 'Tenanted') {
                       updateRentalAssessment({
-                        occupancy: newOccupancy,
+                        occupancyPrimary: newOccupancy,
                         currentRentPrimary: '',
                         currentRentSecondary: '',
                         expiryPrimary: '',
@@ -1168,7 +1168,7 @@ export function Step2PropertyDetails() {
                         yield: '', // Clear Current Yield too since it's based on Current Rent
                       });
                     } else {
-                      updateRentalAssessment({ occupancy: newOccupancy });
+                      updateRentalAssessment({ occupancyPrimary: newOccupancy });
                     }
                   }}
                   className="input-field"
@@ -1183,7 +1183,7 @@ export function Step2PropertyDetails() {
             )}
 
             {/* Current Rent and Expiry - Only show if Occupancy is Tenanted AND Established */}
-            {isEstablished && rentalAssessment?.occupancy === 'Tenanted' && (
+            {isEstablished && rentalAssessment?.occupancyPrimary === 'Tenanted' && (
               <div>
                 {isDualOccupancy ? (
                   <div className="grid grid-cols-2 gap-6">
@@ -1216,17 +1216,17 @@ export function Step2PropertyDetails() {
                             }}
                             className="input-field"
                             placeholder="e.g., $500 or TBC"
-                            required={rentalAssessment?.occupancy === 'Tenanted'}
+                            required={rentalAssessment?.occupancyPrimary === 'Tenanted'}
                           />
                         </div>
                         <div>
-                          <label className="label-field">Expiry{rentalAssessment?.occupancy === 'Tenanted' ? ' *' : ''}</label>
+                          <label className="label-field">Expiry{rentalAssessment?.occupancyPrimary === 'Tenanted' ? ' *' : ''}</label>
                           {(() => {
                             const expiryData = parseExpiry(rentalAssessment?.expiryPrimary);
                             const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
-                            const isRequired = rentalAssessment?.occupancy === 'Tenanted' && !expiryData.isTBC;
+                            const isRequired = rentalAssessment?.occupancyPrimary === 'Tenanted' && !expiryData.isTBC;
                             
                             return (
                               <div className="space-y-2">
@@ -1315,17 +1315,17 @@ export function Step2PropertyDetails() {
                             }}
                             className="input-field"
                             placeholder="e.g., $400 or TBC"
-                            required={rentalAssessment?.occupancy === 'Tenanted'}
+                            required={rentalAssessment?.occupancyPrimary === 'Tenanted'}
                           />
                         </div>
                         <div>
-                          <label className="label-field">Expiry{rentalAssessment?.occupancy === 'Tenanted' ? ' *' : ''}</label>
+                          <label className="label-field">Expiry{rentalAssessment?.occupancyPrimary === 'Tenanted' ? ' *' : ''}</label>
                           {(() => {
                             const expiryData = parseExpiry(rentalAssessment?.expirySecondary);
                             const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
-                            const isRequired = rentalAssessment?.occupancy === 'Tenanted' && !expiryData.isTBC;
+                            const isRequired = rentalAssessment?.occupancyPrimary === 'Tenanted' && !expiryData.isTBC;
                             
                             return (
                               <div className="space-y-2">
@@ -1412,17 +1412,17 @@ export function Step2PropertyDetails() {
                         }}
                         className="input-field"
                         placeholder="e.g., $500 or TBC"
-                        required={rentalAssessment?.occupancy === 'Tenanted'}
+                        required={rentalAssessment?.occupancyPrimary === 'Tenanted'}
                       />
                     </div>
                     <div>
-                      <label className="label-field">Expiry{rentalAssessment?.occupancy === 'Tenanted' ? ' *' : ''}</label>
+                      <label className="label-field">Expiry{rentalAssessment?.occupancyPrimary === 'Tenanted' ? ' *' : ''}</label>
                       {(() => {
                         const expiryData = parseExpiry(rentalAssessment?.expiryPrimary);
                         const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                         'July', 'August', 'September', 'October', 'November', 'December'];
                         const years = getYearOptions();
-                        const isRequired = rentalAssessment?.occupancy === 'Tenanted' && !expiryData.isTBC;
+                        const isRequired = rentalAssessment?.occupancyPrimary === 'Tenanted' && !expiryData.isTBC;
                         
                         return (
                           <div className="space-y-2">
@@ -1675,7 +1675,7 @@ export function Step2PropertyDetails() {
             )}
 
             {/* Current Yield - Auto-calculated, only show if Tenanted AND Established */}
-            {isEstablished && rentalAssessment?.occupancy === 'Tenanted' && (
+            {isEstablished && rentalAssessment?.occupancyPrimary === 'Tenanted' && (
               <div>
                 <label className="label-field">Current Yield (%)</label>
                 <input
