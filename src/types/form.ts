@@ -145,8 +145,6 @@ export interface RentalAssessment {
   rentAppraisalSecondaryTo?: string;
   yield?: string;
   appraisedYield?: string;
-  rentDialoguePrimary?: string;
-  rentDialogueSecondary?: string;
   rentalAssessmentAdditionalDialogue?: string;
 }
 

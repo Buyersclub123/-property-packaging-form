@@ -36,31 +36,23 @@ const HARDCODED_SOURCERS: SourcerOption[] = [
 /**
  * Get list of sourcers
  * 
- * CURRENT: Returns hardcoded list
- * FUTURE: Will fetch from GHL API and cache
+ * CURRENT: Fetches from Google Sheet (Admin sheet - Packagers & Sourcers tab)
+ * FUTURE: Could add GHL API integration as backup
  * 
  * @returns Array of sourcer options
  */
 export async function getSourcers(): Promise<SourcerOption[]> {
-  // TODO: Implement GHL API integration
-  // Example implementation:
-  /*
   try {
-    const response = await fetch('/api/ghl/users');
+    const response = await fetch('/api/sourcers');
     if (response.ok) {
-      const users = await response.json();
-      return users
-        .filter(user => user.role === 'Property Team Member' || user.team === 'Property')
-        .map(user => ({
-          id: user.id,
-          name: `${user.firstName} ${user.lastName}`,
-          email: user.email,
-        }));
+      const data = await response.json();
+      const names = data.sourcers || [];
+      // Convert names to SourcerOption format
+      return names.map((name: string) => ({ name }));
     }
   } catch (error) {
-    console.error('Failed to fetch sourcers from GHL:', error);
+    console.error('Failed to fetch sourcers from Google Sheet:', error);
   }
-  */
   
   // Fallback to hardcoded list
   return HARDCODED_SOURCERS;
