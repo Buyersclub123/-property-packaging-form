@@ -1382,17 +1382,17 @@ export function Step2PropertyDetails() {
                             }}
                             className="input-field"
                             placeholder="e.g., $400 or TBC"
-                            required={rentalAssessment?.occupancyPrimary === 'Tenanted'}
+                            required={rentalAssessment?.occupancySecondary === 'Tenanted'}
                           />
                         </div>
                         <div>
-                          <label className="label-field">Expiry{rentalAssessment?.occupancyPrimary === 'Tenanted' ? ' *' : ''}</label>
+                          <label className="label-field">Expiry{rentalAssessment?.occupancySecondary === 'Tenanted' ? ' *' : ''}</label>
                           {(() => {
                             const expiryData = parseExpiry(rentalAssessment?.expirySecondary);
                             const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
-                            const isRequired = rentalAssessment?.occupancyPrimary === 'Tenanted' && !expiryData.isTBC;
+                            const isRequired = rentalAssessment?.occupancySecondary === 'Tenanted' && !expiryData.isTBC;
                             
                             return (
                               <div className="space-y-2">
