@@ -44,22 +44,6 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
 export default function Home() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  // Auto-load mock data if ?mock=project or ?mock=single in URL (development only)
-  useEffect(() => {
-    if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-      const params = new URLSearchParams(window.location.search);
-      const mockType = params.get('mock');
-      if (mockType === 'project' || mockType === 'single') {
-        // Dynamically import to avoid SSR issues
-        import('@/utils/mockData').then(({ loadMockData }) => {
-          setTimeout(() => {
-            loadMockData(mockType === 'project' ? 'project' : 'single');
-          }, 500);
-        });
-      }
-    }
-  }, []);
-
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <div className="min-h-screen bg-gray-50">
