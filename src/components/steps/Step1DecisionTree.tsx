@@ -485,9 +485,8 @@ export function Step1DecisionTree() {
                         if (address?.unitNumber) {
                           // Format unit number
                           let unitPrefix = '';
-                          if (address.unitNumber.includes('-')) {
-                            unitPrefix = `Units ${address.unitNumber}`;
-                          } else if (address.unitNumber.includes(',')) {
+                          // For dual occupancy, always use "Units" (plural), otherwise "Unit" (singular)
+                          if (decisionTree.dualOccupancy === 'Yes') {
                             unitPrefix = `Units ${address.unitNumber}`;
                           } else {
                             unitPrefix = `Unit ${address.unitNumber}`;
@@ -518,9 +517,8 @@ export function Step1DecisionTree() {
                           if (address?.unitNumber) {
                             // Format unit number
                             let unitPrefix = '';
-                            if (address.unitNumber.includes('-')) {
-                              unitPrefix = `Units ${address.unitNumber}`;
-                            } else if (address.unitNumber.includes(',')) {
+                            // For dual occupancy, always use "Units" (plural), otherwise "Unit" (singular)
+                            if (decisionTree.dualOccupancy === 'Yes') {
                               unitPrefix = `Units ${address.unitNumber}`;
                             } else {
                               unitPrefix = `Unit ${address.unitNumber}`;
@@ -535,9 +533,8 @@ export function Step1DecisionTree() {
                           if (address?.unitNumber) {
                             // Keep unit in address
                             let unitPrefix = '';
-                            if (address.unitNumber.includes('-')) {
-                              unitPrefix = `Units ${address.unitNumber}`;
-                            } else if (address.unitNumber.includes(',')) {
+                            // For dual occupancy, always use "Units" (plural), otherwise "Unit" (singular)
+                            if (decisionTree.dualOccupancy === 'Yes') {
                               unitPrefix = `Units ${address.unitNumber}`;
                             } else {
                               unitPrefix = `Unit ${address.unitNumber}`;
@@ -578,9 +575,8 @@ export function Step1DecisionTree() {
                         if (address?.unitNumber) {
                           // Keep unit in address
                           let unitPrefix = '';
-                          if (address.unitNumber.includes('-')) {
-                            unitPrefix = `Units ${address.unitNumber}`;
-                          } else if (address.unitNumber.includes(',')) {
+                          // For dual occupancy, always use "Units" (plural), otherwise "Unit" (singular)
+                          if (decisionTree.dualOccupancy === 'Yes') {
                             unitPrefix = `Units ${address.unitNumber}`;
                           } else {
                             unitPrefix = `Unit ${address.unitNumber}`;
@@ -711,14 +707,10 @@ export function Step1DecisionTree() {
                       
                       // Format unit number for address
                       let unitPrefix = '';
-                      if (value.includes('-')) {
-                        // Range format: "1-8" -> "Units 1-8"
-                        unitPrefix = `Units ${value}`;
-                      } else if (value.includes(',')) {
-                        // List format: "A,B,C" -> "Units A,B,C"
+                      // For dual occupancy, always use "Units" (plural), otherwise "Unit" (singular)
+                      if (decisionTree.dualOccupancy === 'Yes') {
                         unitPrefix = `Units ${value}`;
                       } else {
-                        // Single format: "2" or "A" -> "Unit 2" or "Unit A"
                         unitPrefix = `Unit ${value}`;
                       }
                       

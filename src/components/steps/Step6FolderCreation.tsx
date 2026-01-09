@@ -350,10 +350,10 @@ export function Step6FolderCreation() {
             <input
               type="text"
               value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
-              className="input-field"
+              readOnly
+              disabled
+              className="input-field bg-gray-100 cursor-not-allowed"
               placeholder="Property address or project name"
-              readOnly={!!folderLink}
             />
             <p className="text-xs text-gray-500 mt-1">
               {decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple' 
