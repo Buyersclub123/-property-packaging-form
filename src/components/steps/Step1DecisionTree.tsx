@@ -875,7 +875,6 @@ export function Step1DecisionTree() {
                           <option value="">Select...</option>
                           <option value="No">Single Occupancy</option>
                           <option value="Yes">Dual Occupancy</option>
-                          <option value="TBC">TBC</option>
                         </select>
                       </div>
                     </div>
