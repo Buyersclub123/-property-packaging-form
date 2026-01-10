@@ -145,6 +145,57 @@ export function Step6FolderCreation() {
     setSubmitError(null);
 
     try {
+      // Fields that are internal/UI state and should NOT be sent to Make.com/GHL
+      const INTERNAL_FIELDS = {
+        address: ['addressVerified', 'addressFieldsEditable', 'stashPropertyAddress', 'latitude', 'longitude', 'addressSource', 'lotNumberNotApplicable', 'usePropertyAddressForProject', 'hasUnitNumbers'],
+        marketPerformance: ['isSaved', 'isVerified', 'daysSinceLastCheck'],
+      };
+
+      // Function to remove internal fields from an object
+      const removeInternalFields = (obj: any, fieldList: string[]): any => {
+        if (!obj || typeof obj !== 'object') return obj;
+        const result: any = {};
+        for (const key in obj) {
+          if (obj.hasOwnProperty(key) && !fieldList.includes(key)) {
+            result[key] = obj[key];
+          }
+        }
+        return result;
+      };
+
+      // Generic function to convert all empty strings to null recursively
+      // GHL numeric dropdowns reject empty strings - they need null or a number
+      // Industry standard: Most APIs prefer null over empty strings for optional fields
+      const convertEmptyStringsToNull = (obj: any): any => {
+        if (obj === null || obj === undefined) {
+          return obj;
+        }
+        
+        // If it's an empty string, convert to null
+        if (obj === '') {
+          return null;
+        }
+        
+        // If it's an array, process each element
+        if (Array.isArray(obj)) {
+          return obj.map(item => convertEmptyStringsToNull(item));
+        }
+        
+        // If it's an object, process each property
+        if (typeof obj === 'object') {
+          const result: any = {};
+          for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              result[key] = convertEmptyStringsToNull(obj[key]);
+            }
+          }
+          return result;
+        }
+        
+        // For primitive values (strings, numbers, booleans), return as-is
+        return obj;
+      };
+
       // Combine selling agent fields before submission
       const sellingAgentParts: string[] = [
         formData.sellingAgentName?.trim(),
@@ -152,11 +203,21 @@ export function Step6FolderCreation() {
         formData.sellingAgentMobile?.trim(),
       ].filter((item): item is string => !!item && item.length > 0);
 
-      const submissionData = {
+      // Remove internal/UI state fields before processing
+      const cleanedFormData = {
         ...formData,
+        address: formData.address ? removeInternalFields(formData.address, INTERNAL_FIELDS.address) : formData.address,
+        marketPerformance: formData.marketPerformance ? removeInternalFields(formData.marketPerformance, INTERNAL_FIELDS.marketPerformance) : formData.marketPerformance,
+      };
+
+      const submissionData = {
+        ...cleanedFormData,
         sellingAgent: sellingAgentParts.length > 0 ? sellingAgentParts.join(', ') : formData.sellingAgent || '',
         folderLink: folderLink,
       };
+
+      // Convert all empty strings to null (handles all fields automatically, including future fields)
+      const processedSubmissionData = convertEmptyStringsToNull(submissionData);
 
       // Send all data to Make.com webhook (Make.com will create GHL record)
       const makeResponse = await fetch('https://hook.eu1.make.com/2xbtucntvnp3wfmkjk0ecuxj4q4c500h', {
@@ -165,7 +226,7 @@ export function Step6FolderCreation() {
         body: JSON.stringify({
           source: 'form_app',
           action: 'submit_new_property',
-          formData: submissionData,
+          formData: processedSubmissionData,
           folderLink: folderLink,
         }),
       });

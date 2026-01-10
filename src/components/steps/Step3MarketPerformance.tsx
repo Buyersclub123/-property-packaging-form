@@ -1010,6 +1010,8 @@ export function Step3MarketPerformance() {
                   onClick={async () => {
                     // Navigate FIRST to prevent any re-renders from interfering
                     setCurrentStep(5);
+                    // Scroll to top when moving to next step
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                     
                     // Then update state and API in the background (non-blocking)
                     setShowStaleDataLinks(false);

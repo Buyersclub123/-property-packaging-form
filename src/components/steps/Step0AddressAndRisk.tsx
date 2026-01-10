@@ -985,6 +985,8 @@ export function Step0AddressAndRisk() {
     
     // Move to next step after all validations pass
     setCurrentStep(2);
+    // Scroll to top when moving to next step
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Auto-populate risk overlays from Stash data when it becomes available

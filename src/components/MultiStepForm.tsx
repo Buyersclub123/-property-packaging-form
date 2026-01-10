@@ -847,6 +847,8 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     
     if (currentStep < STEPS.length && setCurrentStep) {
       setCurrentStep(currentStep + 1);
+      // Scroll to top when moving to next step
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -870,6 +872,8 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       }
       
       setCurrentStep(currentStep - 1);
+      // Scroll to top when moving to previous step
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
