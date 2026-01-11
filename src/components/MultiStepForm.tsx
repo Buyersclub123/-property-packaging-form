@@ -399,7 +399,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         const isDualOccupancy = decisionTree?.dualOccupancy === 'Yes';
         const isHAndL = decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Individual';
         const isEstablished = decisionTree?.propertyType === 'Established';
-        const isSingleContract = decisionTree?.contractType === '02 Single Comms';
+        const isSingleContract = decisionTree?.contractType === '02_single_comms';
         
         // Validation for Projects (Multiple lots)
         if (isProject) {
@@ -586,7 +586,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           }
           
           // If Primary Occupancy is Tenanted, Current Rent and Expiry are required
-          if (rentalAssessment?.occupancyPrimary === 'Tenanted') {
+          if (rentalAssessment?.occupancyPrimary === 'tenanted') {
             if (isEmpty(rentalAssessment?.currentRentPrimary)) {
               setValidationErrorWithRef('Current Rent (Primary) is required when Occupancy (Primary) is "Tenanted".');
               return false;
@@ -604,7 +604,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           }
           
           // For dual occupancy, if Secondary Occupancy is Tenanted, secondary rent and expiry are also required (independent check)
-          if (isDualOccupancy && rentalAssessment?.occupancySecondary === 'Tenanted') {
+          if (isDualOccupancy && rentalAssessment?.occupancySecondary === 'tenanted') {
             if (isEmpty(rentalAssessment?.currentRentSecondary)) {
               setValidationErrorWithRef('Current Rent (Secondary) is required when Occupancy (Secondary) is "Tenanted".');
               return false;

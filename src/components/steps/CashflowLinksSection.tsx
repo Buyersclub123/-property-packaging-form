@@ -28,11 +28,11 @@ export function CashflowLinksSection({ className = '' }: CashflowLinksSectionPro
   
   // Determine which template(s) are needed based on contract type
   const contractType = decisionTree?.contractType;
-  const needsHLTemplate = contractType === '01 H&L Comms';
-  const needsGeneralTemplate = contractType === '02 Single Comms' || 
-                               contractType === '03 Internal with Comms' || 
-                               contractType === '04 Internal No-Comms' || 
-                               contractType === '05 Established';
+  const needsHLTemplate = contractType === '01_hl_comms';
+  const needsGeneralTemplate = contractType === '02_single_comms' || 
+                               contractType === '03_internal_with_comms' || 
+                               contractType === '04_internal_nocomms' || 
+                               contractType === '05_established';
   
   // Update form data when links change
   useEffect(() => {

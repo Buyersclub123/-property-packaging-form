@@ -100,12 +100,12 @@ export function Step2PropertyDetails() {
   const isDualOccupancy = decisionTree.dualOccupancy === 'Yes';
   
   // Check if Contract Type is 01, 02, or 03 (these have cashback/rebate)
-  const hasCashbackRebate = decisionTree.contractType === '01 H&L Comms' || 
-                            decisionTree.contractType === '02 Single Comms' || 
-                            decisionTree.contractType === '03 Internal with Comms';
+  const hasCashbackRebate = decisionTree.contractType === '01_hl_comms' || 
+                            decisionTree.contractType === '02_single_comms' || 
+                            decisionTree.contractType === '03_internal_with_comms';
   
   // Check if Contract Type is 02 Single Comms (uses Total Price instead of Land + Build)
-  const isSingleContract = decisionTree.contractType === '02 Single Comms';
+  const isSingleContract = decisionTree.contractType === '02_single_comms';
   
   // Set defaults for cashback/rebate when contract type requires it
   useEffect(() => {
@@ -115,7 +115,7 @@ export function Step2PropertyDetails() {
         updates.cashbackRebateValue = '20000'; // Default to $20,000
       }
       if (!purchasePrice?.cashbackRebateType) {
-        updates.cashbackRebateType = 'Cashback'; // Default to Cashback
+        updates.cashbackRebateType = 'cashback'; // Default to Cashback
       }
       if (Object.keys(updates).length > 0) {
         updatePurchasePrice(updates);
@@ -176,7 +176,7 @@ export function Step2PropertyDetails() {
   // Calculate Net Price (Total - Cashback) for H&L - Only for Cashback type
   const netPrice = useMemo(() => {
     // Only calculate Net Price if type is "Cashback"
-    if (purchasePrice?.cashbackRebateType !== 'Cashback') return null;
+    if (purchasePrice?.cashbackRebateType !== 'cashback') return null;
     
     if (!totalPrice) return null;
     
@@ -212,8 +212,8 @@ export function Step2PropertyDetails() {
   // For single: use Primary only if Tenanted
   const currentYield = useMemo(() => {
     // Check if at least one unit is Tenanted
-    const isPrimaryTenanted = rentalAssessment?.occupancyPrimary === 'Tenanted';
-    const isSecondaryTenanted = isDualOccupancy && rentalAssessment?.occupancySecondary === 'Tenanted';
+    const isPrimaryTenanted = rentalAssessment?.occupancyPrimary === 'tenanted';
+    const isSecondaryTenanted = isDualOccupancy && rentalAssessment?.occupancySecondary === 'tenanted';
     const isAnyUnitTenanted = isPrimaryTenanted || isSecondaryTenanted;
     
     if (!isAnyUnitTenanted || !propertyPrice) {
@@ -293,8 +293,8 @@ export function Step2PropertyDetails() {
       }
     } else {
       // Only clear if BOTH units are not Tenanted (for dual occupancy) or Primary is not Tenanted (for single)
-      const isPrimaryTenanted = rentalAssessment?.occupancyPrimary === 'Tenanted';
-      const isSecondaryTenanted = isDualOccupancy && rentalAssessment?.occupancySecondary === 'Tenanted';
+      const isPrimaryTenanted = rentalAssessment?.occupancyPrimary === 'tenanted';
+      const isSecondaryTenanted = isDualOccupancy && rentalAssessment?.occupancySecondary === 'tenanted';
       const isAnyUnitTenanted = isPrimaryTenanted || isSecondaryTenanted;
       if (!isAnyUnitTenanted && rentalAssessment?.yield) {
         updateRentalAssessment({ yield: '' });
@@ -351,7 +351,7 @@ export function Step2PropertyDetails() {
                 {Array.from({ length: 11 }, (_, i) => (
                   <option key={i} value={String(i)}>{i}</option>
                 ))}
-                <option value="TBC">TBC</option>
+                <option value="tbc">TBC</option>
               </select>
             </div>
             
@@ -383,13 +383,14 @@ export function Step2PropertyDetails() {
                       required
                     >
                 <option value="">Select...</option>
-                {Array.from({ length: 21 }, (_, i) => {
-                  const value = i / 2;
+                <option value="0">0</option>
+                {Array.from({ length: 19 }, (_, i) => {
+                  const value = 1 + (i / 2);
                   return (
                     <option key={i} value={String(value)}>{value}</option>
                   );
                 })}
-                <option value="TBC">TBC</option>
+                <option value="tbc">TBC</option>
               </select>
             </div>
             
@@ -403,13 +404,14 @@ export function Step2PropertyDetails() {
                   required
                 >
                   <option value="">Select...</option>
-                  {Array.from({ length: 21 }, (_, i) => {
-                    const value = i / 2;
+                  <option value="0">0</option>
+                  {Array.from({ length: 19 }, (_, i) => {
+                    const value = 1 + (i / 2);
                     return (
                       <option key={i} value={String(value)}>{value}</option>
                     );
                   })}
-                  <option value="TBC">TBC</option>
+                  <option value="tbc">TBC</option>
                 </select>
               </div>
             )}
@@ -427,7 +429,7 @@ export function Step2PropertyDetails() {
                 {Array.from({ length: 11 }, (_, i) => (
                   <option key={i} value={String(i)}>{i}</option>
                 ))}
-                <option value="TBC">TBC</option>
+                <option value="tbc">TBC</option>
               </select>
             </div>
             
@@ -461,7 +463,7 @@ export function Step2PropertyDetails() {
                 {Array.from({ length: 11 }, (_, i) => (
                   <option key={i} value={String(i)}>{i}</option>
                 ))}
-                <option value="TBC">TBC</option>
+                <option value="tbc">TBC</option>
               </select>
             </div>
             
@@ -494,7 +496,7 @@ export function Step2PropertyDetails() {
                 {Array.from({ length: 11 }, (_, i) => (
                   <option key={i} value={String(i)}>{i}</option>
                 ))}
-                <option value="TBC">TBC</option>
+                <option value="tbc">TBC</option>
               </select>
             </div>
             
@@ -729,14 +731,14 @@ export function Step2PropertyDetails() {
                 required
               >
                 <option value="">Select...</option>
-                <option value="Individual">Individual</option>
-                <option value="Green">Green</option>
-                <option value="Torrens">Torrens</option>
-                <option value="Strata">Strata</option>
-                <option value="Owners Corp (Community)">Owners Corp (Community)</option>
-                <option value="Survey Strata">Survey Strata</option>
-                <option value="Built Strata">Built Strata</option>
-                <option value="TBC">TBC</option>
+                <option value="individual">Individual</option>
+                <option value="torrens">Torrens</option>
+                <option value="green">Green</option>
+                <option value="strata">Strata</option>
+                <option value="owners_corp_community">Owners Corp (Community)</option>
+                <option value="survey_strata">Survey Strata</option>
+                <option value="built_strata">Built Strata</option>
+                <option value="tbc">TBC</option>
               </select>
             </div>
 
@@ -851,11 +853,11 @@ export function Step2PropertyDetails() {
                     required
                   >
                     <option value="">Select...</option>
-                    <option value="On-market">On-market</option>
-                    <option value="Off-market">Off-market</option>
-                    <option value="Pre-launch">Pre-launch</option>
-                    <option value="Coming Soon">Coming Soon</option>
-                    <option value="TBC">TBC</option>
+                    <option value="onmarket">On-market</option>
+                    <option value="offmarket">Off-market</option>
+                    <option value="prelaunch_opportunity">Pre-launch</option>
+                    <option value="coming_soon">Coming Soon</option>
+                    <option value="tbc">TBC</option>
                   </select>
                 </div>
 
@@ -1005,22 +1007,23 @@ export function Step2PropertyDetails() {
                     onChange={(e) => {
                       const value = e.target.value;
                       updatePurchasePrice({ 
-                        cashbackRebateType: value === '' ? undefined : value as 'Cashback' | 'Rebate on Land' | 'Rebate on Build'
+                        cashbackRebateType: value === '' ? undefined : value as CashbackRebateType
                       });
                     }}
                     className="input-field"
                   >
                     <option value="">Select...</option>
-                    <option value="Cashback">Cashback</option>
-                    <option value="Rebate on Land">Rebate on Land</option>
-                    <option value="Rebate on Build">Rebate on Build</option>
+                    <option value="cashback">Cashback</option>
+                    <option value="rebate_on_land">Rebate on Land</option>
+                    <option value="rebate_on_build">Rebate on Build</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
               </div>
             )}
 
             {/* Calculated Net Price - Only for H&L with Cashback */}
-            {isHAndL && hasCashbackRebate && purchasePrice?.cashbackRebateType === 'Cashback' && (
+            {isHAndL && hasCashbackRebate && purchasePrice?.cashbackRebateType === 'cashback' && (
               <div className="pt-3 border-t">
                 <div>
                   <label className="label-field">Net Price</label>
@@ -1181,7 +1184,7 @@ export function Step2PropertyDetails() {
                         onChange={(e) => {
                           const newOccupancy = e.target.value as OccupancyType;
                           // Clear Current Rent and Expiry fields if changing away from Tenanted
-                          if (newOccupancy !== 'Tenanted') {
+                          if (newOccupancy !== 'tenanted') {
                             updateRentalAssessment({
                               occupancyPrimary: newOccupancy,
                               currentRentPrimary: '',
@@ -1196,9 +1199,10 @@ export function Step2PropertyDetails() {
                         required
                       >
                         <option value="">Select...</option>
-                        <option value="Owner Occupied">Owner Occupied</option>
-                        <option value="Tenanted">Tenanted</option>
-                        <option value="Vacant">Vacant</option>
+                        <option value="owner_occupied">Owner Occupied</option>
+                        <option value="tenanted">Tenanted</option>
+                        <option value="vacant">Vacant</option>
+                        <option value="tbc">TBC</option>
                       </select>
                     </div>
 
@@ -1210,7 +1214,7 @@ export function Step2PropertyDetails() {
                         onChange={(e) => {
                           const newOccupancy = e.target.value as OccupancyType;
                           // Clear Current Rent and Expiry fields if changing away from Tenanted
-                          if (newOccupancy !== 'Tenanted') {
+                          if (newOccupancy !== 'tenanted') {
                             updateRentalAssessment({
                               occupancySecondary: newOccupancy,
                               currentRentSecondary: '',
@@ -1225,9 +1229,10 @@ export function Step2PropertyDetails() {
                         required
                       >
                         <option value="">Select...</option>
-                        <option value="Owner Occupied">Owner Occupied</option>
-                        <option value="Tenanted">Tenanted</option>
-                        <option value="Vacant">Vacant</option>
+                        <option value="owner_occupied">Owner Occupied</option>
+                        <option value="tenanted">Tenanted</option>
+                        <option value="vacant">Vacant</option>
+                        <option value="tbc">TBC</option>
                       </select>
                     </div>
                   </div>
@@ -1239,7 +1244,7 @@ export function Step2PropertyDetails() {
                       onChange={(e) => {
                         const newOccupancy = e.target.value as OccupancyType;
                         // Clear Current Rent and Expiry fields if changing away from Tenanted
-                        if (newOccupancy !== 'Tenanted') {
+                        if (newOccupancy !== 'tenanted') {
                           updateRentalAssessment({
                             occupancyPrimary: newOccupancy,
                             currentRentPrimary: '',
@@ -1256,9 +1261,10 @@ export function Step2PropertyDetails() {
                       required
                     >
                       <option value="">Select...</option>
-                      <option value="Owner Occupied">Owner Occupied</option>
-                      <option value="Tenanted">Tenanted</option>
-                      <option value="Vacant">Vacant</option>
+                      <option value="owner_occupied">Owner Occupied</option>
+                      <option value="tenanted">Tenanted</option>
+                      <option value="vacant">Vacant</option>
+                      <option value="tbc">TBC</option>
                     </select>
                   </div>
                 )}
@@ -1268,8 +1274,8 @@ export function Step2PropertyDetails() {
             {/* Current Rent and Expiry - Only show if Occupancy is Tenanted AND Established */}
             {isEstablished && (
               (isDualOccupancy 
-                ? (rentalAssessment?.occupancyPrimary === 'Tenanted' || rentalAssessment?.occupancySecondary === 'Tenanted')
-                : rentalAssessment?.occupancyPrimary === 'Tenanted') && (
+                ? (rentalAssessment?.occupancyPrimary === 'tenanted' || rentalAssessment?.occupancySecondary === 'tenanted')
+                : rentalAssessment?.occupancyPrimary === 'tenanted') && (
               <div>
                 {isDualOccupancy ? (
                   <div className="grid grid-cols-2 gap-6">
@@ -1302,17 +1308,17 @@ export function Step2PropertyDetails() {
                             }}
                             className="input-field"
                             placeholder="e.g., $500 or TBC"
-                            required={rentalAssessment?.occupancyPrimary === 'Tenanted'}
+                            required={rentalAssessment?.occupancyPrimary === 'tenanted'}
                           />
                         </div>
                         <div>
-                          <label className="label-field">Expiry{rentalAssessment?.occupancyPrimary === 'Tenanted' ? ' *' : ''}</label>
+                          <label className="label-field">Expiry{rentalAssessment?.occupancyPrimary === 'tenanted' ? ' *' : ''}</label>
                           {(() => {
                             const expiryData = parseExpiry(rentalAssessment?.expiryPrimary);
                             const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
-                            const isRequired = rentalAssessment?.occupancyPrimary === 'Tenanted' && !expiryData.isTBC;
+                            const isRequired = rentalAssessment?.occupancyPrimary === 'tenanted' && !expiryData.isTBC;
                             
                             return (
                               <div className="space-y-2">
@@ -1401,17 +1407,17 @@ export function Step2PropertyDetails() {
                             }}
                             className="input-field"
                             placeholder="e.g., $400 or TBC"
-                            required={rentalAssessment?.occupancySecondary === 'Tenanted'}
+                            required={rentalAssessment?.occupancySecondary === 'tenanted'}
                           />
                         </div>
                         <div>
-                          <label className="label-field">Expiry{rentalAssessment?.occupancySecondary === 'Tenanted' ? ' *' : ''}</label>
+                          <label className="label-field">Expiry{rentalAssessment?.occupancySecondary === 'tenanted' ? ' *' : ''}</label>
                           {(() => {
                             const expiryData = parseExpiry(rentalAssessment?.expirySecondary);
                             const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
-                            const isRequired = rentalAssessment?.occupancySecondary === 'Tenanted' && !expiryData.isTBC;
+                            const isRequired = rentalAssessment?.occupancySecondary === 'tenanted' && !expiryData.isTBC;
                             
                             return (
                               <div className="space-y-2">
@@ -1498,17 +1504,17 @@ export function Step2PropertyDetails() {
                         }}
                         className="input-field"
                         placeholder="e.g., $500 or TBC"
-                        required={rentalAssessment?.occupancyPrimary === 'Tenanted'}
+                        required={rentalAssessment?.occupancyPrimary === 'tenanted'}
                       />
                     </div>
                     <div>
-                      <label className="label-field">Expiry{rentalAssessment?.occupancyPrimary === 'Tenanted' ? ' *' : ''}</label>
+                      <label className="label-field">Expiry{rentalAssessment?.occupancyPrimary === 'tenanted' ? ' *' : ''}</label>
                       {(() => {
                         const expiryData = parseExpiry(rentalAssessment?.expiryPrimary);
                         const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                         'July', 'August', 'September', 'October', 'November', 'December'];
                         const years = getYearOptions();
-                        const isRequired = rentalAssessment?.occupancyPrimary === 'Tenanted' && !expiryData.isTBC;
+                        const isRequired = rentalAssessment?.occupancyPrimary === 'tenanted' && !expiryData.isTBC;
                         
                         return (
                           <div className="space-y-2">
@@ -1762,7 +1768,7 @@ export function Step2PropertyDetails() {
             )}
 
             {/* Current Yield - Auto-calculated, only show if any unit is Tenanted AND Established */}
-            {isEstablished && (rentalAssessment?.occupancyPrimary === 'Tenanted' || (isDualOccupancy && rentalAssessment?.occupancySecondary === 'Tenanted')) && (
+            {isEstablished && (rentalAssessment?.occupancyPrimary === 'tenanted' || (isDualOccupancy && rentalAssessment?.occupancySecondary === 'tenanted')) && (
               <div>
                 <label className="label-field">Current Yield (%)</label>
                 <input
@@ -2125,12 +2131,12 @@ function ProjectLotsView() {
   };
   
   // Check if Contract Type has cashback/rebate
-  const hasCashbackRebate = decisionTree.contractType === '01 H&L Comms' || 
-                            decisionTree.contractType === '02 Single Comms' || 
-                            decisionTree.contractType === '03 Internal with Comms';
+  const hasCashbackRebate = decisionTree.contractType === '01_hl_comms' || 
+                            decisionTree.contractType === '02_single_comms' || 
+                            decisionTree.contractType === '03_internal_with_comms';
   
   // Check if Contract Type is 02 Single Comms (uses Total Price instead of Land + Build)
-  const isSingleContract = decisionTree.contractType === '02 Single Comms';
+  const isSingleContract = decisionTree.contractType === '02_single_comms';
   
   // Auto-populate cashback/rebate for lots that don't have values yet
   useEffect(() => {
@@ -2488,9 +2494,10 @@ function ProjectLotsView() {
                   className="input-field"
                 >
                   <option value="">Select...</option>
-                  <option value="Cashback">Cashback</option>
-                  <option value="Rebate on Land">Rebate on Land</option>
-                  <option value="Rebate on Build">Rebate on Build</option>
+                  <option value="cashback">Cashback</option>
+                  <option value="rebate_on_land">Rebate on Land</option>
+                  <option value="rebate_on_build">Rebate on Build</option>
+                  <option value="other">Other</option>
                 </select>
               </div>
             </div>
@@ -2996,13 +3003,14 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
           required
         >
           <option value="">Select...</option>
-          {Array.from({ length: 21 }, (_, i) => {
-            const value = i / 2;
+          <option value="0">0</option>
+          {Array.from({ length: 19 }, (_, i) => {
+            const value = 1 + (i / 2);
             return (
               <option key={i} value={String(value)}>{value}</option>
             );
           })}
-          <option value="TBC">TBC</option>
+          <option value="tbc">TBC</option>
         </select>
       </div>
       
@@ -3016,13 +3024,14 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
             required
           >
             <option value="">Select...</option>
-            {Array.from({ length: 21 }, (_, i) => {
-              const value = i / 2;
+            <option value="0">0</option>
+            {Array.from({ length: 19 }, (_, i) => {
+              const value = 1 + (i / 2);
               return (
                 <option key={i} value={String(value)}>{value}</option>
               );
             })}
-            <option value="TBC">TBC</option>
+            <option value="tbc">TBC</option>
           </select>
         </div>
       )}
@@ -3304,14 +3313,14 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
           required
         >
           <option value="">Select...</option>
-          <option value="Individual">Individual</option>
-          <option value="Green">Green</option>
-          <option value="Torrens">Torrens</option>
-          <option value="Strata">Strata</option>
-          <option value="Owners Corp (Community)">Owners Corp (Community)</option>
-          <option value="Survey Strata">Survey Strata</option>
-          <option value="Built Strata">Built Strata</option>
-          <option value="TBC">TBC</option>
+          <option value="individual">Individual</option>
+          <option value="torrens">Torrens</option>
+          <option value="green">Green</option>
+          <option value="strata">Strata</option>
+          <option value="owners_corp_community">Owners Corp (Community)</option>
+          <option value="survey_strata">Survey Strata</option>
+          <option value="built_strata">Built Strata</option>
+          <option value="tbc">TBC</option>
         </select>
       </div>
 
@@ -3423,7 +3432,7 @@ function LotPurchasePriceFields({ lotIndex, purchasePrice, hasCashbackRebate, is
   // Calculate Net Price (Total - Cashback) - Only for Cashback type, not Rebates
   const netPrice = useMemo(() => {
     // Only calculate Net Price if type is "Cashback"
-    if (purchasePrice?.cashbackRebateType !== 'Cashback') return null;
+    if (purchasePrice?.cashbackRebateType !== 'cashback') return null;
     
     if (!totalPrice) return null;
     
@@ -3596,7 +3605,7 @@ function LotPurchasePriceFields({ lotIndex, purchasePrice, hasCashbackRebate, is
               </p>
             </div>
             
-            {hasCashbackRebate && purchasePrice?.cashbackRebateType === 'Cashback' && (
+            {hasCashbackRebate && purchasePrice?.cashbackRebateType === 'cashback' && (
               <div>
                 <label className="label-field">Net Price</label>
                 <input

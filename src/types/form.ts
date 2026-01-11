@@ -1,17 +1,17 @@
 // Form field types and interfaces
 
 export type PropertyType = 'New' | 'Established';
-export type ContractType = '01 H&L Comms' | '02 Single Comms' | '03 Internal with Comms' | '04 Internal No-Comms' | '05 Established';
+export type ContractType = '01_hl_comms' | '02_single_comms' | '03_internal_with_comms' | '04_internal_nocomms' | '05_established';
 export type LotType = 'Individual' | 'Multiple';
 export type DualOccupancy = 'Yes' | 'No' | 'Mixed' | 'TBC' | '';
 
 export type YesNo = 'Yes' | 'No' | '';
-export type AskingType = 'On-market' | 'Off-market' | 'Pre-launch' | 'Coming Soon' | 'N/A' | 'TBC';
-export type OccupancyType = 'Owner Occupied' | 'Tenanted' | 'Vacant';
-export type TitleType = 'Individual' | 'Green' | 'Torrens' | 'Strata' | 'Owners Corp (Community)' | 'Survey Strata' | 'Built Strata' | 'TBC';
-export type CashbackRebateType = 'Cashback' | 'Rebate on Land' | 'Rebate on Build';
-export type DealType = '01 H&L Comms' | '02 Single Comms' | '03 Internal with Comms' | '04 Internal No-Comms' | '05 Established';
-export type StatusType = '01 Available' | '02 EOI' | '03 Contr\' Exchanged' | '05 Remove no interest' | '06 Remove lost';
+export type AskingType = 'onmarket' | 'offmarket' | 'prelaunch_opportunity' | 'coming_soon' | 'tbc';
+export type OccupancyType = 'owner_occupied' | 'tenanted' | 'vacant' | 'tbc';
+export type TitleType = 'individual' | 'torrens' | 'green' | 'strata' | 'owners_corp_community' | 'survey_strata' | 'built_strata' | 'tbc';
+export type CashbackRebateType = 'cashback' | 'rebate_on_land' | 'rebate_on_build' | 'other';
+export type DealType = '01_hl_comms' | '02_single_comms' | '03_internal_with_comms' | '04_internal_nocomms' | '05_established';
+export type StatusType = '01_available' | '02_eoi' | '03_contr_exchanged' | '05_remove_no_interest' | '06_remove_lost';
 
 // Step 0: Decision Tree (now Step 1 after reordering)
 export interface DecisionTree {

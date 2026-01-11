@@ -29,9 +29,13 @@ function StashStatus() {
   
   if (stashError) {
     return (
-      <div className="p-4 bg-red-50 rounded-lg mb-4">
-        <p className="text-red-700 font-semibold">Error: {stashError}</p>
+      <div className="p-4 bg-red-50 border-2 border-red-300 rounded-lg mb-4">
+        <p className="text-red-800 font-bold text-base">⚠️ Stash Service Error</p>
+        <p className="text-red-700 font-semibold mt-2">{stashError}</p>
         <p className="text-sm text-red-600 mt-2">
+          Flood and Bushfire risk information was not retrieved. Please enter this information manually if known.
+        </p>
+        <p className="text-xs text-red-600 mt-2 italic">
           You can continue manually - the form will work without Stash data.
         </p>
       </div>
@@ -113,7 +117,7 @@ function LGADisplay() {
       console.log('LGADisplay: Setting LGA from Stash:', stashData.lga);
       updateAddress({ lga: stashData.lga });
     }
-  }, [stashData?.lga, formData.address.lga, updateAddress]);
+  }, [stashData?.lga, formData.address.lga]); // updateAddress is a stable Zustand action, doesn't need to be in deps
   
   const lgaValue = formData.address.lga || stashData?.lga || '';
   const isEditable = address.addressFieldsEditable || !address.addressVerified;
@@ -393,7 +397,7 @@ function StashFieldDisplay({ field }: { field: 'floodRisk' | 'bushfireRisk' }) {
 }
 
 export function Step0AddressAndRisk() {
-  const { formData, updateAddress, updateRiskOverlays, updateFormData, setStashData, setStashLoading, setStashError, setCurrentStep } = useFormStore();
+  const { formData, updateAddress, updateRiskOverlays, updateFormData, setStashData, setStashLoading, setStashError, setCurrentStep, stashLoading, stashError, stashData } = useFormStore();
   const { address, riskOverlays, sourcer, sellingAgentName, sellingAgentEmail, sellingAgentMobile } = formData;
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [packagingEnabled, setPackagingEnabled] = useState(false);
@@ -992,8 +996,6 @@ export function Step0AddressAndRisk() {
   // Auto-populate risk overlays from Stash data when it becomes available
   // NOTE: Address fields are populated in handleGeocode, not here
   // IMPORTANT: Only populate if fields are empty - don't overwrite user changes
-  const { stashData, stashLoading } = useFormStore();
-  
   useEffect(() => {
     // Only update overlays if we have stash data AND we're not currently loading (to prevent stale data)
     if (stashData && !stashData.error && !stashLoading) {
@@ -1057,7 +1059,47 @@ export function Step0AddressAndRisk() {
     } else if (stashData?.error) {
       console.log('useEffect: Stash data has error:', stashData.errorMessage);
     }
-  }, [stashData, stashLoading, updateRiskOverlays]); // Only run when stashData changes, not when user changes overlays
+  }, [stashData, stashLoading]); // Only run when stashData changes, not when user changes overlays. updateRiskOverlays is a stable Zustand action.
+
+  // Compute Stash badge state and message
+  let stashBadgeType: 'error' | 'complete' | 'partial' | null = null;
+  let stashBadgeMessage = '';
+  
+  if (!stashLoading && stashError) {
+    stashBadgeType = 'error';
+    stashBadgeMessage = 'Caution – It appears Stash is down, retry in a few minutes or manually enter data';
+  } else if (!stashLoading && !stashError && stashData && !stashData.error) {
+    const hasLGA = !!(stashData.lga);
+    const hasZoning = !!(stashData.zoning || stashData.zone || stashData.zoneDesc);
+    const hasFlood = !!(stashData.floodRisk || stashData.floodingRisk);
+    const hasBushfire = !!(stashData.bushfireRisk);
+    const floodNotAvailable = stashData.flooding?.toLowerCase().includes('not available');
+    const bushfireNotAvailable = stashData.bushfire?.toLowerCase().includes('not available');
+    
+    // Consider "not available" as missing
+    const hasFloodValue = hasFlood && !floodNotAvailable;
+    const hasBushfireValue = hasBushfire && !bushfireNotAvailable;
+    
+    const allFieldsPresent = hasLGA && hasZoning && hasFloodValue && hasBushfireValue;
+    
+    if (allFieldsPresent) {
+      stashBadgeType = 'complete';
+      stashBadgeMessage = 'Verified – Stash Data – LGA, zoning, flood and bushfire received';
+    } else {
+      stashBadgeType = 'partial';
+      // Determine which fields are missing and create appropriate message
+      const missingLGA = !hasLGA;
+      const missingFloodBushfire = !hasFloodValue || !hasBushfireValue;
+      
+      if (missingLGA && !missingFloodBushfire) {
+        stashBadgeMessage = 'Caution – Stash Data – LGA is blank or not available';
+      } else if (!missingLGA && missingFloodBushfire) {
+        stashBadgeMessage = 'Caution – Stash Data – Flood or Bushfire is blank or not available';
+      } else {
+        stashBadgeMessage = 'Caution – Stash Data – LGA, Flood or Bushfire is blank or not available';
+      }
+    }
+  }
 
   return (
     <div>
@@ -1162,17 +1204,46 @@ export function Step0AddressAndRisk() {
             </div>
           </div>
 
-          {/* Stash Status */}
-          <StashStatus />
-          
           {/* Property Info from Stash */}
           <PropertyInfoFromStash />
+
+          {/* Loading message - Fetching GeoScape and Stash data */}
+          {(isGeocoding || stashLoading) && (
+            <div className="mt-2">
+              <div className="p-4 bg-blue-50 rounded-lg mb-4">
+                <p className="text-blue-700">Fetching GeoScape and Stash data...</p>
+              </div>
+            </div>
+          )}
 
           {/* Verified Badge - Below Stash Status */}
           {address.addressVerified && !addressFieldsEditable && (
             <div className="mt-3">
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
-                ✓ Verified
+                ✓ Verified - Address validated through Geoscape
+              </span>
+            </div>
+          )}
+
+          {/* Stash Status Badge - Below Verified, same style */}
+          {stashBadgeType === 'error' && (
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-500 text-white text-xs font-semibold rounded">
+                ⚠️ {stashBadgeMessage}
+              </span>
+            </div>
+          )}
+          {stashBadgeType === 'complete' && (
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
+                ✓ {stashBadgeMessage}
+              </span>
+            </div>
+          )}
+          {stashBadgeType === 'partial' && (
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500 text-white text-xs font-semibold rounded">
+                ⚠️ {stashBadgeMessage}
               </span>
             </div>
           )}
@@ -1203,7 +1274,7 @@ export function Step0AddressAndRisk() {
                       className="mt-1"
                     />
                     <div className="flex-1">
-                      <span className="text-sm font-medium text-gray-700">Stash Address (Validated)</span>
+                      <span className="text-sm font-medium text-gray-700">GeoScape Validated Address</span>
                       <p className="text-xs text-gray-600 mt-1">{address.stashPropertyAddress || address.propertyAddress}</p>
                     </div>
                   </label>

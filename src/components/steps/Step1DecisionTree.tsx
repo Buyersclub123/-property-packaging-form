@@ -406,11 +406,11 @@ export function Step1DecisionTree() {
             required
           >
             <option value="">Select...</option>
-            <option value="01 H&L Comms">01 H&L Comms</option>
-            <option value="02 Single Comms">02 Single Comms</option>
-            <option value="03 Internal with Comms">03 Internal with Comms</option>
-            <option value="04 Internal No-Comms">04 Internal No-Comms</option>
-            <option value="05 Established">05 Established</option>
+            <option value="01_hl_comms">01 H&L Comms</option>
+            <option value="02_single_comms">02 Single Comms</option>
+            <option value="03_internal_with_comms">03 Internal with Comms</option>
+            <option value="04_internal_nocomms">04 Internal No-Comms</option>
+            <option value="05_established">05 Established</option>
           </select>
         </div>
 
@@ -426,9 +426,17 @@ export function Step1DecisionTree() {
             required
           >
             <option value="">Select...</option>
-            <option value="01 Available">01 Available</option>
-            <option value="02 EOI">02 EOI</option>
-            <option value="03 Contr' Exchanged">03 Contr' Exchanged</option>
+            <option value="01_available">01 Available</option>
+            <option value="02_eoi">02 EOI</option>
+            <option value="03_contr_exchanged">03 Contr' Exchanged</option>
+            {/* Options 05 and 06: Available in code for editing scenarios, but hidden when creating new properties */}
+            {/* Show these options only if status is already set to one of them (edit mode) */}
+            {(decisionTree.status === '05_remove_no_interest' || decisionTree.status === '06_remove_lost') && (
+              <>
+                <option value="05_remove_no_interest">05 Remove no interest</option>
+                <option value="06_remove_lost">06 Remove lost</option>
+              </>
+            )}
           </select>
           <p className="text-xs text-gray-500 mt-1">
             Only "01 Available" triggers BA Auto select email
@@ -907,17 +915,17 @@ function getSubjectLineFormat(tree: { propertyType: PropertyType | null; contrac
   }
 
   // For Established, lotType is not needed
-  if (tree.propertyType === 'Established' || tree.contractType === '05 Established') {
+  if (tree.propertyType === 'Established' || tree.contractType === '05_established') {
     return 'Established Property - [Suburb] - [Price]';
   }
 
   // For New, need lotType
   if (tree.propertyType === 'New' && tree.lotType) {
-    if (tree.contractType === '01 H&L Comms' && tree.lotType === 'Multiple') {
+    if (tree.contractType === '01_hl_comms' && tree.lotType === 'Multiple') {
       return 'New H&L Project - [Suburb] - [Lots Available]';
-    } else if (tree.contractType === '01 H&L Comms' && tree.lotType === 'Individual') {
+    } else if (tree.contractType === '01_hl_comms' && tree.lotType === 'Individual') {
       return 'New H&L - [Suburb] - [Price]';
-    } else if (tree.contractType === '02 Single Comms' || tree.contractType === '03 Internal with Comms' || tree.contractType === '04 Internal No-Comms') {
+    } else if (tree.contractType === '02_single_comms' || tree.contractType === '03_internal_with_comms' || tree.contractType === '04_internal_nocomms') {
       return 'New Build - [Suburb] - [Price]';
     }
   }

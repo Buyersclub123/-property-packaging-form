@@ -163,33 +163,62 @@ export function Step6FolderCreation() {
         return result;
       };
 
-      // Generic function to convert all empty strings to null recursively
-      // GHL numeric dropdowns reject empty strings - they need null or a number
-      // Industry standard: Most APIs prefer null over empty strings for optional fields
-      const convertEmptyStringsToNull = (obj: any): any => {
-        if (obj === null || obj === undefined) {
-          return obj;
+      // List of numeric field names that should be converted to 0 instead of null
+      const NUMERIC_FIELDS = [
+        // Purchase Price numeric fields
+        'acceptableAcquisitionFrom', 'acceptableAcquisitionTo', 'landPrice', 'buildPrice', 
+        'totalPrice', 'cashbackRebateValue',
+        // Rental Assessment numeric fields
+        'currentRentPrimary', 'currentRentSecondary', 'rentAppraisalPrimaryFrom', 
+        'rentAppraisalPrimaryTo', 'rentAppraisalSecondaryFrom', 'rentAppraisalSecondaryTo',
+        // Market Performance numeric fields
+        'medianPriceChange3Months', 'medianPriceChange1Year', 'medianPriceChange3Year', 
+        'medianPriceChange5Year', 'medianYield', 'medianRentChange1Year', 
+        'rentalPopulation', 'vacancyRate'
+      ];
+
+      // Generic function to convert empty strings: null for text fields, 0 for numeric fields
+      // Numeric fields need 0 (not null) so GHL accepts them and Make.com can preserve number types
+      const convertEmptyStringsToNull = (obj: any, parentKey?: string): any => {
+        // If it's an array, process each element
+        if (Array.isArray(obj)) {
+          return obj.map(item => convertEmptyStringsToNull(item, parentKey));
         }
         
-        // If it's an empty string, convert to null
+        // If it's an object, process each property
+        if (typeof obj === 'object' && obj !== null) {
+          const result: any = {};
+          for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              // Check if this key is numeric (for nested objects like purchasePrice.landPrice)
+              const isNumericField = NUMERIC_FIELDS.includes(key);
+              const value = obj[key];
+              
+              // Handle numeric fields: convert null, undefined, or empty string to '0'
+              if (isNumericField && (value === null || value === undefined || value === '')) {
+                result[key] = '0'; // Return as string "0" - Module 21's toInteger() will convert to number
+              } else {
+                // Recursively process non-numeric fields or non-empty numeric fields
+                result[key] = convertEmptyStringsToNull(value, key);
+              }
+            }
+          }
+          return result;
+        }
+        
+        // If it's an empty string for a numeric field, convert to '0'
+        if (obj === '' && parentKey && NUMERIC_FIELDS.includes(parentKey)) {
+          return '0';
+        }
+        
+        // If it's an empty string for text field, convert to null
         if (obj === '') {
           return null;
         }
         
-        // If it's an array, process each element
-        if (Array.isArray(obj)) {
-          return obj.map(item => convertEmptyStringsToNull(item));
-        }
-        
-        // If it's an object, process each property
-        if (typeof obj === 'object') {
-          const result: any = {};
-          for (const key in obj) {
-            if (obj.hasOwnProperty(key)) {
-              result[key] = convertEmptyStringsToNull(obj[key]);
-            }
-          }
-          return result;
+        // If it's null/undefined (and not a numeric field), return as-is
+        if (obj === null || obj === undefined) {
+          return obj;
         }
         
         // For primitive values (strings, numbers, booleans), return as-is
