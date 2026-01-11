@@ -31,19 +31,8 @@ export function Step6FolderCreation() {
 
   // Determine folder name based on property type
   const getFolderName = (): string => {
-    const isProject = decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple';
-    
-    if (isProject) {
-      // For projects: use projectAddress if exists, otherwise use propertyAddress from Step 1
-      if (address?.projectAddress) {
-        return address.projectAddress;
-      } else {
-        return address?.propertyAddress || '';
-      }
-    } else {
-      // For non-projects: use propertyAddress from Step 1
-      return address?.propertyAddress || '';
-    }
+    // Always use propertyAddress from Step 1 (not projectAddress)
+    return address?.propertyAddress || '';
   };
 
   // Initialize folder name on mount and when dependencies change
@@ -52,7 +41,7 @@ export function Step6FolderCreation() {
     if (name) {
       setFolderName(name);
     }
-  }, [decisionTree?.propertyType, decisionTree?.lotType, address?.projectAddress, address?.propertyAddress]);
+  }, [address?.propertyAddress]);
 
   // Checklist items
   const isNewProperty = decisionTree?.propertyType === 'New';
@@ -443,12 +432,10 @@ export function Step6FolderCreation() {
               readOnly
               disabled
               className="input-field bg-gray-100 cursor-not-allowed"
-              placeholder="Property address or project name"
+              placeholder="Property address"
             />
             <p className="text-xs text-gray-500 mt-1">
-              {decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple' 
-                ? 'For projects: Uses project address (if checkbox checked) or property address from Step 1'
-                : 'Uses property address from Step 1'}
+              Uses property address from Step 1
             </p>
           </div>
 

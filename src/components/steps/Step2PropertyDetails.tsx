@@ -2197,14 +2197,19 @@ function ProjectLotsView() {
   
   // Auto-populate cashback/rebate for lots that don't have values yet
   useEffect(() => {
-    if (hasCashbackRebate && purchasePrice?.cashbackRebateValue && purchasePrice?.cashbackRebateType && lots) {
+    if (hasCashbackRebate && lots) {
       lots.forEach((lot, index) => {
-        // Only populate if lot doesn't already have values
-        if (!lot.purchasePrice?.cashbackRebateValue || !lot.purchasePrice?.cashbackRebateType) {
-          updateLotPurchasePrice(index, {
-            cashbackRebateValue: lot.purchasePrice?.cashbackRebateValue || purchasePrice.cashbackRebateValue,
-            cashbackRebateType: lot.purchasePrice?.cashbackRebateType || purchasePrice.cashbackRebateType,
-          });
+        const updates: Partial<typeof lot.purchasePrice> = {};
+        // Set default value if missing
+        if (!lot.purchasePrice?.cashbackRebateValue) {
+          updates.cashbackRebateValue = purchasePrice?.cashbackRebateValue || '20000';
+        }
+        // Set default type if missing - always default to 'cashback'
+        if (!lot.purchasePrice?.cashbackRebateType) {
+          updates.cashbackRebateType = purchasePrice?.cashbackRebateType || 'cashback';
+        }
+        if (Object.keys(updates).length > 0) {
+          updateLotPurchasePrice(index, updates);
         }
       });
     }
@@ -3454,11 +3459,18 @@ interface LotPurchasePriceFieldsProps {
 function LotPurchasePriceFields({ lotIndex, purchasePrice, hasCashbackRebate, isSingleContract, updateLotPurchasePrice, formatCurrency, parseCurrency }: LotPurchasePriceFieldsProps) {
   // Set default cashback/rebate values if applicable
   useEffect(() => {
-    if (hasCashbackRebate && !purchasePrice?.cashbackRebateValue && !purchasePrice?.cashbackRebateType) {
-      updateLotPurchasePrice(lotIndex, {
-        cashbackRebateValue: '20000',
-        cashbackRebateType: 'Cashback',
-      });
+    if (hasCashbackRebate) {
+      // Set defaults if either is missing (not just both)
+      if (!purchasePrice?.cashbackRebateValue || !purchasePrice?.cashbackRebateType) {
+        const updates: Partial<typeof purchasePrice> = {};
+        if (!purchasePrice?.cashbackRebateValue) {
+          updates.cashbackRebateValue = '20000';
+        }
+        if (!purchasePrice?.cashbackRebateType) {
+          updates.cashbackRebateType = 'cashback'; // Default to Cashback
+        }
+        updateLotPurchasePrice(lotIndex, updates);
+      }
     }
   }, [hasCashbackRebate, lotIndex, purchasePrice?.cashbackRebateValue, purchasePrice?.cashbackRebateType, updateLotPurchasePrice]);
 
@@ -3637,9 +3649,9 @@ function LotPurchasePriceFields({ lotIndex, purchasePrice, hasCashbackRebate, is
               className="input-field"
             >
               <option value="">Select...</option>
-              <option value="Cashback">Cashback</option>
-              <option value="Rebate on Land">Rebate on Land</option>
-              <option value="Rebate on Build">Rebate on Build</option>
+              <option value="cashback">Cashback</option>
+              <option value="rebate_on_land">Rebate on Land</option>
+              <option value="rebate_on_build">Rebate on Build</option>
             </select>
           </div>
         </div>
