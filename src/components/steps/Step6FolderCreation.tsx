@@ -534,6 +534,21 @@ export function Step6FolderCreation() {
             </button>
           </div>
 
+          {/* Attachments Additional Dialogue Section */}
+          <div className="mb-6">
+            <label className="label-field">Attachments Additional Dialogue (Optional)</label>
+            <p className="text-xs text-gray-500 mb-2">
+              Additional notes or dialogue related to attachments and supporting documentation.
+            </p>
+            <textarea
+              value={formData.attachmentsAdditionalDialogue || ''}
+              onChange={(e) => updateFormData({ attachmentsAdditionalDialogue: e.target.value })}
+              className="input-field min-h-[120px] resize-y"
+              placeholder="Enter any additional notes about attachments..."
+              spellCheck={true}
+            />
+          </div>
+
           {/* Message for BA Section */}
           <div className="mb-6">
             <label className="label-field">Message for BA (Optional)</label>

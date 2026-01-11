@@ -448,9 +448,9 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
               return false;
             }
             
-            // Body Corp Per Quarter is required if Title contains "strata" or "owners corp"
+            // Body Corp Per Quarter is required if Title contains "strata" or "owners_corp"
             const titleLower = lotPropertyDescription?.title?.toLowerCase() || '';
-            if ((titleLower.includes('strata') || titleLower.includes('owners corp')) && 
+            if ((titleLower.includes('strata') || titleLower.includes('owners_corp')) && 
                 isEmpty(lotPropertyDescription?.bodyCorpPerQuarter)) {
               setValidationErrorWithRef(`Lot ${lot.lotNumber || i + 1}: Body Corp Per Quarter is required for Strata/Owners Corp titles.`);
               return false;
@@ -524,9 +524,9 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           }
         }
         
-        // Body Corp Per Quarter is required if Title contains "strata" or "owners corp"
+        // Body Corp Per Quarter is required if Title contains "strata" or "owners_corp"
         const titleLower = propertyDescription?.title?.toLowerCase() || '';
-        if ((titleLower.includes('strata') || titleLower.includes('owners corp')) && 
+        if ((titleLower.includes('strata') || titleLower.includes('owners_corp')) && 
             isEmpty(propertyDescription?.bodyCorpPerQuarter)) {
           return false;
         }

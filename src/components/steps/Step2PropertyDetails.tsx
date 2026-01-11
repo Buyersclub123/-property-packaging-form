@@ -207,6 +207,49 @@ export function Step2PropertyDetails() {
     return null;
   }, [isEstablished, isHAndL, purchasePrice?.acceptableAcquisitionTo, totalPrice]);
 
+  // Calculate Price Group based on Total Price or Acceptable Acquisition To (NOT net price)
+  const priceGroup = useMemo(() => {
+    // Use totalPrice if available, otherwise use acceptableAcquisitionTo
+    const priceValue = totalPrice ? String(totalPrice) : purchasePrice?.acceptableAcquisitionTo;
+    if (!priceValue) return null;
+    
+    // Parse price (remove $, commas, convert to number)
+    const price = parseFloat(parseCurrency(priceValue));
+    if (isNaN(price)) return null;
+    
+    // Determine price group (must match GHL Option Keys: "300__500k", "500__700k", "700_")
+    if (price >= 300000 && price < 500000) return "300__500k";
+    if (price >= 500000 && price < 700000) return "500__700k";
+    if (price >= 700000) return "700_";
+    
+    return null; // Below $300k or invalid
+  }, [totalPrice, purchasePrice?.acceptableAcquisitionTo, parseCurrency]);
+
+  // Convert GHL Option Key to friendly display value
+  const getPriceGroupDisplayValue = (optionKey: string | null | undefined): string => {
+    if (!optionKey) return '';
+    const mapping: Record<string, string> = {
+      '300__500k': '$300 - 500k',
+      '500__700k': '$500 - 700k',
+      '700_': '$700 +'
+    };
+    return mapping[optionKey] || optionKey;
+  };
+
+  // Update priceGroup when calculated value changes
+  useEffect(() => {
+    if (!updatePurchasePrice) return;
+    if (priceGroup !== null) {
+      const newValue = priceGroup;
+      if (purchasePrice?.priceGroup !== newValue) {
+        updatePurchasePrice({ priceGroup: newValue });
+      }
+    } else if (purchasePrice?.priceGroup) {
+      updatePurchasePrice({ priceGroup: '' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceGroup, purchasePrice?.priceGroup]);
+
   // Calculate Current Yield
   // For dual occupancy: use combined rental (Primary + Secondary) if either is Tenanted
   // For single: use Primary only if Tenanted
@@ -717,7 +760,7 @@ export function Step2PropertyDetails() {
                   const newTitle = e.target.value as TitleType;
                   const titleLower = newTitle.toLowerCase();
                   // If changing away from strata/owners corp, clear body corp fields
-                  if (!titleLower.includes('strata') && !titleLower.includes('owners corp')) {
+                  if (!titleLower.includes('strata') && !titleLower.includes('owners_corp')) {
                     updatePropertyDescription({ 
                       title: newTitle,
                       bodyCorpPerQuarter: '',
@@ -742,9 +785,9 @@ export function Step2PropertyDetails() {
               </select>
             </div>
 
-            {/* Body Corp Per Quarter - Only show if Title contains "strata" or "owners corp" */}
+            {/* Body Corp Per Quarter - Only show if Title contains "strata" or "owners_corp" */}
             {(propertyDescription?.title?.toLowerCase().includes('strata') || 
-              propertyDescription?.title?.toLowerCase().includes('owners corp')) && (
+              propertyDescription?.title?.toLowerCase().includes('owners_corp')) && (
               <div>
                 <label className="label-field">Body Corp Per Quarter ($) *</label>
                 <input
@@ -777,9 +820,9 @@ export function Step2PropertyDetails() {
             )}
           </div>
 
-          {/* Body Corp Description - Only show if Title contains "strata" or "owners corp" */}
+          {/* Body Corp Description - Only show if Title contains "strata" or "owners_corp" */}
           {(propertyDescription?.title?.toLowerCase().includes('strata') || 
-            propertyDescription?.title?.toLowerCase().includes('owners corp')) && (
+            propertyDescription?.title?.toLowerCase().includes('owners_corp')) && (
             <div className="mt-4">
               <label className="label-field">Body Corp Description (Text will appear exactly as typed in email template)</label>
               <textarea
@@ -1800,6 +1843,20 @@ export function Step2PropertyDetails() {
               </p>
             </div>
 
+            <div>
+              <label className="label-field">Price Group</label>
+              <input
+                type="text"
+                value={getPriceGroupDisplayValue(purchasePrice?.priceGroup || priceGroup)}
+                readOnly
+                className="input-field bg-gray-100 cursor-not-allowed"
+                placeholder={propertyPrice || totalPrice ? 'Auto-calculated' : 'Enter Total Price or Acceptable Acquisition To to calculate'}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Auto-calculated: Based on Total Price or Acceptable Acquisition To (not including cashback)
+              </p>
+            </div>
+
             {/* Rental Assessment Additional Dialogue - Collapsible */}
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <button
@@ -2386,10 +2443,10 @@ function ProjectLotsView() {
               {expandedProjectSections.has('overview') && (
                 <div className="p-4 bg-white">
                   <textarea
-                    data-project-overview
-                    value={propertyDescription?.projectOverview || ''}
+                    data-project-brief
+                    value={propertyDescription?.projectBrief || ''}
                     onChange={(e) => {
-                      updatePropertyDescription({ projectOverview: e.target.value });
+                      updatePropertyDescription({ projectBrief: e.target.value });
                     }}
                     onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;
@@ -2799,6 +2856,7 @@ function ProjectLotsView() {
                           formatExpiry={formatExpiry}
                           getYearOptions={getYearOptions}
                           lotPurchasePrice={lotPurchasePrice}
+                          updateLotPurchasePrice={updateLotPurchasePrice}
                         />
                       </div>
                     )}
@@ -3299,7 +3357,7 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
           onChange={(e) => {
             const newTitle = e.target.value as TitleType;
             const titleLower = newTitle.toLowerCase();
-            if (!titleLower.includes('strata') && !titleLower.includes('owners corp')) {
+            if (!titleLower.includes('strata') && !titleLower.includes('owners_corp')) {
               updateLotPropertyDescription(lotIndex, { 
                 title: newTitle,
                 bodyCorpPerQuarter: '',
@@ -3326,7 +3384,7 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
 
       {/* Body Corp Per Quarter */}
       {(propertyDescription?.title?.toLowerCase().includes('strata') || 
-        propertyDescription?.title?.toLowerCase().includes('owners corp')) && (
+        propertyDescription?.title?.toLowerCase().includes('owners_corp')) && (
         <div className={`max-w-md ${isDualOccupancy ? 'col-span-2' : ''}`}>
           <label className="label-field">Body Corp Per Quarter ($) *</label>
           <input
@@ -3359,9 +3417,9 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
 
     </div>
     
-    {/* Body Corp Description - Only show if Title contains "strata" or "owners corp" - Outside grid for full width like H&L view */}
+    {/* Body Corp Description - Only show if Title contains "strata" or "owners_corp" - Outside grid for full width like H&L view */}
     {(propertyDescription?.title?.toLowerCase().includes('strata') || 
-      propertyDescription?.title?.toLowerCase().includes('owners corp')) && (
+      propertyDescription?.title?.toLowerCase().includes('owners_corp')) && (
       <div className="mt-4">
         <label className="label-field">Body Corp Description (Text will appear exactly as typed in email template)</label>
         <textarea
@@ -3664,9 +3722,10 @@ interface LotRentalAssessmentFieldsProps {
   formatExpiry: (month: string, year: string, isTBC: boolean) => string;
   getYearOptions: () => number[];
   lotPurchasePrice: any; // Need lot's purchase price to calculate yield
+  updateLotPurchasePrice: (lotIndex: number, price: Partial<any>) => void; // Need to save priceGroup
 }
 
-function LotRentalAssessmentFields({ lotIndex, rentalAssessment, isDualOccupancy, isSingleContract, updateLotRentalAssessment, formatCurrency, parseCurrency, parseExpiry, formatExpiry, getYearOptions, lotPurchasePrice }: LotRentalAssessmentFieldsProps) {
+function LotRentalAssessmentFields({ lotIndex, rentalAssessment, isDualOccupancy, isSingleContract, updateLotRentalAssessment, formatCurrency, parseCurrency, parseExpiry, formatExpiry, getYearOptions, lotPurchasePrice, updateLotPurchasePrice }: LotRentalAssessmentFieldsProps) {
   // Calculate property price for this lot
   // For Single Contract: use totalPrice, Otherwise: use Land + Build
   const lotPropertyPrice = useMemo(() => {
@@ -3736,6 +3795,51 @@ function LotRentalAssessmentFields({ lotIndex, rentalAssessment, isDualOccupancy
       updateLotRentalAssessment(lotIndex, { appraisedYield: '' });
     }
   }, [appraisedYield, lotIndex, rentalAssessment?.appraisedYield, updateLotRentalAssessment]);
+
+  // Convert GHL Option Key to friendly display value (for lots)
+  const getLotPriceGroupDisplayValue = (optionKey: string | null | undefined): string => {
+    if (!optionKey) return '';
+    const mapping: Record<string, string> = {
+      '300__500k': '$300 - 500k',
+      '500__700k': '$500 - 700k',
+      '700_': '$700 +'
+    };
+    return mapping[optionKey] || optionKey;
+  };
+
+  // Calculate Price Group for this lot based on Total Price or Acceptable Acquisition To (NOT net price)
+  const lotPriceGroup = useMemo(() => {
+    // Use totalPrice if available, otherwise use acceptableAcquisitionTo
+    const lotTotalPrice = lotPropertyPrice; // This is already calculated from totalPrice or land+build
+    const priceValue = lotTotalPrice ? String(lotTotalPrice) : lotPurchasePrice?.acceptableAcquisitionTo;
+    if (!priceValue) return null;
+    
+    // Parse price (remove $, commas, convert to number)
+    const price = parseFloat(parseCurrency(priceValue));
+    if (isNaN(price)) return null;
+    
+    // Determine price group (must match GHL Option Keys: "300__500k", "500__700k", "700_")
+    if (price >= 300000 && price < 500000) return "300__500k";
+    if (price >= 500000 && price < 700000) return "500__700k";
+    if (price >= 700000) return "700_";
+    
+    return null; // Below $300k or invalid
+  }, [lotPropertyPrice, lotPurchasePrice?.acceptableAcquisitionTo, parseCurrency]);
+
+  // Update priceGroup when calculated value changes
+  useEffect(() => {
+    if (!updateLotPurchasePrice) return;
+    if (lotPriceGroup !== null) {
+      const newValue = lotPriceGroup;
+      if (lotPurchasePrice?.priceGroup !== newValue) {
+        updateLotPurchasePrice(lotIndex, { priceGroup: newValue });
+      }
+    } else if (lotPurchasePrice?.priceGroup) {
+      updateLotPurchasePrice(lotIndex, { priceGroup: '' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lotPriceGroup, lotPurchasePrice?.priceGroup, lotIndex, updateLotPurchasePrice]);
+
   return (
     <div className="space-y-4">
       {/* Rent Appraisal */}
@@ -3944,6 +4048,21 @@ function LotRentalAssessmentFields({ lotIndex, rentalAssessment, isDualOccupancy
         <p className="text-xs text-gray-500 mt-1">
           Auto-calculated: (Rent Appraisal To × 52 / Property Price) × 100
           {!lotPropertyPrice && ' - Property Price (Land + Build) needed'}
+        </p>
+      </div>
+
+      {/* Price Group */}
+      <div className="mt-4">
+        <label className="label-field">Price Group</label>
+        <input
+          type="text"
+          value={getLotPriceGroupDisplayValue(lotPurchasePrice?.priceGroup || lotPriceGroup)}
+          readOnly
+          className="input-field bg-gray-100 cursor-not-allowed"
+          placeholder={lotPropertyPrice || lotPurchasePrice?.acceptableAcquisitionTo ? 'Auto-calculated' : 'Enter Total Price or Acceptable Acquisition To to calculate'}
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Auto-calculated: Based on Total Price or Acceptable Acquisition To (not including cashback)
         </p>
       </div>
     </div>

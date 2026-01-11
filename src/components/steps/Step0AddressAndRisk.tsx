@@ -1831,15 +1831,6 @@ export function Step0AddressAndRisk() {
           </button>
         </div>
       )}
-      
-      {/* CMI Reports Notice */}
-      {packagingEnabled && (
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-          <p className="text-sm text-gray-700">
-            <strong>📁 CMI Reports:</strong> Please save CMI reports in the property folder. The folder will be created when you submit the form at the end.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

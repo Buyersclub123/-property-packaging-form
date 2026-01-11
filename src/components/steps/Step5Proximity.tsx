@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFormStore } from '@/store/formStore';
 
 export function Step5Proximity() {
-  const { formData, updateFormData } = useFormStore();
+  const { formData, updateFormData, userEmail } = useFormStore();
   const { contentSections, address } = formData;
   
   const [proximity, setProximity] = useState(contentSections?.proximity || '');
   const [whyThisProperty, setWhyThisProperty] = useState(contentSections?.whyThisProperty || '');
   const [investmentHighlights, setInvestmentHighlights] = useState(contentSections?.investmentHighlights || '');
+  const [investmentHighlightsLoading, setInvestmentHighlightsLoading] = useState(false);
+  const [investmentHighlightsInfo, setInvestmentHighlightsInfo] = useState<{ found: boolean; dataSource?: string; daysSinceLastCheck?: number } | null>(null);
+  const [savingInvestmentHighlights, setSavingInvestmentHighlights] = useState(false);
 
   const handleProximityChange = (value: string) => {
     setProximity(value);
@@ -39,6 +42,97 @@ export function Step5Proximity() {
         investmentHighlights: value,
       },
     });
+  };
+
+  // Lookup Investment Highlights when component mounts and LGA/state are available
+  useEffect(() => {
+    const lookupInvestmentHighlights = async () => {
+      if (!address?.lga || !address?.state) {
+        return;
+      }
+
+      // Only lookup if field is empty (don't overwrite user-entered data)
+      const currentHighlights = contentSections?.investmentHighlights || '';
+      if (currentHighlights && currentHighlights.trim() !== '') {
+        return;
+      }
+
+      setInvestmentHighlightsLoading(true);
+      try {
+        const response = await fetch('/api/investment-highlights/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lga: address.lga,
+            state: address.state,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to lookup investment highlights');
+        }
+
+        const result = await response.json();
+        
+        if (result.found && result.data?.investmentHighlights) {
+          setInvestmentHighlights(result.data.investmentHighlights);
+          handleInvestmentHighlightsChange(result.data.investmentHighlights);
+          setInvestmentHighlightsInfo({
+            found: true,
+            dataSource: result.data.dataSource,
+            daysSinceLastCheck: result.daysSinceLastCheck,
+          });
+        } else {
+          setInvestmentHighlightsInfo({ found: false });
+        }
+      } catch (error) {
+        console.error('Error looking up investment highlights:', error);
+        setInvestmentHighlightsInfo({ found: false });
+      } finally {
+        setInvestmentHighlightsLoading(false);
+      }
+    };
+
+    lookupInvestmentHighlights();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address?.lga, address?.state]); // Only run when LGA or state changes
+
+  const handleSaveInvestmentHighlights = async () => {
+    if (!address?.lga || !address?.state || !investmentHighlights || investmentHighlights.trim() === '') {
+      return;
+    }
+
+    setSavingInvestmentHighlights(true);
+    try {
+      const response = await fetch('/api/investment-highlights/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lga: address.lga,
+          state: address.state,
+          investmentHighlights: investmentHighlights.trim(),
+          dataSource: 'Manual Entry',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save investment highlights');
+      }
+
+      // Update info to show it's saved
+      setInvestmentHighlightsInfo({
+        found: true,
+        dataSource: 'Manual Entry',
+        daysSinceLastCheck: 0,
+      });
+
+      alert('Investment Highlights saved to Google Sheet successfully!');
+    } catch (error) {
+      console.error('Error saving investment highlights:', error);
+      alert('Failed to save Investment Highlights. Please try again.');
+    } finally {
+      setSavingInvestmentHighlights(false);
+    }
   };
 
   return (
@@ -92,14 +186,49 @@ export function Step5Proximity() {
 
         {/* Investment Highlights Section */}
         <div>
-          <label className="label-field mb-2">
-            Investment Highlights *
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="label-field mb-0">
+              Investment Highlights *
+            </label>
+            {investmentHighlights && investmentHighlights.trim() !== '' && (
+              <button
+                type="button"
+                onClick={handleSaveInvestmentHighlights}
+                disabled={savingInvestmentHighlights}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+              >
+                {savingInvestmentHighlights ? 'Saving...' : 'Save to Google Sheet'}
+              </button>
+            )}
+          </div>
           <p className="text-sm text-gray-600 mb-2">
             Key investment highlights and infrastructure developments in the area.
             <br />
             <span className="italic">This data is typically sourced from Hotspotting Reports (updated quarterly)</span>
           </p>
+          {investmentHighlightsLoading && (
+            <div className="p-2 bg-blue-50 rounded mb-2">
+              <p className="text-sm text-blue-700">Looking up Investment Highlights data...</p>
+            </div>
+          )}
+          {investmentHighlightsInfo?.found && (
+            <div className="p-2 bg-green-50 rounded mb-2">
+              <p className="text-sm text-green-700">
+                ✓ Data loaded from Google Sheet
+                {investmentHighlightsInfo.dataSource && ` (Source: ${investmentHighlightsInfo.dataSource})`}
+                {investmentHighlightsInfo.daysSinceLastCheck !== undefined && (
+                  <span className="text-xs"> • Last checked: {investmentHighlightsInfo.daysSinceLastCheck} days ago</span>
+                )}
+              </p>
+            </div>
+          )}
+          {investmentHighlightsInfo?.found === false && address?.lga && (
+            <div className="p-2 bg-yellow-50 rounded mb-2">
+              <p className="text-sm text-yellow-700">
+                No Investment Highlights data found for LGA: {address.lga}. You can enter data manually and save it to the Google Sheet.
+              </p>
+            </div>
+          )}
           <textarea
             value={investmentHighlights}
             onChange={(e) => handleInvestmentHighlightsChange(e.target.value)}

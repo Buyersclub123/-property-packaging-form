@@ -114,7 +114,7 @@ export interface PropertyDescription {
   bodyCorpDescription?: string;
   doesThisPropertyHave2Dwellings?: YesNo;
   propertyDescriptionAdditionalDialogue?: string;
-  projectOverview?: string; // For Projects: Project overview (shared across all lots)
+  projectBrief?: string; // For Projects: Project brief (shared across all lots)
 }
 
 // Purchase Price
@@ -129,6 +129,7 @@ export interface PurchasePrice {
   totalPrice?: string; // For Single Contract (02 Single Comms): Total price
   cashbackRebateValue?: string; // For Contract Types 01, 02, 03: Cashback/Rebate value
   cashbackRebateType?: CashbackRebateType; // Type of cashback/rebate
+  priceGroup?: string; // Auto-calculated price group ($300-500k, $500-700k, $700k+)
   purchasePriceAdditionalDialogue?: string;
 }
 

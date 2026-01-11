@@ -1,9 +1,15 @@
 // Google Sheets API integration for Market Performance data
+// Sheet Name: "Property Review Static Data - Market Performance"
+// Investment Highlights Sheet Name: "Property Review Static Data - Investment Highlights"
 import { google } from 'googleapis';
 
 const SHEET_ID = '1M_en0zLhJK6bQMNfZDGzEmPDMwtb3BksvgOsm8N3tlY';
 const TAB_NAME = 'Market Performance';
 const LOG_TAB_NAME = 'Market Performance Log';
+
+// Investment Highlights Sheet
+const INVESTMENT_HIGHLIGHTS_SHEET_ID = '1i9ZNOFNkEy3KT0BJCJoxhVPnKkksqSi7A9TpAVpcqcI';
+const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights';
 
 // Column mapping (0-indexed) - Column C (Data Source) removed
 const COLUMNS = {
@@ -565,3 +571,203 @@ export async function logMarketPerformanceUpdate(
   }
 }
 
+// ============================================================================
+// Investment Highlights Functions
+// ============================================================================
+
+export interface InvestmentHighlightsData {
+  lga: string;
+  state: string;
+  investmentHighlights: string;
+  dataSource?: string;
+  dateCollected?: string;
+  sourceDocument?: string;
+}
+
+export interface InvestmentHighlightsLookupResult {
+  found: boolean;
+  data?: InvestmentHighlightsData;
+  daysSinceLastCheck?: number;
+}
+
+/**
+ * Lookup investment highlights data by LGA and state
+ */
+export async function lookupInvestmentHighlights(
+  lga: string,
+  state: string
+): Promise<InvestmentHighlightsLookupResult> {
+  try {
+    const sheets = getSheetsClient();
+    
+    // Read all data from the Investment Highlights tab
+    // Expected columns: LGA, State, Investment Highlights Content, Data Source, Date Collected/Checked, Source Document
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
+      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`, // Skip header row, read columns A-F
+    });
+
+    const rows = response.data.values || [];
+    
+    // Normalize LGA and state for comparison (case-insensitive, trimmed)
+    const normalizedLGA = lga.trim().toLowerCase();
+    const normalizedState = state.trim().toUpperCase();
+
+    // Find matching row
+    const matchingRow = rows.find((row) => {
+      const rowLGA = (row[0] || '').trim().toLowerCase();
+      const rowState = (row[1] || '').trim().toUpperCase();
+      return rowLGA === normalizedLGA && rowState === normalizedState;
+    });
+
+    if (!matchingRow) {
+      return { found: false };
+    }
+
+    // Extract data
+    const investmentHighlights = matchingRow[2] || ''; // Column C
+    const dataSource = matchingRow[3] || ''; // Column D
+    const dateCollected = matchingRow[4] || ''; // Column E
+    const sourceDocument = matchingRow[5] || ''; // Column F
+
+    // Calculate days since last check
+    let daysSinceLastCheck: number | undefined;
+    if (dateCollected) {
+      try {
+        const collectedDate = new Date(dateCollected);
+        if (!isNaN(collectedDate.getTime())) {
+          const now = new Date();
+          const diffTime = Math.abs(now.getTime() - collectedDate.getTime());
+          daysSinceLastCheck = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+      } catch (e) {
+        // Ignore date parsing errors
+      }
+    }
+
+    return {
+      found: true,
+      data: {
+        lga: matchingRow[0] || '',
+        state: matchingRow[1] || '',
+        investmentHighlights,
+        dataSource,
+        dateCollected,
+        sourceDocument,
+      },
+      daysSinceLastCheck,
+    };
+  } catch (error) {
+    console.error('Error looking up investment highlights:', error);
+    throw error;
+  }
+}
+
+/**
+ * Save or update investment highlights data
+ */
+export async function saveInvestmentHighlightsData(
+  lga: string,
+  state: string,
+  data: Partial<InvestmentHighlightsData>
+): Promise<void> {
+  try {
+    const sheets = getSheetsClient();
+    
+    // First, check if row exists
+    const lookupResult = await lookupInvestmentHighlights(lga, state);
+    
+    const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    if (lookupResult.found) {
+      // Update existing row
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
+        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`,
+      });
+
+      const rows = response.data.values || [];
+      const normalizedLGA = lga.trim().toLowerCase();
+      const normalizedState = state.trim().toUpperCase();
+      
+      const rowIndex = rows.findIndex((row) => {
+        const rowLGA = (row[0] || '').trim().toLowerCase();
+        const rowState = (row[1] || '').trim().toUpperCase();
+        return rowLGA === normalizedLGA && rowState === normalizedState;
+      });
+
+      if (rowIndex === -1) {
+        throw new Error('Row not found for update');
+      }
+
+      const actualRowNumber = rowIndex + 2; // +2 because we skipped header and 0-indexed
+
+      // Build update values
+      const updates: { range: string; values: any[][] }[] = [];
+      
+      // Update Investment Highlights Content (Column C)
+      if (data.investmentHighlights !== undefined) {
+        updates.push({
+          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!C${actualRowNumber}`,
+          values: [[data.investmentHighlights]],
+        });
+      }
+
+      // Update Data Source (Column D) - append if exists, otherwise set
+      if (data.dataSource !== undefined) {
+        updates.push({
+          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!D${actualRowNumber}`,
+          values: [[data.dataSource]],
+        });
+      }
+
+      // Update Date Collected/Checked (Column E)
+      updates.push({
+        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!E${actualRowNumber}`,
+        values: [[now]],
+      });
+
+      // Update Source Document (Column F)
+      if (data.sourceDocument !== undefined) {
+        updates.push({
+          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!F${actualRowNumber}`,
+          values: [[data.sourceDocument]],
+        });
+      }
+
+      // Execute updates
+      if (updates.length > 0) {
+        await sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
+          requestBody: {
+            valueInputOption: 'RAW',
+            data: updates,
+          },
+        });
+      }
+    } else {
+      // Add new row
+      const newRow = [
+        lga, // Column A: LGA
+        state, // Column B: State
+        data.investmentHighlights || '', // Column C: Investment Highlights Content
+        data.dataSource || 'Manual Entry', // Column D: Data Source
+        now, // Column E: Date Collected/Checked
+        data.sourceDocument || '', // Column F: Source Document
+      ];
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
+        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`,
+        valueInputOption: 'RAW',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: {
+          values: [newRow],
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Error saving investment highlights data:', error);
+    throw error;
+  }
+}

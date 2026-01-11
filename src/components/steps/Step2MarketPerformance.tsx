@@ -17,7 +17,7 @@ export function Step3MarketPerformance() {
       <div className="p-4 bg-blue-50 rounded-lg mb-6">
         <p className="text-sm font-semibold text-blue-900 mb-2">Google Sheet:</p>
         <p className="text-blue-700 text-sm">
-          <strong>Name:</strong> Property Review Static Data
+          <strong>Name:</strong> Property Review Static Data - Market Performance
         </p>
         <p className="text-blue-700 text-sm">
           <strong>Tab:</strong> Market Performance
