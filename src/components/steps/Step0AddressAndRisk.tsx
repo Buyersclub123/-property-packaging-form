@@ -948,10 +948,32 @@ export function Step0AddressAndRisk() {
       // Show Sourcer and Selling Agent fields
       // Folder will be created at final submission (Step 5) when address is complete
       setPackagingEnabled(true);
+      
+      // Scroll up a bit to make the fields below more visible
+      setTimeout(() => {
+        const fieldsSection = document.querySelector('[data-fields-section]');
+        if (fieldsSection) {
+          fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          // Fallback: scroll up by 200px
+          window.scrollBy({ top: -200, behavior: 'smooth' });
+        }
+      }, 100);
     } catch (error) {
       console.error('Error checking address:', error);
       // Don't block progression if check fails - just show fields
       setPackagingEnabled(true);
+      
+      // Scroll up a bit to make the fields below more visible
+      setTimeout(() => {
+        const fieldsSection = document.querySelector('[data-fields-section]');
+        if (fieldsSection) {
+          fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+          // Fallback: scroll up by 200px
+          window.scrollBy({ top: -200, behavior: 'smooth' });
+        }
+      }, 100);
     }
   };
 
@@ -1738,7 +1760,7 @@ export function Step0AddressAndRisk() {
 
       {/* Sourcer and Selling Agent Fields - Show after clicking "Continue with Packaging" */}
       {packagingEnabled && (
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div data-fields-section className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <h3 className="text-lg font-semibold mb-4 text-gray-900">Deal Information</h3>
           <div className="space-y-4">
             {/* Sourcer Field */}
