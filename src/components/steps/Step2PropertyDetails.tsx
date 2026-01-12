@@ -3295,7 +3295,7 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
                       value={registrationData.month}
                       onChange={(e) => {
                         const month = e.target.value;
-                        const formatted = formatExpiry(month, registrationData.year, false);
+                        const formatted = formatExpiry(month, registrationData.year, false, false);
                         updateLotPropertyDescription(lotIndex, { landRegistration: formatted ? `${formatted} approx.` : '' });
                       }}
                       className="input-field"
@@ -3310,7 +3310,7 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
                       value={registrationData.year}
                       onChange={(e) => {
                         const year = e.target.value;
-                        const formatted = formatExpiry(registrationData.month, year, false);
+                        const formatted = formatExpiry(registrationData.month, year, false, false);
                         updateLotPropertyDescription(lotIndex, { landRegistration: formatted ? `${formatted} approx.` : '' });
                       }}
                       className="input-field"
