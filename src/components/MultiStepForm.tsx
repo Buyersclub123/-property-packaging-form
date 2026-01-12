@@ -591,14 +591,15 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
               setValidationErrorWithRef('Current Rent (Primary) is required when Occupancy (Primary) is "Tenanted".');
               return false;
             }
-            // Expiry must be either TBC or have a valid format (month/year or partial)
+            // Expiry must be either TBC, Periodical, or have a valid format (month/year or partial)
             const expiryPrimary = rentalAssessment?.expiryPrimary || '';
             const isValidExpiryPrimary = expiryPrimary.toUpperCase() === 'TBC' || 
+                                         expiryPrimary.toUpperCase() === 'PERIODICAL' ||
                                          expiryPrimary.match(/^[A-Za-z]+\s+\d{4}$/) !== null || // "October 2025"
                                          (expiryPrimary.trim().endsWith(' ') && expiryPrimary.trim().length > 0) || // "October "
                                          (expiryPrimary.trim().startsWith(' ') && /^\s+\d{4}$/.test(expiryPrimary)); // " 2025"
             if (isEmpty(expiryPrimary) || !isValidExpiryPrimary) {
-                setValidationErrorWithRef('Expiry (Primary) must be "TBC" or have both month and year selected when Occupancy (Primary) is "Tenanted".');
+                setValidationErrorWithRef('Expiry (Primary) must be "TBC", "Periodical", or have both month and year selected when Occupancy (Primary) is "Tenanted".');
               return false;
             }
           }
@@ -611,11 +612,12 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             }
             const expirySecondary = rentalAssessment?.expirySecondary || '';
             const isValidExpirySecondary = expirySecondary.toUpperCase() === 'TBC' || 
+                                          expirySecondary.toUpperCase() === 'PERIODICAL' ||
                                           expirySecondary.match(/^[A-Za-z]+\s+\d{4}$/) !== null || // "October 2025"
                                           (expirySecondary.trim().endsWith(' ') && expirySecondary.trim().length > 0) || // "October "
                                           (expirySecondary.trim().startsWith(' ') && /^\s+\d{4}$/.test(expirySecondary)); // " 2025"
             if (isEmpty(expirySecondary) || !isValidExpirySecondary) {
-              setValidationErrorWithRef('Expiry (Secondary) must be "TBC" or have both month and year selected when Occupancy (Secondary) is "Tenanted".');
+              setValidationErrorWithRef('Expiry (Secondary) must be "TBC", "Periodical", or have both month and year selected when Occupancy (Secondary) is "Tenanted".');
               return false;
             }
           }

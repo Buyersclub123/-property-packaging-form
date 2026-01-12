@@ -28,49 +28,53 @@ export function Step2PropertyDetails() {
     return value.replace(/[$,]/g, '');
   };
   
-  // Parse expiry value to extract month, year, and TBC status
-  const parseExpiry = (value: string | undefined): { month: string; year: string; isTBC: boolean } => {
+  // Parse expiry value to extract month, year, TBC status, and Periodical status
+  const parseExpiry = (value: string | undefined): { month: string; year: string; isTBC: boolean; isPeriodical: boolean } => {
     if (!value) {
-      return { month: '', year: '', isTBC: false }; // Empty means not TBC, show dropdowns
+      return { month: '', year: '', isTBC: false, isPeriodical: false }; // Empty means not TBC/Periodical, show dropdowns
     }
     if (value.toUpperCase() === 'TBC') {
-      return { month: '', year: '', isTBC: true };
+      return { month: '', year: '', isTBC: true, isPeriodical: false };
+    }
+    if (value.toUpperCase() === 'PERIODICAL') {
+      return { month: '', year: '', isTBC: false, isPeriodical: true };
     }
     if (value.toUpperCase() === 'REGISTERED') {
-      return { month: '', year: '', isTBC: false }; // Registered is handled separately in UI
+      return { month: '', year: '', isTBC: false, isPeriodical: false }; // Registered is handled separately in UI
     }
     // Remove "approx." suffix if present (for land registration)
     const trimmed = value.replace(/\s+approx\.?$/i, '').trim();
     const parts = trimmed.split(/\s+/);
     if (parts.length === 2 && parts[0] && parts[1]) {
       // Both month and year present
-      return { month: parts[0], year: parts[1], isTBC: false };
+      return { month: parts[0], year: parts[1], isTBC: false, isPeriodical: false };
     }
     // Check if it's just a month (ends with space) or just a year (starts with space or is numeric)
     if (trimmed.endsWith(' ') && trimmed.trim().length > 0) {
       // Month only (with trailing space)
-      return { month: trimmed.trim(), year: '', isTBC: false };
+      return { month: trimmed.trim(), year: '', isTBC: false, isPeriodical: false };
     }
     if (trimmed.startsWith(' ') && trimmed.trim().length > 0) {
       // Year only (with leading space)
-      return { month: '', year: trimmed.trim(), isTBC: false };
+      return { month: '', year: trimmed.trim(), isTBC: false, isPeriodical: false };
     }
     // Check if it's a valid month name
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                     'July', 'August', 'September', 'October', 'November', 'December'];
     if (months.includes(trimmed)) {
-      return { month: trimmed, year: '', isTBC: false };
+      return { month: trimmed, year: '', isTBC: false, isPeriodical: false };
     }
     // Check if it's a 4-digit year
     if (/^\d{4}$/.test(trimmed)) {
-      return { month: '', year: trimmed, isTBC: false };
+      return { month: '', year: trimmed, isTBC: false, isPeriodical: false };
     }
-    return { month: '', year: '', isTBC: false };
+    return { month: '', year: '', isTBC: false, isPeriodical: false };
   };
   
-  // Format expiry from month, year, and TBC status
-  const formatExpiry = (month: string, year: string, isTBC: boolean): string => {
+  // Format expiry from month, year, TBC status, and Periodical status
+  const formatExpiry = (month: string, year: string, isTBC: boolean, isPeriodical: boolean): string => {
     if (isTBC) return 'TBC';
+    if (isPeriodical) return 'Periodical';
     if (month && year) return `${month} ${year}`;
     if (month) return `${month} `; // Store month with trailing space if year not selected yet
     if (year) return ` ${year}`; // Store year with leading space if month not selected yet
@@ -628,7 +632,7 @@ export function Step2PropertyDetails() {
                               value={registrationData.month}
                               onChange={(e) => {
                                 const month = e.target.value;
-                                const formatted = formatExpiry(month, registrationData.year, false);
+                                const formatted = formatExpiry(month, registrationData.year, false, false);
                                 updatePropertyDescription({ landRegistration: formatted ? `${formatted} approx.` : '' });
                               }}
                               className="input-field"
@@ -643,7 +647,7 @@ export function Step2PropertyDetails() {
                               value={registrationData.year}
                               onChange={(e) => {
                                 const year = e.target.value;
-                                const formatted = formatExpiry(registrationData.month, year, false);
+                                const formatted = formatExpiry(registrationData.month, year, false, false);
                                 updatePropertyDescription({ landRegistration: formatted ? `${formatted} approx.` : '' });
                               }}
                               className="input-field"
@@ -1361,32 +1365,49 @@ export function Step2PropertyDetails() {
                             const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
-                            const isRequired = rentalAssessment?.occupancyPrimary === 'tenanted' && !expiryData.isTBC;
+                            const isRequired = rentalAssessment?.occupancyPrimary === 'tenanted' && !expiryData.isTBC && !expiryData.isPeriodical;
                             
                             return (
                               <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={expiryData.isTBC}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        updateRentalAssessment({ expiryPrimary: 'TBC' });
-                                      } else {
-                                        updateRentalAssessment({ expiryPrimary: '' });
-                                      }
-                                    }}
-                                    className="w-4 h-4"
-                                  />
-                                  <label className="text-sm text-gray-700">TBC</label>
+                                <div className="flex items-center gap-4">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={expiryData.isTBC}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          updateRentalAssessment({ expiryPrimary: 'TBC' });
+                                        } else {
+                                          updateRentalAssessment({ expiryPrimary: '' });
+                                        }
+                                      }}
+                                      className="w-4 h-4"
+                                    />
+                                    <label className="text-sm text-gray-700">TBC</label>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={expiryData.isPeriodical}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          updateRentalAssessment({ expiryPrimary: 'Periodical' });
+                                        } else {
+                                          updateRentalAssessment({ expiryPrimary: '' });
+                                        }
+                                      }}
+                                      className="w-4 h-4"
+                                    />
+                                    <label className="text-sm text-gray-700">Periodical</label>
+                                  </div>
                                 </div>
-                                {!expiryData.isTBC && (
+                                {!expiryData.isTBC && !expiryData.isPeriodical && (
                                   <div className="grid grid-cols-2 gap-2">
                                     <select
                                       value={expiryData.month}
                                       onChange={(e) => {
                                         const month = e.target.value;
-                                        const formatted = formatExpiry(month, expiryData.year, false);
+                                        const formatted = formatExpiry(month, expiryData.year, false, false);
                                         updateRentalAssessment({ expiryPrimary: formatted });
                                       }}
                                       className="input-field"
@@ -1401,7 +1422,7 @@ export function Step2PropertyDetails() {
                                       value={expiryData.year}
                                       onChange={(e) => {
                                         const year = e.target.value;
-                                        const formatted = formatExpiry(expiryData.month, year, false);
+                                        const formatted = formatExpiry(expiryData.month, year, false, false);
                                         updateRentalAssessment({ expiryPrimary: formatted });
                                       }}
                                       className="input-field"
@@ -1460,32 +1481,49 @@ export function Step2PropertyDetails() {
                             const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
-                            const isRequired = rentalAssessment?.occupancySecondary === 'tenanted' && !expiryData.isTBC;
+                            const isRequired = rentalAssessment?.occupancySecondary === 'tenanted' && !expiryData.isTBC && !expiryData.isPeriodical;
                             
                             return (
                               <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={expiryData.isTBC}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        updateRentalAssessment({ expirySecondary: 'TBC' });
-                                      } else {
-                                        updateRentalAssessment({ expirySecondary: '' });
-                                      }
-                                    }}
-                                    className="w-4 h-4"
-                                  />
-                                  <label className="text-sm text-gray-700">TBC</label>
+                                <div className="flex items-center gap-4">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={expiryData.isTBC}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          updateRentalAssessment({ expirySecondary: 'TBC' });
+                                        } else {
+                                          updateRentalAssessment({ expirySecondary: '' });
+                                        }
+                                      }}
+                                      className="w-4 h-4"
+                                    />
+                                    <label className="text-sm text-gray-700">TBC</label>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={expiryData.isPeriodical}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          updateRentalAssessment({ expirySecondary: 'Periodical' });
+                                        } else {
+                                          updateRentalAssessment({ expirySecondary: '' });
+                                        }
+                                      }}
+                                      className="w-4 h-4"
+                                    />
+                                    <label className="text-sm text-gray-700">Periodical</label>
+                                  </div>
                                 </div>
-                                {!expiryData.isTBC && (
+                                {!expiryData.isTBC && !expiryData.isPeriodical && (
                                   <div className="grid grid-cols-2 gap-2">
                                     <select
                                       value={expiryData.month}
                                       onChange={(e) => {
                                         const month = e.target.value;
-                                        const formatted = formatExpiry(month, expiryData.year, false);
+                                        const formatted = formatExpiry(month, expiryData.year, false, false);
                                         updateRentalAssessment({ expirySecondary: formatted });
                                       }}
                                       className="input-field"
@@ -1500,7 +1538,7 @@ export function Step2PropertyDetails() {
                                       value={expiryData.year}
                                       onChange={(e) => {
                                         const year = e.target.value;
-                                        const formatted = formatExpiry(expiryData.month, year, false);
+                                        const formatted = formatExpiry(expiryData.month, year, false, false);
                                         updateRentalAssessment({ expirySecondary: formatted });
                                       }}
                                       className="input-field"
@@ -1557,34 +1595,51 @@ export function Step2PropertyDetails() {
                         const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                         'July', 'August', 'September', 'October', 'November', 'December'];
                         const years = getYearOptions();
-                        const isRequired = rentalAssessment?.occupancyPrimary === 'tenanted' && !expiryData.isTBC;
+                        const isRequired = rentalAssessment?.occupancyPrimary === 'tenanted' && !expiryData.isTBC && !expiryData.isPeriodical;
                         
                         return (
                           <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={expiryData.isTBC}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    updateRentalAssessment({ expiryPrimary: 'TBC' });
-                                  } else {
-                                    updateRentalAssessment({ expiryPrimary: '' });
-                                  }
-                                }}
-                                className="w-4 h-4"
-                              />
-                              <label className="text-sm text-gray-700">TBC</label>
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={expiryData.isTBC}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      updateRentalAssessment({ expiryPrimary: 'TBC' });
+                                    } else {
+                                      updateRentalAssessment({ expiryPrimary: '' });
+                                    }
+                                  }}
+                                  className="w-4 h-4"
+                                />
+                                <label className="text-sm text-gray-700">TBC</label>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={expiryData.isPeriodical}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      updateRentalAssessment({ expiryPrimary: 'Periodical' });
+                                    } else {
+                                      updateRentalAssessment({ expiryPrimary: '' });
+                                    }
+                                  }}
+                                  className="w-4 h-4"
+                                />
+                                <label className="text-sm text-gray-700">Periodical</label>
+                              </div>
                             </div>
-                            {!expiryData.isTBC && (
+                            {!expiryData.isTBC && !expiryData.isPeriodical && (
                               <div className="grid grid-cols-2 gap-2">
                                 <select
                                   value={expiryData.month}
-                                  onChange={(e) => {
-                                    const month = e.target.value;
-                                    const formatted = formatExpiry(month, expiryData.year, false);
-                                    updateRentalAssessment({ expiryPrimary: formatted });
-                                  }}
+                                    onChange={(e) => {
+                                      const month = e.target.value;
+                                      const formatted = formatExpiry(month, expiryData.year, false, false);
+                                      updateRentalAssessment({ expiryPrimary: formatted });
+                                    }}
                                   className="input-field"
                                   required={isRequired}
                                 >
@@ -1595,11 +1650,11 @@ export function Step2PropertyDetails() {
                                 </select>
                                 <select
                                   value={expiryData.year}
-                                  onChange={(e) => {
-                                    const year = e.target.value;
-                                    const formatted = formatExpiry(expiryData.month, year, false);
-                                    updateRentalAssessment({ expiryPrimary: formatted });
-                                  }}
+                                    onChange={(e) => {
+                                      const year = e.target.value;
+                                      const formatted = formatExpiry(expiryData.month, year, false, false);
+                                      updateRentalAssessment({ expiryPrimary: formatted });
+                                    }}
                                   className="input-field"
                                   required={isRequired}
                                 >
@@ -2052,34 +2107,36 @@ function ProjectLotsView() {
     return value.replace(/[$,]/g, '');
   };
   
-  const parseExpiry = (value: string | undefined): { month: string; year: string; isTBC: boolean } => {
-    if (!value) return { month: '', year: '', isTBC: false };
-    if (value.toUpperCase() === 'TBC') return { month: '', year: '', isTBC: true };
-    if (value.toUpperCase() === 'REGISTERED') return { month: '', year: '', isTBC: false };
+  const parseExpiry = (value: string | undefined): { month: string; year: string; isTBC: boolean; isPeriodical: boolean } => {
+    if (!value) return { month: '', year: '', isTBC: false, isPeriodical: false };
+    if (value.toUpperCase() === 'TBC') return { month: '', year: '', isTBC: true, isPeriodical: false };
+    if (value.toUpperCase() === 'PERIODICAL') return { month: '', year: '', isTBC: false, isPeriodical: true };
+    if (value.toUpperCase() === 'REGISTERED') return { month: '', year: '', isTBC: false, isPeriodical: false };
     const trimmed = value.replace(/\s+approx\.?$/i, '').trim();
     const parts = trimmed.split(/\s+/);
     if (parts.length === 2 && parts[0] && parts[1]) {
-      return { month: parts[0], year: parts[1], isTBC: false };
+      return { month: parts[0], year: parts[1], isTBC: false, isPeriodical: false };
     }
     if (trimmed.endsWith(' ') && trimmed.trim().length > 0) {
-      return { month: trimmed.trim(), year: '', isTBC: false };
+      return { month: trimmed.trim(), year: '', isTBC: false, isPeriodical: false };
     }
     if (trimmed.startsWith(' ') && trimmed.trim().length > 0) {
-      return { month: '', year: trimmed.trim(), isTBC: false };
+      return { month: '', year: trimmed.trim(), isTBC: false, isPeriodical: false };
     }
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                     'July', 'August', 'September', 'October', 'November', 'December'];
     if (months.includes(trimmed)) {
-      return { month: trimmed, year: '', isTBC: false };
+      return { month: trimmed, year: '', isTBC: false, isPeriodical: false };
     }
     if (/^\d{4}$/.test(trimmed)) {
-      return { month: '', year: trimmed, isTBC: false };
+      return { month: '', year: trimmed, isTBC: false, isPeriodical: false };
     }
-    return { month: '', year: '', isTBC: false };
+    return { month: '', year: '', isTBC: false, isPeriodical: false };
   };
   
-  const formatExpiry = (month: string, year: string, isTBC: boolean): string => {
+  const formatExpiry = (month: string, year: string, isTBC: boolean, isPeriodical: boolean): string => {
     if (isTBC) return 'TBC';
+    if (isPeriodical) return 'Periodical';
     if (month && year) return `${month} ${year}`;
     if (month) return `${month} `;
     if (year) return ` ${year}`;
@@ -3012,8 +3069,8 @@ interface LotPropertyDescriptionFieldsProps {
   updateLotPropertyDescription: (lotIndex: number, description: Partial<any>) => void;
   formatCurrency: (value: string | undefined) => string;
   parseCurrency: (value: string) => string;
-  parseExpiry: (value: string | undefined) => { month: string; year: string; isTBC: boolean };
-  formatExpiry: (month: string, year: string, isTBC: boolean) => string;
+  parseExpiry: (value: string | undefined) => { month: string; year: string; isTBC: boolean; isPeriodical: boolean };
+  formatExpiry: (month: string, year: string, isTBC: boolean, isPeriodical: boolean) => string;
   getYearOptions: () => number[];
 }
 
@@ -3730,8 +3787,8 @@ interface LotRentalAssessmentFieldsProps {
   updateLotRentalAssessment: (lotIndex: number, assessment: Partial<any>) => void;
   formatCurrency: (value: string | undefined) => string;
   parseCurrency: (value: string) => string;
-  parseExpiry: (value: string | undefined) => { month: string; year: string; isTBC: boolean };
-  formatExpiry: (month: string, year: string, isTBC: boolean) => string;
+  parseExpiry: (value: string | undefined) => { month: string; year: string; isTBC: boolean; isPeriodical: boolean };
+  formatExpiry: (month: string, year: string, isTBC: boolean, isPeriodical: boolean) => string;
   getYearOptions: () => number[];
   lotPurchasePrice: any; // Need lot's purchase price to calculate yield
   updateLotPurchasePrice: (lotIndex: number, price: Partial<any>) => void; // Need to save priceGroup
