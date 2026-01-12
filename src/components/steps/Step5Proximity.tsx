@@ -44,6 +44,55 @@ export function Step5Proximity() {
     });
   };
 
+  // Paste handlers to strip quotes that Excel adds when copying cells
+  const handleWhyThisPropertyPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    // Remove leading/trailing quotes that Excel might add when copying cells
+    // Handle both straight quotes (" ') and curly quotes (" " ' ')
+    // Also trim whitespace that might be around quotes
+    let cleaned = pastedText.trim();
+    // Remove leading quotes (straight and curly)
+    cleaned = cleaned.replace(/^["""''']+/, '');
+    // Remove trailing quotes (straight and curly)
+    cleaned = cleaned.replace(/["""''']+$/, '');
+    // Final trim in case quotes were around whitespace
+    cleaned = cleaned.trim();
+    handleWhyThisPropertyChange(cleaned);
+  };
+
+  const handleProximityPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    // Remove leading/trailing quotes that Excel might add when copying cells
+    // Handle both straight quotes (" ') and curly quotes (" " ' ')
+    // Also trim whitespace that might be around quotes
+    let cleaned = pastedText.trim();
+    // Remove leading quotes (straight and curly)
+    cleaned = cleaned.replace(/^["""''']+/, '');
+    // Remove trailing quotes (straight and curly)
+    cleaned = cleaned.replace(/["""''']+$/, '');
+    // Final trim in case quotes were around whitespace
+    cleaned = cleaned.trim();
+    handleProximityChange(cleaned);
+  };
+
+  const handleInvestmentHighlightsPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    // Remove leading/trailing quotes that Excel might add when copying cells
+    // Handle both straight quotes (" ') and curly quotes (" " ' ')
+    // Also trim whitespace that might be around quotes
+    let cleaned = pastedText.trim();
+    // Remove leading quotes (straight and curly)
+    cleaned = cleaned.replace(/^["""''']+/, '');
+    // Remove trailing quotes (straight and curly)
+    cleaned = cleaned.replace(/["""''']+$/, '');
+    // Final trim in case quotes were around whitespace
+    cleaned = cleaned.trim();
+    handleInvestmentHighlightsChange(cleaned);
+  };
+
   // Lookup Investment Highlights when component mounts and LGA/state are available
   useEffect(() => {
     const lookupInvestmentHighlights = async () => {
@@ -153,6 +202,7 @@ export function Step5Proximity() {
           <textarea
             value={whyThisProperty}
             onChange={(e) => handleWhyThisPropertyChange(e.target.value)}
+            onPaste={handleWhyThisPropertyPaste}
             className="input-field min-h-[150px]"
             placeholder="• **Location** - Prime location in growing suburb&#10;• **Growth Potential** - Strong capital growth expected&#10;• **Rental Yield** - Excellent rental yield of X%"
             spellCheck={true}
@@ -177,6 +227,7 @@ export function Step5Proximity() {
           <textarea
             value={proximity}
             onChange={(e) => handleProximityChange(e.target.value)}
+            onPaste={handleProximityPaste}
             className="input-field min-h-[200px]"
             placeholder={`${address?.propertyAddress || 'Property Address'}&#10;• 0.5 km (5 mins), Local Kindergarten&#10;• 1.2 km (10 mins), Primary School&#10;• 2.5 km (15 mins), Supermarket&#10;• 5.0 km (20 mins), Hospital`}
             spellCheck={true}
@@ -232,6 +283,7 @@ export function Step5Proximity() {
           <textarea
             value={investmentHighlights}
             onChange={(e) => handleInvestmentHighlightsChange(e.target.value)}
+            onPaste={handleInvestmentHighlightsPaste}
             className="input-field min-h-[150px]"
             placeholder="• Major infrastructure projects&#10;• Population growth trends&#10;• Economic development initiatives&#10;• Transport improvements"
             spellCheck={true}

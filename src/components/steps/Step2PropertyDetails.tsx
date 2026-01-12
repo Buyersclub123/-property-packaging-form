@@ -1356,6 +1356,7 @@ export function Step2PropertyDetails() {
                             className="input-field"
                             placeholder="e.g., $500 or TBC"
                             required={rentalAssessment?.occupancyPrimary === 'tenanted'}
+                            disabled={rentalAssessment?.occupancyPrimary !== 'tenanted'}
                           />
                         </div>
                         <div>
@@ -1366,6 +1367,7 @@ export function Step2PropertyDetails() {
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
                             const isRequired = rentalAssessment?.occupancyPrimary === 'tenanted' && !expiryData.isTBC && !expiryData.isPeriodical;
+                            const isDisabled = rentalAssessment?.occupancyPrimary !== 'tenanted';
                             
                             return (
                               <div className="space-y-2">
@@ -1382,8 +1384,9 @@ export function Step2PropertyDetails() {
                                         }
                                       }}
                                       className="w-4 h-4"
+                                      disabled={isDisabled}
                                     />
-                                    <label className="text-sm text-gray-700">TBC</label>
+                                    <label className={`text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700'}`}>TBC</label>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <input
@@ -1397,8 +1400,9 @@ export function Step2PropertyDetails() {
                                         }
                                       }}
                                       className="w-4 h-4"
+                                      disabled={isDisabled}
                                     />
-                                    <label className="text-sm text-gray-700">Periodical</label>
+                                    <label className={`text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700'}`}>Periodical</label>
                                   </div>
                                 </div>
                                 {!expiryData.isTBC && !expiryData.isPeriodical && (
@@ -1412,6 +1416,7 @@ export function Step2PropertyDetails() {
                                       }}
                                       className="input-field"
                                       required={isRequired}
+                                      disabled={isDisabled}
                                     >
                                       <option value="">Select Month</option>
                                       {months.map(month => (
@@ -1427,6 +1432,7 @@ export function Step2PropertyDetails() {
                                       }}
                                       className="input-field"
                                       required={isRequired}
+                                      disabled={isDisabled}
                                     >
                                       <option value="">Select Year</option>
                                       {years.map(year => (
@@ -1472,6 +1478,7 @@ export function Step2PropertyDetails() {
                             className="input-field"
                             placeholder="e.g., $400 or TBC"
                             required={rentalAssessment?.occupancySecondary === 'tenanted'}
+                            disabled={rentalAssessment?.occupancySecondary !== 'tenanted'}
                           />
                         </div>
                         <div>
@@ -1482,6 +1489,7 @@ export function Step2PropertyDetails() {
                                             'July', 'August', 'September', 'October', 'November', 'December'];
                             const years = getYearOptions();
                             const isRequired = rentalAssessment?.occupancySecondary === 'tenanted' && !expiryData.isTBC && !expiryData.isPeriodical;
+                            const isDisabled = rentalAssessment?.occupancySecondary !== 'tenanted';
                             
                             return (
                               <div className="space-y-2">
@@ -1498,8 +1506,9 @@ export function Step2PropertyDetails() {
                                         }
                                       }}
                                       className="w-4 h-4"
+                                      disabled={isDisabled}
                                     />
-                                    <label className="text-sm text-gray-700">TBC</label>
+                                    <label className={`text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700'}`}>TBC</label>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     <input
@@ -1513,8 +1522,9 @@ export function Step2PropertyDetails() {
                                         }
                                       }}
                                       className="w-4 h-4"
+                                      disabled={isDisabled}
                                     />
-                                    <label className="text-sm text-gray-700">Periodical</label>
+                                    <label className={`text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700'}`}>Periodical</label>
                                   </div>
                                 </div>
                                 {!expiryData.isTBC && !expiryData.isPeriodical && (
@@ -1528,6 +1538,7 @@ export function Step2PropertyDetails() {
                                       }}
                                       className="input-field"
                                       required={isRequired}
+                                      disabled={isDisabled}
                                     >
                                       <option value="">Select Month</option>
                                       {months.map(month => (
@@ -1543,6 +1554,7 @@ export function Step2PropertyDetails() {
                                       }}
                                       className="input-field"
                                       required={isRequired}
+                                      disabled={isDisabled}
                                     >
                                       <option value="">Select Year</option>
                                       {years.map(year => (
@@ -1586,6 +1598,7 @@ export function Step2PropertyDetails() {
                         className="input-field"
                         placeholder="e.g., $500 or TBC"
                         required={rentalAssessment?.occupancyPrimary === 'tenanted'}
+                        disabled={rentalAssessment?.occupancyPrimary !== 'tenanted'}
                       />
                     </div>
                     <div>
@@ -1596,6 +1609,7 @@ export function Step2PropertyDetails() {
                                         'July', 'August', 'September', 'October', 'November', 'December'];
                         const years = getYearOptions();
                         const isRequired = rentalAssessment?.occupancyPrimary === 'tenanted' && !expiryData.isTBC && !expiryData.isPeriodical;
+                        const isDisabled = rentalAssessment?.occupancyPrimary !== 'tenanted';
                         
                         return (
                           <div className="space-y-2">
@@ -1612,8 +1626,9 @@ export function Step2PropertyDetails() {
                                     }
                                   }}
                                   className="w-4 h-4"
+                                  disabled={isDisabled}
                                 />
-                                <label className="text-sm text-gray-700">TBC</label>
+                                <label className={`text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700'}`}>TBC</label>
                               </div>
                               <div className="flex items-center gap-2">
                                 <input
@@ -1627,8 +1642,9 @@ export function Step2PropertyDetails() {
                                     }
                                   }}
                                   className="w-4 h-4"
+                                  disabled={isDisabled}
                                 />
-                                <label className="text-sm text-gray-700">Periodical</label>
+                                <label className={`text-sm ${isDisabled ? 'text-gray-400' : 'text-gray-700'}`}>Periodical</label>
                               </div>
                             </div>
                             {!expiryData.isTBC && !expiryData.isPeriodical && (
@@ -1642,6 +1658,7 @@ export function Step2PropertyDetails() {
                                     }}
                                   className="input-field"
                                   required={isRequired}
+                                  disabled={isDisabled}
                                 >
                                   <option value="">Select Month</option>
                                   {months.map(month => (
@@ -1657,6 +1674,7 @@ export function Step2PropertyDetails() {
                                     }}
                                   className="input-field"
                                   required={isRequired}
+                                  disabled={isDisabled}
                                 >
                                   <option value="">Select Year</option>
                                   {years.map(year => (
