@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useFormStore } from '@/store/formStore';
-import { PropertyType, ContractType, LotType, DualOccupancy, StatusType, LotDetails } from '@/types/form';
+import { PropertyType, ContractType, LotType, DualOccupancy, StatusType, LotDetails, ContractTypeSimplified } from '@/types/form';
 
 export function Step1DecisionTree() {
   const { formData, updateDecisionTree, updateLots, clearStep2Data, setCurrentStep, updateAddress } = useFormStore();
@@ -174,6 +174,31 @@ export function Step1DecisionTree() {
   }, [decisionTree.propertyType, decisionTree.lotType, decisionTree.dualOccupancy]);
 
   // Note: Lot number now shows for H&L and Established, so we don't clear it when switching property types
+
+  // Compute contractTypeSimplified (Single Contract or Split Contract) for H&L properties
+  // This is a computed field that flows through to GHL and Make.com for cleaner email template logic
+  useEffect(() => {
+    // Only compute for H&L properties (New + Individual lot type)
+    if (decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual') {
+      let computedContractType: ContractTypeSimplified | null = null;
+      
+      if (decisionTree.contractType === '01_hl_comms') {
+        computedContractType = 'Split Contract';
+      } else if (decisionTree.contractType === '02_single_comms') {
+        computedContractType = 'Single Contract';
+      }
+      
+      // Only update if the computed value is different from current value
+      if (decisionTree.contractTypeSimplified !== computedContractType) {
+        updateDecisionTree({ contractTypeSimplified: computedContractType });
+      }
+    } else {
+      // For non-H&L properties, clear the field
+      if (decisionTree.contractTypeSimplified !== null && decisionTree.contractTypeSimplified !== undefined) {
+        updateDecisionTree({ contractTypeSimplified: null });
+      }
+    }
+  }, [decisionTree.propertyType, decisionTree.lotType, decisionTree.contractType, decisionTree.contractTypeSimplified, updateDecisionTree]);
 
   // Clear lots if they change from Project to something else
   useEffect(() => {

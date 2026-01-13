@@ -2,6 +2,7 @@
 
 export type PropertyType = 'New' | 'Established';
 export type ContractType = '01_hl_comms' | '02_single_comms' | '03_internal_with_comms' | '04_internal_nocomms' | '05_established';
+export type ContractTypeSimplified = 'Single Contract' | 'Split Contract';
 export type LotType = 'Individual' | 'Multiple';
 export type DualOccupancy = 'Yes' | 'No' | 'Mixed' | 'TBC' | '';
 
@@ -17,6 +18,7 @@ export type StatusType = '01_available' | '02_eoi' | '03_contr_exchanged' | '05_
 export interface DecisionTree {
   propertyType: PropertyType | null;
   contractType: ContractType | null;
+  contractTypeSimplified?: ContractTypeSimplified | null; // Computed field: "Single Contract" or "Split Contract" for H&L properties
   lotType: LotType | null;
   dualOccupancy: DualOccupancy | null;
   status: StatusType | null;

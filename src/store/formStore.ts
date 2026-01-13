@@ -40,6 +40,7 @@ const initialFormData: FormData = {
   decisionTree: {
     propertyType: null,
     contractType: null,
+    contractTypeSimplified: null,
     lotType: null,
     dualOccupancy: null,
     status: null,

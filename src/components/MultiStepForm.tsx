@@ -547,11 +547,11 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           }
         }
         
-        // For H&L: For Single Contract: Total Price required, Otherwise: Land Price and Build Price required
+        // For H&L: For Single Contract: Total Price and Comparable Sales required, Otherwise: Land Price, Build Price, and Comparable Sales required
         if (isHAndL) {
           if (isSingleContract) {
-            if (isEmpty(purchasePrice?.totalPrice)) {
-              setValidationErrorWithRef('Total Price is required for Single Contract (H&L).');
+            if (isEmpty(purchasePrice?.totalPrice) || isEmpty(purchasePrice?.comparableSales)) {
+              setValidationErrorWithRef('Total Price and Comparable Sales are required for Single Contract (H&L).');
               return false;
             }
           } else {
