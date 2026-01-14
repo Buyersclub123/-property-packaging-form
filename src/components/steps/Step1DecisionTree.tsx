@@ -175,30 +175,43 @@ export function Step1DecisionTree() {
 
   // Note: Lot number now shows for H&L and Established, so we don't clear it when switching property types
 
-  // Compute contractTypeSimplified (Single Contract or Split Contract) for H&L properties
-  // This is a computed field that flows through to GHL and Make.com for cleaner email template logic
+  // Clear Contract Type when Property Type changes and current Contract Type is invalid
   useEffect(() => {
-    // Only compute for H&L properties (New + Individual lot type)
-    if (decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual') {
-      let computedContractType: ContractTypeSimplified | null = null;
+    if (decisionTree.propertyType && decisionTree.contractType) {
+      const validForNew = ['01_hl_comms', '02_single_comms'];
+      const validForEstablished = ['03_internal_with_comms', '04_internal_nocomms', '05_established'];
       
-      if (decisionTree.contractType === '01_hl_comms') {
-        computedContractType = 'Split Contract';
-      } else if (decisionTree.contractType === '02_single_comms') {
-        computedContractType = 'Single Contract';
-      }
+      const isValid =
+        (decisionTree.propertyType === 'New' && validForNew.includes(decisionTree.contractType)) ||
+        (decisionTree.propertyType === 'Established' && validForEstablished.includes(decisionTree.contractType));
       
-      // Only update if the computed value is different from current value
-      if (decisionTree.contractTypeSimplified !== computedContractType) {
-        updateDecisionTree({ contractTypeSimplified: computedContractType });
-      }
-    } else {
-      // For non-H&L properties, clear the field
-      if (decisionTree.contractTypeSimplified !== null && decisionTree.contractTypeSimplified !== undefined) {
-        updateDecisionTree({ contractTypeSimplified: null });
+      if (!isValid) {
+        updateDecisionTree({ contractType: null });
       }
     }
-  }, [decisionTree.propertyType, decisionTree.lotType, decisionTree.contractType, decisionTree.contractTypeSimplified, updateDecisionTree]);
+  }, [decisionTree.propertyType, updateDecisionTree]);
+
+  // Compute contractTypeSimplified (Single Contract or Split Contract)
+  // Simple mapping based on Contract Type only:
+  // - "01_hl_comms" → "Split Contract"
+  // - All other contract types → "Single Contract"
+  useEffect(() => {
+    let computedContractType: ContractTypeSimplified | null = null;
+    
+    if (decisionTree.contractType) {
+      if (decisionTree.contractType === '01_hl_comms') {
+        computedContractType = 'Split Contract';
+      } else {
+        // All other contract types: '02_single_comms', '03_internal_with_comms', '04_internal_nocomms', '05_established'
+        computedContractType = 'Single Contract';
+      }
+    }
+    // If contractType is null/undefined, computedContractType stays null
+    
+    // Always update to ensure the field exists in the object (even if null)
+    // This ensures it's always included in JSON payload
+    updateDecisionTree({ contractTypeSimplified: computedContractType });
+  }, [decisionTree.contractType, updateDecisionTree]);
 
   // Clear lots if they change from Project to something else
   useEffect(() => {
@@ -431,11 +444,19 @@ export function Step1DecisionTree() {
             required
           >
             <option value="">Select...</option>
-            <option value="01_hl_comms">01 H&L Comms</option>
-            <option value="02_single_comms">02 Single Comms</option>
-            <option value="03_internal_with_comms">03 Internal with Comms</option>
-            <option value="04_internal_nocomms">04 Internal No-Comms</option>
-            <option value="05_established">05 Established</option>
+            {decisionTree.propertyType === 'New' && (
+              <>
+                <option value="01_hl_comms">01 H&L Comms</option>
+                <option value="02_single_comms">02 Single Comms</option>
+              </>
+            )}
+            {decisionTree.propertyType === 'Established' && (
+              <>
+                <option value="03_internal_with_comms">03 Internal with Comms</option>
+                <option value="04_internal_nocomms">04 Internal No-Comms</option>
+                <option value="05_established">05 Established</option>
+              </>
+            )}
           </select>
         </div>
 

@@ -93,58 +93,59 @@ export function Step5Proximity() {
     handleInvestmentHighlightsChange(cleaned);
   };
 
-  // Lookup Investment Highlights when component mounts and LGA/state are available
-  useEffect(() => {
-    const lookupInvestmentHighlights = async () => {
-      if (!address?.lga || !address?.state) {
-        return;
-      }
-
-      // Only lookup if field is empty (don't overwrite user-entered data)
-      const currentHighlights = contentSections?.investmentHighlights || '';
-      if (currentHighlights && currentHighlights.trim() !== '') {
-        return;
-      }
-
-      setInvestmentHighlightsLoading(true);
-      try {
-        const response = await fetch('/api/investment-highlights/lookup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lga: address.lga,
-            state: address.state,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to lookup investment highlights');
-        }
-
-        const result = await response.json();
-        
-        if (result.found && result.data?.investmentHighlights) {
-          setInvestmentHighlights(result.data.investmentHighlights);
-          handleInvestmentHighlightsChange(result.data.investmentHighlights);
-          setInvestmentHighlightsInfo({
-            found: true,
-            dataSource: result.data.dataSource,
-            daysSinceLastCheck: result.daysSinceLastCheck,
-          });
-        } else {
-          setInvestmentHighlightsInfo({ found: false });
-        }
-      } catch (error) {
-        console.error('Error looking up investment highlights:', error);
-        setInvestmentHighlightsInfo({ found: false });
-      } finally {
-        setInvestmentHighlightsLoading(false);
-      }
-    };
-
-    lookupInvestmentHighlights();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address?.lga, address?.state]); // Only run when LGA or state changes
+  // DISABLED: Auto-lookup Investment Highlights functionality
+  // This will be re-enabled later after email population is verified
+  // useEffect(() => {
+  //   const lookupInvestmentHighlights = async () => {
+  //     if (!address?.lga || !address?.state) {
+  //       return;
+  //     }
+  //
+  //     // Only lookup if field is empty (don't overwrite user-entered data)
+  //     const currentHighlights = contentSections?.investmentHighlights || '';
+  //     if (currentHighlights && currentHighlights.trim() !== '') {
+  //       return;
+  //     }
+  //
+  //     setInvestmentHighlightsLoading(true);
+  //     try {
+  //       const response = await fetch('/api/investment-highlights/lookup', {
+  //         method: 'POST',
+  //         headers: { 'Content-Type': 'application/json' },
+  //         body: JSON.stringify({
+  //           lga: address.lga,
+  //           state: address.state,
+  //         }),
+  //       });
+  //
+  //       if (!response.ok) {
+  //         throw new Error('Failed to lookup investment highlights');
+  //       }
+  //
+  //       const result = await response.json();
+  //       
+  //       if (result.found && result.data?.investmentHighlights) {
+  //         setInvestmentHighlights(result.data.investmentHighlights);
+  //         handleInvestmentHighlightsChange(result.data.investmentHighlights);
+  //         setInvestmentHighlightsInfo({
+  //           found: true,
+  //           dataSource: result.data.dataSource,
+  //           daysSinceLastCheck: result.daysSinceLastCheck,
+  //         });
+  //       } else {
+  //         setInvestmentHighlightsInfo({ found: false });
+  //       }
+  //     } catch (error) {
+  //       console.error('Error looking up investment highlights:', error);
+  //       setInvestmentHighlightsInfo({ found: false });
+  //     } finally {
+  //       setInvestmentHighlightsLoading(false);
+  //     }
+  //   };
+  //
+  //   lookupInvestmentHighlights();
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [address?.lga, address?.state]); // Only run when LGA or state changes
 
   const handleSaveInvestmentHighlights = async () => {
     if (!address?.lga || !address?.state || !investmentHighlights || investmentHighlights.trim() === '') {
@@ -241,7 +242,8 @@ export function Step5Proximity() {
             <label className="label-field mb-0">
               Investment Highlights *
             </label>
-            {investmentHighlights && investmentHighlights.trim() !== '' && (
+            {/* DISABLED: Save to Google Sheet button - functionality disabled for now */}
+            {false && investmentHighlights && investmentHighlights.trim() !== '' && (
               <button
                 type="button"
                 onClick={handleSaveInvestmentHighlights}

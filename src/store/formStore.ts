@@ -390,6 +390,7 @@ export const useFormStore = create<FormStore>()(
           decisionTree: {
             propertyType: null,
             contractType: null,
+            contractTypeSimplified: null, // Include so field always exists in state
             lotType: null,
             dualOccupancy: null,
             status: null,

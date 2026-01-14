@@ -57,7 +57,7 @@
 ---
 
 ### 7. Combine Market Performance + Data Collection (MEDIUM PRIORITY)
-**GoogleSheet:** Property Review Static Data
+**GoogleSheet:** Property Review Static Data - Market Performance
 **Link:** https://docs.google.com/spreadsheets/d/1M_en0zLhJK6bQMNfZDGzEmPDMwtb3BksvgOsm8N3tlY/edit?usp=sharing
 **Tab:** Market Performance
 **Columns:** A-L (see FEEDBACK-AND-CHANGES.md for details)

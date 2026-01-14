@@ -65,7 +65,7 @@
 ### 5. Market Performance - COMBINE WITH DATA COLLECTION
 
 **GoogleSheet Details:**
-- Name: Property Review Static Data
+- Name: Property Review Static Data - Market Performance
 - Link: https://docs.google.com/spreadsheets/d/1M_en0zLhJK6bQMNfZDGzEmPDMwtb3BksvgOsm8N3tlY/edit?usp=sharing
 - Tab: Market Performance
 - Headers: A-L
