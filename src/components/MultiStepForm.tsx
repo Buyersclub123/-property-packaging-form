@@ -577,6 +577,12 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           }
         }
         
+        // Purchase Price Additional Dialogue is required when Cashback/Rebate Type is "Rebate"
+        if (purchasePrice?.cashbackRebateType === 'rebate' && isEmpty(purchasePrice?.purchasePriceAdditionalDialogue)) {
+          setValidationErrorWithRef('Purchase Price Additional Dialogue is required when Cashback/Rebate Type is "Rebate". Please provide details of the rebate.');
+          return false;
+        }
+        
         // Rental Assessment - mandatory fields
         // Occupancy only required for Established properties
         if (isEstablished) {

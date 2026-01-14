@@ -10,7 +10,7 @@ export type YesNo = 'Yes' | 'No' | '';
 export type AskingType = 'onmarket' | 'offmarket' | 'prelaunch_opportunity' | 'coming_soon' | 'tbc';
 export type OccupancyType = 'owner_occupied' | 'tenanted' | 'vacant' | 'tbc';
 export type TitleType = 'individual' | 'torrens' | 'green' | 'strata' | 'owners_corp_community' | 'survey_strata' | 'built_strata' | 'tbc';
-export type CashbackRebateType = 'cashback' | 'rebate_on_land' | 'rebate_on_build' | 'other';
+export type CashbackRebateType = 'cashback' | 'rebate';
 export type DealType = '01_hl_comms' | '02_single_comms' | '03_internal_with_comms' | '04_internal_nocomms' | '05_established';
 export type StatusType = '01_available' | '02_eoi' | '03_contr_exchanged' | '05_remove_no_interest' | '06_remove_lost';
 

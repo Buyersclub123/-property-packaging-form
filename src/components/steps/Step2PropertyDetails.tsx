@@ -127,6 +127,13 @@ export function Step2PropertyDetails() {
     }
   }, [hasCashbackRebate, purchasePrice?.cashbackRebateValue, purchasePrice?.cashbackRebateType, updatePurchasePrice]);
 
+  // Auto-expand Purchase Price Additional Dialogue when Rebate is selected
+  useEffect(() => {
+    if (purchasePrice?.cashbackRebateType === 'rebate') {
+      setIsPurchasePriceAdditionalDialogueExpanded(true);
+    }
+  }, [purchasePrice?.cashbackRebateType]);
+
   // Clear secondary property fields when dualOccupancy changes from "Yes" to "No" or empty
   useEffect(() => {
     if (decisionTree.dualOccupancy !== 'Yes' && propertyDescription) {
@@ -1021,6 +1028,23 @@ export function Step2PropertyDetails() {
             {hasCashbackRebate && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="label-field">Cashback/Rebate Type</label>
+                  <select
+                    value={purchasePrice?.cashbackRebateType || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      updatePurchasePrice({ 
+                        cashbackRebateType: value === '' ? undefined : value as CashbackRebateType
+                      });
+                    }}
+                    className="input-field"
+                  >
+                    <option value="">Select...</option>
+                    <option value="cashback">Cashback</option>
+                    <option value="rebate">Rebate</option>
+                  </select>
+                </div>
+                <div>
                   <label className="label-field">Cashback/Rebate Value ($)</label>
                   <input
                     type="text"
@@ -1046,25 +1070,6 @@ export function Step2PropertyDetails() {
                     className="input-field"
                     placeholder="e.g., $5,000 or TBC"
                   />
-                </div>
-                <div>
-                  <label className="label-field">Cashback/Rebate Type</label>
-                  <select
-                    value={purchasePrice?.cashbackRebateType || ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      updatePurchasePrice({ 
-                        cashbackRebateType: value === '' ? undefined : value as CashbackRebateType
-                      });
-                    }}
-                    className="input-field"
-                  >
-                    <option value="">Select...</option>
-                    <option value="cashback">Cashback</option>
-                    <option value="rebate_on_land">Rebate on Land</option>
-                    <option value="rebate_on_build">Rebate on Build</option>
-                    <option value="other">Other</option>
-                  </select>
                 </div>
               </div>
             )}
@@ -1182,7 +1187,10 @@ export function Step2PropertyDetails() {
                 onClick={() => setIsPurchasePriceAdditionalDialogueExpanded(!isPurchasePriceAdditionalDialogueExpanded)}
                 className="w-full px-4 py-3 bg-blue-50 hover:bg-blue-100 flex items-center justify-between text-left border-b border-gray-200"
               >
-                <span className="font-semibold text-gray-900">Purchase Price Additional Dialogue (Text will appear exactly as typed in email template)</span>
+                <span className="font-semibold text-gray-900">
+                  Purchase Price Additional Dialogue (Text will appear exactly as typed in email template)
+                  {purchasePrice?.cashbackRebateType === 'rebate' && <span className="text-red-600 ml-1">*</span>}
+                </span>
                 <svg
                   className={`w-4 h-4 text-gray-500 transition-transform ${isPurchasePriceAdditionalDialogueExpanded ? 'rotate-180' : ''}`}
                   fill="none"
@@ -1194,6 +1202,11 @@ export function Step2PropertyDetails() {
               </button>
               {isPurchasePriceAdditionalDialogueExpanded && (
                 <div className="p-4 bg-white">
+                  {purchasePrice?.cashbackRebateType === 'rebate' && (
+                    <p className="text-sm text-gray-600 mb-2">
+                      <strong>Note:</strong> Provide details of the rebate in the purchase price additional dialogue box.
+                    </p>
+                  )}
                   <textarea
                     value={purchasePrice?.purchasePriceAdditionalDialogue || ''}
                     onChange={(e) => updatePurchasePrice({ purchasePriceAdditionalDialogue: e.target.value })}
@@ -1206,6 +1219,7 @@ export function Step2PropertyDetails() {
                     rows={3}
                     placeholder="Any additional details about purchase price"
                     spellCheck={true}
+                    required={purchasePrice?.cashbackRebateType === 'rebate'}
                   />
                 </div>
               )}
@@ -2566,78 +2580,76 @@ function ProjectLotsView() {
                 {expandedProjectSections.has('cashback') && (
                   <div className="p-4 bg-white">
                     <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="label-field">Cashback/Rebate Value ($)</label>
-                <input
-                  type="text"
-                  value={formatCurrency(purchasePrice?.cashbackRebateValue)}
-                  onChange={(e) => {
-                    const rawValue = parseCurrency(e.target.value);
-                    const upperValue = rawValue.toUpperCase();
-                    const isNumeric = /^\d+$/.test(rawValue);
-                    const isTBC = upperValue === 'T' || upperValue === 'TB' || upperValue === 'TBC';
-                    if (rawValue === '' || isNumeric || isTBC) {
-                      const valueToSet = isTBC ? upperValue : rawValue;
-                      // Update project-level
-                      updatePurchasePrice({ cashbackRebateValue: valueToSet });
-                      // Auto-populate all lots (only if lot doesn't already have a value)
-                      if (lots) {
-                        lots.forEach((lot, index) => {
-                          if (!lot.purchasePrice?.cashbackRebateValue) {
-                            updateLotPurchasePrice(index, { cashbackRebateValue: valueToSet });
-                          }
-                        });
-                      }
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const rawValue = parseCurrency(e.target.value);
-                    if (rawValue && rawValue.toUpperCase() !== 'TBC') {
-                      const formatted = formatCurrency(rawValue);
-                      if (formatted !== e.target.value) {
-                        updatePurchasePrice({ cashbackRebateValue: rawValue });
-                        // Auto-populate all lots (only if lot doesn't already have a value)
-                        if (lots) {
-                          lots.forEach((lot, index) => {
-                            if (!lot.purchasePrice?.cashbackRebateValue) {
-                              updateLotPurchasePrice(index, { cashbackRebateValue: rawValue });
+                      <div>
+                        <label className="label-field">Cashback/Rebate Type</label>
+                        <select
+                          value={purchasePrice?.cashbackRebateType || ''}
+                          onChange={(e) => {
+                            const value = e.target.value as CashbackRebateType;
+                            // Update project-level
+                            updatePurchasePrice({ cashbackRebateType: value });
+                            // Auto-populate all lots (only if lot doesn't already have a value)
+                            if (lots) {
+                              lots.forEach((lot, index) => {
+                                if (!lot.purchasePrice?.cashbackRebateType) {
+                                  updateLotPurchasePrice(index, { cashbackRebateType: value });
+                                }
+                              });
                             }
-                          });
-                        }
-                      }
-                    }
-                  }}
-                  className="input-field"
-                  placeholder="e.g., $20,000 or TBC"
-                />
-              </div>
-              <div>
-                <label className="label-field">Cashback/Rebate Type</label>
-                <select
-                  value={purchasePrice?.cashbackRebateType || ''}
-                  onChange={(e) => {
-                    const value = e.target.value as CashbackRebateType;
-                    // Update project-level
-                    updatePurchasePrice({ cashbackRebateType: value });
-                    // Auto-populate all lots (only if lot doesn't already have a value)
-                    if (lots) {
-                      lots.forEach((lot, index) => {
-                        if (!lot.purchasePrice?.cashbackRebateType) {
-                          updateLotPurchasePrice(index, { cashbackRebateType: value });
-                        }
-                      });
-                    }
-                  }}
-                  className="input-field"
-                >
-                  <option value="">Select...</option>
-                  <option value="cashback">Cashback</option>
-                  <option value="rebate_on_land">Rebate on Land</option>
-                  <option value="rebate_on_build">Rebate on Build</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-            </div>
+                          }}
+                          className="input-field"
+                        >
+                          <option value="">Select...</option>
+                          <option value="cashback">Cashback</option>
+                          <option value="rebate">Rebate</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label-field">Cashback/Rebate Value ($)</label>
+                        <input
+                          type="text"
+                          value={formatCurrency(purchasePrice?.cashbackRebateValue)}
+                          onChange={(e) => {
+                            const rawValue = parseCurrency(e.target.value);
+                            const upperValue = rawValue.toUpperCase();
+                            const isNumeric = /^\d+$/.test(rawValue);
+                            const isTBC = upperValue === 'T' || upperValue === 'TB' || upperValue === 'TBC';
+                            if (rawValue === '' || isNumeric || isTBC) {
+                              const valueToSet = isTBC ? upperValue : rawValue;
+                              // Update project-level
+                              updatePurchasePrice({ cashbackRebateValue: valueToSet });
+                              // Auto-populate all lots (only if lot doesn't already have a value)
+                              if (lots) {
+                                lots.forEach((lot, index) => {
+                                  if (!lot.purchasePrice?.cashbackRebateValue) {
+                                    updateLotPurchasePrice(index, { cashbackRebateValue: valueToSet });
+                                  }
+                                });
+                              }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const rawValue = parseCurrency(e.target.value);
+                            if (rawValue && rawValue.toUpperCase() !== 'TBC') {
+                              const formatted = formatCurrency(rawValue);
+                              if (formatted !== e.target.value) {
+                                updatePurchasePrice({ cashbackRebateValue: rawValue });
+                                // Auto-populate all lots (only if lot doesn't already have a value)
+                                if (lots) {
+                                  lots.forEach((lot, index) => {
+                                    if (!lot.purchasePrice?.cashbackRebateValue) {
+                                      updateLotPurchasePrice(index, { cashbackRebateValue: rawValue });
+                                    }
+                                  });
+                                }
+                              }
+                            }
+                          }}
+                          className="input-field"
+                          placeholder="e.g., $20,000 or TBC"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -3690,6 +3702,18 @@ function LotPurchasePriceFields({ lotIndex, purchasePrice, hasCashbackRebate, is
       {hasCashbackRebate && (
         <div className="grid grid-cols-2 gap-4">
           <div>
+            <label className="label-field">Cashback/Rebate Type</label>
+            <select
+              value={purchasePrice?.cashbackRebateType || ''}
+              onChange={(e) => updateLotPurchasePrice(lotIndex, { cashbackRebateType: e.target.value as CashbackRebateType })}
+              className="input-field"
+            >
+              <option value="">Select...</option>
+              <option value="cashback">Cashback</option>
+              <option value="rebate">Rebate</option>
+            </select>
+          </div>
+          <div>
             <label className="label-field">Cashback/Rebate Value ($)</label>
             <input
               type="text"
@@ -3715,19 +3739,6 @@ function LotPurchasePriceFields({ lotIndex, purchasePrice, hasCashbackRebate, is
               className="input-field"
               placeholder="e.g., $20,000 or TBC"
             />
-          </div>
-          <div>
-            <label className="label-field">Cashback/Rebate Type</label>
-            <select
-              value={purchasePrice?.cashbackRebateType || ''}
-              onChange={(e) => updateLotPurchasePrice(lotIndex, { cashbackRebateType: e.target.value as CashbackRebateType })}
-              className="input-field"
-            >
-              <option value="">Select...</option>
-              <option value="cashback">Cashback</option>
-              <option value="rebate_on_land">Rebate on Land</option>
-              <option value="rebate_on_build">Rebate on Build</option>
-            </select>
           </div>
         </div>
       )}

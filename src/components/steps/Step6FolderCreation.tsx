@@ -236,17 +236,26 @@ export function Step6FolderCreation() {
 
       // Convert all empty strings to null (handles all fields automatically, including future fields)
       const processedSubmissionData = convertEmptyStringsToNull(submissionData);
+      
+      // Ensure contractTypeSimplified always exists (even if null) so it's included in JSON
+      if (processedSubmissionData.decisionTree && !('contractTypeSimplified' in processedSubmissionData.decisionTree)) {
+        processedSubmissionData.decisionTree.contractTypeSimplified = null;
+      }
+
+      // Prepare payload
+      const payload = {
+        source: 'form_app',
+        action: 'submit_new_property',
+        formData: processedSubmissionData,
+        folderLink: folderLink,
+      };
+      const jsonBody = JSON.stringify(payload);
 
       // Send all data to Make.com webhook (Make.com will create GHL record)
       const makeResponse = await fetch('https://hook.eu1.make.com/2xbtucntvnp3wfmkjk0ecuxj4q4c500h', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source: 'form_app',
-          action: 'submit_new_property',
-          formData: processedSubmissionData,
-          folderLink: folderLink,
-        }),
+        body: jsonBody,
       });
 
       if (!makeResponse.ok) {
@@ -538,7 +547,7 @@ export function Step6FolderCreation() {
 
           {/* Message for BA Section */}
           <div className="mb-6">
-            <label className="label-field">Message for BA (Optional)</label>
+            <label className="text-lg font-semibold mb-4 block">Message for BA (Optional)</label>
             <p className="text-xs text-gray-500 mb-2">
               This message will appear at the beginning of the email sent to the Business Analyst. Use it to provide any additional context or instructions.
             </p>
