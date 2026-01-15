@@ -73,10 +73,20 @@ export function Step6FolderCreation() {
     setFolderError(null);
 
     try {
+      // Debug: Log what we're sending
+      console.log('=== FOLDER CREATION REQUEST ===');
+      console.log('Folder name:', folderName);
+      console.log('FormData decisionTree:', formData.decisionTree);
+      console.log('LotType:', formData.decisionTree?.lotType);
+      console.log('ContractTypeSimplified:', formData.decisionTree?.contractTypeSimplified);
+      
       const response = await fetch('/api/create-property-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ propertyAddress: folderName }),
+        body: JSON.stringify({ 
+          propertyAddress: folderName,
+          formData: formData,
+        }),
       });
 
       if (!response.ok) {
