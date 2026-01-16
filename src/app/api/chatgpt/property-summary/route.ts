@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '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';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // System prompt based on Property Summary Tool specification
 const SYSTEM_PROMPT = `You are a Property Intelligence Engine that emulates the combined behavior of:
