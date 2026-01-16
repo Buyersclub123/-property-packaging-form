@@ -64,17 +64,16 @@ export async function POST(request: Request) {
     console.log('isSplitContract:', isSplitContract);
     console.log('Will process sheets:', isHL && isSplitContract && formData);
     
-    // TEMPORARY FOR TESTING: Process ALL H&L properties regardless of contract type
-    // TODO: Remove forceProcess after debugging - only process Split Contract normally
-    const forceProcess = formData?.decisionTree?.lotType === 'Individual' && 
-                         formData?.decisionTree?.propertyType === 'New';
+    // TEMPORARY FOR TESTING: Process ALL properties to test if code works
+    // TODO: Change back to only H&L + Split Contract after testing
+    const shouldProcess = !!formData; // Process ALL properties for now
     
-    const shouldProcess = (isHL && isSplitContract && formData) || forceProcess;
+    console.log('=== DECISION ===');
+    console.log('shouldProcess:', shouldProcess);
+    console.log('formData exists:', !!formData);
     
     if (shouldProcess) {
-      if (forceProcess && !isSplitContract) {
-        console.log('⚠️ FORCING PROCESSING FOR TESTING (not Split Contract but is H&L)');
-      }
+      console.log('✓ PROCEEDING WITH SHEET PROCESSING');
       try {
         console.log('=== PROCESSING SHEETS ===');
         // Find all Google Sheets in the folder
