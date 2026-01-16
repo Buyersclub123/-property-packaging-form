@@ -124,7 +124,7 @@ export async function POST(request: Request) {
     }
     
     // Parse the response to extract proximity and "Why this Property"
-    const lines = content.split('\n').filter(line => line.trim());
+    const lines = content.split('\n').filter((line: string) => line.trim());
     
     let proximityText = '';
     let whyThisProperty = '';
