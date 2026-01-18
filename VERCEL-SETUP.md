@@ -46,6 +46,22 @@ Click "Deploy" - Vercel will:
 - Preview URLs: Created for each commit/PR
 - Environment variables: Set in dashboard (not in code)
 
+## Step 6: Disable Auto-Deploy (CRITICAL)
+
+**IMPORTANT:** To prevent automatic deployments when code is pushed to GitHub:
+
+1. Go to Vercel Dashboard → Your Project → Settings → Git
+2. Under "Production Branch" section
+3. **Disable "Automatic deployments from Git"**
+4. Save changes
+
+**Why:** Git push = backup only, NOT deployment. Deployments must be manual and approved.
+
+**Manual Deployment:**
+- Go to Deployments tab
+- Click "Redeploy" or promote a specific deployment
+- Only deploy when code is tested and ready
+
 ## Troubleshooting
 
 **Build fails:**

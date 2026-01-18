@@ -171,10 +171,16 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Error creating property folder:', error);
+    
+    // Get debug info from global if available
+    const debugInfo = (global as any).__lastDriveClientDebug || [];
+    
     return NextResponse.json(
       { 
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to create property folder' 
+        error: error instanceof Error ? error.message : 'Failed to create property folder',
+        debugInfo: debugInfo.length > 0 ? debugInfo : undefined,
+        errorType: error instanceof Error ? error.constructor.name : typeof error
       },
       { status: 500 }
     );

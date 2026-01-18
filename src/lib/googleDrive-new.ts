@@ -5,14 +5,8 @@ import { google } from 'googleapis';
  * Initialize Google Drive API client
  */
 function getDriveClient() {
-  const debugInfo: string[] = [];
-  debugInfo.push('[getDriveClient] Starting...');
-  
   // Try to get credentials from environment variable first
   let credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
-  debugInfo.push(`Credentials from env: ${credentialsJson ? `Found (length: ${credentialsJson.length})` : 'NOT FOUND'}`);
-  console.error('[getDriveClient] Starting...');
-  console.error('[getDriveClient] Credentials from env:', credentialsJson ? `Found (length: ${credentialsJson.length})` : 'NOT FOUND');
   
   // If not in env, try to read from file
   if (!credentialsJson) {
@@ -20,32 +14,20 @@ function getDriveClient() {
       const fs = require('fs');
       const path = require('path');
       const credentialsPath = path.join(process.cwd(), 'credentials', 'google-sheets-credentials.json');
-      console.error('[getDriveClient] Checking file:', credentialsPath);
       if (fs.existsSync(credentialsPath)) {
         credentialsJson = fs.readFileSync(credentialsPath, 'utf8');
-        console.error('[getDriveClient] Credentials from file:', credentialsJson ? `Found (length: ${credentialsJson.length})` : 'NOT FOUND');
-      } else {
-        console.error('[getDriveClient] File does not exist');
       }
     } catch (error) {
-      console.error('[getDriveClient] File read error:', error);
       // File reading failed, will throw error below
     }
   }
   
   if (!credentialsJson) {
-    const errorMsg = 'GOOGLE_SHEETS_CREDENTIALS environment variable is not set and credentials file not found. Please check your .env.local file and restart the dev server.';
-    debugInfo.push(`ERROR: ${errorMsg}`);
-    console.error('[getDriveClient]', errorMsg);
-    throw new Error(errorMsg);
+    throw new Error('GOOGLE_SHEETS_CREDENTIALS environment variable is not set and credentials file not found. Please check your .env.local file and restart the dev server.');
   }
-  
-  // Store debug info globally so we can access it in error handlers
-  (global as any).__lastDriveClientDebug = debugInfo;
 
   // Remove single quotes if present at start/end (from .env file)
   credentialsJson = credentialsJson.trim();
-  const hadQuotes = credentialsJson.startsWith("'") || credentialsJson.startsWith('"');
   if (credentialsJson.startsWith("'") && credentialsJson.endsWith("'")) {
     credentialsJson = credentialsJson.slice(1, -1);
   }
@@ -67,227 +49,15 @@ function getDriveClient() {
     }
   }
   
-  // Fix private key - handle both escaped newlines (\n) and actual newlines
-  if (credentials.private_key) {
-    const beforeLength = credentials.private_key.length;
-    const beforeHasEscapedNewline = credentials.private_key.includes('\\n');
-    const beforeHasActualNewline = credentials.private_key.includes('\n');
-    
-    debugInfo.push(`Private key BEFORE fix: length=${beforeLength}, hasEscapedNewline=${beforeHasEscapedNewline}, hasActualNewline=${beforeHasActualNewline}`);
-    debugInfo.push(`Starts with: ${credentials.private_key.substring(0, 50)}`);
-    
-    console.error('[getDriveClient] Private key BEFORE fix:');
-    console.error('  Length:', beforeLength);
-    console.error('  Starts with:', credentials.private_key.substring(0, 50));
-    console.error('  Contains \\n (escaped):', beforeHasEscapedNewline);
-    console.error('  Contains actual newline:', beforeHasActualNewline);
-    
-    // Normalize the private key:
-    // 1. If it has escaped newlines (\n), convert them to actual newlines
-    // 2. If it already has actual newlines, keep them
-    // 3. Normalize any extra whitespace
-    if (beforeHasEscapedNewline) {
-      // Replace escaped newlines with actual newlines
-      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
-    }
-    
-    // Normalize: ensure proper line breaks and remove any trailing/leading whitespace
-    credentials.private_key = credentials.private_key.trim();
-    
-    // Ensure the key has proper line breaks (should have newlines between BEGIN/END markers)
-    // If somehow it's all on one line, try to detect and fix (though this shouldn't happen)
-    if (!credentials.private_key.includes('\n') && credentials.private_key.includes('-----BEGIN') && credentials.private_key.includes('-----END')) {
-      // Key is on one line - this is unusual but handle it
-      console.error('[getDriveClient] WARNING: Private key appears to be on a single line');
-    }
-    
-    const afterLength = credentials.private_key.length;
-    const afterHasEscapedNewline = credentials.private_key.includes('\\n');
-    const afterHasActualNewline = credentials.private_key.includes('\n');
-    
-    debugInfo.push(`Private key AFTER fix: length=${afterLength}, hasEscapedNewline=${afterHasEscapedNewline}, hasActualNewline=${afterHasActualNewline}`);
-    debugInfo.push(`Starts with: ${credentials.private_key.substring(0, 50)}`);
-    
-    console.error('[getDriveClient] Private key AFTER fix:');
-    console.error('  Length:', afterLength);
-    console.error('  Starts with:', credentials.private_key.substring(0, 50));
-    console.error('  Contains \\n (escaped):', afterHasEscapedNewline);
-    console.error('  Contains actual newline:', afterHasActualNewline);
-    
-    // Validate the key format
-    if (!credentials.private_key.startsWith('-----BEGIN')) {
-      const warning = 'WARNING: Private key does not start with -----BEGIN';
-      debugInfo.push(warning);
-      console.error('[getDriveClient]', warning);
-    }
-    if (!credentials.private_key.includes('-----END')) {
-      const warning = 'WARNING: Private key does not contain -----END';
-      debugInfo.push(warning);
-      console.error('[getDriveClient]', warning);
-    }
-  } else {
-    const error = 'ERROR: private_key is missing from credentials!';
-    debugInfo.push(error);
-    console.error('[getDriveClient]', error);
-  }
-  
-  (global as any).__lastDriveClientDebug = debugInfo;
-  
-  // Validate credentials before using
-  if (!credentials.private_key || !credentials.client_email) {
-    console.error('[getDriveClient] Missing fields - private_key:', !!credentials.private_key, 'client_email:', !!credentials.client_email);
-    throw new Error('GOOGLE_SHEETS_CREDENTIALS missing required fields: private_key or client_email');
-  }
-  
-  console.error('[getDriveClient] Service account email:', credentials.client_email);
-  console.error('[getDriveClient] About to create GoogleAuth...');
-  
-  try {
-    console.error('[getDriveClient] Creating GoogleAuth with credentials...');
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive',
-      ],
-    });
-    console.error('[getDriveClient] GoogleAuth created successfully');
-    
-    console.error('[getDriveClient] Creating Drive client...');
-    const drive = google.drive({ version: 'v3', auth });
-    console.error('[getDriveClient] Drive client created successfully');
-    return drive;
-  } catch (authError) {
-    const errorInfo = [
-      `ERROR creating auth: ${authError instanceof Error ? authError.constructor.name : typeof authError}`,
-      `Message: ${authError instanceof Error ? authError.message : String(authError)}`,
-      ...debugInfo
-    ];
-    (global as any).__lastDriveClientDebug = errorInfo;
-    
-    console.error('[getDriveClient] ERROR creating auth:');
-    console.error('  Type:', authError instanceof Error ? authError.constructor.name : typeof authError);
-    console.error('  Message:', authError instanceof Error ? authError.message : String(authError));
-    if (authError instanceof Error && authError.stack) {
-      console.error('  Stack:', authError.stack);
-    }
-    
-    // Attach debug info to error
-    if (authError instanceof Error) {
-      (authError as any).debugInfo = debugInfo;
-    }
-    throw authError;
-  }
-}
-
-/**
- * Get Sheets client using the same credentials as Drive client
- */
-function getSheetsClientFromCredentials() {
-  let credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
-  
-  if (!credentialsJson) {
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const credentialsPath = path.join(process.cwd(), 'credentials', 'google-sheets-credentials.json');
-      if (fs.existsSync(credentialsPath)) {
-        credentialsJson = fs.readFileSync(credentialsPath, 'utf8');
-      }
-    } catch (error) {
-      // File reading failed
-    }
-  }
-  
-  if (!credentialsJson) {
-    throw new Error('GOOGLE_SHEETS_CREDENTIALS environment variable is not set');
-  }
-  
-  credentialsJson = credentialsJson.trim();
-  if (credentialsJson.startsWith("'") && credentialsJson.endsWith("'")) {
-    credentialsJson = credentialsJson.slice(1, -1);
-  }
-  if (credentialsJson.startsWith('"') && credentialsJson.endsWith('"')) {
-    credentialsJson = credentialsJson.slice(1, -1);
-  }
-  
-  let credentials;
-  try {
-    credentials = JSON.parse(credentialsJson);
-  } catch (error) {
-    try {
-      const cleanedJson = credentialsJson.replace(/\n/g, ' ').replace(/\s+/g, ' ');
-      credentials = JSON.parse(cleanedJson);
-    } catch (parseError) {
-      throw new Error(`Failed to parse GOOGLE_SHEETS_CREDENTIALS: ${parseError instanceof Error ? parseError.message : 'Invalid JSON format'}`);
-    }
-  }
-  
-  // Fix private key - replace escaped newlines with actual newlines
-  if (credentials.private_key) {
-    credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
-  }
-  
   const auth = new google.auth.GoogleAuth({
     credentials,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    scopes: [
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/drive',
+    ],
   });
 
-  return google.sheets({ version: 'v4', auth });
-}
-
-/**
- * Diagnostic function to check service account access to Shared Drive
- * This can help identify permission issues
- */
-export async function checkServiceAccountAccess(driveId: string): Promise<{ hasAccess: boolean; error?: string; serviceAccountEmail?: string }> {
-  let serviceAccountEmail = 'unknown';
-  
-  try {
-    // Get service account email from credentials
-    let credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
-    if (credentialsJson) {
-      credentialsJson = credentialsJson.trim();
-      if (credentialsJson.startsWith("'") && credentialsJson.endsWith("'")) {
-        credentialsJson = credentialsJson.slice(1, -1);
-      }
-      if (credentialsJson.startsWith('"') && credentialsJson.endsWith('"')) {
-        credentialsJson = credentialsJson.slice(1, -1);
-      }
-      try {
-        const credentials = JSON.parse(credentialsJson);
-        serviceAccountEmail = credentials.client_email || 'unknown';
-      } catch {
-        // Ignore parse errors
-      }
-    }
-    
-    const drive = getDriveClient();
-    
-    // Try to list files in the Shared Drive
-    const response = await drive.files.list({
-      q: 'trashed=false',
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      driveId: driveId,
-      corpora: 'drive',
-      pageSize: 1, // Just check if we can access, don't need all files
-    });
-    
-    return {
-      hasAccess: true,
-      serviceAccountEmail,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    return {
-      hasAccess: false,
-      error: errorMessage,
-      serviceAccountEmail,
-    };
-  }
+  return google.drive({ version: 'v3', auth });
 }
 
 /**
@@ -314,14 +84,12 @@ export async function createFolder(
     const requestOptions: any = {
       requestBody: fileMetadata,
       fields: 'id, name, webViewLink',
-      supportsAllDrives: true, // Always set for Shared Drive compatibility
+      supportsAllDrives: true,
     };
 
-    // If driveId is provided, include it in the request for Shared Drives
+    // If driveId is provided, include it in the request
     if (driveId) {
       requestOptions.driveId = driveId;
-      requestOptions.includeItemsFromAllDrives = true;
-      requestOptions.corpora = 'drive';
     }
 
     const response = await drive.files.create(requestOptions);
@@ -383,17 +151,11 @@ export async function copyFileToFolder(
         parents: [destinationFolderId],
       },
       fields: 'id, name',
-      supportsAllDrives: true, // Always set for Shared Drive compatibility
     };
-    
-    // For Shared Drives, add additional parameters
     if (driveId) {
-      copyOptions.driveId = driveId;
-      copyOptions.includeItemsFromAllDrives = true;
-      copyOptions.corpora = 'drive';
+      copyOptions.supportsAllDrives = true;
     }
     
-    console.log('[copyFileToFolder] Copying file:', fileId, 'to folder:', destinationFolderId);
     const copiedFile = await drive.files.copy(copyOptions);
 
     if (!copiedFile.data.id) {
@@ -420,9 +182,9 @@ export async function listFilesInFolder(folderId: string, driveId?: string): Pro
     const listOptions: any = {
       q: `'${folderId}' in parents and trashed=false`,
       fields: 'files(id, name, mimeType)',
-      supportsAllDrives: true, // Always set for Shared Drive compatibility
     };
     if (driveId) {
+      listOptions.supportsAllDrives = true;
       listOptions.includeItemsFromAllDrives = true;
       listOptions.driveId = driveId;
       listOptions.corpora = 'drive';
@@ -453,9 +215,6 @@ export async function copyFolderStructure(
   try {
     const drive = getDriveClient();
     
-    console.log('[copyFolderStructure] Attempting to access source folder:', sourceFolderId);
-    console.log('[copyFolderStructure] Shared Drive ID:', driveId);
-    
     // Get source folder metadata
     const getOptions: any = {
       fileId: sourceFolderId,
@@ -463,12 +222,8 @@ export async function copyFolderStructure(
     };
     if (driveId) {
       getOptions.supportsAllDrives = true;
-      console.log('[copyFolderStructure] Using Shared Drive mode');
     }
-    
-    console.log('[copyFolderStructure] Calling drive.files.get...');
     const sourceFolder = await drive.files.get(getOptions);
-    console.log('[copyFolderStructure] Successfully got source folder:', sourceFolder.data.name);
     
     // Create new folder in destination
     const newFolder = await createFolder(newFolderName, destinationParentFolderId, driveId);
@@ -590,8 +345,9 @@ export async function populateSpreadsheet(
   driveId?: string
 ): Promise<void> {
   try {
-    // Use the same credentials to create Sheets client
-    const sheets = getSheetsClientFromCredentials();
+    // Import getSheetsClient from googleSheets.ts
+    const { getSheetsClient } = await import('./googleSheets');
+    const sheets = getSheetsClient();
     
     const TAB_NAME = 'Autofill data';
     
@@ -619,44 +375,6 @@ export async function populateSpreadsheet(
                    formData.propertyDescription?.bathSecondary || 
                    formData.propertyDescription?.garageSecondary;
     
-    // Helper function to convert state to uppercase 3-letter format (for cashflow spreadsheet formulas)
-    const convertStateToCode = (state: string): string => {
-      if (!state) return '';
-      
-      const stateUpper = state.toUpperCase().trim();
-      
-      // If already 3-letter code, return as-is
-      if (stateUpper.length === 3 && /^[A-Z]{3}$/.test(stateUpper)) {
-        return stateUpper;
-      }
-      
-      // Map full state names to codes
-      const stateMap: Record<string, string> = {
-        'VICTORIA': 'VIC',
-        'NEW SOUTH WALES': 'NSW',
-        'QUEENSLAND': 'QLD',
-        'SOUTH AUSTRALIA': 'SA',
-        'WESTERN AUSTRALIA': 'WA',
-        'TASMANIA': 'TAS',
-        'NORTHERN TERRITORY': 'NT',
-        'AUSTRALIAN CAPITAL TERRITORY': 'ACT',
-        'ACT': 'ACT',
-      };
-      
-      // Check if it's a full state name
-      if (stateMap[stateUpper]) {
-        return stateMap[stateUpper];
-      }
-      
-      // If it's already a valid code (2-3 letters), return uppercase
-      if (stateUpper.length >= 2 && stateUpper.length <= 3) {
-        return stateUpper;
-      }
-      
-      // Return as-is if we can't determine
-      return stateUpper;
-    };
-    
     // Calculate values based on CSV mapping
     const calculateValue = (fieldName: string): string => {
       const fieldLower = fieldName.toLowerCase().trim();
@@ -666,10 +384,9 @@ export async function populateSpreadsheet(
         return formData.address?.propertyAddress || '';
       }
       
-      // State mapping - convert to uppercase 3-letter format for cashflow spreadsheet formulas
+      // State mapping
       if (fieldLower.includes('state')) {
-        const state = formData.address?.state || '';
-        return convertStateToCode(state);
+        return formData.address?.state || '';
       }
       
       // Land Cost mapping
@@ -810,4 +527,3 @@ export async function populateHLSpreadsheet(
   // Delegate to new function
   return populateSpreadsheet(spreadsheetId, formData);
 }
-

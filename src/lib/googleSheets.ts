@@ -53,7 +53,7 @@ export interface MarketPerformanceLookupResult {
 /**
  * Initialize Google Sheets API client
  */
-function getSheetsClient() {
+export function getSheetsClient() {
   // Try to get credentials from environment variable first
   let credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
   
@@ -96,6 +96,19 @@ function getSheetsClient() {
     } catch (parseError) {
       throw new Error(`Failed to parse GOOGLE_SHEETS_CREDENTIALS: ${parseError instanceof Error ? parseError.message : 'Invalid JSON format'}`);
     }
+  }
+  
+  // Fix private key - handle both escaped newlines (\n) and actual newlines
+  if (credentials.private_key) {
+    // Normalize the private key:
+    // 1. If it has escaped newlines (\n), convert them to actual newlines
+    // 2. If it already has actual newlines, keep them
+    // 3. Normalize any extra whitespace
+    if (credentials.private_key.includes('\\n')) {
+      credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+    }
+    // Trim any extra whitespace
+    credentials.private_key = credentials.private_key.trim();
   }
   
   const auth = new google.auth.GoogleAuth({
@@ -754,9 +767,7 @@ export async function saveInvestmentHighlightsData(
         data.dataSource || 'Manual Entry', // Column D: Data Source
         now, // Column E: Date Collected/Checked
         data.sourceDocument || '', // Column F: Source Document
-      ];
-
-      await sheets.spreadsheets.values.append({
+      ];      await sheets.spreadsheets.values.append({
         spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
         range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`,
         valueInputOption: 'RAW',

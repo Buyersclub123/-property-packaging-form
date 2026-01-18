@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 
-const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY || '61cf69f5359f4d5197a72214a78164c9';
-const GEOSCAPE_API_KEY = process.env.NEXT_PUBLIC_GEOSCAPE_API_KEY || 'VfqDRW796v5jGTfXcHgJXDdoGi7DENZA';
+const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+if (!GEOAPIFY_API_KEY) {
+  throw new Error('GEOAPIFY_API_KEY environment variable is required');
+}
+
+const GEOSCAPE_API_KEY = process.env.NEXT_PUBLIC_GEOSCAPE_API_KEY;
+if (!GEOSCAPE_API_KEY) {
+  throw new Error('NEXT_PUBLIC_GEOSCAPE_API_KEY environment variable is required');
+}
 
 // All categories in one call (corrected based on Geoapify API error)
+// Note: Beach removed per requirements - cities now handled separately via hardcoded list + Google Maps
 const ALL_CATEGORIES = [
   'childcare.kindergarten',
   'education.school',
@@ -13,13 +21,12 @@ const ALL_CATEGORIES = [
   'public_transport.train',
   'railway.train',
   'public_transport.bus',
-  'beach',
   'airport',
-  'populated_place.city',
   'childcare',
 ].join(',');
 
 // Required amenities with counts and category matching
+// Note: Beach removed per requirements - cities now handled separately via hardcoded list + Google Maps
 const REQUIRED_AMENITIES = [
   { type: 'kindergarten', count: 1, categories: ['childcare.kindergarten'] },
   { type: 'schools', count: 3, categories: ['education.school'] },
@@ -27,7 +34,6 @@ const REQUIRED_AMENITIES = [
   { type: 'hospitals', count: 2, categories: ['healthcare.hospital'] },
   { type: 'train_station', count: 1, categories: ['public_transport.train', 'railway.train'] },
   { type: 'bus_stop', count: 1, categories: ['public_transport.bus'] },
-  { type: 'beach', count: 1, categories: ['beach'] },
   { type: 'airport', count: 1, categories: ['airport'] },
   { type: 'child_daycare', count: 3, categories: ['childcare'] },
 ];
@@ -94,7 +100,7 @@ async function searchAllPlaces(
     const biasStr = `proximity:${lon},${lat}`;
     const url = `https://api.geoapify.com/v2/places?categories=${encodeURIComponent(ALL_CATEGORIES)}&filter=${encodeURIComponent(filterStr)}&bias=${encodeURIComponent(biasStr)}&limit=${limit}&apiKey=${GEOAPIFY_API_KEY}`;
     
-    console.log('Calling Geoapify API:', url.replace(GEOAPIFY_API_KEY, '***'));
+    console.log('Calling Geoapify API:', GEOAPIFY_API_KEY ? url.replace(GEOAPIFY_API_KEY, '***') : url);
     
     const response = await axios.get(url, {
       timeout: 15000,
@@ -315,7 +321,7 @@ export async function POST(request: Request) {
         filter: `circle:${lon},${lat},200000`,
         bias: `proximity:${lon},${lat}`,
         limit: 20,
-        apiKey: GEOAPIFY_API_KEY,
+        apiKey: GEOAPIFY_API_KEY!,
       };
       try {
         const airportResponse = await axios.get(airportUrl, {

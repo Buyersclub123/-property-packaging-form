@@ -8,67 +8,30 @@ const SHARED_DRIVE_ID = '0AFVxBPJiTmjPUk9PVA';
  * Used by the standalone test page
  */
 export async function POST(request: Request) {
-  console.log('\n\n=== API ROUTE HIT: test-populate-sheets ===');
-  console.log('Time:', new Date().toISOString());
-  
+  console.error('=== TEST POPULATE SHEETS ROUTE CALLED ===');
+  console.error('Time:', new Date().toISOString());
   try {
-    const body = await request.json();
-    console.log('Request body received:', {
-      hasSourceFolderId: !!body.sourceFolderId,
-      hasDestinationParentFolderId: !!body.destinationParentFolderId,
-      hasNewFolderName: !!body.newFolderName,
-      hasFormData: !!body.formData,
-    });
+    const { sourceFolderId, destinationParentFolderId, newFolderName, formData } = await request.json();
+    console.error('Request body parsed successfully');
     
-    const { sourceFolderId, destinationParentFolderId, newFolderName, formData } = body;
-    
-    if (!sourceFolderId) {
-      console.error('ERROR: Source folder ID is missing');
+    if (!sourceFolderId || !destinationParentFolderId || !newFolderName) {
       return NextResponse.json(
-        { success: false, error: 'Source folder ID is required' },
+        { success: false, error: 'Missing required parameters' },
         { status: 400 }
       );
     }
 
-    if (!destinationParentFolderId) {
-      console.error('ERROR: Destination parent folder ID is missing');
-      return NextResponse.json(
-        { success: false, error: 'Destination parent folder ID is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!newFolderName) {
-      console.error('ERROR: New folder name is missing');
-      return NextResponse.json(
-        { success: false, error: 'New folder name is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!formData) {
-      console.error('ERROR: Form data is missing');
-      return NextResponse.json(
-        { success: false, error: 'Form data is required' },
-        { status: 400 }
-      );
-    }
-
-    console.log('=== TEST COPY FOLDER & POPULATE SHEETS ===');
-    console.log('Source Folder ID:', sourceFolderId);
-    console.log('Destination Parent Folder ID:', destinationParentFolderId);
-    console.log('New Folder Name:', newFolderName);
-    console.log('Form data keys:', Object.keys(formData));
-
-    // Step 1: Copy the folder
-    console.log('Copying folder...');
+    // Step 1: Copy the folder (EXACT same call as working endpoint)
+    console.error('About to call copyFolderStructure...');
     const newFolder = await copyFolderStructure(
       sourceFolderId,
       destinationParentFolderId,
       newFolderName,
       SHARED_DRIVE_ID
     );
-    console.log('✓ Folder copied successfully:', newFolder.id, newFolder.name);
+    console.error('copyFolderStructure completed successfully');
+    
+    console.log('Created property folder:', newFolder.id);
 
     // Step 2: Find all Google Sheets in the new folder
     const sheets = await findGoogleSheetsInFolder(newFolder.id, SHARED_DRIVE_ID);
@@ -77,6 +40,9 @@ export async function POST(request: Request) {
     if (sheets.length === 0) {
       return NextResponse.json({
         success: true,
+        newFolderName: newFolder.name,
+        folderLink: newFolder.webViewLink,
+        folderId: newFolder.id,
         sheetsFound: 0,
         results: [],
         message: 'No Google Sheets found in folder',
@@ -91,7 +57,7 @@ export async function POST(request: Request) {
         console.log(`Populating sheet: ${sheet.name} (${sheet.id})`);
         await populateSpreadsheet(sheet.id, formData, SHARED_DRIVE_ID);
         results.push({ 
-          sheet: sheet.name, 
+          sheetName: sheet.name, 
           sheetId: sheet.id,
           success: true,
           message: 'Sheet populated successfully',
@@ -101,7 +67,7 @@ export async function POST(request: Request) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`✗ Error populating ${sheet.name}:`, errorMessage);
         results.push({ 
-          sheet: sheet.name,
+          sheetName: sheet.name,
           sheetId: sheet.id,
           success: false, 
           error: errorMessage,
@@ -123,16 +89,23 @@ export async function POST(request: Request) {
       results,
     });
   } catch (error) {
-    console.error('\n❌ ERROR in test-populate-sheets API route:');
+    console.error('=== ERROR CAUGHT IN ROUTE ===');
     console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
     console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Full error:', error);
     if (error instanceof Error && error.stack) {
       console.error('Stack trace:', error.stack);
     }
+    
+    // Get debug info from global if available
+    const debugInfo = (global as any).__lastDriveClientDebug || [];
+    
     return NextResponse.json(
       { 
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to populate sheets' 
+        error: error instanceof Error ? error.message : 'Failed to populate sheets',
+        debugInfo: debugInfo.length > 0 ? debugInfo : undefined,
+        errorType: error instanceof Error ? error.constructor.name : typeof error
       },
       { status: 500 }
     );

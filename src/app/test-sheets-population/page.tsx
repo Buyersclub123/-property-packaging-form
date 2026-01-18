@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 
 export default function TestSheetsPopulation() {
-  const [activeTab, setActiveTab] = useState<'sheets' | 'washington-brown'>('sheets');
+  const [activeTab, setActiveTab] = useState<'sheets' | 'washington-brown'>('washington-brown');
   const [sourceFolderId, setSourceFolderId] = useState('1R2g9dbaaQooocgV3FZe9KR-0F0C1xNh5'); // Master Template default
   const [destinationParentFolderId, setDestinationParentFolderId] = useState('1RFOBoJKBVIBDZsMUih3tWJ-yOE8YLKoZ'); // Properties folder default
   const [newFolderName, setNewFolderName] = useState('Test 1');
@@ -176,7 +176,6 @@ export default function TestSheetsPopulation() {
 
   const handleTest = async () => {
     console.log('=== BUTTON CLICKED ===');
-    alert('Button clicked - handler is firing!');
     
     if (!sourceFolderId.trim()) {
       setResult('Error: Please enter a source folder ID to copy from');
@@ -197,6 +196,12 @@ export default function TestSheetsPopulation() {
     try {
       console.log('Starting test...', { sourceFolderId, destinationParentFolderId, newFolderName });
       
+      // Include depreciation values in formData if they exist
+      const formDataWithDepreciation = {
+        ...formData,
+        depreciation: Object.keys(depreciation).length > 0 ? depreciation : undefined,
+      };
+      
       const response = await fetch('/api/test-populate-sheets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,7 +209,7 @@ export default function TestSheetsPopulation() {
           sourceFolderId,
           destinationParentFolderId,
           newFolderName,
-          formData,
+          formData: formDataWithDepreciation,
         }),
       });
 
@@ -221,7 +226,30 @@ export default function TestSheetsPopulation() {
       console.log('Response data:', data);
       
       if (data.success) {
-        setResult(`✅ Success!\n\nNew Folder Created: ${data.newFolderName}\nFolder Link: ${data.folderLink}\n\nFound ${data.sheetsFound} sheet(s)\n\nResults:\n${JSON.stringify(data.results, null, 2)}`);
+        // Format results more nicely
+        let resultsText = `✅ Success!\n\n`;
+        resultsText += `New Folder Created: ${data.newFolderName}\n`;
+        resultsText += `Folder Link: ${data.folderLink}\n\n`;
+        resultsText += `Found ${data.sheetsFound} sheet(s)\n\n`;
+        
+        if (data.results && Array.isArray(data.results)) {
+          resultsText += `Sheet Population Results:\n`;
+          resultsText += `${'='.repeat(50)}\n`;
+          data.results.forEach((result: any, index: number) => {
+            resultsText += `\n${index + 1}. ${result.sheetName || 'Unknown Sheet'}\n`;
+            resultsText += `   Status: ${result.success ? '✅ Success' : '❌ Failed'}\n`;
+            if (result.error) {
+              resultsText += `   Error: ${result.error}\n`;
+            }
+            if (result.fieldsPopulated) {
+              resultsText += `   Fields Populated: ${result.fieldsPopulated}\n`;
+            }
+          });
+        } else {
+          resultsText += `\nResults: ${JSON.stringify(data.results, null, 2)}`;
+        }
+        
+        setResult(resultsText);
       } else {
         setResult(`❌ Error: ${data.error || 'Unknown error'}`);
       }
@@ -239,16 +267,6 @@ export default function TestSheetsPopulation() {
       <div className="mb-6 border-b border-gray-200">
         <nav className="flex space-x-8">
           <button
-            onClick={() => setActiveTab('sheets')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'sheets'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Sheets Population
-          </button>
-          <button
             onClick={() => setActiveTab('washington-brown')}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'washington-brown'
@@ -257,6 +275,16 @@ export default function TestSheetsPopulation() {
             }`}
           >
             Washington Brown Calculator
+          </button>
+          <button
+            onClick={() => setActiveTab('sheets')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'sheets'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Sheets Population
           </button>
         </nav>
       </div>
@@ -349,9 +377,30 @@ export default function TestSheetsPopulation() {
       {result && (
         <div className="mt-6">
           <h2 className="text-xl font-semibold mb-2">Result:</h2>
-          <pre className="bg-gray-100 p-4 rounded overflow-auto text-sm whitespace-pre-wrap border">
-            {result}
-          </pre>
+          <div className="bg-gray-100 p-4 rounded overflow-auto text-sm whitespace-pre-wrap border">
+            {result.split('\n').map((line, index) => {
+              // Check if line contains a URL
+              const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
+              if (urlMatch) {
+                const parts = line.split(urlMatch[0]);
+                return (
+                  <div key={index}>
+                    {parts[0]}
+                    <a 
+                      href={urlMatch[0]} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      {urlMatch[0]}
+                    </a>
+                    {parts[1]}
+                  </div>
+                );
+              }
+              return <div key={index}>{line}</div>;
+            })}
+          </div>
         </div>
       )}
 
