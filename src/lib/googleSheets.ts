@@ -53,7 +53,7 @@ export interface MarketPerformanceLookupResult {
 /**
  * Initialize Google Sheets API client
  */
-export function getSheetsClient() {
+function getSheetsClient() {
   // Try to get credentials from environment variable first
   let credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
   
