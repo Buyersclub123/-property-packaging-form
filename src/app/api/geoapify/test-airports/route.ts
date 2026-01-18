@@ -159,10 +159,15 @@ export async function POST(request: Request) {
       addressForGoogleMaps = propertyAddress || `${lat},${lon}`;
     } else if (propertyAddress) {
       // Geocode using Geoscape to get coordinates
+      const GEOSCAPE_API_KEY = process.env.NEXT_PUBLIC_GEOSCAPE_API_KEY;
+      if (!GEOSCAPE_API_KEY) {
+        throw new Error('NEXT_PUBLIC_GEOSCAPE_API_KEY environment variable is required');
+      }
+      
       const geocodeResponse = await axios.get('https://api.psma.com.au/v2/addresses/geocoder', {
         params: { address: propertyAddress },
         headers: {
-          'Authorization': process.env.NEXT_PUBLIC_GEOSCAPE_API_KEY || 'VfqDRW796v5jGTfXcHgJXDdoGi7DENZA',
+          'Authorization': GEOSCAPE_API_KEY,
           'Accept': 'application/json',
         },
         timeout: 10000,
