@@ -88,8 +88,15 @@ export async function GET() {
     return NextResponse.json({ sourcers: sourcerNames });
   } catch (error) {
     console.error('Error fetching sourcers from Google Sheet:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorDetails = error instanceof Error && error.stack ? error.stack : undefined;
     return NextResponse.json(
-      { error: 'Failed to fetch sourcers', sourcers: [] },
+      { 
+        error: 'Failed to fetch sourcers', 
+        errorMessage,
+        errorDetails: process.env.NODE_ENV === 'development' ? errorDetails : undefined,
+        sourcers: [] 
+      },
       { status: 500 }
     );
   }
