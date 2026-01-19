@@ -3,11 +3,16 @@ import { NextResponse } from 'next/server';
 /**
  * GHL API Configuration
  */
-const GHL_BASE_URL = 'https://services.leadconnectorhq.com';
-const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
-const GHL_LOCATION_ID = 'UJWYn4mrgGodB7KZUcHt';
-const GHL_BEARER_TOKEN = 'pit-090b5645-cb9e-47b0-a729-4d6ded3b0c04';
-const GHL_API_VERSION = '2021-07-28';
+const GHL_BASE_URL = process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com';
+const GHL_OBJECT_ID = process.env.GHL_OBJECT_ID || '';
+const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
+const GHL_BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
+const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
+
+// Validate required environment variables
+if (!GHL_OBJECT_ID || !GHL_LOCATION_ID || !GHL_BEARER_TOKEN) {
+  console.error('Missing GHL environment variables. Required: GHL_OBJECT_ID, GHL_LOCATION_ID, GHL_BEARER_TOKEN');
+}
 
 /**
  * API route to submit property data to GHL Custom Objects
@@ -15,6 +20,14 @@ const GHL_API_VERSION = '2021-07-28';
  */
 export async function POST(request: Request) {
   try {
+    // Validate required environment variables
+    if (!GHL_OBJECT_ID || !GHL_LOCATION_ID || !GHL_BEARER_TOKEN) {
+      return NextResponse.json(
+        { success: false, error: 'GHL API configuration is missing. Please check environment variables.' },
+        { status: 500 }
+      );
+    }
+
     const formData = await request.json();
     
     if (!formData) {

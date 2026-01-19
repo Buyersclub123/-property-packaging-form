@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+const GEOAPIFY_API_BASE_URL = process.env.GEOAPIFY_API_BASE_URL || 'https://api.geoapify.com/v2/places';
+const PSMA_API_ENDPOINT = process.env.PSMA_API_ENDPOINT || 'https://api.psma.com.au/v2/addresses/geocoder';
+
 if (!GEOAPIFY_API_KEY) {
   throw new Error('GEOAPIFY_API_KEY environment variable is required');
 }
@@ -39,7 +42,7 @@ export async function POST(request: Request) {
       lat = latitude;
       lon = longitude;
     } else if (propertyAddress) {
-      const geocodeResponse = await axios.get('https://api.psma.com.au/v2/addresses/geocoder', {
+      const geocodeResponse = await axios.get(PSMA_API_ENDPOINT, {
         params: { address: propertyAddress },
         headers: {
           'Authorization': GEOSCAPE_API_KEY,
@@ -70,7 +73,7 @@ export async function POST(request: Request) {
       limit: '100',
       apiKey: GEOAPIFY_API_KEY!,
     });
-    const url = `https://api.geoapify.com/v2/places?${params.toString()}&filter=${filterStr}&bias=${biasStr}`;
+    const url = `${GEOAPIFY_API_BASE_URL}?${params.toString()}&filter=${filterStr}&bias=${biasStr}`;
     
     const response = await axios.get(url, { timeout: 30000 });
     const data: GeoapifyResponse = response.data;

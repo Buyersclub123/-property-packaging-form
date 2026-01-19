@@ -4,12 +4,18 @@
 import axios from 'axios';
 
 const GEOSCAPE_API_KEY = process.env.NEXT_PUBLIC_GEOSCAPE_API_KEY;
+const PSMA_API_ENDPOINT = process.env.PSMA_API_ENDPOINT || 'https://api.psma.com.au/v2/addresses/geocoder';
+
 if (!GEOSCAPE_API_KEY) {
   throw new Error('NEXT_PUBLIC_GEOSCAPE_API_KEY environment variable is required');
 }
 
+if (!PSMA_API_ENDPOINT) {
+  throw new Error('PSMA_API_ENDPOINT environment variable is required');
+}
+
 const GEOSCAPE_CONFIG = {
-  apiUrl: 'https://api.psma.com.au/v2/addresses/geocoder',
+  apiUrl: PSMA_API_ENDPOINT,
   apiKey: GEOSCAPE_API_KEY,
   timeout: 10000,
 };

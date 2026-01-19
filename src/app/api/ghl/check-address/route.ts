@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 /**
  * Make.com webhook URL for checking if address exists in GHL
  */
-const CHECK_ADDRESS_WEBHOOK_URL = 'https://hook.eu1.make.com/u63eqhdemilc7wsaw3ub4mjxwbc6da75';
+const CHECK_ADDRESS_WEBHOOK_URL = process.env.MAKE_WEBHOOK_CHECK_ADDRESS || '';
 
 /**
  * API route to check if an address already exists in GHL custom objects
@@ -18,6 +18,15 @@ export async function POST(request: Request) {
         { success: false, error: 'Property address is required' },
         { status: 400 }
       );
+    }
+
+    if (!CHECK_ADDRESS_WEBHOOK_URL) {
+      console.error('MAKE_WEBHOOK_CHECK_ADDRESS environment variable is not set');
+      return NextResponse.json({
+        success: true,
+        exists: false,
+        error: 'Webhook configuration missing - proceeding with folder creation',
+      });
     }
 
     // Call Make.com webhook to check GHL

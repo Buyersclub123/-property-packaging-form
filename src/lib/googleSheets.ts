@@ -3,12 +3,12 @@
 // Investment Highlights Sheet Name: "Property Review Static Data - Investment Highlights"
 import { google } from 'googleapis';
 
-const SHEET_ID = '1M_en0zLhJK6bQMNfZDGzEmPDMwtb3BksvgOsm8N3tlY';
+const SHEET_ID = process.env.GOOGLE_SHEET_ID_MARKET_PERFORMANCE || '';
 const TAB_NAME = 'Market Performance';
 const LOG_TAB_NAME = 'Market Performance Log';
 
 // Investment Highlights Sheet
-const INVESTMENT_HIGHLIGHTS_SHEET_ID = '1i9ZNOFNkEy3KT0BJCJoxhVPnKkksqSi7A9TpAVpcqcI';
+const INVESTMENT_HIGHLIGHTS_SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS || '';
 const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights';
 
 // Column mapping (0-indexed) - Column C (Data Source) removed
@@ -127,6 +127,10 @@ export async function lookupMarketPerformance(
   state: string
 ): Promise<MarketPerformanceLookupResult> {
   try {
+    if (!SHEET_ID) {
+      throw new Error('GOOGLE_SHEET_ID_MARKET_PERFORMANCE environment variable is not set');
+    }
+    
     const sheets = getSheetsClient();
     
     // Read all data from the Market Performance tab
@@ -611,6 +615,10 @@ export async function lookupInvestmentHighlights(
   state: string
 ): Promise<InvestmentHighlightsLookupResult> {
   try {
+    if (!INVESTMENT_HIGHLIGHTS_SHEET_ID) {
+      throw new Error('GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS environment variable is not set');
+    }
+    
     const sheets = getSheetsClient();
     
     // Read all data from the Investment Highlights tab

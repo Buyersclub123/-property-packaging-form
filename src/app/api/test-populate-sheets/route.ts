@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { copyFolderStructure, findGoogleSheetsInFolder, populateSpreadsheet } from '@/lib/googleDrive';
 
-const SHARED_DRIVE_ID = '0AFVxBPJiTmjPUk9PVA';
-
 /**
  * Test API route to copy a folder and populate Google Sheets in it
  * Used by the standalone test page
@@ -18,6 +16,16 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: 'Missing required parameters' },
         { status: 400 }
+      );
+    }
+
+    // Get Shared Drive ID from environment variable
+    const SHARED_DRIVE_ID = process.env.GOOGLE_DRIVE_SHARED_DRIVE_ID || '';
+    
+    if (!SHARED_DRIVE_ID) {
+      return NextResponse.json(
+        { success: false, error: 'GOOGLE_DRIVE_SHARED_DRIVE_ID environment variable is missing' },
+        { status: 500 }
       );
     }
 

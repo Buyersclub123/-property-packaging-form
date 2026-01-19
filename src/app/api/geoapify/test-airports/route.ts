@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+const GOOGLE_MAPS_API_BASE_URL = process.env.GOOGLE_MAPS_API_BASE_URL || 'https://maps.googleapis.com/maps/api/distancematrix/json';
+const PSMA_API_ENDPOINT = process.env.PSMA_API_ENDPOINT || 'https://api.psma.com.au/v2/addresses/geocoder';
+
 if (!GOOGLE_MAPS_API_KEY) {
   throw new Error('GOOGLE_MAPS_API_KEY environment variable is required');
 }
@@ -99,7 +102,7 @@ async function getDistancesFromGoogleMaps(
     const batch = airports.slice(i, i + batchSize);
     const destinations = batch.map(a => a.address).join('|');
 
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?` +
+    const url = `${GOOGLE_MAPS_API_BASE_URL}?` +
       `origins=${encodeURIComponent(originAddress)}` +
       `&destinations=${encodeURIComponent(destinations)}` +
       `&departure_time=${departureTime}` +
@@ -164,7 +167,7 @@ export async function POST(request: Request) {
         throw new Error('NEXT_PUBLIC_GEOSCAPE_API_KEY environment variable is required');
       }
       
-      const geocodeResponse = await axios.get('https://api.psma.com.au/v2/addresses/geocoder', {
+      const geocodeResponse = await axios.get(PSMA_API_ENDPOINT, {
         params: { address: propertyAddress },
         headers: {
           'Authorization': GEOSCAPE_API_KEY,

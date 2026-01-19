@@ -1,6 +1,6 @@
 // Vercel API integration for managing deployments and environment variables
 
-const VERCEL_API_BASE = 'https://api.vercel.com';
+const VERCEL_API_BASE = process.env.VERCEL_API_BASE_URL || 'https://api.vercel.com';
 
 /**
  * Get Vercel API token from environment

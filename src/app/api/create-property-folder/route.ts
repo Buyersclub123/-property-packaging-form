@@ -25,13 +25,23 @@ export async function POST(request: Request) {
     }
 
     // Shared Drive ID (Packaging Shared Drive)
-    const SHARED_DRIVE_ID = '0AFVxBPJiTmjPUk9PVA';
+    const SHARED_DRIVE_ID = process.env.GOOGLE_DRIVE_SHARED_DRIVE_ID || '';
     
     // Template folder ID (00 - Master Folder Template - inside Properties in Shared Drive)
-    const TEMPLATE_FOLDER_ID = '1R2g9dbaaQooocgV3FZe9KR-0F0C1xNh5';
+    const TEMPLATE_FOLDER_ID = process.env.GOOGLE_DRIVE_TEMPLATE_FOLDER_ID || '';
     
     // Properties folder ID (where property folders go - inside Shared Drive)
-    const PROPERTIES_FOLDER_ID = '1RFOBoJKBVIBDZsMUih3tWJ-yOE8YLKoZ';
+    const PROPERTIES_FOLDER_ID = process.env.GOOGLE_DRIVE_PROPERTIES_FOLDER_ID || '';
+
+    if (!SHARED_DRIVE_ID || !TEMPLATE_FOLDER_ID || !PROPERTIES_FOLDER_ID) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Google Drive configuration is missing. Required environment variables: GOOGLE_DRIVE_SHARED_DRIVE_ID, GOOGLE_DRIVE_TEMPLATE_FOLDER_ID, GOOGLE_DRIVE_PROPERTIES_FOLDER_ID' 
+        },
+        { status: 500 }
+      );
+    }
     
     // Step 1: Copy template folder to Properties folder (creates new property folder in Shared Drive)
     const propertyFolder = await copyFolderStructure(

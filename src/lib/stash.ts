@@ -6,7 +6,7 @@ import { StashResponse, YesNo } from '@/types/form';
 
 // Configuration - Easy to update after testing
 const CONFIG = {
-  webhookUrl: process.env.NEXT_PUBLIC_STASH_WEBHOOK_URL || 'https://hook.eu1.make.com/gsova3xd6kwrckiw3j5js2twfgu1i885',
+  webhookUrl: process.env.NEXT_PUBLIC_STASH_WEBHOOK_URL || '',
   timeout: 30000, // 30 seconds
   retries: 2,
   // Field mapping - will be updated after testing actual response
@@ -28,6 +28,16 @@ const CONFIG = {
  */
 export async function getStashData(address: string): Promise<StashResponse> {
   try {
+    if (!CONFIG.webhookUrl) {
+      return {
+        error: true,
+        errorMessage: 'Stash API webhook URL is not configured. Please check NEXT_PUBLIC_STASH_WEBHOOK_URL environment variable.',
+        floodRisk: '' as YesNo,
+        bushfireRisk: '' as YesNo,
+        rawStashData: 'Configuration error',
+      };
+    }
+    
     const response = await axios.post(
       CONFIG.webhookUrl,
       { property_address: address },

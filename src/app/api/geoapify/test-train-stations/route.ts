@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+const GEOAPIFY_API_BASE_URL = process.env.GEOAPIFY_API_BASE_URL || 'https://api.geoapify.com/v2/places';
+const PSMA_API_ENDPOINT = process.env.PSMA_API_ENDPOINT || 'https://api.psma.com.au/v2/addresses/geocoder';
+
 if (!GEOAPIFY_API_KEY) {
   throw new Error('GEOAPIFY_API_KEY environment variable is required');
 }
@@ -41,7 +44,7 @@ export async function POST(request: Request) {
       lon = longitude;
     } else if (propertyAddress) {
       // Geocode using Geoscape
-      const geocodeResponse = await axios.get('https://api.psma.com.au/v2/addresses/geocoder', {
+      const geocodeResponse = await axios.get(PSMA_API_ENDPOINT, {
         params: { address: propertyAddress },
         headers: {
           'Authorization': GEOSCAPE_API_KEY,
@@ -79,7 +82,7 @@ export async function POST(request: Request) {
       limit: '50',
       apiKey: GEOAPIFY_API_KEY!,
     });
-    const url50 = `https://api.geoapify.com/v2/places?${params50.toString()}&filter=${filterStr50}&bias=${biasStr}`;
+    const url50 = `${GEOAPIFY_API_BASE_URL}?${params50.toString()}&filter=${filterStr50}&bias=${biasStr}`;
     
     console.log('Train station search - coords:', { lat, lon });
     console.log('Train station search - Initial 50km URL:', GEOAPIFY_API_KEY ? url50.replace(GEOAPIFY_API_KEY, '***') : url50);
@@ -127,7 +130,7 @@ export async function POST(request: Request) {
           limit: '50',
           apiKey: GEOAPIFY_API_KEY!,
         });
-        const url100 = `https://api.geoapify.com/v2/places?${params100.toString()}&filter=${filterStr100}&bias=${biasStr}`;
+        const url100 = `${GEOAPIFY_API_BASE_URL}?${params100.toString()}&filter=${filterStr100}&bias=${biasStr}`;
         
         console.log('Train station search - 100km URL:', GEOAPIFY_API_KEY ? url100.replace(GEOAPIFY_API_KEY, '***') : url100);
         

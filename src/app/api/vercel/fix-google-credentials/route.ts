@@ -1,9 +1,33 @@
 import { NextResponse } from 'next/server';
 import { getEnvironmentVariables } from '@/lib/vercel';
+import fs from 'fs';
+import path from 'path';
 
-const PROJECT_NAME = 'property-packaging-form';
-const TEAM_ID = 'team_HCICkgEtqpNH4cacsrTLXLC9';
-const VERCEL_API_BASE = 'https://api.vercel.com';
+// Read project configuration from .vercel/project.json (Vercel standard)
+function getVercelProjectConfig() {
+  try {
+    const projectJsonPath = path.join(process.cwd(), '.vercel', 'project.json');
+    if (fs.existsSync(projectJsonPath)) {
+      const projectJson = JSON.parse(fs.readFileSync(projectJsonPath, 'utf-8'));
+      return {
+        projectId: projectJson.projectId || 'property-packaging-form',
+        orgId: projectJson.orgId || 'team_HCICkgEtqpNH4cacsrTLXLC9',
+      };
+    }
+  } catch (error) {
+    console.warn('Could not read .vercel/project.json, using defaults:', error);
+  }
+  // Fallback to defaults if file doesn't exist
+  return {
+    projectId: 'property-packaging-form',
+    orgId: 'team_HCICkgEtqpNH4cacsrTLXLC9',
+  };
+}
+
+const { projectId, orgId } = getVercelProjectConfig();
+const PROJECT_NAME = projectId;
+const TEAM_ID = orgId;
+const VERCEL_API_BASE = process.env.VERCEL_API_BASE_URL || 'https://api.vercel.com';
 
 function getVercelToken(): string {
   const token = process.env.VERCEL_API_TOKEN;

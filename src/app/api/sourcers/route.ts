@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 
-const ADMIN_SHEET_ID = '1uxhNYe9Qx8g-ZCTOGP27_DS9SdoYe6CVmG1J4fxPsLQ';
+const ADMIN_SHEET_ID = process.env.GOOGLE_SHEET_ID_ADMIN || '';
 const TAB_NAME = 'Packagers & Sourcers';
 
 function getSheetsClient() {
@@ -54,6 +54,14 @@ function getSheetsClient() {
 
 export async function GET() {
   try {
+    if (!ADMIN_SHEET_ID) {
+      console.error('GOOGLE_SHEET_ID_ADMIN environment variable is not set');
+      return NextResponse.json(
+        { error: 'Configuration error', sourcers: [] },
+        { status: 500 }
+      );
+    }
+    
     const sheets = getSheetsClient();
     
     // Read from "Packagers & Sourcers" tab, Column A (emails)

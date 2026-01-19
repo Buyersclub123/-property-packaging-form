@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+const GEOAPIFY_API_BASE_URL = process.env.GEOAPIFY_API_BASE_URL || 'https://api.geoapify.com/v2/places';
+const PSMA_API_ENDPOINT = process.env.PSMA_API_ENDPOINT || 'https://api.psma.com.au/v2/addresses/geocoder';
+
 if (!GEOAPIFY_API_KEY) {
   throw new Error('GEOAPIFY_API_KEY environment variable is required');
 }
@@ -63,7 +66,7 @@ interface GeoapifyResponse {
  */
 async function geocodeAddress(address: string): Promise<{ lat: number; lon: number } | null> {
   try {
-    const response = await axios.get('https://api.psma.com.au/v2/addresses/geocoder', {
+    const response = await axios.get(PSMA_API_ENDPOINT, {
       params: { address },
       headers: {
         'Authorization': GEOSCAPE_API_KEY,
@@ -98,7 +101,7 @@ async function searchAllPlaces(
   try {
     const filterStr = `circle:${lon},${lat},${radius}`;
     const biasStr = `proximity:${lon},${lat}`;
-    const url = `https://api.geoapify.com/v2/places?categories=${encodeURIComponent(ALL_CATEGORIES)}&filter=${encodeURIComponent(filterStr)}&bias=${encodeURIComponent(biasStr)}&limit=${limit}&apiKey=${GEOAPIFY_API_KEY}`;
+    const url = `${GEOAPIFY_API_BASE_URL}?categories=${encodeURIComponent(ALL_CATEGORIES)}&filter=${encodeURIComponent(filterStr)}&bias=${encodeURIComponent(biasStr)}&limit=${limit}&apiKey=${GEOAPIFY_API_KEY}`;
     
     console.log('Calling Geoapify API:', GEOAPIFY_API_KEY ? url.replace(GEOAPIFY_API_KEY, '***') : url);
     
@@ -116,7 +119,7 @@ async function searchAllPlaces(
       try {
         const filterStr = `circle:${lon},${lat},${radius}`;
         const biasStr = `proximity:${lon},${lat}`;
-        const url = `https://api.geoapify.com/v2/places?categories=${encodeURIComponent(ALL_CATEGORIES)}&filter=${encodeURIComponent(filterStr)}&bias=${encodeURIComponent(biasStr)}&limit=${limit}&apiKey=${GEOAPIFY_API_KEY}`;
+        const url = `${GEOAPIFY_API_BASE_URL}?categories=${encodeURIComponent(ALL_CATEGORIES)}&filter=${encodeURIComponent(filterStr)}&bias=${encodeURIComponent(biasStr)}&limit=${limit}&apiKey=${GEOAPIFY_API_KEY}`;
         const retryResponse = await axios.get(url, {
           timeout: 15000,
         });
@@ -143,7 +146,7 @@ async function searchAllPlaces(
  */
 async function getPropertyState(address: string): Promise<string | null> {
   try {
-    const response = await axios.get('https://api.psma.com.au/v2/addresses/geocoder', {
+    const response = await axios.get(PSMA_API_ENDPOINT, {
       params: { address },
       headers: {
         'Authorization': GEOSCAPE_API_KEY,
@@ -315,7 +318,7 @@ export async function POST(request: Request) {
     if (airportsFound.length === 0) {
       console.log('No airports found in 50km, searching 200km...');
       // Search ONLY for airports with larger radius
-      const airportUrl = `https://api.geoapify.com/v2/places`;
+      const airportUrl = GEOAPIFY_API_BASE_URL;
       const airportParams = {
         categories: 'airport',
         filter: `circle:${lon},${lat},200000`,

@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useFormStore } from '@/store/formStore';
 
-// GHL Configuration
-const GHL_LOCATION_ID = 'UJWYn4mrgGodB7KZUcHt';
-const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
+// GHL Configuration (using NEXT_PUBLIC_ prefix for client-side access)
+const GHL_LOCATION_ID = process.env.NEXT_PUBLIC_GHL_LOCATION_ID || '';
+const GHL_OBJECT_ID = process.env.NEXT_PUBLIC_GHL_OBJECT_ID || '';
 
 interface ChecklistItem {
   id: string;
@@ -262,7 +262,11 @@ export function Step6FolderCreation() {
       const jsonBody = JSON.stringify(payload);
 
       // Send all data to Make.com webhook (Make.com will create GHL record)
-      const makeResponse = await fetch('https://hook.eu1.make.com/2xbtucntvnp3wfmkjk0ecuxj4q4c500h', {
+      const webhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_FORM_SUBMISSION;
+      if (!webhookUrl) {
+        throw new Error('NEXT_PUBLIC_MAKE_WEBHOOK_FORM_SUBMISSION environment variable is not set');
+      }
+      const makeResponse = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: jsonBody,
@@ -303,7 +307,13 @@ export function Step6FolderCreation() {
     setEmailError(null);
 
     try {
-      const response = await fetch('https://hook.eu1.make.com/bkq23g13n4ae6qpkdbdwpnu7h1ac16d', {
+      const webhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_RESEND_EMAIL;
+      if (!webhookUrl) {
+        setEmailError('NEXT_PUBLIC_MAKE_WEBHOOK_RESEND_EMAIL environment variable is not set');
+        setEmailStatus('error');
+        return;
+      }
+      const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
