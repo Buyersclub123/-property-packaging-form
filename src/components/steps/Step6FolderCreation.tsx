@@ -310,7 +310,7 @@ export function Step6FolderCreation() {
       const webhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_RESEND_EMAIL;
       if (!webhookUrl) {
         setEmailError('NEXT_PUBLIC_MAKE_WEBHOOK_RESEND_EMAIL environment variable is not set');
-        setEmailStatus('error');
+        setEmailStatus('failed');
         return;
       }
       const response = await fetch(webhookUrl, {
