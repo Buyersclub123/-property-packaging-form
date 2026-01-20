@@ -49,6 +49,7 @@ export function Step5Proximity() {
             }
           })}
           suburb={address?.suburbName}
+          lga={address?.lga}
         />
 
         {/* Component 3: Investment Highlights */}
@@ -61,7 +62,10 @@ export function Step5Proximity() {
             }
           })}
           lga={address?.lga}
+          suburb={address?.suburbName}
           state={address?.state}
+          streetAddress={address?.propertyAddress}
+          userEmail="unknown"
         />
       </div>
     </div>
