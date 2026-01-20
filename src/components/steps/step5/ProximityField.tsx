@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAutoResize } from '@/hooks/useAutoResize';
 
 /**
- * ProximityField Component (Phase 4A)
+ * ProximityField Component (Phase 4A + Enhancements)
  * 
  * Purpose: Display and manage proximity/amenity data with automation
  * 
@@ -14,6 +15,10 @@ import { useState, useEffect } from 'react';
  * - Address override functionality
  * - Error handling with manual fallback
  * - Manual paste functionality (preserved from Phase 3)
+ * 
+ * Enhancements:
+ * - Auto-growing textarea (expands with content)
+ * - Early proximity loading (pre-fetched from Step 2)
  */
 
 interface ProximityFieldProps {
@@ -24,6 +29,9 @@ interface ProximityFieldProps {
 }
 
 export function ProximityField({ value, onChange, address, disabled = false }: ProximityFieldProps) {
+  // Auto-resize textarea based on content
+  const textareaRef = useAutoResize(value);
+  
   // State management for automation features
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -175,13 +183,19 @@ export function ProximityField({ value, onChange, address, disabled = false }: P
         )}
       </div>
 
-      {/* Main Text Area */}
+      {/* Main Text Area - Auto-growing */}
       <textarea
+        ref={textareaRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onPaste={handlePaste}
         disabled={disabled || loading}
-        className="input-field min-h-[200px] font-mono text-sm"
+        className="input-field font-mono text-sm"
+        style={{
+          overflow: 'hidden',
+          resize: 'none',
+          minHeight: '100px'
+        }}
         placeholder={`${address || 'Property Address'}&#10;• 0.5 km (5 mins), Local Kindergarten&#10;• 1.2 km (10 mins), Primary School&#10;• 2.0 km (15 mins), Shopping Centre...`}
         spellCheck={true}
         required
