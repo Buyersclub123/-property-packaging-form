@@ -254,30 +254,65 @@ This tracker coordinates implementation work across multiple Cursor chats for th
 ---
 
 ### Step 6C: Investment Highlights / Hotspotting Reports
-- **Status:** ⏳ Not Started
-- **Doc:** `planning_docs/07_step5_proximity_content_requirements_DEVELOPER_BUILD_SPEC.md`
+
+#### Phase 4C Base (✅ Complete)
+- **Status:** ✅ Complete
+- **Doc:** `PHASE-4C-HANDOFF-INVESTMENT-HIGHLIGHTS.md`
 - **Branch:** `feature/phase-4-highlights`
-- **Chat:** Chat E (Not yet assigned)
-- **Dependencies:** Step 5 refactoring
-- **Risk:** High (complex conditional logic)
-- **Started:** TBD
-- **Completed:** TBD
+- **Chat:** Chat E
+- **Started:** 2026-01-21
+- **Completed:** 2026-01-21
 
 **Deliverables:**
-- [ ] Create new Google Sheet structure
-- [ ] Create API endpoints (lookup, list, link, create)
-- [ ] Implement lookup logic
-- [ ] Build "match found" UI
-- [ ] Build "no match" UI with two options
-- [ ] Implement save logic
-- [ ] Test with various scenarios
+- [x] Google Sheets lookup by LGA/suburb + state
+- [x] Auto-lookup on page load
+- [x] Match found / No match UI
+- [x] Save new reports to Google Sheet
+- [x] Auto-growing textarea
+- [x] Manual paste functionality with smart quote cleanup
 
-**Blockers:**
-- ⚠️ Need Investment Highlights Google Sheet name
+#### Phase 4C-1: PDF Upload + Metadata Extraction (✅ Complete)
+- **Status:** ✅ Complete
+- **Doc:** `PHASE-4C-1-HANDOFF-PDF-UPLOAD.md`
+- **Branch:** `feature/phase-4c-1-pdf-upload`
+- **Chat:** Chat F
+- **Started:** 2026-01-21
+- **Completed:** 2026-01-21
 
-**Notes:**
-- Most complex Step 5 feature
-- _Add implementation notes here as work progresses_
+**Deliverables:**
+- [x] PDF upload UI with drag & drop
+- [x] File validation (PDF only, max 50MB)
+- [x] Upload to Google Drive
+- [x] Extract Report Name from PDF front page (agile parsing)
+- [x] Extract Valid Period from PDF (multiple date formats)
+- [x] User verification UI with editable fields
+- [x] Version management (CURRENT/LEGACY folders)
+- [x] Activity logging to Google Sheet
+- [x] Link to Hotspotting membership site
+
+**Files Created:**
+- `form-app/src/lib/investmentHighlightsLogger.ts` - Activity logging utility
+- `form-app/src/lib/pdfExtractor.ts` - PDF text extraction and metadata parsing
+- `form-app/src/app/api/investment-highlights/upload-pdf/route.ts` - PDF upload endpoint
+- `form-app/src/app/api/investment-highlights/extract-metadata/route.ts` - Metadata extraction endpoint
+- `form-app/src/app/api/investment-highlights/organize-pdf/route.ts` - Version management endpoint
+
+**Files Modified:**
+- `form-app/src/components/steps/step5/InvestmentHighlightsField.tsx` - Added PDF upload and verification UI
+- `form-app/package.json` - Added pdf-parse dependency
+
+**Implementation Notes:**
+- PDF upload to temporary location in Google Drive
+- Agile parsing extracts Report Name and Valid Period from front page
+- User can verify and edit extracted metadata
+- Automatic folder structure: `Hotspotting Reports/[Report Name]/CURRENT|LEGACY/`
+- Old PDFs automatically moved to LEGACY when new version uploaded
+- Activity log tracks: Uploaded, Superseded, Used, etc.
+- Google Sheet columns N (PDF Drive Link) and O (PDF File ID) populated
+
+**Next Phase:**
+- Phase 4C-2: AI Summary Generation + Section Editing
+- Phase 4C-3: Expiry Warnings + Proximity Fix
 
 ---
 
