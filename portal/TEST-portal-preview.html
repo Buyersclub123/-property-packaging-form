@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TEST - Buyers Agent Property Review Portal (Preview)</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 40px; 
+      background: #f7f7f7; 
+    }
+    .container { 
+      background: #fff; 
+      border-radius: 12px; 
+      box-shadow: 0 0 10px #ccc; 
+      padding: 32px; 
+      max-width: 1400px; 
+      margin: auto; 
+    }
+    .logo { 
+      width: 180px; 
+      margin-bottom: 20px; 
+    }
+    .property-summary { 
+      font-weight: bold; 
+      font-size: 1.2em; 
+      margin-bottom: 24px; 
+    }
+    .standard-message-section { 
+      margin-bottom: 24px; 
+      padding: 16px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border-left: 4px solid #fbd721;
+    }
+    .standard-message-section label { 
+      display: block; 
+      margin-bottom: 8px; 
+      font-weight: bold; 
+    }
+    .standard-message-section textarea { 
+      width: 100%; 
+      min-height: 70px; 
+      font-size: 1em; 
+      margin-top: 8px; 
+      border-radius: 8px; 
+      padding: 8px; 
+      border: 1px solid #ddd;
+      font-family: Arial, sans-serif;
+      resize: vertical;
+      overflow-y: hidden;
+    }
+    .message-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .save-message-btn {
+      padding: 6px 16px;
+      background: #2aaa7e;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: 500;
+    }
+    .save-message-btn:hover {
+      background: #228a66;
+    }
+    .save-status {
+      font-size: 0.85em;
+      color: #666;
+      font-style: italic;
+    }
+    .helper-text {
+      font-size: 0.85em;
+      color: #666;
+      margin-top: 6px;
+      font-style: italic;
+    }
+    .filter-section {
+      margin-bottom: 20px;
+      padding: 16px;
+      background: #f0f0f0;
+      border-radius: 6px;
+    }
+    .filter-row {
+      margin-bottom: 12px;
+    }
+    .filter-row label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .filter-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .filter-select {
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      min-width: 200px;
+    }
+    .actions {
+      margin-top: 30px; 
+      display: flex;
+      gap: 14px;
+    }
+    .actions button { 
+      padding: 10px 22px; 
+      border: none; 
+      border-radius: 8px; 
+      font-size: 1em; 
+      cursor: pointer; 
+      box-shadow: 0 2px 4px #eee; 
+      flex: 1;
+      font-weight: 500;
+    }
+    .actions button:first-child { 
+      background: #0a5599; 
+      color: #fff; 
+    }
+    .actions button:nth-child(2) { 
+      background: #2aaa7e; 
+      color: #fff; 
+    }
+    .actions button:last-child { 
+      background: #eb5858; 
+      color: #fff; 
+    }
+    .test-banner {
+      background: #ffeb3b;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 4px solid #ff9800;
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="test-banner">
+      ⚠️ TEST PREVIEW - This is a layout preview. No data will be saved or sent.
+    </div>
+    <img class="logo" src="https://storage.googleapis.com/msgsndr/UJWYn4mrgGodB7KZUcHt/media/6938361650387f705884d8de.jpg" alt="BuyersClub Logo">
+    <h1>Buyers Agent Property Review Portal</h1>
+    <div class="property-summary">Property Name: TEST PROPERTY ADDRESS</div>
+    
+    <div class="standard-message-section">
+      <label for="standard-message"><strong>Your Standard Client Message:</strong></label>
+      <textarea id="standard-message" rows="4" placeholder="💡 Tip: Your message formatting will be preserved exactly as you type it. Use line breaks (Enter) to create paragraphs or spacing in your email."></textarea>
+      <div class="message-actions">
+        <button id="save-message-btn" class="save-message-btn">Save Message</button>
+        <span id="save-status" class="save-status"></span>
+      </div>
+      <div class="helper-text">💡 Tip: Your message formatting will be preserved exactly as you type it. Use line breaks (Enter) to create paragraphs or spacing in your email.</div>
+    </div>
+    
+    <div class="filter-section">
+      <div class="filter-row">
+        <label for="ba-filter-select">Filter by BA (Follower):</label>
+        <div class="filter-wrapper">
+          <select id="ba-filter-select" class="filter-select">
+            <option value="">Select BA(s)...</option>
+            <option value="John T">John T</option>
+            <option value="Ali">Ali</option>
+          </select>
+        </div>
+      </div>
+      <div class="filter-row">
+        <label for="stage-filter-select">Filter by Pipeline Stage:</label>
+        <div class="filter-wrapper">
+          <select id="stage-filter-select" class="filter-select">
+            <option value="">Select Stage(s)...</option>
+            <option value="Qualified">Qualified</option>
+            <option value="Proposal">Proposal</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    
+    <div style="margin-top: 20px; margin-bottom: 20px;">
+      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.95em;">
+        <input type="checkbox" id="send-on-behalf-checkbox" style="width: 16px; height: 16px; cursor: pointer;">
+        <span>Send on behalf of someone else</span>
+      </label>
+      <div id="send-from-section" style="display: none; margin-top: 16px; padding: 16px; background: #f9f9f9; border-radius: 6px; border-left: 3px solid #4caf50;">
+        <div class="filter-row" style="margin-bottom: 12px;">
+          <label for="send-from-select" style="display: block; margin-bottom: 6px; font-weight: 600;">Send From (Email Address):</label>
+          <div style="display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;">
+            <select id="send-from-select" class="filter-select" style="flex: 1; min-width: 250px; max-width: 400px; padding: 8px;">
+              <option value="">Select BA from list...</option>
+              <option value="john.t@buyersclub.com.au">John T (john.t@buyersclub.com.au)</option>
+              <option value="ali@buyersclub.com.au">Ali (ali@buyersclub.com.au)</option>
+            </select>
+            <div style="display: flex; align-items: center; gap: 4px; flex: 1; min-width: 200px;">
+              <span style="white-space: nowrap;">or enter manually:</span>
+              <input type="email" id="send-from-manual" placeholder="email@example.com" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95em;">
+            </div>
+          </div>
+          <div class="helper-text" style="margin-top: 6px;">Select which BA's email address to send from, or enter an email address manually. All selected opportunities will be sent from this address. Changing this will automatically load that BA's saved generic message (if available).</div>
+        </div>
+        <div style="margin-top: 16px; padding: 12px; background: #f0f0f0; border-radius: 4px;">
+          <strong style="font-size: 0.9em;">How "Send From" Works:</strong>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 0.85em; line-height: 1.6;">
+            <li><strong>Checkbox to Enable:</strong> Check "Send on behalf of someone else" to show the "Send From" dropdown</li>
+            <li><strong>Single Selection:</strong> One "Send From" selection applies to ALL opportunities selected by tick box</li>
+            <li><strong>Auto-Load Message:</strong> When you change "Send From", it automatically loads that BA's saved generic message</li>
+            <li><strong>Create/Save Messages:</strong> If the BA doesn't have a saved message, you can create one and save it for them</li>
+            <li><strong>Email Setup:</strong> Only email addresses that have been set up to send via this system can be used</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    
+    <div class="actions">
+      <button id="send-standard">Send to All with Standard Message</button>
+      <button id="action-above">Action the Above</button>
+      <button id="non-suitable">Non-Suitable – Send Back to Packager</button>
+    </div>
+  </div>
+  
+  <script>
+    // Mock functionality for preview
+    const sendOnBehalfCheckbox = document.getElementById('send-on-behalf-checkbox');
+    const sendFromSection = document.getElementById('send-from-section');
+    const sendFromSelect = document.getElementById('send-from-select');
+    const messageTextarea = document.getElementById('standard-message');
+    
+    // Handle checkbox toggle
+    sendOnBehalfCheckbox.addEventListener('change', function(e) {
+      if (e.target.checked) {
+        sendFromSection.style.display = 'block';
+      } else {
+        sendFromSection.style.display = 'none';
+        messageTextarea.value = 'Hi,\n\nPlease see the opportunity below.\n\nKeen to get your feedback on this when you are free to speak.';
+      }
+    });
+    
+    // Handle Send From dropdown change
+    sendFromSelect.addEventListener('change', function(e) {
+      const selectedEmail = e.target.value;
+      const sendFromManual = document.getElementById('send-from-manual');
+      
+      if (selectedEmail) {
+        // Clear manual input when dropdown is selected
+        if (sendFromManual) sendFromManual.value = '';
+        
+        // Mock: Load different messages based on selection
+        if (selectedEmail.includes('john.t')) {
+          messageTextarea.value = 'Hi,\n\nPlease see the opportunity below. This is John\'s saved message.\n\nKeen to get your feedback on this when you are free to speak.';
+        } else if (selectedEmail.includes('ali')) {
+          messageTextarea.value = 'Hi,\n\nPlease see the opportunity below. This is Ali\'s saved message.\n\nLet me know your thoughts when convenient.';
+        }
+        
+        // Show feedback
+        const statusEl = document.getElementById('save-status');
+        statusEl.textContent = '✓ Loaded message for ' + e.target.options[e.target.selectedIndex].text;
+        statusEl.className = 'save-status saved';
+        setTimeout(() => {
+          statusEl.textContent = '';
+          statusEl.className = 'save-status';
+        }, 3000);
+      }
+    });
+    
+    // Handle manual email input
+    const sendFromManual = document.getElementById('send-from-manual');
+    if (sendFromManual) {
+      sendFromManual.addEventListener('input', function(e) {
+        const manualEmail = e.target.value.trim();
+        if (manualEmail && sendFromSelect.value) {
+          // Clear dropdown when manual entry is used
+          sendFromSelect.value = '';
+        }
+      });
+      
+      sendFromManual.addEventListener('blur', function(e) {
+        // Validate email format
+        const email = e.target.value.trim();
+        if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+          e.target.style.borderColor = '#eb5858';
+          const statusEl = document.getElementById('save-status');
+          statusEl.textContent = 'Please enter a valid email address';
+          statusEl.className = 'save-status warning';
+          setTimeout(() => {
+            statusEl.textContent = '';
+            statusEl.className = 'save-status';
+          }, 3000);
+        } else {
+          e.target.style.borderColor = '#ccc';
+        }
+      });
+    }
+    
+    // Disable action buttons for preview
+    document.querySelectorAll('.actions button').forEach(btn => {
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      btn.style.cursor = 'not-allowed';
+    });
+    
+    document.getElementById('save-message-btn').addEventListener('click', function() {
+      const checkbox = document.getElementById('send-on-behalf-checkbox');
+      if (checkbox && checkbox.checked && sendFromSelect.value) {
+        const baName = sendFromSelect.options[sendFromSelect.selectedIndex].text.split(' (')[0];
+        alert('TEST MODE: Would save message for ' + baName + '. Save functionality disabled in preview.');
+      } else {
+        alert('TEST MODE: Message save functionality disabled in preview.');
+      }
+    });
+  </script>
+</body>
+</html>
+

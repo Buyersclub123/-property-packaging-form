@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Property Review - Confirmation (TEST)</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: "Montserrat", Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .test-controls {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+      max-width: 500px;
+      width: 100%;
+    }
+    
+    .test-controls h2 {
+      font-size: 18px;
+      color: #4c4c4c;
+      margin-bottom: 15px;
+    }
+    
+    .test-buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    
+    .test-btn {
+      padding: 8px 16px;
+      background-color: #fbd721;
+      color: #4c4c4c;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    
+    .test-btn:hover {
+      background-color: #e6c51d;
+    }
+    
+    .confirmation-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      max-width: 500px;
+      width: 100%;
+      padding: 40px;
+      text-align: center;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .logo {
+      width: 180px;
+      height: 40px;
+      margin: 0 auto 30px;
+      display: block;
+      object-fit: contain;
+    }
+    
+    .icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      animation: scaleIn 0.4s ease-out 0.2s both;
+    }
+    
+    @keyframes scaleIn {
+      from {
+        transform: scale(0);
+      }
+      to {
+        transform: scale(1);
+      }
+    }
+    
+    .icon.success {
+      background-color: #d4edda;
+      color: #28a745;
+    }
+    
+    .icon.error {
+      background-color: #f8d7da;
+      color: #dc3545;
+    }
+    
+    .icon.loading {
+      background-color: #e7f3ff;
+      color: #007bff;
+    }
+    
+    h1 {
+      font-size: 24px;
+      color: #4c4c4c;
+      margin-bottom: 15px;
+      font-weight: 600;
+    }
+    
+    .message {
+      font-size: 16px;
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 30px;
+    }
+    
+    .button {
+      display: inline-block;
+      padding: 12px 30px;
+      background-color: #fbd721;
+      color: #4c4c4c;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      transition: background-color 0.3s ease;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+    
+    .button:hover {
+      background-color: #e6c51d;
+    }
+    
+    .button:active {
+      transform: scale(0.98);
+    }
+    
+    .error-details {
+      background-color: #f8f9fa;
+      border-left: 4px solid #dc3545;
+      padding: 15px;
+      margin: 20px 0;
+      text-align: left;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #007bff;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="test-controls">
+    <h2>Test Controls - Click to preview different states:</h2>
+    <div class="test-buttons">
+      <button class="test-btn" onclick="showState('loading')">Loading</button>
+      <button class="test-btn" onclick="showState('success-approve')">Success (Approve)</button>
+      <button class="test-btn" onclick="showState('success-reject')">Success (Reject)</button>
+      <button class="test-btn" onclick="showState('error')">Error</button>
+    </div>
+  </div>
+
+  <div class="confirmation-container">
+    <img src="https://storage.googleapis.com/msgsndr/UJWYn4mrgGodB7KZUcHt/media/6938361650387f7f05884d8de.jpg" 
+         alt="BuyersClub" 
+         class="logo">
+    
+    <div id="loadingState">
+      <div class="spinner"></div>
+      <h1>Processing...</h1>
+      <p class="message">Please wait while we process your request.</p>
+    </div>
+    
+    <div id="successState" style="display: none;">
+      <div class="icon success">✓</div>
+      <h1 id="successTitle">Success!</h1>
+      <p class="message" id="successMessage">Your request has been processed successfully.</p>
+      <button class="button" onclick="closeWindow()">Close</button>
+    </div>
+    
+    <div id="errorState" style="display: none;">
+      <div class="icon error">✕</div>
+      <h1>Error</h1>
+      <p class="message" id="errorMessage">An error occurred while processing your request.</p>
+      <div id="errorDetails" class="error-details" style="display: none;"></div>
+      <button class="button" onclick="closeWindow()">Close</button>
+    </div>
+  </div>
+
+  <script>
+    // Confirmation messages based on action
+    const messages = {
+      approve: {
+        title: 'Approved!',
+        message: 'The property review has been approved and will be sent to the BA.'
+      },
+      reject: {
+        title: 'Rejected',
+        message: 'The property review has been marked for editing and resubmission.'
+      }
+    };
+    
+    function showState(state) {
+      // Hide all states
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('successState').style.display = 'none';
+      document.getElementById('errorState').style.display = 'none';
+      
+      // Show selected state
+      if (state === 'loading') {
+        document.getElementById('loadingState').style.display = 'block';
+      } else if (state === 'success-approve') {
+        document.getElementById('successState').style.display = 'block';
+        document.getElementById('successTitle').textContent = messages.approve.title;
+        document.getElementById('successMessage').textContent = messages.approve.message;
+      } else if (state === 'success-reject') {
+        document.getElementById('successState').style.display = 'block';
+        document.getElementById('successTitle').textContent = messages.reject.title;
+        document.getElementById('successMessage').textContent = messages.reject.message;
+      } else if (state === 'error') {
+        document.getElementById('errorState').style.display = 'block';
+        document.getElementById('errorMessage').textContent = 'Failed to process request. Please try again.';
+      }
+    }
+    
+    function closeWindow() {
+      alert('In production, this would close the window or redirect to Gmail.');
+      // In production:
+      // window.close();
+      // setTimeout(() => {
+      //   window.location.href = 'https://mail.google.com';
+      // }, 500);
+    }
+    
+    // Show loading state by default
+    showState('loading');
+    
+    // Auto-demo: cycle through states (optional - comment out if you don't want this)
+    // setTimeout(() => showState('success-approve'), 2000);
+  </script>
+</body>
+</html>
+

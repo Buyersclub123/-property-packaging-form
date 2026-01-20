@@ -1,0 +1,7 @@
+Unit A Occupancy,Unit B Occupancy,Show Occupancy,Show Current Rent,Show Expiry,Show Current Yield,Show Appraisal,Show Appraised Yield
+owner_occupied,owner_occupied,YES (both),NO,NO,NO,YES,YES
+owner_occupied,tenanted,YES (both),YES (Unit B only),YES (Unit B only),YES (if Unit B has rent),YES,YES
+owner_occupied,vacant,YES (both),NO,NO,NO,YES,YES
+tenanted,tenanted,YES (both),YES (both units),YES (both units),YES (combined),YES,YES
+tenanted,vacant,YES (both),YES (Unit A only),YES (Unit A only),YES (Unit A only),YES,YES
+vacant,vacant,YES (both),NO,NO,NO,YES,YES

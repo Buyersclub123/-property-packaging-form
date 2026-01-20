@@ -1,0 +1,60 @@
+CRITICAL DEVELOPMENT WORKFLOW RULES - MUST FOLLOW STRICTLY
+
+DEPLOYMENT COMMUNICATION - USE THESE EXACT TERMS:
+
+"Fix created in Dev" = Code written locally, NOT tested, NOT deployed
+"Fix tested in Dev" = Code tested locally and working
+"Fix deployed to Vercel" = Code deployed to Vercel Production
+"Vercel-only change" = Change made only in Vercel settings (environment variables, etc.)
+
+WHEN TO USE THESE TERMS:
+- Say "Fix created in Dev" when you write code locally
+- Say "Fix tested in Dev" ONLY after you've tested it locally and it works
+- Say "Fix deployed to Vercel" ONLY after deployment completes successfully
+- NEVER say "Fix deployed" if you only pushed to Git
+- NEVER ask user to test if you haven't deployed yet
+
+TESTING BEFORE DEPLOYMENT:
+- ALWAYS test fixes in Dev BEFORE deploying to Vercel Production
+- NEVER deploy untested code to Production
+- If user asks you to test something - test it and report results immediately
+- If test fails - tell user it failed, don't deploy broken code
+
+GIT vs DEPLOYMENT:
+- Git push = backup/tracking only, NOT deployment
+- Git push does NOT deploy code to Vercel
+- Deployment to Vercel requires explicit permission from user
+- NEVER say code is "deployed" if you only pushed to Git
+
+DEPLOYMENT PERMISSION:
+- ALWAYS ask explicit permission before deploying to Vercel Production
+- User must approve deployment before you do it
+- If user says "deploy" - that's permission, proceed
+- If user says "test in Dev first" - do that, don't deploy yet
+
+MONITORING DEPLOYMENTS/RESTARTS:
+- When restarting dev server - monitor the restart
+- When deploying to Vercel - monitor the deployment
+- Confirm deployment/restart completed successfully before telling user to test
+- If deployment/restart fails - tell user immediately, don't ask them to test
+- Check deployment status yourself - if you can't check, ask user to check
+
+ENVIRONMENT VARIABLES:
+- NEVER hardcode API keys, credentials, or sensitive values
+- ALWAYS use environment variables from .env.local (local) or Vercel (production)
+- .env.local values must match Vercel environment variables
+- If environment variable is missing - add it to both .env.local AND Vercel
+- User handles adding values to .env.local (file is filtered)
+- I handle adding values to Vercel via API or tell user exact steps
+
+VERCEL ENVIRONMENT SETUP:
+- Project name: property-packaging-form
+- Team ID: HCICkgEtqpNH4cacsrTLXLC9
+- Dashboard URL: https://vercel.com/team_HCICkgEtqpNH4cacsrTLXLC9/property-packaging-form
+- GitHub repo: (check git remote for current repo)
+- Required environment variables: Check .env.local for full list
+
+COPY-PASTE RULE:
+- If user mentions they should have copy-pasted something but you don't see it
+- Immediately tell user you think they didn't provide what they said they would
+- Don't spend time searching for it - just ask them directly

@@ -1,0 +1,58 @@
+{
+  "projectCategories": {
+    "packaging": {
+      "type": "🏠 PROPERTY PACKAGING PROJECT (Current/Active)",
+      "description": "Main project we're actively working on",
+      "projects": {
+        "property-packaging-form": {
+          "name": "property-packaging-form",
+          "projectId": null,
+          "vercelUrl": "property-packaging-form.vercel.app",
+          "localPath": "form-app",
+          "githubRepo": "Buyersclub123/property-packaging-form",
+          "purpose": "Main property packaging form application",
+          "status": "linked"
+        }
+      }
+    },
+    "previousTools": {
+      "type": "🛠️ PREVIOUS TOOLS (Amenity Distance Apps)",
+      "description": "Older amenity distance calculator tools",
+      "projects": {
+        "amenity-distance-app": {
+          "name": "amenity-distance-app",
+          "projectId": "prj_npDyA1rE7JbJQdSTwvpEyy9B7i6C",
+          "vercelUrl": "amenity-distance-app.vercel.app",
+          "localPath": "amenity-distance-app",
+          "githubRepo": "Buyersclub123/amenity-distance-app",
+          "purpose": "Amenity distance calculator - main version",
+          "status": "local copy created - need to link"
+        },
+        "amenity-distance-app-a220": {
+          "name": "amenity-distance-app-a220",
+          "projectId": "prj_Fn7algkhTDEsYmlKXnGmQ8Fs8vvr",
+          "vercelUrl": "amenity-distance-app-a22o.vercel.app",
+          "localPath": "amenity-distance-app-a220",
+          "githubRepo": "Buyersclub123/amenity-distance-app",
+          "purpose": "Amenity distance calculator - a220 variant",
+          "status": "local copy created - need to link"
+        },
+        "amenity-distance-app-8m3d": {
+          "name": "amenity-distance-app-8m3d",
+          "projectId": "prj_00368xqiLdylmPmcjP3BfkCL9K73",
+          "vercelUrl": "amenity-distance-app-8m3d.vercel.app",
+          "localPath": "amenity-distance-app-8m3d",
+          "githubRepo": "Buyersclub123/amenity-distance-app",
+          "purpose": "Amenity distance calculator - 8m3d variant",
+          "status": "local copy created - need to link"
+        }
+      }
+    }
+  },
+  "apiAccess": {
+    "vercelApiToken": "RVE0quS0k8s5yNzlLzcmHIyz",
+    "tokenLocation": "https://vercel.com/account/tokens"
+  },
+  "lastUpdated": "2026-01-10",
+  "note": "This file contains access credentials. Keep secure and do not commit tokens to public repositories."
+}

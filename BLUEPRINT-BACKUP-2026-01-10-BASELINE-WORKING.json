@@ -1,0 +1,724 @@
+{
+    "name": "Form App Property Submission",
+    "flow": [
+        {
+            "id": 1,
+            "module": "gateway:CustomWebHook",
+            "version": 1,
+            "parameters": {
+                "hook": 2303330,
+                "maxResults": 1
+            },
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0
+                },
+                "restore": {
+                    "parameters": {
+                        "hook": {
+                            "label": "Form App Webhook",
+                            "data": {
+                                "editable": "true"
+                            }
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "hook",
+                        "type": "hook:gateway-webhook",
+                        "label": "Webhook",
+                        "required": true
+                    },
+                    {
+                        "name": "maxResults",
+                        "type": "number",
+                        "label": "Maximum number of results"
+                    }
+                ],
+                "interface": [
+                    {
+                        "name": "source",
+                        "type": "text"
+                    },
+                    {
+                        "name": "action",
+                        "type": "text"
+                    },
+                    {
+                        "name": "formData",
+                        "type": "collection",
+                        "spec": [
+                            {
+                                "name": "decisionTree",
+                                "type": "collection",
+                                "spec": [
+                                    {
+                                        "name": "propertyType",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "contractType",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "lotType",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "dualOccupancy",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "status",
+                                        "type": "text"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "address",
+                                "type": "collection",
+                                "spec": [
+                                    {
+                                        "name": "propertyAddress",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "streetNumber",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "streetName",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "suburbName",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "state",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "postCode",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "lga",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "googleMap",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "addressVerified",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "addressFieldsEditable",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "stashPropertyAddress",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "latitude",
+                                        "type": "number"
+                                    },
+                                    {
+                                        "name": "longitude",
+                                        "type": "number"
+                                    },
+                                    {
+                                        "name": "addressSource",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "lotNumber",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "lotNumberNotApplicable",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "unitNumber",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "projectAddress",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "projectName",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "usePropertyAddressForProject",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "folderLink",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "folderName",
+                                        "type": "text"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "riskOverlays",
+                                "type": "collection",
+                                "spec": [
+                                    {
+                                        "name": "flood",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "bushfire",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "mining",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "otherOverlay",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "specialInfrastructure",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "dueDiligenceAcceptance",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "zoning",
+                                        "type": "text"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "propertyDescription",
+                                "type": "collection",
+                                "spec": []
+                            },
+                            {
+                                "name": "purchasePrice",
+                                "type": "collection",
+                                "spec": [
+                                    {
+                                        "name": "cashbackRebateValue",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "cashbackRebateType",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "comparableSales",
+                                        "type": "text"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "rentalAssessment",
+                                "type": "collection",
+                                "spec": []
+                            },
+                            {
+                                "name": "marketPerformance",
+                                "type": "collection",
+                                "spec": [
+                                    {
+                                        "name": "medianPriceChange3Months",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianPriceChange1Year",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianPriceChange3Year",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianPriceChange5Year",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianYield",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianRentChange1Year",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "rentalPopulation",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "vacancyRate",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "isSaved",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "daysSinceLastCheck",
+                                        "type": "number"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "contentSections",
+                                "type": "collection",
+                                "spec": [
+                                    {
+                                        "name": "investmentHighlights",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "proximity",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "whyThisProperty",
+                                        "type": "text"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "agentInfo",
+                                "type": "collection",
+                                "spec": []
+                            },
+                            {
+                                "name": "lots",
+                                "type": "array",
+                                "spec": {
+                                    "type": "collection",
+                                    "spec": [
+                                        {
+                                            "name": "lotNumber",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "name": "singleOrDual",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "name": "purchasePrice",
+                                            "type": "collection",
+                                            "spec": [
+                                                {
+                                                    "name": "cashbackRebateValue",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "cashbackRebateType",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "comparableSales",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "landPrice",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "buildPrice",
+                                                    "type": "text"
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "name": "propertyDescription",
+                                            "type": "collection",
+                                            "spec": [
+                                                {
+                                                    "name": "bedsPrimary",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "bathPrimary",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "garagePrimary",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "landRegistration",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "landSize",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "buildSize",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "title",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "bodyCorpPerQuarter",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "bodyCorpDescription",
+                                                    "type": "text"
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "name": "rentalAssessment",
+                                            "type": "collection",
+                                            "spec": [
+                                                {
+                                                    "name": "rentAppraisalPrimaryFrom",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "rentAppraisalPrimaryTo",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "appraisedYield",
+                                                    "type": "text"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "name": "packager",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sourcer",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sellingAgentName",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sellingAgentEmail",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sellingAgentMobile",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sellingAgent",
+                                "type": "text"
+                            },
+                            {
+                                "name": "folderLink",
+                                "type": "text"
+                            }
+                        ]
+                    },
+                    {
+                        "name": "folderLink",
+                        "type": "text"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 316,
+                    "y": -1
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 21,
+                            "module": "code:ExecuteCode",
+                            "version": 0,
+                            "parameters": {},
+                            "filter": {
+                                "name": "Single Property",
+                                "conditions": [
+                                    [
+                                        {
+                                            "a": "{{1.formData.decisionTree.lotType}}",
+                                            "o": "text:notequal",
+                                            "b": "Multiple"
+                                        }
+                                    ]
+                                ]
+                            },
+                            "mapper": {
+                                "language": "javascript",
+                                "input": [
+                                    {
+                                        "name": "fd",
+                                        "value": "{{1.formData}}"
+                                    }
+                                ],
+                                "dependencies": [],
+                                "inputFormat": "editor",
+                                "codeEditorJavascript": "// Access Module 1's output directly (no Input mapping needed)\nconst formData = input.fd;\n\n// Safety check\nif (!formData) {\n    throw new Error(\"No data received from Module 1.\");\n}\n\n// Get folderLink\nconst folderLink = formData.folderLink || null;\n\n// Helper: Ensure property_address is NEVER null (Required by GHL)\nconst requiredString = (val) => {\n    if (!val || val === \"\" || val === null) return \"No Address Provided\";\n    return String(val);\n};\n\nconst nullIfEmpty = (val) => (!val || val === \"\" ? null : val);\n\nconst toFloat = (val) => {\n    if (val === null || val === undefined || val === '') return 0;\n    const num = parseFloat(val);\n    return isNaN(num) ? 0 : num;\n};\n\n// Mapping function for asking field values (Form → GHL)\nconst mapAskingValue = (val) => {\n    if (!val) return null;\n    const mapping = {\n        \"On-market\": \"on-market\",\n        \"Off-market\": \"off-market\",\n        \"Pre-launch\": \"pre-launch opportunity\",\n        \"Coming Soon\": \"coming soon\",\n        \"TBC\": null,\n        \"N/A\": null\n    };\n    return mapping[val] || null;\n};\n\n// Build the complete payload\nconst payload = {\n  locationId: \"UJWYn4mrgGodB7KZUcHt\",\n  properties: {\n    property_address: requiredString(formData.address?.propertyAddress),\n    street_number: nullIfEmpty(formData.address?.streetNumber),\n    street_name: nullIfEmpty(formData.address?.streetName),\n    suburb_name: nullIfEmpty(formData.address?.suburbName),\n    state: nullIfEmpty(formData.address?.state),\n    post_code: nullIfEmpty(formData.address?.postCode),\n    lga: nullIfEmpty(formData.address?.lga),\n    unit__lot: nullIfEmpty(formData.address?.unitNumber),\n    unit__lot_secondary: nullIfEmpty(formData.address?.unitNumberSecondary),\n    google_map: nullIfEmpty(formData.address?.googleMap),\n    sourcer: nullIfEmpty(formData.sourcer?.replace(\"@buyersclub.com.au\", \"\")),\n    packager: nullIfEmpty(formData.packager?.replace(\"@buyersclub.com.au\", \"\")),\n    deal_type: nullIfEmpty(formData.decisionTree?.contractType),\n    status: nullIfEmpty(formData.decisionTree?.status),\n    folder_link: folderLink,\n    zoning: nullIfEmpty(formData.riskOverlays?.zoning),\n    flood: nullIfEmpty(formData.riskOverlays?.flood),\n    flood_dialogue: nullIfEmpty(formData.riskOverlays?.floodDialogue),\n    bushfire: nullIfEmpty(formData.riskOverlays?.bushfire),\n    bushfire_dialogue: nullIfEmpty(formData.riskOverlays?.bushfireDialogue),\n    mining: nullIfEmpty(formData.riskOverlays?.mining),\n    mining_dialogie: nullIfEmpty(formData.riskOverlays?.miningDialogue),\n    other_overlay: nullIfEmpty(formData.riskOverlays?.otherOverlay),\n    other_overlay_dialogue: nullIfEmpty(formData.riskOverlays?.otherOverlayDialogue),\n    special_infrastructure: nullIfEmpty(formData.riskOverlays?.specialInfrastructure),\n    special_infrastructure_dialogue: nullIfEmpty(formData.riskOverlays?.specialInfrastructureDialogue),\n    due_diligence_acceptance: nullIfEmpty(formData.riskOverlays?.dueDiligenceAcceptance),\n    beds_primary: nullIfEmpty(formData.propertyDescription?.bedsPrimary),\n    beds_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.bedsSecondary),\n    bath_primary: nullIfEmpty(formData.propertyDescription?.bathPrimary),\n    baths_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.bathSecondary),\n    garage_primary: nullIfEmpty(formData.propertyDescription?.garagePrimary),\n    garage_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.garageSecondary),\n    carport_primary: nullIfEmpty(formData.propertyDescription?.carportPrimary),\n    carport_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.carportSecondary),\n    carspace_primary: nullIfEmpty(formData.propertyDescription?.carspacePrimary),\n    carspace_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.carspaceSecondary),\n    year_built: nullIfEmpty(formData.propertyDescription?.yearBuilt),\n    land_size: nullIfEmpty(formData.propertyDescription?.landSize),\n    build_size: nullIfEmpty(formData.propertyDescription?.buildSize),\n    build_size_primary: nullIfEmpty(formData.propertyDescription?.buildSizePrimary),\n    build_size_secondary: nullIfEmpty(formData.propertyDescription?.buildSizeSecondary),\n    land_registration: nullIfEmpty(formData.propertyDescription?.landRegistration),\n    title: nullIfEmpty(formData.propertyDescription?.title),\n    body_corp__per_quarter: nullIfEmpty(formData.propertyDescription?.bodyCorpPerQuarter),\n    body_corp_description: nullIfEmpty(formData.propertyDescription?.bodyCorpDescription),\n    does_this_property_have_2_dwellings: nullIfEmpty(formData.propertyDescription?.singleOrDual),\n    property_description_additional_dialogue: nullIfEmpty(formData.propertyDescription?.additionalDialogue),\n    asking: mapAskingValue(formData.purchasePrice?.asking),\n    asking_text: nullIfEmpty(formData.purchasePrice?.askingText),\n    accepted_acquisition_target: nullIfEmpty(formData.purchasePrice?.acceptedAcquisitionTarget),\n    acceptable_acquisition__from: nullIfEmpty(formData.purchasePrice?.acceptableAcquisitionFrom),\n    acceptable_acquisition__to: nullIfEmpty(formData.purchasePrice?.acceptableAcquisitionTo),\n    land_price: nullIfEmpty(formData.purchasePrice?.landPrice),\n    build_price: nullIfEmpty(formData.purchasePrice?.buildPrice),\n    total_price: nullIfEmpty(formData.purchasePrice?.totalPrice),\n    cashback_rebate_value: nullIfEmpty(formData.purchasePrice?.cashbackRebateValue),\n    cashback_rebate_type: nullIfEmpty(formData.purchasePrice?.cashbackRebateType),\n    comparable_sales: nullIfEmpty(formData.purchasePrice?.comparableSales),\n    purchase_price_additional_dialogue: nullIfEmpty(formData.purchasePrice?.purchasePriceAdditionalDialogue),\n    price_group: nullIfEmpty(formData.purchasePrice?.priceGroup),\n    occupancy: nullIfEmpty(formData.rentalAssessment?.occupancy),\n    occupancy_primary: nullIfEmpty(formData.rentalAssessment?.occupancyPrimary),\n    occupancy_secondary: nullIfEmpty(formData.rentalAssessment?.occupancySecondary),\n    current_rent_primary__per_week: nullIfEmpty(formData.rentalAssessment?.currentRentPrimary),\n    current_rent_secondary__per_week: nullIfEmpty(formData.rentalAssessment?.currentRentSecondary),\n    expiry_primary: nullIfEmpty(formData.rentalAssessment?.expiryPrimary),\n    expiry_secondary: nullIfEmpty(formData.rentalAssessment?.expirySecondary),\n    rent_appraisal_primary: nullIfEmpty(formData.rentalAssessment?.rentAppraisalPrimary),\n    rent_appraisal_primary_from: nullIfEmpty(formData.rentalAssessment?.rentAppraisalPrimaryFrom),\n    rent_appraisal_primary_to: nullIfEmpty(formData.rentalAssessment?.rentAppraisalPrimaryTo),\n    rent_appraisal_secondary: nullIfEmpty(formData.rentalAssessment?.rentAppraisalSecondary),\n    rent_appraisal_secondary_from: nullIfEmpty(formData.rentalAssessment?.rentAppraisalSecondaryFrom),\n    rent_appraisal_secondary_to: nullIfEmpty(formData.rentalAssessment?.rentAppraisalSecondaryTo),\n    yield: nullIfEmpty(formData.rentalAssessment?.yield),\n    appraised_yield: nullIfEmpty(formData.rentalAssessment?.appraisedYield),\n    rent_dialogue_primary: nullIfEmpty(formData.rentalAssessment?.rentDialoguePrimary),\n    rent_dialogue_secondary: nullIfEmpty(formData.rentalAssessment?.rentDialogueSecondary),\n    rental_assessment_additional_dialogue: nullIfEmpty(formData.rentalAssessment?.rentalAssessmentAdditionalDialogue),\n    median_price_change__3_months: toFloat(formData.marketPerformance?.medianPriceChange3Months),\n    median_price_change__1_year: toFloat(formData.marketPerformance?.medianPriceChange1Year),\n    median_price_change__3_year: toFloat(formData.marketPerformance?.medianPriceChange3Year),\n    median_price_change__5_year: toFloat(formData.marketPerformance?.medianPriceChange5Year),\n    median_yield: toFloat(formData.marketPerformance?.medianYield),\n    median_rent_change__1_year: toFloat(formData.marketPerformance?.medianRentChange1Year),\n    rental_population: toFloat(formData.marketPerformance?.rentalPopulation),\n    vacancy_rate: toFloat(formData.marketPerformance?.vacancyRate),\n    market_perfornance_additional_dialogue: nullIfEmpty(formData.marketPerformance?.marketPerformanceAdditionalDialogue),\n    why_this_property: nullIfEmpty(formData.contentSections?.whyThisProperty),\n    proximity: nullIfEmpty(formData.contentSections?.proximity),\n    investment_highlights: nullIfEmpty(formData.contentSections?.investmentHighlights),\n    agent_name: nullIfEmpty(formData.agentInfo?.name),\n    agent_mobile: nullIfEmpty(formData.agentInfo?.mobile),\n    agent_email: nullIfEmpty(formData.agentInfo?.email),\n    message_for_ba: nullIfEmpty(formData.messageForBA),\n    attachments_additional_dialogue: nullIfEmpty(formData.attachmentsAdditionalDialogue),\n    push_record_to_deal_sheet: nullIfEmpty(formData.pushRecordToDealSheet),\n    lot_number: null,\n    project_parent_id: null,\n    project_identifier: null,\n    is_parent_record: null,\n    project_brief: null,\n    project_overview: null\n  }\n};\n\nreturn payload;"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 680,
+                                    "y": -173
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "language": {
+                                            "mode": "chose",
+                                            "label": "JavaScript"
+                                        },
+                                        "input": {
+                                            "items": [
+                                                null
+                                            ]
+                                        },
+                                        "inputFormat": {
+                                            "label": "Code editor"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 14,
+                            "module": "http:MakeRequest",
+                            "version": 4,
+                            "parameters": {
+                                "authenticationType": "noAuth",
+                                "tlsType": "",
+                                "proxyKeychain": ""
+                            },
+                            "mapper": {
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records",
+                                "method": "post",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-d375efb5-f445-458d-af06-3cbbb4b331dd"
+                                    },
+                                    {
+                                        "name": "Version",
+                                        "value": "2021-07-28"
+                                    },
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "contentType": "json",
+                                "parseResponse": true,
+                                "stopOnHttpError": true,
+                                "allowRedirects": true,
+                                "shareCookies": false,
+                                "requestCompressedContent": true,
+                                "inputMethod": "jsonString",
+                                "jsonStringBodyContent": "{{21.result}}"
+                            }
+                        },
+                        {
+                            "id": 15,
+                            "module": "http:MakeRequest",
+                            "version": 4,
+                            "parameters": {
+                                "authenticationType": "noAuth",
+                                "tlsType": "",
+                                "proxyKeychain": ""
+                            },
+                            "mapper": {
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records/{{14.data.record.id}}?locationId=UJWYn4mrgGodB7KZUcHt",
+                                "method": "get",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-d375efb5-f445-458d-af06-3cbbb4b331dd"
+                                    },
+                                    {
+                                        "name": "Version",
+                                        "value": " 2021-07-28"
+                                    }
+                                ],
+                                "parseResponse": true,
+                                "stopOnHttpError": true,
+                                "allowRedirects": true,
+                                "shareCookies": false,
+                                "requestCompressedContent": true
+                            }
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 6,
+                            "module": "util:SetVariable2",
+                            "version": 1,
+                            "parameters": {},
+                            "filter": {
+                                "name": "Project",
+                                "conditions": [
+                                    [
+                                        {
+                                            "a": "{{1.formData.decisionTree.lotType}}",
+                                            "o": "text:equal",
+                                            "b": "Multiple"
+                                        }
+                                    ]
+                                ]
+                            },
+                            "mapper": {
+                                "name": "incoming_data",
+                                "scope": "roundtrip",
+                                "value": "{{`1`}}"
+                            }
+                        },
+                        {
+                            "id": 9,
+                            "module": "http:MakeRequest",
+                            "version": 4,
+                            "parameters": {
+                                "authenticationType": "noAuth",
+                                "tlsType": "",
+                                "proxyKeychain": ""
+                            },
+                            "mapper": {
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records",
+                                "method": "post",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-d375efb5-f445-458d-af06-3cbbb4b331dd"
+                                    },
+                                    {
+                                        "name": "Version",
+                                        "value": "2021-07-28"
+                                    }
+                                ],
+                                "contentType": "json",
+                                "parseResponse": true,
+                                "stopOnHttpError": true,
+                                "allowRedirects": true,
+                                "shareCookies": false,
+                                "requestCompressedContent": true,
+                                "inputMethod": "jsonString",
+                                "jsonStringBodyContent": "{\r\n  \"locationId\": \"UJWYn4mrgGodB7KZUcHt\",\r\n  \"properties\": {\r\n    \"property_address\": \"{{6.incoming_data.formData.address.projectAddress}}\",\r\n    \"is_parent_record\": \"Yes\",\r\n    \"project_identifier\": \"PROJ-{{formatDate(now; \"YYYYMMDD-HHmmss\")}}\",\r\n    \"folder_link\": \"{{6.incoming_data.formData.folderLink}}\"\r\n  }\r\n}"
+                            }
+                        },
+                        {
+                            "id": 10,
+                            "module": "util:SetVariable2",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "name": "parent_record_id",
+                                "scope": "roundtrip",
+                                "value": "{{9.data.record.id}}"
+                            }
+                        },
+                        {
+                            "id": 13,
+                            "module": "util:SetVariable2",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "name": "\"lots_array",
+                                "scope": "roundtrip",
+                                "value": "{{1.formData.lots}}"
+                            }
+                        },
+                        {
+                            "id": 11,
+                            "module": "builtin:BasicFeeder",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "array": "{{1.formData.lots}}"
+                            }
+                        },
+                        {
+                            "id": 12,
+                            "module": "http:MakeRequest",
+                            "version": 4,
+                            "parameters": {
+                                "authenticationType": "noAuth",
+                                "tlsType": "",
+                                "proxyKeychain": ""
+                            },
+                            "mapper": {
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records",
+                                "method": "post",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-d375efb5-f445-458d-af06-3cbbb4b331dd"
+                                    },
+                                    {
+                                        "name": "Version",
+                                        "value": "2021-07-28"
+                                    }
+                                ],
+                                "contentType": "json",
+                                "parseResponse": true,
+                                "stopOnHttpError": true,
+                                "allowRedirects": true,
+                                "shareCookies": false,
+                                "requestCompressedContent": true,
+                                "inputMethod": "jsonString",
+                                "jsonStringBodyContent": "{\r\n  \"locationId\": \"UJWYn4mrgGodB7KZUcHt\",\r\n  \"properties\": {\r\n    \"property_address\": \"{{6.incoming_data.formData.address.projectAddress}}\",\r\n    \"lot_number\": \"{{11.lotNumber}}\",\r\n    \"project_parent_id\": \"{{10.parent_record_id}}\",\r\n    \"is_parent_record\": \"No\",\r\n    \"build_size\": \"{{11.propertyDescription.buildSize}}\",\r\n    \"land_registration\": \"{{11.propertyDescription.landRegistration}}\",\r\n    \"land_size\": \"{{11.propertyDescription.landSize}}\",\n    \"build_size_primary\": \"{{11.propertyDescription.buildSizePrimary}}\",\r\n    \"build_size_secondary\": \"{{11.propertyDescription.buildSizeSecondary}}\",\r\n    \"land_price\": \"{{11.purchasePrice.landPrice}}\",\r\n    \"build_price\": \"{{11.purchasePrice.buildPrice}}\",\r\n    \"total_price\": \"{{11.purchasePrice.totalPrice}}\",\r\n    \"cashback_rebate_value\": \"{{11.purchasePrice.cashbackRebateValue}}\",\r\n    \"cashback_rebate_type\": \"{{11.purchasePrice.cashbackRebateType}}\",\r\n    \"rent_appraisal_primary_from\": \"{{11.rentalAssessment.rentAppraisalPrimaryFrom}}\",\r\n    \"rent_appraisal_primary_to\": \"{{11.rentalAssessment.rentAppraisalPrimaryTo}}\",\r\n    \"rent_appraisal_secondary_from\": \"{{11.rentalAssessment.rentAppraisalSecondaryFrom}}\",\r\n    \"rent_appraisal_secondary_to\": \"{{11.rentalAssessment.rentAppraisalSecondaryTo}}\"\r\n  }\r\n}"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "instant": true,
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "slots": null,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false,
+            "freshVariables": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "zone": "eu1.make.com",
+        "notes": []
+    }
+}
