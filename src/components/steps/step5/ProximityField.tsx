@@ -26,9 +26,10 @@ interface ProximityFieldProps {
   onChange: (value: string) => void;
   address?: string;
   disabled?: boolean;
+  preFetchedData?: string; // Pre-fetched proximity data from Step 2
 }
 
-export function ProximityField({ value, onChange, address, disabled = false }: ProximityFieldProps) {
+export function ProximityField({ value, onChange, address, disabled = false, preFetchedData }: ProximityFieldProps) {
   // Auto-resize textarea based on content
   const textareaRef = useAutoResize(value);
   
@@ -40,13 +41,30 @@ export function ProximityField({ value, onChange, address, disabled = false }: P
 
   /**
    * Auto-run proximity calculation when component loads
+   * Enhancement 2: Check for pre-fetched data first
    * Only runs if address is available and field is empty
    */
   useEffect(() => {
-    if (address && !value && !calculatedFor) {
+    // If we already have data (either in value or pre-fetched), mark as calculated
+    if (value) {
+      if (!calculatedFor) {
+        setCalculatedFor(address || 'pre-loaded');
+      }
+      return;
+    }
+    
+    // If we have pre-fetched data but it's not in value yet, use it
+    if (preFetchedData && !value) {
+      onChange(preFetchedData);
+      setCalculatedFor(address || 'pre-loaded');
+      return;
+    }
+    
+    // Otherwise, fetch as normal if we have address
+    if (address && !calculatedFor) {
       calculateProximity(address);
     }
-  }, [address]); // Only depend on address to avoid re-running
+  }, [address, value, preFetchedData]); // Depend on all relevant values
 
   /**
    * Calculate proximity using the API

@@ -205,6 +205,9 @@ export interface FormData {
   dealType?: DealType;
   reviewDate?: string;
   
+  // Pre-fetched data (loaded early for better UX)
+  proximityData?: string; // Pre-fetched proximity results from Step 2
+  
   // Step 0
   decisionTree: DecisionTree;
   

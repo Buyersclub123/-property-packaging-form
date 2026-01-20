@@ -1,11 +1,12 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useFormStore } from '@/store/formStore';
 import { YesNo } from '@/types/form';
 
 export function Step2StashCheck() {
-  const { formData, updateRiskOverlays, stashData } = useFormStore();
-  const { riskOverlays } = formData;
+  const { formData, updateFormData, updateRiskOverlays, stashData } = useFormStore();
+  const { riskOverlays, address } = formData;
 
   const handleOverlayChange = (field: keyof typeof riskOverlays, value: YesNo) => {
     updateRiskOverlays({ [field]: value });
@@ -24,6 +25,41 @@ export function Step2StashCheck() {
       specialInfrastructure: 'No',
     });
   };
+
+  /**
+   * Early Proximity Loading (Enhancement 2)
+   * Start fetching proximity data early so it's ready when user reaches Step 5
+   * This improves perceived performance and reduces wait time
+   */
+  useEffect(() => {
+    const fetchProximityEarly = async () => {
+      // Only fetch if we have address and haven't fetched yet
+      if (address?.propertyAddress && !formData.proximityData) {
+        try {
+          console.log('Early proximity fetch starting for:', address.propertyAddress);
+          const response = await fetch('/api/geoapify/proximity', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ propertyAddress: address.propertyAddress }),
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.proximity) {
+              // Store in formData for later use on Step 5
+              updateFormData({ proximityData: data.proximity });
+              console.log('Early proximity fetch successful');
+            }
+          }
+        } catch (err) {
+          // Silent fail - ProximityField will retry on Step 5
+          console.log('Early proximity fetch failed, will retry on Step 5:', err);
+        }
+      }
+    };
+
+    fetchProximityEarly();
+  }, [address?.propertyAddress]); // Only re-run if address changes
 
   // Auto-populate from Stash data if available
   if (stashData && !stashData.error) {

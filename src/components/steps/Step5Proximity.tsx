@@ -19,7 +19,7 @@ import { InvestmentHighlightsField } from './step5/InvestmentHighlightsField';
 
 export function Step5Proximity() {
   const { formData, updateFormData } = useFormStore();
-  const { contentSections, address } = formData;
+  const { contentSections, address, proximityData } = formData;
 
   return (
     <div>
@@ -28,7 +28,7 @@ export function Step5Proximity() {
       <div className="space-y-8">
         {/* Component 1: Proximity */}
         <ProximityField
-          value={contentSections?.proximity || ''}
+          value={contentSections?.proximity || proximityData || ''}
           onChange={(value) => updateFormData({
             contentSections: {
               ...contentSections,
@@ -36,6 +36,7 @@ export function Step5Proximity() {
             }
           })}
           address={address?.propertyAddress}
+          preFetchedData={proximityData}
         />
 
         {/* Component 2: Why This Property */}
