@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useFormStore } from '@/store/formStore';
 import { PropertyType, ContractType, LotType, DualOccupancy, StatusType, LotDetails, ContractTypeSimplified } from '@/types/form';
 
@@ -83,6 +83,8 @@ export function Step1DecisionTree() {
     }
   }, [address?.unitNumber, address?.hasUnitNumbers]);
   
+  const prevDualOccupancy = useRef<DualOccupancy | null>(decisionTree.dualOccupancy);
+
   // Auto-select "Yes" for hasUnitNumbers if Dual Occupancy is selected
   // Clear to undefined if Dual Occupancy is not "Yes" and was previously auto-set
   useEffect(() => {
@@ -94,13 +96,14 @@ export function Step1DecisionTree() {
       }
     } else if (decisionTree.dualOccupancy === 'No' || decisionTree.dualOccupancy === null) {
       // If Dual Occupancy changes away from Yes, reset to undefined (unless user explicitly set it)
-      // Only reset if it was true (could have been auto-set)
-      if (hasUnitNumbers === true && !address?.unitNumber) {
+      // Only reset if it was true (could have been auto-set) AND we effectively just switched from Yes
+      if (prevDualOccupancy.current === 'Yes' && hasUnitNumbers === true && !address?.unitNumber) {
         // Only auto-clear if no unit number was entered (meaning it was just auto-set)
         setHasUnitNumbers(undefined);
         updateAddress({ hasUnitNumbers: undefined });
       }
     }
+    prevDualOccupancy.current = decisionTree.dualOccupancy;
   }, [decisionTree.dualOccupancy]);
 
   // Clear dependent fields when property type or lot type changes

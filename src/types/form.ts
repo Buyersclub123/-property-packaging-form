@@ -172,7 +172,17 @@ export interface MarketPerformance {
 export interface ContentSections {
   whyThisProperty?: string;
   proximity?: string;
-  investmentHighlights?: string;
+  investmentHighlights?: string; // Main Body
+  investmentHighlightsReportName?: string;
+  investmentHighlightsValidFrom?: string;
+  investmentHighlightsValidTo?: string;
+  investmentHighlightsExtra1?: string;
+  investmentHighlightsExtra2?: string;
+  investmentHighlightsExtra3?: string;
+  investmentHighlightsExtra4?: string;
+  investmentHighlightsExtra5?: string;
+  investmentHighlightsExtra6?: string;
+  investmentHighlightsExtra7?: string;
 }
 
 // Agent Information

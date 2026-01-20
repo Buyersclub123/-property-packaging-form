@@ -519,7 +519,10 @@ export async function findGoogleSheetsInFolder(
     const items = await listFilesInFolder(folderId, driveId);
     return items
       .filter(item => item.mimeType === 'application/vnd.google-apps.spreadsheet')
-      .map(item => ({ id: item.id, name: item.name }));
+      .map(item => ({ 
+        id: item.id ? item.id.trim().replace(/\.+$/, '') : '', 
+        name: item.name || '' 
+      }));
   } catch (error) {
     console.error('Error finding Google Sheets in folder:', error);
     throw error;
@@ -537,20 +540,30 @@ export async function renameFile(
   try {
     const drive = getDriveClient();
     
+    // Clean file ID - remove any trailing periods or whitespace
+    const cleanFileId = fileId.trim().replace(/\.+$/, '');
+    
     const updateOptions: any = {
-      fileId,
+      fileId: cleanFileId,
       requestBody: {
         name: newName,
       },
+      supportsAllDrives: true, // Always set for Shared Drive compatibility
     };
     
     if (driveId) {
-      updateOptions.supportsAllDrives = true;
+      updateOptions.includeItemsFromAllDrives = true;
+      updateOptions.driveId = driveId;
+      updateOptions.corpora = 'drive';
     }
     
+    console.error(`[RENAME] Renaming file ${cleanFileId} to "${newName}"${driveId ? ` in drive ${driveId}` : ''}`);
     await drive.files.update(updateOptions);
-  } catch (error) {
-    console.error('Error renaming file:', error);
+    console.error(`[RENAME] ✓ Successfully renamed file to "${newName}"`);
+  } catch (error: any) {
+    console.error('[RENAME] ✗ Error renaming file:', error?.message || error);
+    console.error('[RENAME] File ID:', fileId);
+    console.error('[RENAME] New name:', newName);
     throw error;
   }
 }
@@ -565,18 +578,84 @@ export async function deleteFile(
   try {
     const drive = getDriveClient();
     
-    const deleteOptions: any = {
-      fileId,
+    // Clean file ID - remove any trailing periods or whitespace
+    const cleanFileId = fileId.trim().replace(/\.+$/, '');
+    
+    // First verify file exists and is accessible
+    const getOptions: any = {
+      fileId: cleanFileId,
+      fields: 'id,name',
+      supportsAllDrives: true,
     };
     
     if (driveId) {
-      deleteOptions.supportsAllDrives = true;
+      getOptions.includeItemsFromAllDrives = true;
+      getOptions.driveId = driveId;
+      getOptions.corpora = 'drive';
     }
     
-    await drive.files.delete(deleteOptions);
-  } catch (error) {
-    console.error('Error deleting file:', error);
-    throw error;
+    // Verify file exists before attempting delete
+    try {
+      const fileInfo = await drive.files.get(getOptions);
+      console.error(`[DELETION] File verified: ${fileInfo.data.name} (ID: ${fileInfo.data.id})`);
+    } catch (getError: any) {
+      console.error(`[DELETION] File verification failed: ${getError?.message || getError}`);
+      throw new Error(`Cannot access file ${cleanFileId}: ${getError?.message || 'File not found'}`);
+    }
+    
+    // Try trashing first (safer, works with Content Manager role)
+    const trashOptions: any = {
+      fileId: cleanFileId,
+      requestBody: { trashed: true },
+      supportsAllDrives: true,
+    };
+    
+    if (driveId) {
+      trashOptions.includeItemsFromAllDrives = true;
+      trashOptions.driveId = driveId;
+      trashOptions.corpora = 'drive';
+    }
+    
+    console.error(`[DELETION] Attempting to trash file ${cleanFileId}${driveId ? ` from drive ${driveId}` : ''}`);
+    
+    try {
+      // Try trashing first (works with Content Manager role)
+      await drive.files.update(trashOptions);
+      console.error(`[DELETION] ✓ Successfully trashed file ${cleanFileId}`);
+    } catch (trashError: any) {
+      // If trashing fails, try permanent delete (requires Manager/Organizer role)
+      console.error(`[DELETION] Trashing failed, trying permanent delete: ${trashError?.message || trashError}`);
+      
+      const deleteOptions: any = {
+        fileId: cleanFileId,
+        supportsAllDrives: true,
+      };
+      
+      if (driveId) {
+        deleteOptions.includeItemsFromAllDrives = true;
+        deleteOptions.driveId = driveId;
+        deleteOptions.corpora = 'drive';
+      }
+      
+      await drive.files.delete(deleteOptions);
+      console.error(`[DELETION] ✓ Successfully permanently deleted file ${cleanFileId}`);
+    }
+  } catch (error: any) {
+    const errorMessage = error?.message || String(error);
+    const errorCode = error?.code;
+    const errorResponse = error?.response?.data;
+    
+    console.error('[DELETION] ✗ Error deleting file');
+    console.error('[DELETION] Error message:', errorMessage);
+    console.error('[DELETION] Error code:', errorCode);
+    console.error('[DELETION] Error response:', JSON.stringify(errorResponse, null, 2));
+    console.error('[DELETION] File ID (original):', fileId);
+    console.error('[DELETION] File ID (cleaned):', fileId.trim().replace(/\.+$/, ''));
+    console.error('[DELETION] Drive ID:', driveId);
+    
+    // Re-throw with cleaned error message (remove period if it's from our error format)
+    const cleanedErrorMsg = errorMessage.replace(/\.$/, '');
+    throw new Error(cleanedErrorMsg);
   }
 }
 
@@ -741,6 +820,40 @@ export async function populateSpreadsheet(
         return formData.rentalAssessment?.rentAppraisalPrimaryTo || '';
       }
       
+      // Depreciation Years 1-10 (B18-B27)
+      // Handle various field name patterns: "Depreciation Year 1", "Year 1 Depreciation", "Depreciation 1", etc.
+      if (fieldLower.includes('depreciation')) {
+        // Pattern 1: "Depreciation Year 1" or "Depreciation Year1"
+        let yearMatch = fieldLower.match(/depreciation\s+year\s*(\d+)/);
+        if (yearMatch) {
+          const year = parseInt(yearMatch[1]);
+          if (year >= 1 && year <= 10) {
+            return formData.depreciation?.[`year${year}`] || '';
+          }
+        }
+        
+        // Pattern 2: "Year 1 Depreciation" or "Year1 Depreciation"
+        yearMatch = fieldLower.match(/year\s*(\d+)\s+depreciation/);
+        if (yearMatch) {
+          const year = parseInt(yearMatch[1]);
+          if (year >= 1 && year <= 10) {
+            return formData.depreciation?.[`year${year}`] || '';
+          }
+        }
+        
+        // Pattern 3: "Depreciation 1" (just number after depreciation)
+        yearMatch = fieldLower.match(/depreciation\s*(\d+)/);
+        if (yearMatch) {
+          const year = parseInt(yearMatch[1]);
+          if (year >= 1 && year <= 10) {
+            return formData.depreciation?.[`year${year}`] || '';
+          }
+        }
+      }
+
+      // Note: Rates (B14), Insurance Type (B15), Insurance Amount (B16), and P&B/PCI (B17) 
+      // are written directly to cells - NO COLUMN A CHECKING
+
       // Skip fields marked as "Yes" in CSV (new fields needed)
       // Skip Average Rent (auto-calc in sheet)
       if (fieldLower.includes('average rent')) {
@@ -780,19 +893,59 @@ export async function populateSpreadsheet(
     
     console.log('Updates to apply:', updates.map(u => `${u.range} = ${u.value}`));
     
-    // Step 5: Write values to column B
+    // Step 5: Add direct cell writes (B14-B17) - NO COLUMN A CHECKING
+    const directWrites = [];
+    
+    // B14: Rates
+    if (formData.rates) {
+      directWrites.push({
+        range: `'${TAB_NAME}'!B14`,
+        values: [[formData.rates]],
+      });
+    }
+    
+    // B15: Insurance Type
+    if (formData.insuranceType) {
+      directWrites.push({
+        range: `'${TAB_NAME}'!B15`,
+        values: [[formData.insuranceType]],
+      });
+    }
+    
+    // B16: Insurance Amount
+    if (formData.insuranceAmount) {
+      directWrites.push({
+        range: `'${TAB_NAME}'!B16`,
+        values: [[formData.insuranceAmount]],
+      });
+    }
+    
+    // B17: P&B/PCI Report
+    if (formData.pbPciReport) {
+      directWrites.push({
+        range: `'${TAB_NAME}'!B17`,
+        values: [[formData.pbPciReport]],
+      });
+    }
+    
+    // Step 6: Write all values (existing updates + direct writes)
+    const allUpdates = [
+      ...updates.map(update => ({
+        range: update.range,
+        values: [[update.value]],
+      })),
+      ...directWrites,
+    ];
+    
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
       requestBody: {
         valueInputOption: 'USER_ENTERED',
-        data: updates.map(update => ({
-          range: update.range,
-          values: [[update.value]],
-        })),
+        data: allUpdates,
       },
     });
     
-    console.log(`✓ Successfully populated ${updates.length} fields`);
+    console.log(`✓ Successfully populated ${allUpdates.length} fields (${updates.length} from column A mapping + ${directWrites.length} direct writes)`);
   } catch (error) {
     console.error('Error populating spreadsheet:', error);
     throw error;

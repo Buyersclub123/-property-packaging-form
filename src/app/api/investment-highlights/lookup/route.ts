@@ -4,16 +4,16 @@ import { lookupInvestmentHighlights } from '@/lib/googleSheets';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { lga, state } = body;
+    const { lga, state, suburb } = body;
 
-    if (!lga || !state) {
+    if ((!lga && !suburb) || !state) {
       return NextResponse.json(
-        { error: 'LGA and state are required' },
+        { error: 'LGA or Suburb, and State are required' },
         { status: 400 }
       );
     }
 
-    const result = await lookupInvestmentHighlights(lga, state);
+    const result = await lookupInvestmentHighlights(lga || '', suburb || '', state);
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('Error in investment highlights lookup:', error);

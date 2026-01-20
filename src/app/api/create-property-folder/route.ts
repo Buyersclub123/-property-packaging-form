@@ -100,24 +100,43 @@ export async function POST(request: Request) {
           });
         }
         
-        // Find HL sheet (has "HL" in title) and non-HL sheet
-        const hlSheet = sheets.find(s => s.name.toLowerCase().includes('hl'));
-        const nonHLSheet = sheets.find(s => !s.name.toLowerCase().includes('hl'));
+        // Get contract type from form data
+        const contractType = formData?.decisionTree?.contractTypeSimplified || '';
         
-        console.log('HL sheet found:', hlSheet ? hlSheet.name : 'NOT FOUND');
-        console.log('Non-HL sheet found:', nonHLSheet ? nonHLSheet.name : 'NOT FOUND');
+        // Find sheets by contract type in name
+        const splitContractSheet = sheets.find(s => 
+          s.name.toLowerCase().includes('split contract')
+        );
+        const singleContractSheet = sheets.find(s => 
+          s.name.toLowerCase().includes('single contract')
+        );
         
-        // Delete non-HL sheet if it exists
-        if (nonHLSheet) {
+        console.log('Contract Type:', contractType);
+        console.log('Split contract sheet found:', splitContractSheet ? splitContractSheet.name : 'NOT FOUND');
+        console.log('Single contract sheet found:', singleContractSheet ? singleContractSheet.name : 'NOT FOUND');
+        
+        // Delete opposite sheet based on contract type
+        const contractTypeLower = contractType.toLowerCase().trim();
+        if (contractTypeLower === 'single contract' && splitContractSheet) {
           try {
-            await deleteFile(nonHLSheet.id, SHARED_DRIVE_ID);
-            console.log(`✓ Deleted non-HL sheet: ${nonHLSheet.name}`);
+            await deleteFile(splitContractSheet.id, SHARED_DRIVE_ID);
+            console.log(`✓ Deleted split contract sheet: ${splitContractSheet.name}`);
           } catch (deleteError) {
-            console.error('Error deleting non-HL sheet:', deleteError);
+            console.error('Error deleting split contract sheet:', deleteError);
           }
-        } else {
-          console.log('No non-HL sheet to delete');
         }
+        
+        if (contractTypeLower === 'split contract' && singleContractSheet) {
+          try {
+            await deleteFile(singleContractSheet.id, SHARED_DRIVE_ID);
+            console.log(`✓ Deleted single contract sheet: ${singleContractSheet.name}`);
+          } catch (deleteError) {
+            console.error('Error deleting single contract sheet:', deleteError);
+          }
+        }
+        
+        // Find HL sheet (has "HL" in title) for renaming (if still needed)
+        const hlSheet = sheets.find(s => s.name.toLowerCase().includes('hl'));
         
         // Rename HL sheet if it exists
         if (hlSheet) {

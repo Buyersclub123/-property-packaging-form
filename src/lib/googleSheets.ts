@@ -595,23 +595,25 @@ export async function logMarketPerformanceUpdate(
 export interface InvestmentHighlightsData {
   lga: string;
   state: string;
-  investmentHighlights: string;
-  dataSource?: string;
-  dateCollected?: string;
-  sourceDocument?: string;
+  reportName?: string;
+  validFrom?: string;
+  validTo?: string;
+  investmentHighlights: string; // Main Body
+  extras?: string[]; // Array of 7 strings
+  suburbs?: string; // Comma separated list
 }
 
 export interface InvestmentHighlightsLookupResult {
   found: boolean;
   data?: InvestmentHighlightsData;
-  daysSinceLastCheck?: number;
 }
 
 /**
- * Lookup investment highlights data by LGA and state
+ * Lookup investment highlights data by LGA and Suburb
  */
 export async function lookupInvestmentHighlights(
   lga: string,
+  suburb: string,
   state: string
 ): Promise<InvestmentHighlightsLookupResult> {
   try {
@@ -622,61 +624,65 @@ export async function lookupInvestmentHighlights(
     const sheets = getSheetsClient();
     
     // Read all data from the Investment Highlights tab
-    // Expected columns: LGA, State, Investment Highlights Content, Data Source, Date Collected/Checked, Source Document
+    // Expected columns: A:LGA, B:State, C:ReportName, D:ValidFrom, E:ValidTo, F:Content, G-M:Extras, N:Suburbs
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`, // Skip header row, read columns A-F
+      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:N`, 
     });
 
     const rows = response.data.values || [];
     
-    // Normalize LGA and state for comparison (case-insensitive, trimmed)
     const normalizedLGA = lga.trim().toLowerCase();
+    const normalizedSuburb = suburb ? suburb.trim().toLowerCase() : '';
     const normalizedState = state.trim().toUpperCase();
 
-    // Find matching row
-    const matchingRow = rows.find((row) => {
-      const rowLGA = (row[0] || '').trim().toLowerCase();
-      const rowState = (row[1] || '').trim().toUpperCase();
-      return rowLGA === normalizedLGA && rowState === normalizedState;
-    });
+    // 1. Try to find by Suburb match in Column N (Index 13)
+    let matchingRow = undefined;
+    if (normalizedSuburb) {
+        matchingRow = rows.find((row) => {
+            const rowSuburbs = (row[13] || '').toLowerCase();
+            // Check if suburb appears in the list (comma separated)
+            const suburbList = rowSuburbs.split(',').map((s: string) => s.trim());
+            return suburbList.includes(normalizedSuburb);
+        });
+    }
+
+    // 2. If not found, try to find by LGA match in Column A (Index 0)
+    if (!matchingRow) {
+        matchingRow = rows.find((row) => {
+            const rowLGA = (row[0] || '').trim().toLowerCase();
+            const rowState = (row[1] || '').trim().toUpperCase();
+            return rowLGA === normalizedLGA && rowState === normalizedState;
+        });
+    }
 
     if (!matchingRow) {
       return { found: false };
     }
 
     // Extract data
-    const investmentHighlights = matchingRow[2] || ''; // Column C
-    const dataSource = matchingRow[3] || ''; // Column D
-    const dateCollected = matchingRow[4] || ''; // Column E
-    const sourceDocument = matchingRow[5] || ''; // Column F
-
-    // Calculate days since last check
-    let daysSinceLastCheck: number | undefined;
-    if (dateCollected) {
-      try {
-        const collectedDate = new Date(dateCollected);
-        if (!isNaN(collectedDate.getTime())) {
-          const now = new Date();
-          const diffTime = Math.abs(now.getTime() - collectedDate.getTime());
-          daysSinceLastCheck = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        }
-      } catch (e) {
-        // Ignore date parsing errors
-      }
-    }
+    const data: InvestmentHighlightsData = {
+        lga: matchingRow[0] || '',
+        state: matchingRow[1] || '',
+        reportName: matchingRow[2] || '',
+        validFrom: matchingRow[3] || '',
+        validTo: matchingRow[4] || '',
+        investmentHighlights: matchingRow[5] || '',
+        extras: [
+            matchingRow[6] || '',
+            matchingRow[7] || '',
+            matchingRow[8] || '',
+            matchingRow[9] || '',
+            matchingRow[10] || '',
+            matchingRow[11] || '',
+            matchingRow[12] || '',
+        ],
+        suburbs: matchingRow[13] || '',
+    };
 
     return {
       found: true,
-      data: {
-        lga: matchingRow[0] || '',
-        state: matchingRow[1] || '',
-        investmentHighlights,
-        dataSource,
-        dateCollected,
-        sourceDocument,
-      },
-      daysSinceLastCheck,
+      data,
     };
   } catch (error) {
     console.error('Error looking up investment highlights:', error);
@@ -689,102 +695,124 @@ export async function lookupInvestmentHighlights(
  */
 export async function saveInvestmentHighlightsData(
   lga: string,
+  suburb: string,
   state: string,
   data: Partial<InvestmentHighlightsData>
 ): Promise<void> {
   try {
     const sheets = getSheetsClient();
     
-    // First, check if row exists
-    const lookupResult = await lookupInvestmentHighlights(lga, state);
-    
-    const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-    
-    if (lookupResult.found) {
-      // Update existing row
-      const response = await sheets.spreadsheets.values.get({
+    // Check if row exists (logic same as lookup)
+    const response = await sheets.spreadsheets.values.get({
         spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`,
-      });
+        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:N`,
+    });
 
-      const rows = response.data.values || [];
-      const normalizedLGA = lga.trim().toLowerCase();
-      const normalizedState = state.trim().toUpperCase();
-      
-      const rowIndex = rows.findIndex((row) => {
-        const rowLGA = (row[0] || '').trim().toLowerCase();
-        const rowState = (row[1] || '').trim().toUpperCase();
-        return rowLGA === normalizedLGA && rowState === normalizedState;
-      });
+    const rows = response.data.values || [];
+    const normalizedLGA = lga.trim().toLowerCase();
+    const normalizedSuburb = suburb.trim().toLowerCase();
+    const normalizedState = state.trim().toUpperCase();
 
-      if (rowIndex === -1) {
-        throw new Error('Row not found for update');
-      }
+    let rowIndex = -1;
 
-      const actualRowNumber = rowIndex + 2; // +2 because we skipped header and 0-indexed
-
-      // Build update values
-      const updates: { range: string; values: any[][] }[] = [];
-      
-      // Update Investment Highlights Content (Column C)
-      if (data.investmentHighlights !== undefined) {
-        updates.push({
-          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!C${actualRowNumber}`,
-          values: [[data.investmentHighlights]],
+    // 1. Try Suburb Match
+    if (normalizedSuburb) {
+        rowIndex = rows.findIndex((row) => {
+            const rowSuburbs = (row[13] || '').toLowerCase();
+            const suburbList = rowSuburbs.split(',').map((s: string) => s.trim());
+            return suburbList.includes(normalizedSuburb);
         });
-      }
-
-      // Update Data Source (Column D) - append if exists, otherwise set
-      if (data.dataSource !== undefined) {
-        updates.push({
-          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!D${actualRowNumber}`,
-          values: [[data.dataSource]],
-        });
-      }
-
-      // Update Date Collected/Checked (Column E)
-      updates.push({
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!E${actualRowNumber}`,
-        values: [[now]],
-      });
-
-      // Update Source Document (Column F)
-      if (data.sourceDocument !== undefined) {
-        updates.push({
-          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!F${actualRowNumber}`,
-          values: [[data.sourceDocument]],
-        });
-      }
-
-      // Execute updates
-      if (updates.length > 0) {
-        await sheets.spreadsheets.values.batchUpdate({
-          spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-          requestBody: {
-            valueInputOption: 'RAW',
-            data: updates,
-          },
-        });
-      }
-    } else {
-      // Add new row
-      const newRow = [
-        lga, // Column A: LGA
-        state, // Column B: State
-        data.investmentHighlights || '', // Column C: Investment Highlights Content
-        data.dataSource || 'Manual Entry', // Column D: Data Source
-        now, // Column E: Date Collected/Checked
-        data.sourceDocument || '', // Column F: Source Document
-      ];      await sheets.spreadsheets.values.append({
-        spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`,
-        valueInputOption: 'RAW',
-        insertDataOption: 'INSERT_ROWS',
-        requestBody: {
-          values: [newRow],
-        },
-      });
     }
+
+    // 2. Try LGA Match
+    if (rowIndex === -1) {
+        rowIndex = rows.findIndex((row) => {
+            const rowLGA = (row[0] || '').trim().toLowerCase();
+            const rowState = (row[1] || '').trim().toUpperCase();
+            return rowLGA === normalizedLGA && rowState === normalizedState;
+        });
+    }
+
+    // Prepare row data
+    const extras = data.extras || [];
+    const mainBody = data.investmentHighlights || '';
+    const reportName = data.reportName || '';
+    const validFrom = data.validFrom || '';
+    const validTo = data.validTo || '';
+
+    if (rowIndex !== -1) {
+        // Update existing
+        const actualRowNumber = rowIndex + 2;
+        const existingRow = rows[rowIndex];
+        
+        // Merge Suburbs
+        let currentSuburbs = existingRow[13] || '';
+        const suburbList = currentSuburbs.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+        let suburbUpdated = false;
+        
+        // Add current suburb if not present (case insensitive check)
+        if (suburb && !suburbList.some((s: string) => s.toLowerCase() === normalizedSuburb)) {
+            suburbList.push(suburb.trim()); // Use original case
+            currentSuburbs = suburbList.join(', ');
+            suburbUpdated = true;
+        }
+
+        const updates: { range: string; values: any[][] }[] = [];
+
+        // Update fields if provided
+        if (data.reportName !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!C${actualRowNumber}`, values: [[reportName]] });
+        if (data.validFrom !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!D${actualRowNumber}`, values: [[validFrom]] });
+        if (data.validTo !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!E${actualRowNumber}`, values: [[validTo]] });
+        if (data.investmentHighlights !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!F${actualRowNumber}`, values: [[mainBody]] });
+        
+        // Extras G-M
+        if (extras.length > 0) {
+             const extrasRow = [
+                 extras[0] || '', extras[1] || '', extras[2] || '', extras[3] || '', extras[4] || '', extras[5] || '', extras[6] || ''
+             ];
+             updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!G${actualRowNumber}`, values: [extrasRow] });
+        }
+
+        // Suburbs N
+        if (suburbUpdated) {
+            updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!N${actualRowNumber}`, values: [[currentSuburbs]] });
+        }
+
+        if (updates.length > 0) {
+            await sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
+                requestBody: { valueInputOption: 'RAW', data: updates },
+            });
+        }
+
+    } else {
+        // Create new
+        const newRow = [
+            lga,
+            state,
+            reportName,
+            validFrom,
+            validTo,
+            mainBody,
+            extras[0] || '',
+            extras[1] || '',
+            extras[2] || '',
+            extras[3] || '',
+            extras[4] || '',
+            extras[5] || '',
+            extras[6] || '',
+            suburb, // Initial suburb
+        ];
+
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
+            range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:N`,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: [newRow] },
+        });
+    }
+
   } catch (error) {
     console.error('Error saving investment highlights data:', error);
     throw error;
