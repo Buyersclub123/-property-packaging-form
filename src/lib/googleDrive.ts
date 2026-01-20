@@ -751,23 +751,36 @@ export async function populateSpreadsheet(
         return convertStateToCode(state);
       }
       
-      // Land Cost mapping
+      // Land Cost mapping - ONLY populate if split contract
       if (fieldLower.includes('land cost')) {
-        return formData.purchasePrice?.landPrice || '';
-      }
-      
-      // Build Cost mapping
-      if (fieldLower.includes('build cost')) {
-        return formData.purchasePrice?.buildPrice || '';
-      }
-      
-      // Total Cost (calculated)
-      if (fieldLower.includes('total cost')) {
-        const land = parseFloat(formData.purchasePrice?.landPrice || '0');
-        const build = parseFloat(formData.purchasePrice?.buildPrice || '0');
-        if (land && build) {
-          return String(land + build);
+        const isSplitContract = formData.decisionTree?.contractTypeSimplified === 'Split Contract';
+        if (isSplitContract) {
+          return formData.purchasePrice?.landPrice || '';
         }
+        return '';
+      }
+      
+      // Build Cost mapping - ONLY populate if split contract
+      if (fieldLower.includes('build cost')) {
+        const isSplitContract = formData.decisionTree?.contractTypeSimplified === 'Split Contract';
+        if (isSplitContract) {
+          return formData.purchasePrice?.buildPrice || '';
+        }
+        return '';
+      }
+      
+      // Total Cost mapping
+      if (fieldLower.includes('total cost')) {
+        // For split contracts, calculate from land + build
+        const isSplitContract = formData.decisionTree?.contractTypeSimplified === 'Split Contract';
+        if (isSplitContract) {
+          const land = parseFloat(formData.purchasePrice?.landPrice || '0');
+          const build = parseFloat(formData.purchasePrice?.buildPrice || '0');
+          if (land && build) {
+            return String(land + build);
+          }
+        }
+        // For single contracts or if calculation fails, use totalPrice
         return formData.purchasePrice?.totalPrice || '';
       }
       
@@ -893,10 +906,11 @@ export async function populateSpreadsheet(
     
     console.log('Updates to apply:', updates.map(u => `${u.range} = ${u.value}`));
     
-    // Step 5: Add direct cell writes (B14-B17) - NO COLUMN A CHECKING
+    // Step 5: Add direct cell writes (B14-B27) - NO COLUMN A CHECKING
+    // These fields are written directly to specific cells without checking column A
     const directWrites = [];
     
-    // B14: Rates
+    // B14: Rates (quarterly council rates)
     if (formData.rates) {
       directWrites.push({
         range: `'${TAB_NAME}'!B14`,
@@ -904,15 +918,24 @@ export async function populateSpreadsheet(
       });
     }
     
-    // B15: Insurance Type
+    // B15: Insurance Type (dropdown: "Insurance" or "Insurance + Strata")
     if (formData.insuranceType) {
       directWrites.push({
         range: `'${TAB_NAME}'!B15`,
         values: [[formData.insuranceType]],
       });
+    } else {
+      // Auto-determine insurance type based on title
+      const title = formData.propertyDescription?.title?.toLowerCase() || '';
+      const hasBodyCorp = title.includes('strata') || title.includes('owners corp');
+      const insuranceType = hasBodyCorp ? 'Insurance + Strata' : 'Insurance';
+      directWrites.push({
+        range: `'${TAB_NAME}'!B15`,
+        values: [[insuranceType]],
+      });
     }
     
-    // B16: Insurance Amount
+    // B16: Insurance Amount (annual insurance cost)
     if (formData.insuranceAmount) {
       directWrites.push({
         range: `'${TAB_NAME}'!B16`,
@@ -920,12 +943,35 @@ export async function populateSpreadsheet(
       });
     }
     
-    // B17: P&B/PCI Report
+    // B17: P&B/PCI Report (dropdown: "P&B" for established, "PCI" for new builds)
     if (formData.pbPciReport) {
       directWrites.push({
         range: `'${TAB_NAME}'!B17`,
         values: [[formData.pbPciReport]],
       });
+    } else {
+      // Auto-determine report type based on property type
+      const isNewProperty = formData.decisionTree?.propertyType === 'New';
+      const reportType = isNewProperty ? 'PCI' : 'P&B';
+      directWrites.push({
+        range: `'${TAB_NAME}'!B17`,
+        values: [[reportType]],
+      });
+    }
+    
+    // B18-B27: Depreciation Years 1-10 (Diminishing Value amounts)
+    // Write depreciation values if they exist
+    if (formData.depreciation) {
+      for (let year = 1; year <= 10; year++) {
+        const depreciationValue = formData.depreciation[`year${year}`];
+        if (depreciationValue) {
+          const rowNumber = 17 + year; // B18 = row 18, B19 = row 19, etc.
+          directWrites.push({
+            range: `'${TAB_NAME}'!B${rowNumber}`,
+            values: [[depreciationValue]],
+          });
+        }
+      }
     }
     
     // Step 6: Write all values (existing updates + direct writes)

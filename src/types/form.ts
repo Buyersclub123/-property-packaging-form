@@ -242,6 +242,27 @@ export interface FormData {
   cashflowSheetLinkHL?: string; // House & Land cashflow spreadsheet copy URL
   cashflowSheetLinkGeneral?: string; // General/Single Contract cashflow spreadsheet copy URL
   
+  // Cashflow Spreadsheet Fields (rows 14-27 in Autofill data tab)
+  rates?: string; // Quarterly council rates (B14)
+  insuranceType?: 'Insurance' | 'Insurance + Strata'; // Insurance type dropdown (B15)
+  insuranceAmount?: string; // Annual insurance amount (B16)
+  pbPciReport?: 'P&B' | 'PCI'; // Report type: P&B for established, PCI for new builds (B17)
+  buildWindow?: string; // Expected build window in months
+  
+  // Depreciation (Years 1-10) - Diminishing Value amounts (B18-B27)
+  depreciation?: {
+    year1?: string;
+    year2?: string;
+    year3?: string;
+    year4?: string;
+    year5?: string;
+    year6?: string;
+    year7?: string;
+    year8?: string;
+    year9?: string;
+    year10?: string;
+  };
+  
   // Workflow
   messageForBA?: string;
   pushRecordToDealSheet?: YesNo;
