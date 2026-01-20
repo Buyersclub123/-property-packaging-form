@@ -1,28 +1,68 @@
 'use client';
 
+/**
+ * Step 5: Property Content & Proximity (Phase 3 - Refactored)
+ * 
+ * This component has been refactored to use three independent field components:
+ * 1. ProximityField - Proximity/amenity data
+ * 2. WhyThisPropertyField - "Why This Property" content
+ * 3. InvestmentHighlightsField - Investment highlights/hotspotting reports
+ * 
+ * Phase 3: Manual paste functionality only
+ * Phase 4: Will add automation features (auto-run, AI generation, sheet lookup)
+ */
+
 import { useFormStore } from '@/store/formStore';
-import { ProximitySection } from './step5/ProximitySection';
-import { WhyThisPropertySection } from './step5/WhyThisPropertySection';
-import { InvestmentHighlightsSection } from './step5/InvestmentHighlightsSection';
+import { ProximityField } from './step5/ProximityField';
+import { WhyThisPropertyField } from './step5/WhyThisPropertyField';
+import { InvestmentHighlightsField } from './step5/InvestmentHighlightsField';
 
 export function Step5Proximity() {
-  const { formData } = useFormStore();
-  const { address } = formData;
+  const { formData, updateFormData } = useFormStore();
+  const { contentSections, address } = formData;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Location & Content</h2>
-        <p className="text-gray-600 mb-6">
-          Review and generate content for {address?.propertyAddress || 'the property'}.
-        </p>
+    <div>
+      <h2 className="text-2xl font-bold mb-6">Property Content & Proximity</h2>
+      
+      <div className="space-y-8">
+        {/* Component 1: Proximity */}
+        <ProximityField
+          value={contentSections?.proximity || ''}
+          onChange={(value) => updateFormData({
+            contentSections: {
+              ...contentSections,
+              proximity: value
+            }
+          })}
+          address={address?.propertyAddress}
+        />
+
+        {/* Component 2: Why This Property */}
+        <WhyThisPropertyField
+          value={contentSections?.whyThisProperty || ''}
+          onChange={(value) => updateFormData({
+            contentSections: {
+              ...contentSections,
+              whyThisProperty: value
+            }
+          })}
+          suburb={address?.suburbName}
+        />
+
+        {/* Component 3: Investment Highlights */}
+        <InvestmentHighlightsField
+          value={contentSections?.investmentHighlights || ''}
+          onChange={(value) => updateFormData({
+            contentSections: {
+              ...contentSections,
+              investmentHighlights: value
+            }
+          })}
+          lga={address?.lga}
+          state={address?.state}
+        />
       </div>
-      
-      <ProximitySection />
-      
-      <WhyThisPropertySection />
-      
-      <InvestmentHighlightsSection />
     </div>
   );
 }

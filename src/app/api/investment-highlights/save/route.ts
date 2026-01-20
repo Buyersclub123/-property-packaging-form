@@ -4,7 +4,7 @@ import { saveInvestmentHighlightsData } from '@/lib/googleSheets';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { lga, state, investmentHighlights, dataSource, sourceDocument } = body;
+    const { lga, suburb, state, investmentHighlights, reportName, validFrom, validTo, extras, suburbs } = body;
 
     if (!lga || !state) {
       return NextResponse.json(
@@ -20,10 +20,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await saveInvestmentHighlightsData(lga, state, {
+    await saveInvestmentHighlightsData(lga, suburb || '', state, {
       investmentHighlights,
-      dataSource: dataSource || 'Manual Entry',
-      sourceDocument: sourceDocument || '',
+      reportName,
+      validFrom,
+      validTo,
+      extras,
+      suburbs,
     });
     
     return NextResponse.json({ success: true });
