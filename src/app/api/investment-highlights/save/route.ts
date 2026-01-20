@@ -4,29 +4,33 @@ import { saveInvestmentHighlightsData } from '@/lib/googleSheets';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { lga, suburb, state, investmentHighlights, reportName, validFrom, validTo, extras, suburbs } = body;
+    const { suburbs, state, reportName, validPeriod, mainBody, extraInfo } = body;
 
-    if (!lga || !state) {
+    if (!suburbs || !state) {
       return NextResponse.json(
-        { error: 'LGA and state are required' },
+        { error: 'Suburbs and state are required' },
         { status: 400 }
       );
     }
 
-    if (!investmentHighlights) {
+    if (!reportName || !validPeriod || !mainBody) {
       return NextResponse.json(
-        { error: 'Investment highlights content is required' },
+        { error: 'Report name, valid period, and main body are required' },
         { status: 400 }
       );
     }
 
-    await saveInvestmentHighlightsData(lga, suburb || '', state, {
-      investmentHighlights,
-      reportName,
-      validFrom,
-      validTo,
-      extras,
+    // Extract first suburb for lookup purposes
+    const suburbList = suburbs.split(',').map((s: string) => s.trim());
+    const firstSuburb = suburbList[0] || '';
+
+    await saveInvestmentHighlightsData('', firstSuburb, state, {
       suburbs,
+      state,
+      reportName,
+      validPeriod,
+      mainBody,
+      extraInfo: extraInfo || '',
     });
     
     return NextResponse.json({ success: true });

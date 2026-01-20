@@ -48,9 +48,19 @@ export function InvestmentHighlightsField({
   
   // Form fields for saving new report
   const [newReportName, setNewReportName] = useState('');
-  const [newValidFrom, setNewValidFrom] = useState('');
-  const [newValidTo, setNewValidTo] = useState('');
+  const [newValidPeriod, setNewValidPeriod] = useState('');
+  const [newMainBody, setNewMainBody] = useState('');
+  const [newExtraInfo, setNewExtraInfo] = useState('');
   const [showSaveForm, setShowSaveForm] = useState(false);
+  
+  // PDF upload states
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [uploadedFileId, setUploadedFileId] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [extractedReportName, setExtractedReportName] = useState('');
+  const [extractedValidPeriod, setExtractedValidPeriod] = useState('');
+  const [showVerification, setShowVerification] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
 
   // Auto-lookup on mount
   useEffect(() => {
@@ -87,11 +97,12 @@ export function InvestmentHighlightsField({
       if (result.found && result.data) {
         setMatchStatus('found');
         setReportName(result.data.reportName || '');
-        // Construct valid period from validFrom and validTo
-        const validFrom = result.data.validFrom || '';
-        const validTo = result.data.validTo || '';
-        setValidPeriod(validFrom && validTo ? `${validFrom} - ${validTo}` : validFrom || validTo || '');
-        onChange(result.data.investmentHighlights || '');
+        setValidPeriod(result.data.validPeriod || '');
+        // Combine Main Body and Extra Info for display
+        const mainBody = result.data.mainBody || '';
+        const extraInfo = result.data.extraInfo || '';
+        const combined = mainBody + (extraInfo ? '\n\n' + extraInfo : '');
+        onChange(combined);
       } else {
         setMatchStatus('not-found');
       }
@@ -105,8 +116,8 @@ export function InvestmentHighlightsField({
   };
 
   const handleSave = async () => {
-    if ((!lga && !suburb) || !state || !newReportName || !newValidFrom || !newValidTo || !value) {
-      alert('Please fill in all fields');
+    if ((!lga && !suburb) || !state || !newReportName || !newValidPeriod || !newMainBody) {
+      alert('Please fill in Report Name, Valid Period, and Main Body');
       return;
     }
     
@@ -117,14 +128,12 @@ export function InvestmentHighlightsField({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          lga: lga || suburb || '',
-          suburb: suburb || '',
+          suburbs: suburb || '', // Comma-separated suburbs (start with current)
           state, 
           reportName: newReportName,
-          validFrom: newValidFrom,
-          validTo: newValidTo,
-          investmentHighlights: value,
-          suburbs: suburb || '', // Initial suburb
+          validPeriod: newValidPeriod,
+          mainBody: newMainBody,
+          extraInfo: newExtraInfo || '',
         }),
       });
       
@@ -137,13 +146,145 @@ export function InvestmentHighlightsField({
       setShowSaveForm(false);
       setMatchStatus('found');
       setReportName(newReportName);
-      setValidPeriod(`${newValidFrom} - ${newValidTo}`);
+      setValidPeriod(newValidPeriod);
+      // Update display with saved content
+      const combined = newMainBody + (newExtraInfo ? '\n\n' + newExtraInfo : '');
+      onChange(combined);
     } catch (err) {
       console.error('Save error:', err);
       alert('Failed to save investment highlights. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Please select a PDF file');
+      return;
+    }
+    
+    // Validate file size (50MB max)
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert('File is too large. Maximum size is 50MB.');
+      return;
+    }
+    
+    setUploadingPdf(true);
+    setUploadProgress('Uploading PDF...');
+    setError(null);
+    
+    try {
+      // Step 1: Upload PDF to Google Drive
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const uploadResponse = await fetch('/api/investment-highlights/upload-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+      
+      const uploadResult = await uploadResponse.json();
+      setUploadedFileId(uploadResult.fileId);
+      setUploadedFileName(uploadResult.fileName);
+      
+      // Step 2: Extract metadata from PDF
+      setUploadProgress('Extracting metadata...');
+      
+      const extractResponse = await fetch('/api/investment-highlights/extract-metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: uploadResult.fileId }),
+      });
+      
+      if (!extractResponse.ok) {
+        const errorData = await extractResponse.json();
+        throw new Error(errorData.error || 'Metadata extraction failed');
+      }
+      
+      const extractResult = await extractResponse.json();
+      setExtractedReportName(extractResult.reportName || '');
+      setExtractedValidPeriod(extractResult.validPeriod || '');
+      
+      // Show verification UI
+      setShowVerification(true);
+      setMatchStatus(null);
+    } catch (err: any) {
+      console.error('PDF upload error:', err);
+      setError(err.message || 'Failed to upload PDF. Please try again.');
+    } finally {
+      setUploadingPdf(false);
+      setUploadProgress('');
+    }
+  };
+
+  const handleConfirmMetadata = async () => {
+    if (!extractedReportName || !extractedValidPeriod) {
+      alert('Please fill in Report Name and Valid Period');
+      return;
+    }
+    
+    setLoading(true);
+    setUploadProgress('Organizing PDF...');
+    
+    try {
+      // Organize PDF into CURRENT/LEGACY folders and save to sheet
+      const response = await fetch('/api/investment-highlights/organize-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileId: uploadedFileId,
+          reportName: extractedReportName,
+          validPeriod: extractedValidPeriod,
+          suburbs: suburb || '',
+          state,
+          userEmail: userEmail || 'unknown',
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to organize PDF');
+      }
+      
+      const result = await response.json();
+      
+      // Success - update UI
+      setMatchStatus('found');
+      setReportName(extractedReportName);
+      setValidPeriod(extractedValidPeriod);
+      setShowVerification(false);
+      
+      alert('PDF uploaded and organized successfully!');
+      
+      // Note: Main body will be populated in Phase 4C-2 with AI summary
+      onChange('PDF uploaded. AI summary generation will be available in Phase 4C-2.');
+    } catch (err: any) {
+      console.error('PDF organization error:', err);
+      setError(err.message || 'Failed to organize PDF. Please try again.');
+    } finally {
+      setLoading(false);
+      setUploadProgress('');
+    }
+  };
+
+  const handleCancelUpload = () => {
+    setShowVerification(false);
+    setUploadedFileId('');
+    setUploadedFileName('');
+    setExtractedReportName('');
+    setExtractedValidPeriod('');
+    setUploadProgress('');
   };
 
   /**
@@ -209,7 +350,7 @@ export function InvestmentHighlightsField({
           </div>
         )}
         
-        {matchStatus === 'not-found' && (
+        {matchStatus === 'not-found' && !showVerification && (
           <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
             <div className="flex items-center space-x-2 text-yellow-600 mb-2">
               <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -217,15 +358,119 @@ export function InvestmentHighlightsField({
               </svg>
               <span className="font-medium">No Match Found</span>
             </div>
-            <p className="text-sm text-gray-700 mb-2">
-              No existing report for {suburb || lga}, {state}. Please paste highlights and save.
+            <p className="text-sm text-gray-700 mb-3">
+              No existing report for {suburb || lga}, {state}.
             </p>
+            
+            {/* PDF Upload Option */}
+            <div className="mt-3 p-4 border-2 border-dashed border-gray-300 rounded-lg text-center bg-white">
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handlePdfUpload}
+                className="hidden"
+                id="pdf-upload"
+                disabled={uploadingPdf}
+              />
+              <label htmlFor="pdf-upload" className={`cursor-pointer ${uploadingPdf ? 'opacity-50' : ''}`}>
+                <div className="text-gray-600">
+                  <div className="text-2xl mb-2">📄</div>
+                  <div className="font-medium">Upload Hotspotting PDF</div>
+                  <p className="text-sm mt-1">Drag & drop or click to browse</p>
+                  <p className="text-xs text-gray-500 mt-1">(PDF files only, max 50MB)</p>
+                </div>
+              </label>
+              {uploadingPdf && (
+                <div className="mt-3 text-sm text-blue-600">
+                  {uploadProgress}
+                </div>
+              )}
+            </div>
+            
+            <div className="my-3 text-center text-sm text-gray-500">
+              ─── OR ───
+            </div>
+            
             <button
               onClick={() => setShowSaveForm(!showSaveForm)}
               className="text-sm text-blue-600 hover:text-blue-700 underline"
             >
-              {showSaveForm ? 'Hide Save Form' : 'Show Save Form'}
+              {showSaveForm ? 'Hide Manual Entry Form' : 'Show Manual Entry Form'}
             </button>
+            
+            <div className="mt-3 text-sm text-gray-600">
+              💡 Check for latest reports:{' '}
+              <a 
+                href="https://membership.hotspotting.com.au/hotspotting-reports"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                Hotspotting Membership
+              </a>
+            </div>
+          </div>
+        )}
+        
+        {/* PDF Verification UI */}
+        {showVerification && (
+          <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-md">
+            <h4 className="font-medium text-blue-900 mb-3 flex items-center">
+              <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              PDF Uploaded: {uploadedFileName}
+            </h4>
+            <p className="text-sm text-blue-800 mb-3">📋 Extracted Information:</p>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Report Name *
+                </label>
+                <input
+                  type="text"
+                  value={extractedReportName}
+                  onChange={(e) => setExtractedReportName(e.target.value)}
+                  className="w-full p-2 border rounded-md"
+                  placeholder="e.g., SUNSHINE COAST"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Valid Period *
+                </label>
+                <input
+                  type="text"
+                  value={extractedValidPeriod}
+                  onChange={(e) => setExtractedValidPeriod(e.target.value)}
+                  className="w-full p-2 border rounded-md"
+                  placeholder="e.g., October 2025 - January 2026"
+                />
+              </div>
+            </div>
+            
+            <p className="text-xs text-gray-600 mt-3">
+              ⚠️ Please verify the information above is correct
+            </p>
+            
+            <div className="flex space-x-2 mt-3">
+              <button
+                onClick={handleConfirmMetadata}
+                disabled={!extractedReportName || !extractedValidPeriod || loading}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {loading ? uploadProgress || 'Processing...' : '✓ Confirm & Continue'}
+              </button>
+              <button
+                onClick={handleCancelUpload}
+                disabled={loading}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400"
+              >
+                ✗ Cancel
+              </button>
+            </div>
           </div>
         )}
         
@@ -251,37 +496,49 @@ export function InvestmentHighlightsField({
                 type="text"
                 value={newReportName}
                 onChange={(e) => setNewReportName(e.target.value)}
-                placeholder="e.g., Lewisham Investment Report Jan 2026"
+                placeholder="e.g., SUNSHINE COAST"
                 className="w-full p-2 border rounded-md"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Valid From *
+                Valid Period *
               </label>
               <input
                 type="text"
-                value={newValidFrom}
-                onChange={(e) => setNewValidFrom(e.target.value)}
-                placeholder="e.g., October 2025"
+                value={newValidPeriod}
+                onChange={(e) => setNewValidPeriod(e.target.value)}
+                placeholder="e.g., October 2025 - January 2026"
                 className="w-full p-2 border rounded-md"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Valid To *
+                Main Body *
               </label>
-              <input
-                type="text"
-                value={newValidTo}
-                onChange={(e) => setNewValidTo(e.target.value)}
-                placeholder="e.g., January 2026"
+              <textarea
+                value={newMainBody}
+                onChange={(e) => setNewMainBody(e.target.value)}
+                placeholder="Key investment highlights and infrastructure developments"
                 className="w-full p-2 border rounded-md"
+                rows={4}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Extra Info (Optional)
+              </label>
+              <textarea
+                value={newExtraInfo}
+                onChange={(e) => setNewExtraInfo(e.target.value)}
+                placeholder="Additional information (optional)"
+                className="w-full p-2 border rounded-md"
+                rows={2}
               />
             </div>
             <button
               onClick={handleSave}
-              disabled={loading || !value}
+              disabled={loading || !newReportName || !newValidPeriod || !newMainBody}
               className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
             >
               {loading ? 'Saving...' : 'Save to Google Sheet'}

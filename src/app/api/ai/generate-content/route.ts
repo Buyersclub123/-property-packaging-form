@@ -41,7 +41,12 @@ export async function POST(request: NextRequest) {
     
     // Get API configuration from environment variables
     const apiKey = process.env.OPENAI_API_KEY;
-    const apiBaseUrl = process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1/chat/completions';
+    // Support both full URL and base URL formats
+    let apiUrl = process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1';
+    // If it doesn't end with /chat/completions, add it
+    if (!apiUrl.endsWith('/chat/completions')) {
+      apiUrl = apiUrl.replace(/\/$/, '') + '/chat/completions';
+    }
     
     if (!apiKey) {
       console.error('OPENAI_API_KEY not configured');
@@ -62,14 +67,14 @@ export async function POST(request: NextRequest) {
     }
     
     // Call OpenAI API using native fetch
-    const response = await fetch(apiBaseUrl, {
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: process.env.OPENAI_MODEL || 'gpt-4',
         messages: [
           { role: 'system', content: 'You are a real estate investment summary tool.' },
           { role: 'user', content: prompt }
@@ -102,22 +107,27 @@ export async function POST(request: NextRequest) {
  */
 function getPrompt(suburb: string, lga: string, type: string): string {
   if (type === 'why-property') {
-    return `You are a real estate investment summary tool. Your job is to provide a list of 7 investment-based reasons why a specific property location is a strong investment, using suburb and LGA-level data.
+    return `Generate 7 detailed investment-based reasons why this property would appeal to investors. Use a professional, confident tone suited for a real estate investment brief. Each reason should start with a bold heading, followed by 2–4 well-written sentences explaining the insight clearly.
 
-Provide two outputs in the exact format below:
+Focus on real investor themes like:
+- Capital growth trends
+- Rental yield strength
+- Vacancy rates
+- Infrastructure investment
+- Affordability advantage
+- Transport access
+- Tenant demand
 
-1. Full Detailed Reasons – 7 reasons, each starting with a bold heading (like "Strong Capital Growth"), followed by 2–4 sentences with suburb-specific data or explanation.  
-2. Short One-Line Versions Only – list the same 7 headings only, in the same order as above.
-
-Rules:
-- No bullet points, asterisks, or extra spacing.
-- No intro, explanation, or summary.
-- Each reason must be based on real property investment criteria: capital growth, rental yield, vacancy, infrastructure, affordability, transport, and tenant demand.
-- Use the suburb and LGA data for accuracy.
-- Style must be consistent and clean for direct inclusion in a property investment report.
+Use the specific suburb and LGA context when relevant.
 
 Suburb: ${suburb}
-LGA: ${lga}`;
+LGA: ${lga}
+
+Important formatting instructions:
+- ✅ Include only the full detailed reasons
+- ❌ Do not include a short summary list or single-line versions at the end
+- ✅ Each heading must be bold (Markdown style, e.g., **Strong Capital Growth**)
+- ✅ No bullet points, numbers, or extra spacing between entries`;
   }
   
   return '';
