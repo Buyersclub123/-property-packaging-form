@@ -5,10 +5,15 @@ import { useFormStore } from '@/store/formStore';
 import { StepIndicator } from './StepIndicator';
 import { exportFormDataToExcel } from '@/lib/excelExport';
 import { Step0AddressAndRisk } from './steps/Step0AddressAndRisk';
+import { Step1AInvestmentHighlightsCheck } from './steps/Step1AInvestmentHighlightsCheck';
 import { Step1DecisionTree } from './steps/Step1DecisionTree';
 import { Step2PropertyDetails } from './steps/Step2PropertyDetails';
 import { Step3MarketPerformance } from './steps/Step3MarketPerformance';
 import { Step5Proximity } from './steps/Step5Proximity';
+import { Step6InsuranceCalculator } from './steps/Step6InsuranceCalculator';
+import { Step6WashingtonBrown } from './steps/Step6WashingtonBrown';
+import { Step7CashflowReview } from './steps/Step7CashflowReview';
+import { Step8Submission } from './steps/Step8Submission';
 import { Step6FolderCreation } from './steps/Step6FolderCreation';
 import { Step4Review } from './steps/Step4Review';
 import { getUserEmail } from '@/lib/userAuth';
@@ -16,11 +21,15 @@ import { getUserEmail } from '@/lib/userAuth';
 // Steps numbered starting from 1
 const STEPS = [
   { number: 1, title: 'Address & Risk Check', component: Step0AddressAndRisk },
-  { number: 2, title: 'Decision Tree', component: Step1DecisionTree },
-  { number: 3, title: 'Property Details', component: Step2PropertyDetails },
-  { number: 4, title: 'Market Performance', component: Step3MarketPerformance },
-  { number: 5, title: 'Proximity & Content', component: Step5Proximity },
-  { number: 6, title: 'Folder Creation', component: Step6FolderCreation },
+  { number: 2, title: 'Investment Highlights Check', component: Step1AInvestmentHighlightsCheck },
+  { number: 3, title: 'Decision Tree', component: Step1DecisionTree },
+  { number: 4, title: 'Property Details', component: Step2PropertyDetails },
+  { number: 5, title: 'Market Performance', component: Step3MarketPerformance },
+  { number: 6, title: 'Proximity & Content', component: Step5Proximity },
+  { number: 7, title: 'Insurance Calculator', component: Step6InsuranceCalculator },
+  { number: 8, title: 'Washington Brown', component: Step6WashingtonBrown },
+  { number: 9, title: 'Cashflow Review', component: Step7CashflowReview },
+  { number: 10, title: 'Submission', component: Step8Submission },
 ];
 
 interface MultiStepFormProps {
@@ -279,7 +288,26 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         }
         return true;
 
-      case 2: // Decision Tree
+      case 2: // Investment Highlights Check
+        // Check that user has either:
+        // 1. Found a match (status: 'ready')
+        // 2. Selected from dropdown (status: 'ready')
+        // 3. Uploaded a PDF (status: 'processing' or 'ready')
+        const ihStatus = formData.earlyProcessing?.investmentHighlights?.status;
+        
+        if (!ihStatus || ihStatus === 'pending') {
+          setValidationErrorWithRef('Please select an Investment Highlights report from the dropdown or upload a PDF before proceeding.');
+          return false;
+        }
+        
+        if (ihStatus === 'error') {
+          setValidationErrorWithRef('There was an error processing the Investment Highlights. Please try again or select a different report.');
+          return false;
+        }
+        
+        return true;
+
+      case 3: // Decision Tree
         // All decision tree fields are required
         if (!decisionTree?.propertyType || !decisionTree?.status) {
           setValidationErrorWithRef('Property Type and Status are required.');
@@ -394,7 +422,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 3: // Property Details
+      case 4: // Property Details
         const isProject = decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple';
         const isDualOccupancy = decisionTree?.dualOccupancy === 'Yes';
         const isHAndL = decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Individual';
@@ -645,7 +673,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 4: // Market Performance
+      case 5: // Market Performance
         const { marketPerformance } = formData;
         
         // All market performance fields are required
@@ -715,7 +743,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 5: // Proximity & Content
+      case 6: // Proximity & Content
         const { contentSections } = formData;
         
         // All content sections are required
@@ -742,6 +770,75 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
+      case 7: // Insurance Calculator
+        const { insurance } = formData;
+        
+        if (!insurance || insurance.trim() === '') {
+          setValidationError('Please enter the annual insurance cost from the Terri Scheer calculator.');
+          return false;
+        }
+        
+        // Validate that it's a valid number
+        const insuranceValue = parseFloat(insurance.replace(/,/g, ''));
+        if (isNaN(insuranceValue) || insuranceValue < 0) {
+          setValidationError('Insurance value must be a valid positive number.');
+          return false;
+        }
+        
+        return true;
+
+      case 8: // Washington Brown
+        const { depreciation } = formData;
+        
+        if (!depreciation) {
+          setValidationError('Please parse the Washington Brown report or manually enter all 10 years of depreciation values.');
+          return false;
+        }
+        
+        // Check all 10 years
+        const missingYears: number[] = [];
+        const invalidYears: number[] = [];
+        
+        for (let i = 1; i <= 10; i++) {
+          const yearKey = `year${i}` as keyof typeof depreciation;
+          const value = depreciation[yearKey];
+          
+          if (!value || value.trim() === '') {
+            missingYears.push(i);
+          } else {
+            // Validate that it's a valid number
+            const numValue = parseFloat(value.replace(/,/g, ''));
+            if (isNaN(numValue) || numValue < 0) {
+              invalidYears.push(i);
+            }
+          }
+        }
+        
+        if (missingYears.length > 0) {
+          setValidationError(`Missing depreciation value for Year ${missingYears.join(', ')}. All 10 years are required.`);
+          return false;
+        }
+        
+        if (invalidYears.length > 0) {
+          setValidationError(`Invalid depreciation value for Year ${invalidYears.join(', ')}. Values must be valid positive numbers.`);
+          return false;
+        }
+        
+        return true;
+
+      case 9: // Cashflow Review
+        // Check if folder has been created
+        if (!formData.address?.folderLink) {
+          setValidationError('Please create the property folder before proceeding.');
+          return false;
+        }
+        
+        return true;
+
+      case 10: // Submission
+        // Step 9 handles its own validation (checklist must be complete)
+        // No validation needed here as user can't proceed past Step 9
+        return true;
 
       default:
         return true;
@@ -754,6 +851,124 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
 
   const canGoPrevious = () => {
     return currentStep > 1;
+  };
+
+  // Early processing functions for Proximity & Why This Property
+  const startProximityProcessing = async () => {
+    const { address, earlyProcessing } = formData;
+    
+    console.log('📍 Starting Proximity processing...', { 
+      address: address?.propertyAddress, 
+      status: earlyProcessing?.proximity?.status 
+    });
+    
+    // Don't re-run if already processing or ready
+    if (earlyProcessing?.proximity?.status === 'processing' || 
+        earlyProcessing?.proximity?.status === 'ready') {
+      console.log('⏭️ Proximity already processing or ready, skipping');
+      return;
+    }
+    
+    updateFormData({
+      earlyProcessing: {
+        ...formData.earlyProcessing,
+        proximity: { status: 'processing', data: null },
+      },
+    });
+
+    try {
+      const res = await fetch('/api/geoapify/proximity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ propertyAddress: address?.propertyAddress }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        updateFormData({
+          earlyProcessing: {
+            ...formData.earlyProcessing,
+            proximity: { status: 'ready', data: json.proximity },
+          },
+        });
+      } else {
+        updateFormData({
+          earlyProcessing: {
+            ...formData.earlyProcessing,
+            proximity: { status: 'error', data: null },
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Proximity processing error:', error);
+      updateFormData({
+        earlyProcessing: {
+          ...formData.earlyProcessing,
+          proximity: { status: 'error', data: null },
+        },
+      });
+    }
+  };
+
+  const startWhyThisPropertyProcessing = async () => {
+    const { address, earlyProcessing } = formData;
+    
+    console.log('💡 Starting Why This Property processing...', { 
+      suburb: address?.suburbName, 
+      lga: address?.lga,
+      status: earlyProcessing?.whyThisProperty?.status 
+    });
+    
+    // Don't re-run if already processing or ready
+    if (earlyProcessing?.whyThisProperty?.status === 'processing' || 
+        earlyProcessing?.whyThisProperty?.status === 'ready') {
+      console.log('⏭️ Why This Property already processing or ready, skipping');
+      return;
+    }
+    
+    updateFormData({
+      earlyProcessing: {
+        ...formData.earlyProcessing,
+        whyThisProperty: { status: 'processing', data: null },
+      },
+    });
+
+    try {
+      const res = await fetch('/api/ai/generate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'why-property',
+          suburb: address?.suburbName,
+          lga: address?.lga,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        updateFormData({
+          earlyProcessing: {
+            ...formData.earlyProcessing,
+            whyThisProperty: { status: 'ready', data: json.content },
+          },
+        });
+      } else {
+        updateFormData({
+          earlyProcessing: {
+            ...formData.earlyProcessing,
+            whyThisProperty: { status: 'error', data: null },
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Why This Property processing error:', error);
+      updateFormData({
+        earlyProcessing: {
+          ...formData.earlyProcessing,
+          whyThisProperty: { status: 'error', data: null },
+        },
+      });
+    }
   };
 
   const handleNext = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -809,14 +1024,14 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       }
     }
     
-    // If on last step (Step 6), the form submission is handled in Step6FolderCreation component
+    // If on last step (Step 9), the form submission is handled in Step8Submission component
     // Step 5 (Proximity & Content) is no longer the last step
     if (currentStep === STEPS.length) {
-      // This should not happen now - Step 6 handles submission
+      // This should not happen now - Step 9 (Submission) handles submission
       return;
     }
     
-    // Legacy submission code (kept for reference, but Step 6 handles submission now)
+    // Legacy submission code (kept for reference, but Step 9 handles submission now)
     if (false && currentStep === 5) {
       // Combine selling agent fields before export
       const sellingAgentParts: string[] = [
@@ -851,6 +1066,13 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         alert('Error exporting form data. Check console for details.');
       }
       return;
+    }
+    
+    // Trigger early processing for Proximity & Why This Property after Step 4 (Property Details)
+    if (currentStep === 4) {
+      console.log('🚀 Triggering early processing for Proximity & Why This Property...');
+      startProximityProcessing();
+      startWhyThisPropertyProcessing();
     }
     
     if (currentStep < STEPS.length && setCurrentStep) {

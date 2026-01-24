@@ -1,0 +1,79 @@
+========================================
+COPY THIS PROMPT INTO NEW AI CHAT
+========================================
+
+You are analyzing a photo document generator feature for a property review system.
+
+## THE REQUIREMENT
+
+Generate a professional PDF document with property photos.
+
+**User Workflow:**
+1. User drags & drops photos from realestate.com.au (or other sources)
+2. System collects photos
+3. System generates a PDF with:
+   - Property address as header (e.g., "5 Acacia St Point Vernon QLD 4655")
+   - All photos laid out professionally
+   - Saved to property's Google Drive folder
+
+**Current Manual Process (to be automated):**
+- User downloads photos → Pastes into Word → Adds header → Saves as PDF → Uploads to Drive
+
+## TECHNICAL CONTEXT
+
+- Next.js 14 (App Router), React 18, TypeScript
+- Server-side API routes available
+- Google Drive API for storage
+- Photos: Various sizes/formats (JPG, PNG, WebP), typically 2-5 MB each
+- Typical: 5-10 photos, Max: 20-30 photos
+
+## YOUR TASK
+
+Analyze and recommend:
+
+### 1. PDF Generation Library
+Which library is best for Next.js?
+- PDFKit, jsPDF, Puppeteer, pdf-lib, React-PDF, or others?
+- Why? (Ease of use, image handling, performance, server-side compatibility)
+
+### 2. Image Processing
+How to handle various formats and sizes?
+- Resize strategy (optimize file size, maintain aspect ratio)
+- Library: Sharp, Jimp, Canvas API, or browser-side?
+
+### 3. Layout Design
+How to layout photos professionally?
+- Photos per page? (Grid 2x2, 3x3, or single per page?)
+- Page size (A4, Letter)
+- Margins, spacing, header format
+
+### 4. Implementation Workflow
+Step-by-step process:
+1. User uploads photos (drag & drop)
+2. [Your steps]
+3. PDF generated
+4. Saved to Google Drive
+
+### 5. Edge Cases
+- Very large images
+- Unsupported formats
+- Too many photos
+- PDF generation fails
+- How to handle errors?
+
+## DELIVERABLES
+
+1. **Library Recommendations** (PDF + Image processing)
+2. **Implementation Plan** (Workflow, API endpoints, architecture)
+3. **Layout Design** (Photos per page, page size, header format)
+4. **Edge Case Handling** (Validation, errors, user feedback)
+5. **Pseudocode Examples** (Upload handler, PDF generation, image resizing)
+
+## CRITICAL RULES
+
+❌ DO NOT WRITE FULL CODE
+✅ Provide pseudocode and conceptual examples
+✅ Focus on architecture and approach
+✅ Recommend specific libraries with clear reasoning
+
+========================================

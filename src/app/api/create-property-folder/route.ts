@@ -8,6 +8,7 @@ import {
   deleteFile,
   populateHLSpreadsheet
 } from '@/lib/googleDrive';
+import { constructAndSanitizeFolderName } from '@/lib/addressFormatter';
 
 /**
  * API route to create a property folder by copying the Master Folder Template
@@ -43,11 +44,19 @@ export async function POST(request: Request) {
       );
     }
     
-    // Step 1: Copy template folder to Properties folder (creates new property folder in Shared Drive)
+    // Step 1: Construct folder name using NEW naming convention from addressFormatter.ts
+    // This ensures proper formatting with Lot/Unit numbers
+    const folderName = formData?.address 
+      ? constructAndSanitizeFolderName(formData.address)
+      : propertyAddress; // Fallback to old naming if address data not available
+    
+    console.log('Creating folder with name:', folderName);
+    
+    // Step 2: Copy template folder to Properties folder (creates new property folder in Shared Drive)
     const propertyFolder = await copyFolderStructure(
       TEMPLATE_FOLDER_ID,
       PROPERTIES_FOLDER_ID,
-      propertyAddress,
+      folderName,
       SHARED_DRIVE_ID
     );
     
@@ -96,7 +105,7 @@ export async function POST(request: Request) {
             success: true,
             folderId: propertyFolder.id,
             folderLink: propertyFolder.webViewLink,
-            folderName: propertyAddress,
+            folderName: folderName,
           });
         }
         
@@ -135,26 +144,46 @@ export async function POST(request: Request) {
           }
         }
         
-        // Find HL sheet (has "HL" in title) for renaming (if still needed)
-        const hlSheet = sheets.find(s => s.name.toLowerCase().includes('hl'));
+        // Format address for file naming: streetNumber + streetName + suburbName
+        const addressParts = [
+          formData.address?.streetNumber,
+          formData.address?.streetName,
+          formData.address?.suburbName
+        ].filter(Boolean);
+        const addressString = addressParts.join(' ');
         
-        // Rename HL sheet if it exists
-        if (hlSheet) {
+        console.log('Address parts:', addressParts);
+        console.log('Formatted address:', addressString);
+        
+        // Find and rename Photos.docx
+        const { listFilesInFolder } = await import('@/lib/googleDrive');
+        const allFiles = await listFilesInFolder(propertyFolder.id, SHARED_DRIVE_ID);
+        const photosDoc = allFiles.find(f => 
+          f.name.toLowerCase().includes('photos') && 
+          f.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+        
+        if (photosDoc) {
           try {
-            // Format address: streetNumber + streetName + suburbName
-            const addressParts = [
-              formData.address?.streetNumber,
-              formData.address?.streetName,
-              formData.address?.suburbName
-            ].filter(Boolean);
-            const addressString = addressParts.join(' ');
-            
-            console.log('Address parts:', addressParts);
-            console.log('Formatted address:', addressString);
-            
-            const newName = `CF HL spreadsheet (${addressString})`;
-            await renameFile(hlSheet.id, newName, SHARED_DRIVE_ID);
-            console.log(`✓ Renamed HL sheet to: ${newName}`);
+            const newPhotosName = `Photos ${addressString}.docx`;
+            await renameFile(photosDoc.id, newPhotosName, SHARED_DRIVE_ID);
+            console.log(`✓ Renamed Photos document to: ${newPhotosName}`);
+          } catch (renameError) {
+            console.error('Error renaming Photos document:', renameError);
+          }
+        } else {
+          console.warn('Photos.docx not found in folder');
+        }
+        
+        // Find the kept spreadsheet (either Split Contract or Single Contract)
+        const keptSheet = contractTypeLower === 'split contract' ? splitContractSheet : singleContractSheet;
+        
+        // Rename kept spreadsheet
+        if (keptSheet) {
+          try {
+            const newName = `CF spreadsheet ${addressString}`;
+            await renameFile(keptSheet.id, newName, SHARED_DRIVE_ID);
+            console.log(`✓ Renamed CF spreadsheet to: ${newName}`);
             
             // Populate the sheet with form data
             console.log('Populating sheet with form data...');
@@ -162,14 +191,14 @@ export async function POST(request: Request) {
             console.log('Purchase price:', formData.purchasePrice);
             console.log('Address:', formData.address);
             
-            await populateHLSpreadsheet(hlSheet.id, formData);
-            console.log(`✓ Populated HL spreadsheet with form data`);
+            await populateHLSpreadsheet(keptSheet.id, formData);
+            console.log(`✓ Populated CF spreadsheet with form data`);
           } catch (populateError) {
             console.error('Error populating sheet:', populateError);
             throw populateError; // Re-throw so we can see it in logs
           }
         } else {
-          console.warn('HL sheet not found in folder - cannot rename or populate');
+          console.warn('No spreadsheet found in folder - cannot rename or populate');
         }
       } catch (error) {
         console.error('=== ERROR PROCESSING SHEETS ===');
@@ -196,7 +225,7 @@ export async function POST(request: Request) {
       success: true,
       folderId: propertyFolder.id,
       folderLink: propertyFolder.webViewLink,
-      folderName: propertyAddress,
+      folderName: folderName,
     });
   } catch (error) {
     console.error('Error creating property folder:', error);

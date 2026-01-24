@@ -1,0 +1,343 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Calibri;}{\f1 Courier New;}}
+{\colortbl;\red26\green115\blue232;\red52\green168\blue83;\red234\green67\blue53;\red251\green188\blue4;\red139\green69\blue19;\red79\green195\blue247;}
+
+{\pard\qc\fs48\b Google Sheets Conditional Formatting Guide\b0\fs24\par}
+{\pard\qc\fs32 Date Tracking with Color-Coded Cells\fs24\par}
+{\pard\qc\par}
+{\pard\qc\b Document Version:\b0 2.0\par}
+{\pard\qc\b Last Updated:\b0 January 24, 2026\par}
+{\pard\qc\b Purpose:\b0 Set up automatic color-coding for date tracking in Column F\par}
+{\pard\par}
+
+{\pard\qc\fs56\b\cf1 PART 1: QUICK SETUP GUIDE\b0\cf0\fs24\par}
+{\pard\qc Follow these steps exactly. No explanations - just do it!\par}
+{\pard\par}
+
+{\pard\fs32\b\cf2 Step 1: Add Date Picker to Column F\b0\cf0\fs24\par}
+{\pard 1. Click on the \b Column F header\b0 (the letter "F")\par}
+{\pard 2. Menu: \b Data \u8594? Data validation\b0\par}
+{\pard 3. Click \b "+ Add rule"\b0\par}
+{\pard 4. \b Criteria:\b0 Select \b "Date is valid"\b0\par}
+{\pard 5. \b On invalid data:\b0 Select \b "Show warning"\b0\par}
+{\pard 6. Click \b "Done"\b0\par}
+{\pard\par}
+{\pard\b Result:\b0 Double-clicking cells now shows a calendar picker\par}
+{\pard\par}
+
+{\pard\fs32\b\cf2 Step 2: Add Conditional Formatting Rules\b0\cf0\fs24\par}
+{\pard\b Access Conditional Formatting\b0\par}
+{\pard 1. Click on the \b Column F header\b0\par}
+{\pard 2. Menu: \b Format \u8594? Conditional formatting\b0\par}
+{\pard\par}
+
+{\pard\fs28\b Rule 1: Blank Cells \u8594? White\b0\fs24\par}
+{\pard 1. Click \b "+ Add another rule"\b0\par}
+{\pard 2. \b Apply to range:\b0 F3:F991 (or F3:F for unlimited)\par}
+{\pard 3. \b Format cells if:\b0 Custom formula is\par}
+{\pard 4. \b Formula:\b0 \f1 =ISBLANK(F3)\f0\par}
+{\pard 5. \b Formatting style:\b0 White background\par}
+{\pard 6. Click \b "Done"\b0\par}
+{\pard\par}
+
+{\pard\fs28\b\cf5 Rule 2: "Nil Finance" \u8594? Brown (Any Capitalization)\b0\cf0\fs24\par}
+{\pard 1. Click \b "+ Add another rule"\b0\par}
+{\pard 2. \b Apply to range:\b0 F3:F991 (or F3:F)\par}
+{\pard 3. \b Format cells if:\b0 Custom formula is\par}
+{\pard 4. \b Formula:\b0\par}
+{\pard\f1 =OR(F3="NIL FINANCE", F3="Nil Finance", F3="nil finance", UPPER(TRIM(F3))="NIL FINANCE")\f0\par}
+{\pard 5. \b Formatting style:\b0 Brown background (#A0522D or #8B4513)\par}
+{\pard 6. Click \b "Done"\b0\par}
+{\pard\par}
+
+{\pard\fs28\b\cf6 Rule 3: Other Text \u8594? Light Blue\b0\cf0\fs24\par}
+{\pard 1. Click \b "+ Add another rule"\b0\par}
+{\pard 2. \b Apply to range:\b0 F3:F991 (or F3:F)\par}
+{\pard 3. \b Format cells if:\b0 Custom formula is\par}
+{\pard 4. \b Formula:\b0\par}
+{\pard\f1 =AND(NOT(ISBLANK(F3)), NOT(ISNUMBER(F3)), UPPER(TRIM(F3))<>"NIL FINANCE")\f0\par}
+{\pard 5. \b Formatting style:\b0 Light Blue background (#CFE2F3 or #D0E0E3)\par}
+{\pard 6. Click \b "Done"\b0\par}
+{\pard\par}
+
+{\pard\fs28\b\cf3 Rule 4: Past Dates \u8594? Red\b0\cf0\fs24\par}
+{\pard 1. Click \b "+ Add another rule"\b0\par}
+{\pard 2. \b Apply to range:\b0 F3:F991 (or F3:F)\par}
+{\pard 3. \b Format cells if:\b0 Custom formula is\par}
+{\pard 4. \b Formula:\b0 \f1 =AND(ISNUMBER(F3), F3<TODAY())\f0\par}
+{\pard 5. \b Formatting style:\b0 Red background (#FF0000 or #EA4335)\par}
+{\pard 6. Click \b "Done"\b0\par}
+{\pard\par}
+
+{\pard\fs28\b\cf4 Rule 5: Dates Within 5 Days \u8594? Amber\b0\cf0\fs24\par}
+{\pard 1. Click \b "+ Add another rule"\b0\par}
+{\pard 2. \b Apply to range:\b0 F3:F991 (or F3:F)\par}
+{\pard 3. \b Format cells if:\b0 Custom formula is\par}
+{\pard 4. \b Formula:\b0 \f1 =AND(ISNUMBER(F3), F3>=TODAY(), F3<=TODAY()+5)\f0\par}
+{\pard 5. \b Formatting style:\b0 Amber/Orange background (#FFA500 or #FBBC04)\par}
+{\pard 6. Click \b "Done"\b0\par}
+{\pard\par}
+
+{\pard\fs28\b\cf2 Rule 6: Dates 6+ Days Away \u8594? Green\b0\cf0\fs24\par}
+{\pard 1. Click \b "+ Add another rule"\b0\par}
+{\pard 2. \b Apply to range:\b0 F3:F991 (or F3:F)\par}
+{\pard 3. \b Format cells if:\b0 Custom formula is\par}
+{\pard 4. \b Formula:\b0 \f1 =AND(ISNUMBER(F3), F3>TODAY()+5)\f0\par}
+{\pard 5. \b Formatting style:\b0 Green background (#00FF00 or #34A853)\par}
+{\pard 6. Click \b "Done"\b0\par}
+{\pard\par}
+
+{\pard\page}
+
+{\pard\fs32\b\cf4 Step 3: Verify Rule Order\b0\cf0\fs24\par}
+{\pard\b CRITICAL:\b0 Rules must be in this exact order!\par}
+{\pard\par}
+{\pard 1. Open \b Format \u8594? Conditional formatting\b0\par}
+{\pard 2. \b Drag rules\b0 to match this order:\par}
+{\pard    1. Blank \u8594? White\par}
+{\pard    2. "Nil Finance" \u8594? Brown\par}
+{\pard    3. Other Text \u8594? Light Blue\par}
+{\pard    4. Past Date \u8594? Red\par}
+{\pard    5. Within 5 Days \u8594? Amber\par}
+{\pard    6. 6+ Days \u8594? Green\par}
+{\pard 3. Click \b "Done"\b0\par}
+{\pard\par}
+
+{\pard\fs32\b\cf2 Step 4: Add Apps Script (Optional but Recommended)\b0\cf0\fs24\par}
+{\pard\i This auto-converts typed dates like "26/11/2025" to proper dates.\i0\par}
+{\pard\par}
+{\pard 1. Menu: \b Extensions \u8594? Apps Script\b0\par}
+{\pard 2. Delete any existing code\par}
+{\pard 3. Paste this code:\par}
+{\pard\par}
+{\pard\f1\fs20
+function onEdit(e) \{\line
+  try \{\line
+    const sh = e.range.getSheet();\line
+    const sheetName = "YOUR_SHEET_NAME_HERE"; // CHANGE THIS\line
+    \line
+    if (sh.getName() !== sheetName) return;\line
+    \line
+    const range = e.range;\line
+    const col = range.getColumn();\line
+    const row = range.getRow();\line
+    \line
+    if (col !== 6 || row < 3) return;\line
+    \line
+    const value = range.getValue();\line
+    \line
+    if (!value || value instanceof Date) return;\line
+    \line
+    const datePattern = /^\\d\{1,2\}\\/\\d\{1,2\}\\/\\d\{4\}$/;\line
+    if (datePattern.test(value)) \{\line
+      const parts = value.split('/');\line
+      const date = new Date(parts[2], parts[1] - 1, parts[0]);\line
+      if (!isNaN(date)) \{\line
+        range.setValue(date);\line
+        range.setNumberFormat('dd/mm/yyyy');\line
+      \}\line
+    \}\line
+    \line
+  \} catch (err) \{\line
+    // Fail silently\line
+  \}\line
+\}\f0\fs24\par}
+{\pard\par}
+{\pard 4. \b Change line 4:\b0 Replace YOUR_SHEET_NAME_HERE with your actual sheet tab name (case-sensitive!)\par}
+{\pard 5. Press \b Ctrl+S\b0 to save\par}
+{\pard 6. Close Apps Script tab\par}
+{\pard 7. Refresh your Google Sheet (F5)\par}
+{\pard\par}
+
+{\pard\fs32\b\cf2 Step 5: Fix Existing Text Dates\b0\cf0\fs24\par}
+{\pard If you have dates that were entered before adding the script:\par}
+{\pard 1. Select all cells in Column F with white dates\par}
+{\pard 2. Menu: \b Format \u8594? Number \u8594? Date\b0\par}
+{\pard 3. Done!\par}
+{\pard\par}
+
+{\pard\fs32\b\cf2 Step 6: Test Everything\b0\cf0\fs24\par}
+{\pard\par}
+{\pard\b Type This \u8594? Expected Color\b0\par}
+{\pard (Leave blank) \u8594? White\par}
+{\pard NIL FINANCE \u8594? Brown\par}
+{\pard Nil Finance \u8594? Brown\par}
+{\pard nil finance \u8594? Brown\par}
+{\pard REQUESTED BROKERS DETAILS \u8594? Light Blue\par}
+{\pard 01/01/2025 (past date) \u8594? Red\par}
+{\pard Date 3 days from today \u8594? Amber\par}
+{\pard Date 10 days from today \u8594? Green\par}
+{\pard\par}
+
+{\pard\fs32\b Quick Troubleshooting\b0\fs24\par}
+{\pard\par}
+{\pard\b Problem:\b0 "Nil Finance" is white, not brown\par}
+{\pard\b Solution:\b0 Check Rule 2 range includes all rows (F3:F991 or F3:F)\par}
+{\pard\par}
+{\pard\b Problem:\b0 Dates are white\par}
+{\pard\b Solution:\b0 Select cells \u8594? Format \u8594? Number \u8594? Date\par}
+{\pard\par}
+{\pard\b Problem:\b0 Script not working\par}
+{\pard\b Solution:\b0 Check sheet name matches exactly (case-sensitive)\par}
+{\pard\par}
+{\pard\b Problem:\b0 Wrong colors\par}
+{\pard\b Solution:\b0 Check rule order (Nil Finance must be before Other Text)\par}
+{\pard\par}
+
+{\pard\page}
+
+{\pard\qc\fs56\b\cf1 PART 2: DETAILED EXPLANATIONS\b0\cf0\fs24\par}
+{\pard\par}
+
+{\pard\fs36\b\cf1 Why This Setup Works\b0\cf0\fs24\par}
+{\pard\par}
+
+{\pard\fs28\b Understanding the Color System\b0\fs24\par}
+{\pard\par}
+
+{\pard\b White (Blank)\b0\par}
+{\pard Formula: \f1 =ISBLANK(F3)\f0\par}
+{\pard - Only matches completely empty cells\par}
+{\pard - Keeps your sheet looking clean\par}
+{\pard\par}
+
+{\pard\b\cf5 Brown (Nil Finance)\b0\cf0\par}
+{\pard Formula: \f1 =OR(F3="NIL FINANCE", F3="Nil Finance", F3="nil finance", UPPER(TRIM(F3))="NIL FINANCE")\f0\par}
+{\pard - Matches "Nil Finance" in ANY capitalization\par}
+{\pard - TRIM() removes extra spaces\par}
+{\pard - UPPER() converts to uppercase for comparison\par}
+{\pard - Works with: "NIL FINANCE", "Nil Finance", "nil finance", " Nil Finance " (with spaces)\par}
+{\pard\par}
+
+{\pard\b\cf6 Light Blue (Other Text)\b0\cf0\par}
+{\pard Formula: \f1 =AND(NOT(ISBLANK(F3)), NOT(ISNUMBER(F3)), UPPER(TRIM(F3))<>"NIL FINANCE")\f0\par}
+{\pard - Matches any text that isn't blank and isn't "Nil Finance"\par}
+{\pard - NOT(ISNUMBER(F3)) excludes dates (dates are stored as numbers)\par}
+{\pard - Catches: "REQUESTED BROKERS DETAILS", "TBC", "Pending", etc.\par}
+{\pard\par}
+
+{\pard\b\cf3 Red (Past Dates)\b0\cf0\par}
+{\pard Formula: \f1 =AND(ISNUMBER(F3), F3<TODAY())\f0\par}
+{\pard - Dates are stored as numbers in Google Sheets\par}
+{\pard - TODAY() returns the current date\par}
+{\pard - Highlights overdue dates\par}
+{\pard\par}
+
+{\pard\b\cf4 Amber (Upcoming Dates)\b0\cf0\par}
+{\pard Formula: \f1 =AND(ISNUMBER(F3), F3>=TODAY(), F3<=TODAY()+5)\f0\par}
+{\pard - Matches dates from today through 5 days from now\par}
+{\pard - Warns about approaching deadlines\par}
+{\pard\par}
+
+{\pard\b\cf2 Green (Future Dates)\b0\cf0\par}
+{\pard Formula: \f1 =AND(ISNUMBER(F3), F3>TODAY()+5)\f0\par}
+{\pard - Matches dates more than 5 days away\par}
+{\pard - Shows dates that are safely in the future\par}
+{\pard\par}
+
+{\pard\fs36\b\cf1 Why Rule Order Matters\b0\cf0\fs24\par}
+{\pard\par}
+{\pard\b Key Concept:\b0 Google Sheets checks rules from top to bottom and applies the first matching rule.\par}
+{\pard\par}
+
+{\pard\b Example: Wrong Order\b0\par}
+{\pard If "Other Text" (Rule 3) comes BEFORE "Nil Finance" (Rule 2) and Rule 3 doesn't properly exclude "Nil Finance":\par}
+{\pard\par}
+{\pard Cell contains: "NIL FINANCE"\par}
+{\pard Check Rule 3 (Other Text):\par}
+{\pard - NOT(ISBLANK(F3)) \u8594? TRUE (not blank)\par}
+{\pard - NOT(ISNUMBER(F3)) \u8594? TRUE (not a number)\par}
+{\pard - F3<>"Nil Finance" \u8594? TRUE (because "NIL FINANCE" is not equal to "Nil Finance")\par}
+{\pard Result: Cell turns LIGHT BLUE (wrong!)\par}
+{\pard Rule 2 never gets checked!\par}
+{\pard\par}
+
+{\pard\b Correct Order Prevents Issues\b0\par}
+{\pard By putting "Nil Finance" (Rule 2) BEFORE "Other Text" (Rule 3):\par}
+{\pard - "Nil Finance" gets checked first and matched\par}
+{\pard - Other text gets checked second and matched\par}
+{\pard - No conflicts!\par}
+{\pard\par}
+
+{\pard\page}
+
+{\pard\fs36\b\cf1 Why the Apps Script is Essential\b0\cf0\fs24\par}
+{\pard\par}
+
+{\pard\fs28\b The Text vs. Date Problem\b0\fs24\par}
+{\pard\par}
+{\pard When you type 26/11/2025 in a cell, Google Sheets might interpret it as:\par}
+{\pard 1. A proper date (if your locale is DD/MM/YYYY)\par}
+{\pard 2. Text (if your locale is MM/DD/YYYY and sees "month 26")\par}
+{\pard 3. Text (if you have a leading space)\par}
+{\pard 4. Text (if you copy/paste from elsewhere)\par}
+{\pard\par}
+
+{\pard\b Why This Breaks Conditional Formatting:\b0\par}
+{\pard\par}
+{\pard Cell shows: "26/11/2025"\par}
+{\pard Stored as: TEXT (not a date)\par}
+{\pard\par}
+{\pard Date Rule Check:\par}
+{\pard - ISNUMBER(F3) \u8594? FALSE (text is not a number)\par}
+{\pard - Rule doesn't apply\par}
+{\pard Result: Cell stays WHITE\par}
+{\pard\par}
+
+{\pard\b How Dates Should Work:\b0\par}
+{\pard\par}
+{\pard Cell shows: 26/11/2025\par}
+{\pard Stored as: 45646 (date serial number)\par}
+{\pard Formatted as: dd/mm/yyyy\par}
+{\pard\par}
+{\pard Date Rule Check:\par}
+{\pard - ISNUMBER(F3) \u8594? TRUE (dates are numbers)\par}
+{\pard - F3<TODAY() \u8594? TRUE (if date is past)\par}
+{\pard Result: Cell turns RED\par}
+{\pard\par}
+
+{\pard\b What the Script Does:\b0\par}
+{\pard The script watches Column F and automatically converts text dates to real dates:\par}
+{\pard 1. Detects pattern: DD/MM/YYYY\par}
+{\pard 2. Splits "26/11/2025" into ["26", "11", "2025"]\par}
+{\pard 3. Creates date: new Date(year, month-1, day)\par}
+{\pard 4. Replaces text with date\par}
+{\pard 5. Formats as dd/mm/yyyy\par}
+{\pard\par}
+{\pard\b Result:\b0 You type 26/11/2025 \u8594? Script converts it \u8594? Conditional formatting works!\par}
+{\pard\par}
+
+{\pard\fs36\b\cf1 Color Reference Table\b0\cf0\fs24\par}
+{\pard\par}
+{\pard\b Color | Meaning | Example\b0\par}
+{\pard White | Blank | (empty cell)\par}
+{\pard Brown | Nil Finance | "NIL FINANCE", "Nil Finance"\par}
+{\pard Light Blue | Other text | "REQUESTED BROKERS DETAILS"\par}
+{\pard Red | Past date | 01/01/2025 (if today is later)\par}
+{\pard Amber | Within 5 days | 27/01/2026 (if today is 24/01/2026)\par}
+{\pard Green | 6+ days away | 05/02/2026 (if today is 24/01/2026)\par}
+{\pard\par}
+
+{\pard\fs36\b\cf1 Summary Checklist\b0\cf0\fs24\par}
+{\pard\par}
+{\pard [ ] Data validation added (Date is valid, Show warning)\par}
+{\pard [ ] Rule 1: Blank \u8594? White\par}
+{\pard [ ] Rule 2: Nil Finance \u8594? Brown (case-insensitive)\par}
+{\pard [ ] Rule 3: Other text \u8594? Light Blue\par}
+{\pard [ ] Rule 4: Past dates \u8594? Red\par}
+{\pard [ ] Rule 5: Dates within 5 days \u8594? Amber\par}
+{\pard [ ] Rule 6: Dates 6+ days away \u8594? Green\par}
+{\pard [ ] All rules have range F3:F991 or F3:F covering all data\par}
+{\pard [ ] Rules in correct order\par}
+{\pard [ ] Tested all color scenarios\par}
+{\pard [ ] Apps Script added and saved\par}
+{\pard [ ] Script sheet name matches actual tab name\par}
+{\pard [ ] Script authorized\par}
+{\pard [ ] Existing text dates converted\par}
+{\pard\par}
+
+{\pard\qc\par}
+{\pard\qc\fs20 Google Sheets Conditional Formatting Guide\par}
+{\pard\qc Version 2.0 | Last Updated: January 24, 2026\fs24\par}
+
+}

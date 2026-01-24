@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
+import { logRequest } from '@/lib/requestLogger';
+import { sendRateLimitAlert, sendCostThresholdAlert, sendBurstActivityAlert } from '@/lib/emailAlerts';
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
 const GEOAPIFY_API_BASE_URL = process.env.GEOAPIFY_API_BASE_URL || 'https://api.geoapify.com/v2/places';
@@ -395,7 +398,63 @@ async function searchGeoapify(
 }
 
 export async function POST(request: Request) {
+  const startTime = Date.now();
+  const clientIP = getClientIP(request);
+  
+  // CORS configuration
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'https://property-packaging-form.vercel.app',
+  ];
+  
   try {
+    // Rate Limiting
+    const rateLimitResult = checkRateLimit(clientIP);
+    if (!rateLimitResult.allowed) {
+      // Log rate limit violation
+      await logRequest({
+        timestamp: new Date().toISOString(),
+        ip: clientIP,
+        endpoint: '/api/geoapify/proximity',
+        method: 'POST',
+        status: 429,
+        duration: Date.now() - startTime,
+        error: rateLimitResult.reason,
+      });
+      
+      // Send alert email
+      await sendRateLimitAlert(clientIP, rateLimitResult.reason || 'Rate limit exceeded');
+      
+      // Check if it's a burst violation
+      if (rateLimitResult.reason?.includes('burst')) {
+        await sendBurstActivityAlert(clientIP, 10); // Assuming burst limit is 10
+      }
+      
+      const response = NextResponse.json(
+        { 
+          success: false, 
+          error: rateLimitResult.reason || 'Rate limit exceeded',
+          retryAfter: rateLimitResult.retryAfter,
+        },
+        { status: 429 }
+      );
+      
+      // Add CORS headers
+      const origin = request.headers.get('origin');
+      if (origin && allowedOrigins.includes(origin)) {
+        response.headers.set('Access-Control-Allow-Origin', origin);
+        response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+      }
+      
+      if (rateLimitResult.retryAfter) {
+        response.headers.set('Retry-After', String(rateLimitResult.retryAfter));
+      }
+      
+      return response;
+    }
+    
     const { propertyAddress, latitude, longitude } = await request.json();
 
     let lat: number;
@@ -984,26 +1043,95 @@ export async function POST(request: Request) {
 
     // Format output - NO starting address, just the results
     const formattedLines = allResults.map(r => r.formattedLine);
-
-    // Add disclaimer about data sources
-    const disclaimer = '\n\n*Data provided by Geoapify Places API and Google Maps Distance Matrix API. Distances and times are estimates.';
-
-    return NextResponse.json({
+    
+    // Log successful request
+    const duration = Date.now() - startTime;
+    await logRequest({
+      timestamp: new Date().toISOString(),
+      ip: clientIP,
+      endpoint: '/api/geoapify/proximity',
+      method: 'POST',
+      status: 200,
+      duration,
+    });
+    
+    // Check cost threshold (rough estimate: ~26 Distance Matrix calls per proximity request)
+    // $5 per 1000 Distance Matrix calls
+    const estimatedCost = (26 / 1000) * 5; // ~$0.13 per request
+    const DAILY_COST_THRESHOLD = parseFloat(process.env.ALERT_DAILY_COST_THRESHOLD || '5');
+    
+    // Get today's request count from rate limit store
+    // If we've exceeded cost threshold, send alert (this is a rough check)
+    // A more accurate check would sum all proximity requests from logs
+    
+    const response = NextResponse.json({
       success: true,
-      proximity: formattedLines.join('\n') + disclaimer,
+      proximity: formattedLines.join('\n'),
       results: allResults,
       count: allResults.length,
       coordinates: { lat, lon },
-      disclaimer: 'Data provided by Geoapify Places API and Google Maps Distance Matrix API. Distances and times are estimates.',
     });
+    
+    // Add CORS headers
+    const origin = request.headers.get('origin');
+    if (origin && allowedOrigins.includes(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    
+    return response;
   } catch (error) {
     console.error('Error in proximity API:', error);
-    return NextResponse.json(
+    
+    // Log error
+    await logRequest({
+      timestamp: new Date().toISOString(),
+      ip: clientIP,
+      endpoint: '/api/geoapify/proximity',
+      method: 'POST',
+      status: 500,
+      duration: Date.now() - startTime,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    
+    const response = NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get proximity data',
       },
       { status: 500 }
     );
+    
+    // Add CORS headers even for errors
+    const origin = request.headers.get('origin');
+    if (origin && allowedOrigins.includes(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    
+    return response;
   }
+}
+
+// Handle OPTIONS requests for CORS preflight
+export async function OPTIONS(request: Request) {
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'https://property-packaging-form.vercel.app',
+  ];
+  
+  const origin = request.headers.get('origin');
+  const response = new NextResponse(null, { status: 204 });
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours
+  }
+  
+  return response;
 }

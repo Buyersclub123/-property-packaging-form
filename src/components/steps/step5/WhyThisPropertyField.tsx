@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAutoResize } from '@/hooks/useAutoResize';
 
 /**
@@ -27,11 +27,13 @@ interface WhyThisPropertyFieldProps {
   suburb?: string;
   lga?: string;
   disabled?: boolean;
+  preFetchedData?: string | null;
 }
 
 export function WhyThisPropertyField({ 
   value, 
-  onChange, 
+  onChange,
+  preFetchedData, 
   suburb, 
   lga, 
   disabled = false 
@@ -40,20 +42,29 @@ export function WhyThisPropertyField({
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [generated, setGenerated] = useState(false);
+  const hasGeneratedRef = useRef(false); // Use ref to track if we've generated (persists across re-renders)
 
   /**
    * Auto-generate content when component mounts
    * Only runs if:
    * - suburb and lga are available
    * - field is empty
-   * - hasn't been generated yet
+   * - hasn't been generated yet (tracked via ref)
    */
   useEffect(() => {
-    if (suburb && lga && !value && !generated) {
+    // If we have pre-fetched data, use it instead of generating
+    if (preFetchedData && !value && !hasGeneratedRef.current) {
+      hasGeneratedRef.current = true;
+      onChange(preFetchedData);
+      return;
+    }
+    
+    // Otherwise, generate as normal (only if not already generated)
+    if (suburb && lga && !value && !hasGeneratedRef.current) {
+      hasGeneratedRef.current = true; // Mark as generated BEFORE calling API
       generateContent();
     }
-  }, [suburb, lga]);
+  }, [suburb, lga, value, preFetchedData]);
 
   /**
    * Generate AI content via backend API
@@ -82,7 +93,6 @@ export function WhyThisPropertyField({
       
       const data = await response.json();
       onChange(data.content);
-      setGenerated(true);
     } catch (err) {
       console.error('AI generation error:', err);
       setError('The AI service could not be reached. Please generate content manually via Chat GPT and paste the results below.');
@@ -132,7 +142,7 @@ export function WhyThisPropertyField({
   return (
     <div className="space-y-4">
       <div>
-        <label className="label-field mb-1">Why this Property? *</label>
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">Why this Property? *</h3>
         <p className="text-sm text-gray-600">
           AI will auto-generate investment reasons, or paste manually from ChatGPT.
         </p>
@@ -165,7 +175,7 @@ export function WhyThisPropertyField({
         )}
         
         {/* Success State */}
-        {generated && !loading && !error && (
+        {hasGeneratedRef.current && !loading && !error && value && (
           <div className="mt-3 mb-3 text-sm text-green-600 flex items-center space-x-2">
             <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />

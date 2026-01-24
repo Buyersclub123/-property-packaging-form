@@ -208,6 +208,30 @@ export interface FormData {
   // Pre-fetched data (loaded early for better UX)
   proximityData?: string; // Pre-fetched proximity results from Step 2
   
+  // Early processing state (Step 1A)
+  earlyProcessing?: {
+    investmentHighlights?: {
+      status: 'pending' | 'processing' | 'ready' | 'error';
+      data?: any;
+      dateStatus?: any;
+      selectedFromDropdown?: boolean;
+      uploadedPdfFileId?: string;
+      uploadedPdfTimestamp?: number;
+      uploadedPdfFileName?: string;
+      error?: string;
+    };
+    proximity?: {
+      status: 'pending' | 'processing' | 'ready' | 'error';
+      data?: string;
+      error?: string;
+    };
+    whyThisProperty?: {
+      status: 'pending' | 'processing' | 'ready' | 'error';
+      data?: string;
+      error?: string;
+    };
+  };
+  
   // Step 0
   decisionTree: DecisionTree;
   
@@ -238,6 +262,9 @@ export interface FormData {
   // Agent Info
   agentInfo: AgentInfo;
   
+  // Insurance (Step 6)
+  insurance?: string; // Annual insurance cost from Terri Scheer calculator
+  
   // Attachments
   attachmentsAdditionalDialogue?: string;
   
@@ -245,12 +272,15 @@ export interface FormData {
   cashflowSheetLinkHL?: string; // House & Land cashflow spreadsheet copy URL
   cashflowSheetLinkGeneral?: string; // General/Single Contract cashflow spreadsheet copy URL
   
-  // Cashflow Spreadsheet Fields (rows 14-27 in Autofill data tab)
+  // Cashflow Spreadsheet Fields (rows 13-29 in Autofill data tab)
+  councilWaterRates?: string; // Council/Water Rates $ (B13) - editable on Step 7
   rates?: string; // Quarterly council rates (B14)
   insuranceType?: 'Insurance' | 'Insurance + Strata'; // Insurance type dropdown (B15)
   insuranceAmount?: string; // Annual insurance amount (B16)
   pbPciReport?: 'P&B' | 'PCI'; // Report type: P&B for established, PCI for new builds (B17)
-  buildWindow?: string; // Expected build window in months
+  buildWindow?: string; // Build Window dropdown: 09 mo, 12 mo, 15 mo, 18 mo (B27) - editable on Step 7, Split Contract only
+  cashback1Month?: string; // Cashback 1 month dropdown: 1-18 (B28) - editable on Step 7, Split Contract only
+  cashback2Month?: string; // Cashback 2 month dropdown: 1-18 (B29) - editable on Step 7, Split Contract only
   
   // Depreciation (Years 1-10) - Diminishing Value amounts (B18-B27)
   depreciation?: {

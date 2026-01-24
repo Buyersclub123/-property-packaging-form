@@ -101,7 +101,23 @@ export const useFormStore = create<FormStore>()(
       
       updateFormData: (data) =>
         set((state) => ({
-          formData: { ...state.formData, ...data },
+          formData: {
+            ...state.formData,
+            ...data,
+            // Deep merge for nested objects to prevent data loss
+            ...(data.contentSections && {
+              contentSections: {
+                ...state.formData.contentSections,
+                ...data.contentSections,
+              },
+            }),
+            ...(data.earlyProcessing && {
+              earlyProcessing: {
+                ...state.formData.earlyProcessing,
+                ...data.earlyProcessing,
+              },
+            }),
+          },
         })),
       
       updateDecisionTree: (tree) =>

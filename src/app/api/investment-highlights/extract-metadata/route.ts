@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { extractPdfText, extractMetadataFromText } from '@/lib/pdfExtractor';
+
+// Force Node.js runtime (not Edge)
+export const runtime = 'nodejs';
 
 /**
  * Extract metadata (Report Name and Valid Period) from PDF front page
+ * Uses dynamic imports to avoid Next.js static analysis dropping this route
  */
 export async function POST(request: NextRequest) {
   try {
@@ -39,13 +42,16 @@ export async function POST(request: NextRequest) {
     
     // Download PDF from Google Drive
     const response = await drive.files.get(
-      { fileId, alt: 'media' },
+      { fileId, alt: 'media', supportsAllDrives: true },
       { responseType: 'arraybuffer' }
     );
     
     if (!response.data) {
       throw new Error('Failed to download PDF from Google Drive');
     }
+    
+    // Dynamically import PDF extractor to avoid static analysis issues
+    const { extractPdfText, extractMetadataFromText } = await import('@/lib/pdfExtractor');
     
     // Extract text from PDF
     const buffer = Buffer.from(response.data as ArrayBuffer);
@@ -54,9 +60,12 @@ export async function POST(request: NextRequest) {
     // Extract metadata using agile parsing
     const metadata = extractMetadataFromText(text);
     
+    console.log(`✅ Returning metadata with mainBody (${metadata.mainBody?.length || 0} chars)`);
+    
     return NextResponse.json({
       reportName: metadata.reportName,
       validPeriod: metadata.validPeriod,
+      mainBody: metadata.mainBody,
       confidence: metadata.confidence,
     });
   } catch (error: any) {

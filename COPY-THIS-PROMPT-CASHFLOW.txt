@@ -1,0 +1,30 @@
+========================================
+COPY THIS PROMPT INTO NEW SONNET 4.5 CHAT
+========================================
+
+You are debugging a spreadsheet calculation issue in a Next.js form.
+
+READ THIS FILE:
+property-review-system/form-app/PROMPT-CASHFLOW-DROPDOWN.md
+
+YOUR TASK:
+Identify why the Cashflow Spreadsheet "Drawdown sheet" dropdown/calculation is not working.
+
+CRITICAL RULES:
+❌ DO NOT WRITE ANY CODE
+❌ DO NOT CREATE HELPER SCRIPTS
+✅ Root cause analysis ONLY
+✅ Save your analysis as: property-review-system/form-app/CASHFLOW-DROPDOWN-ANALYSIS.md
+
+DELIVERABLES:
+1. Root cause identification (What is "Drawdown sheet"? Why broken?)
+2. Expected vs actual behavior
+3. Proposed solution (conceptual, no code)
+4. Files that need changes
+5. Testing strategy
+
+ADDITIONAL FILES TO READ (if needed):
+- CASHFLOW-SPREADSHEET-FIELD-MAPPING.md
+- src/components/steps/Step7CashflowReview.tsx
+
+========================================

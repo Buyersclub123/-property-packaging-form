@@ -593,13 +593,26 @@ export async function logMarketPerformanceUpdate(
 // ============================================================================
 
 export interface InvestmentHighlightsData {
-  // NEW STRUCTURE (matches Google Sheet columns A-F)
+  // NEW STRUCTURE (matches Google Sheet columns A-O)
   suburbs: string; // Column A: Comma-separated list of suburbs
   state: string; // Column B: State code (e.g., "NSW", "QLD")
   reportName: string; // Column C: Report name
   validPeriod: string; // Column D: Valid period (e.g., "October 2025 - January 2026")
   mainBody: string; // Column E: Main investment highlights content
   extraInfo: string; // Column F: Extra information (optional)
+  
+  // Individual sections (Columns G-M)
+  populationGrowthContext?: string; // Column G
+  residential?: string; // Column H
+  industrial?: string; // Column I
+  commercialAndCivic?: string; // Column J
+  healthAndEducation?: string; // Column K
+  transport?: string; // Column L
+  jobImplications?: string; // Column M
+  
+  // PDF information (Columns N-O)
+  pdfDriveLink?: string; // Column N
+  pdfFileId?: string; // Column O
   
   // LEGACY FIELDS (kept for backward compatibility, no longer used)
   lga?: string;
@@ -630,10 +643,10 @@ export async function lookupInvestmentHighlights(
     const sheets = getSheetsClient();
     
     // Read all data from the Investment Highlights tab
-    // NEW STRUCTURE: A:Suburbs (comma-separated), B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:ExtraInfo
+    // NEW STRUCTURE: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:ExtraInfo, G-M:Sections, N-O:PDF
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`, 
+      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:O`, 
     });
 
     const rows = response.data.values || [];
@@ -671,7 +684,13 @@ export async function lookupInvestmentHighlights(
       return { found: false };
     }
 
-    // Extract data
+    // Extract data (all 15 columns A-O)
+    // NOTE: Google Sheets API may return shorter arrays if trailing cells are empty
+    console.log('[googleSheets] matchingRow length:', matchingRow.length);
+    console.log('[googleSheets] matchingRow[4] (Main Body):', matchingRow[4]);
+    console.log('[googleSheets] matchingRow[4] type:', typeof matchingRow[4]);
+    console.log('[googleSheets] matchingRow[4] length:', (matchingRow[4] || '').length);
+    
     const data: InvestmentHighlightsData = {
         suburbs: matchingRow[0] || '',
         state: matchingRow[1] || '',
@@ -679,6 +698,15 @@ export async function lookupInvestmentHighlights(
         validPeriod: matchingRow[3] || '',
         mainBody: matchingRow[4] || '',
         extraInfo: matchingRow[5] || '',
+        populationGrowthContext: matchingRow[6] || '',
+        residential: matchingRow[7] || '',
+        industrial: matchingRow[8] || '',
+        commercialAndCivic: matchingRow[9] || '',
+        healthAndEducation: matchingRow[10] || '',
+        transport: matchingRow[11] || '',
+        jobImplications: matchingRow[12] || '',
+        pdfDriveLink: matchingRow[13] || '',
+        pdfFileId: matchingRow[14] || '',
         // Legacy fields (no longer used but kept for compatibility)
         lga: '',
         validFrom: '',
@@ -686,6 +714,8 @@ export async function lookupInvestmentHighlights(
         investmentHighlights: '',
         extras: [],
     };
+    
+    console.log('[googleSheets] Extracted mainBody length:', data.mainBody.length);
 
     return {
       found: true,
@@ -710,10 +740,10 @@ export async function saveInvestmentHighlightsData(
     const sheets = getSheetsClient();
     
     // Check if row exists (logic same as lookup)
-    // NEW STRUCTURE: A:Suburbs (comma-separated), B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:ExtraInfo
+    // NEW STRUCTURE: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:ExtraInfo, G-M:Sections, N-O:PDF
     const response = await sheets.spreadsheets.values.get({
         spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`,
+        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:O`,
     });
 
     const rows = response.data.values || [];
@@ -744,12 +774,21 @@ export async function saveInvestmentHighlightsData(
         return false;
     });
 
-    // Prepare row data
+    // Prepare row data (all 15 columns)
     const suburbs = data.suburbs || suburb || lga || '';
     const reportName = data.reportName || '';
     const validPeriod = data.validPeriod || '';
     const mainBody = data.mainBody || '';
     const extraInfo = data.extraInfo || '';
+    const populationGrowthContext = data.populationGrowthContext || '';
+    const residential = data.residential || '';
+    const industrial = data.industrial || '';
+    const commercialAndCivic = data.commercialAndCivic || '';
+    const healthAndEducation = data.healthAndEducation || '';
+    const transport = data.transport || '';
+    const jobImplications = data.jobImplications || '';
+    const pdfDriveLink = data.pdfDriveLink || '';
+    const pdfFileId = data.pdfFileId || '';
 
     if (rowIndex !== -1) {
         // Update existing
@@ -770,12 +809,21 @@ export async function saveInvestmentHighlightsData(
 
         const updates: { range: string; values: any[][] }[] = [];
 
-        // Update fields if provided
+        // Update fields if provided (all 15 columns)
         if (suburbUpdated) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A${actualRowNumber}`, values: [[currentSuburbs]] });
         if (data.reportName !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!C${actualRowNumber}`, values: [[reportName]] });
         if (data.validPeriod !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!D${actualRowNumber}`, values: [[validPeriod]] });
         if (data.mainBody !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!E${actualRowNumber}`, values: [[mainBody]] });
         if (data.extraInfo !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!F${actualRowNumber}`, values: [[extraInfo]] });
+        if (data.populationGrowthContext !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!G${actualRowNumber}`, values: [[populationGrowthContext]] });
+        if (data.residential !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!H${actualRowNumber}`, values: [[residential]] });
+        if (data.industrial !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!I${actualRowNumber}`, values: [[industrial]] });
+        if (data.commercialAndCivic !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!J${actualRowNumber}`, values: [[commercialAndCivic]] });
+        if (data.healthAndEducation !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!K${actualRowNumber}`, values: [[healthAndEducation]] });
+        if (data.transport !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!L${actualRowNumber}`, values: [[transport]] });
+        if (data.jobImplications !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!M${actualRowNumber}`, values: [[jobImplications]] });
+        if (data.pdfDriveLink !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!N${actualRowNumber}`, values: [[pdfDriveLink]] });
+        if (data.pdfFileId !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!O${actualRowNumber}`, values: [[pdfFileId]] });
 
         if (updates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
@@ -793,11 +841,20 @@ export async function saveInvestmentHighlightsData(
             validPeriod, // Column D: Valid Period
             mainBody, // Column E: Main Body
             extraInfo, // Column F: Extra Info
+            populationGrowthContext, // Column G: Population Growth Context
+            residential, // Column H: Residential
+            industrial, // Column I: Industrial
+            commercialAndCivic, // Column J: Commercial and Civic
+            healthAndEducation, // Column K: Health and Education
+            transport, // Column L: Transport
+            jobImplications, // Column M: Job Implications
+            pdfDriveLink, // Column N: PDF Drive Link
+            pdfFileId, // Column O: PDF File ID
         ];
 
         await sheets.spreadsheets.values.append({
             spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-            range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:F`,
+            range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:O`,
             valueInputOption: 'RAW',
             insertDataOption: 'INSERT_ROWS',
             requestBody: { values: [newRow] },

@@ -45,10 +45,10 @@ export async function POST(request: NextRequest) {
     
     const drive = google.drive({ version: 'v3', auth });
     
-    // Get parent folder ID
-    const parentFolderId = process.env.GOOGLE_PARENT_FOLDER_ID;
+    // Get Hotspotting Reports folder ID
+    const parentFolderId = process.env.GOOGLE_HOTSPOTTING_FOLDER_ID;
     if (!parentFolderId) {
-      throw new Error('GOOGLE_PARENT_FOLDER_ID environment variable is not set');
+      throw new Error('GOOGLE_HOTSPOTTING_FOLDER_ID environment variable is not set');
     }
     
     // Step 1: Find or create "Hotspotting Reports" folder
@@ -82,6 +82,8 @@ export async function POST(request: NextRequest) {
     const currentFiles = await drive.files.list({
       q: `'${currentFolderId}' in parents and trashed=false`,
       fields: 'files(id, name, webViewLink)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
     
     let oldPdfLink = '';
@@ -100,6 +102,7 @@ export async function POST(request: NextRequest) {
             addParents: legacyFolderId,
             removeParents: currentFolderId,
             fields: 'id, parents',
+            supportsAllDrives: true,
           });
           
           // Log superseded action
@@ -128,12 +131,14 @@ export async function POST(request: NextRequest) {
         name: newFileName,
       },
       fields: 'id, name, webViewLink',
+      supportsAllDrives: true,
     });
     
     // Get updated file info
     const updatedFile = await drive.files.get({
       fileId: fileId,
       fields: 'id, name, webViewLink',
+      supportsAllDrives: true,
     });
     
     const webViewLink = updatedFile.data.webViewLink || '';
@@ -189,6 +194,8 @@ async function findOrCreateFolder(
   const response = await drive.files.list({
     q: query,
     fields: 'files(id, name)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
   
   if (response.data.files && response.data.files.length > 0) {
@@ -205,6 +212,7 @@ async function findOrCreateFolder(
   const folder = await drive.files.create({
     requestBody: fileMetadata,
     fields: 'id',
+    supportsAllDrives: true,
   });
   
   return folder.data.id;

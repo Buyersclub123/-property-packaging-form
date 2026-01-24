@@ -1,0 +1,88 @@
+========================================
+COPY THIS PROMPT INTO GOOGLE AI / CHATGPT
+========================================
+
+You are analyzing a PDF extraction timing issue with Google Drive API.
+
+## THE PROBLEM
+
+When users upload a PDF to Google Drive and immediately try to extract metadata from it, we get this error:
+```
+Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+```
+
+**What's happening:**
+1. User uploads PDF to Google Drive ✅
+2. Upload succeeds, we get a fileId ✅
+3. Frontend immediately calls extract-metadata API with the fileId ✅
+4. API tries to download the PDF from Google Drive using drive.files.get() ❌
+5. Google Drive returns an HTML error page (404) instead of the PDF ❌
+6. We try to parse HTML as JSON → Error ❌
+
+**Why it happens:**
+Google Drive needs time to process/index the uploaded file before it can be downloaded again.
+
+**Workaround that works:**
+- Upload PDF → Wait 10-15 seconds → Refresh page → Try extraction again → Works! ✅
+
+## CURRENT CODE
+
+Frontend waits 3 seconds after upload, then immediately calls extract-metadata API.
+Backend tries to download PDF using drive.files.get() with alt='media' and responseType='arraybuffer'.
+The response.data is an HTML error page, not a PDF.
+
+## YOUR TASK
+
+Analyze why Google Drive returns HTML error instead of PDF immediately after upload, and recommend the best solution.
+
+CRITICAL RULES:
+❌ DO NOT WRITE ANY CODE
+✅ Analysis and recommendations ONLY
+✅ Provide clear pros/cons for each solution option
+
+DELIVERABLES:
+1. Root cause explanation (Why does Google Drive need processing time?)
+2. Recommended solution (Option A, B, C, D, E, or hybrid?)
+3. Implementation guidance (pseudocode, retry strategy, error detection)
+4. Alternative ideas we haven't considered
+
+SOLUTION OPTIONS TO EVALUATE:
+
+**Option A: Retry Logic with Exponential Backoff**
+- Try download, if fails wait and retry
+- Backoff: 1s, 2s, 4s, 8s, 16s
+- Max retries: 5-7 attempts
+- Pros: Robust, handles variable processing times
+- Cons: Complex, may still fail
+
+**Option B: Longer Fixed Delay**
+- Increase wait from 3s to 15-20s
+- Pros: Simple
+- Cons: Always waits full time
+
+**Option C: Polling/Status Check**
+- Poll Google Drive to check if file is ready
+- Use drive.files.get() with fields='id,name,mimeType' (metadata only)
+- Pros: Efficient
+- Cons: More API calls
+
+**Option D: Deferred Processing**
+- Upload PDF, save fileId
+- Background job processes later
+- Pros: No waiting
+- Cons: Complex architecture
+
+**Option E: Early Upload (User's Idea)**
+- Upload PDF on Step 2 or 3 (earlier in form)
+- User fills other fields (takes 2-5 minutes)
+- By Step 5, file is ready
+- Pros: Natural delay, no artificial waiting
+- Cons: UI/UX changes needed
+
+CONTEXT:
+- Upload works 100% of the time
+- Extraction fails 100% on fresh uploads
+- Extraction works 100% after 10-15 second wait
+- Tech: Next.js 14, Google Drive API v3, pdf-parse library
+
+========================================

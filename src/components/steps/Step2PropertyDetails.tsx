@@ -87,6 +87,13 @@ export function Step2PropertyDetails() {
     return Array.from({ length: 11 }, (_, i) => currentYear + i);
   };
   
+  // Pre-populate Comparable Sales field with default text
+  useEffect(() => {
+    if (!purchasePrice?.comparableSales) {
+      updatePurchasePrice({ comparableSales: 'We have seen comparable properties trade in the ' });
+    }
+  }, []);
+
   // Debug: Log what Step 2 is reading
   useEffect(() => {
     console.log('=== STEP 2 COMPONENT MOUNTED/RENDERED ===');

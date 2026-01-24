@@ -27,11 +27,22 @@ export const MAX_FOLDER_NAME_LENGTH = 250;
  * @returns Formatted address string
  */
 export function constructFullAddress(address: AddressData): string {
+  // If propertyAddress already contains lot/unit info, just use it as-is
+  const mainAddress = address.propertyAddress?.trim() || '';
+  
+  // Check if propertyAddress already starts with "Lot" or "Unit"
+  const hasLotOrUnit = /^(Lot|Unit)\s/i.test(mainAddress);
+  
+  if (hasLotOrUnit || !mainAddress) {
+    // propertyAddress already formatted OR empty - use as-is
+    return mainAddress;
+  }
+  
+  // Otherwise, construct from separate fields
   const parts: string[] = [];
   
   // Add lot number if present
   if (address.lotNumber && address.lotNumber.trim() !== '' && !address.lotNumberNotApplicable) {
-    // Lot number should already include "Lot" prefix from form, but add it if missing
     const lotNum = address.lotNumber.trim();
     if (!lotNum.toLowerCase().startsWith('lot')) {
       parts.push(`Lot ${lotNum}`);
@@ -42,7 +53,6 @@ export function constructFullAddress(address: AddressData): string {
   
   // Add unit number if present
   if (address.unitNumber && address.unitNumber.trim() !== '' && address.hasUnitNumbers) {
-    // Unit number should already include "Unit" prefix from form, but add it if missing
     const unitNum = address.unitNumber.trim();
     if (!unitNum.toLowerCase().startsWith('unit')) {
       parts.push(`Unit ${unitNum}`);
@@ -52,7 +62,6 @@ export function constructFullAddress(address: AddressData): string {
   }
   
   // Add main property address
-  const mainAddress = address.propertyAddress?.trim() || '';
   if (mainAddress) {
     parts.push(mainAddress);
   }

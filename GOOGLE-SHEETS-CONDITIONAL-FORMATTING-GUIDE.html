@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Sheets Conditional Formatting Guide</title>
+    <style>
+        @media print {
+            body { margin: 0; padding: 20px; }
+            .page-break { page-break-before: always; }
+            .no-break { page-break-inside: avoid; }
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        
+        h1 {
+            color: #1a73e8;
+            border-bottom: 4px solid #1a73e8;
+            padding-bottom: 15px;
+            margin-top: 0;
+            font-size: 2.2em;
+        }
+        
+        h2 {
+            color: #1a73e8;
+            margin-top: 40px;
+            font-size: 1.8em;
+            border-left: 5px solid #1a73e8;
+            padding-left: 15px;
+        }
+        
+        h3 {
+            color: #34a853;
+            margin-top: 30px;
+            font-size: 1.4em;
+        }
+        
+        h4 {
+            color: #ea4335;
+            margin-top: 20px;
+            font-size: 1.2em;
+        }
+        
+        .header-info {
+            background: #e8f0fe;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        
+        .header-info p {
+            margin: 5px 0;
+            font-weight: 500;
+        }
+        
+        .part-header {
+            background: linear-gradient(135deg, #1a73e8 0%, #34a853 100%);
+            color: white;
+            padding: 30px;
+            margin: 40px -40px 30px -40px;
+            text-align: center;
+            font-size: 2em;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .step-box {
+            background: #f8f9fa;
+            border-left: 5px solid #fbbc04;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .step-box h3 {
+            margin-top: 0;
+            color: #fbbc04;
+        }
+        
+        .rule-box {
+            background: #fff;
+            border: 2px solid #e0e0e0;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .rule-box h4 {
+            margin-top: 0;
+            padding: 10px;
+            border-radius: 4px;
+            color: white;
+        }
+        
+        .rule-white h4 { background: #9e9e9e; }
+        .rule-brown h4 { background: #8b4513; }
+        .rule-blue h4 { background: #4fc3f7; color: #333; }
+        .rule-red h4 { background: #ea4335; }
+        .rule-amber h4 { background: #fbbc04; color: #333; }
+        .rule-green h4 { background: #34a853; }
+        
+        code {
+            background: #f5f5f5;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #d32f2f;
+        }
+        
+        pre {
+            background: #263238;
+            color: #aed581;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+        
+        pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        th {
+            background: #1a73e8;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        tr:hover {
+            background: #f5f5f5;
+        }
+        
+        .emoji {
+            font-size: 1.2em;
+            margin-right: 5px;
+        }
+        
+        .checkmark {
+            color: #34a853;
+            font-weight: bold;
+        }
+        
+        .crossmark {
+            color: #ea4335;
+            font-weight: bold;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border-left: 5px solid #fbbc04;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .warning-box strong {
+            color: #856404;
+        }
+        
+        .success-box {
+            background: #d4edda;
+            border-left: 5px solid #34a853;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .info-box {
+            background: #e8f0fe;
+            border-left: 5px solid #1a73e8;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        ol, ul {
+            padding-left: 25px;
+        }
+        
+        li {
+            margin: 10px 0;
+        }
+        
+        .checklist {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .checklist li:before {
+            content: "☐ ";
+            font-size: 1.2em;
+            margin-right: 10px;
+            color: #1a73e8;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Sheets Conditional Formatting Guide</h1>
+        <h2 style="margin-top: 0; color: #666; font-size: 1.3em;">Date Tracking with Color-Coded Cells</h2>
+        
+        <div class="header-info">
+            <p><strong>Document Version:</strong> 2.0</p>
+            <p><strong>Last Updated:</strong> January 24, 2026</p>
+            <p><strong>Purpose:</strong> Set up automatic color-coding for date tracking in Column F</p>
+        </div>
+
+        <!-- PART 1 -->
+        <div class="page-break"></div>
+        <div class="part-header">Part 1: Quick Setup Guide</div>
+        
+        <p style="font-size: 1.1em; text-align: center; color: #666; margin-bottom: 40px;">
+            Follow these steps exactly. No explanations - just do it!
+        </p>
+
+        <!-- Step 1 -->
+        <div class="step-box no-break">
+            <h3><span class="emoji">📅</span>Step 1: Add Date Picker to Column F</h3>
+            <ol>
+                <li>Click on the <strong>Column F header</strong> (the letter "F")</li>
+                <li>Menu: <strong>Data → Data validation</strong></li>
+                <li>Click <strong>"+ Add rule"</strong></li>
+                <li><strong>Criteria:</strong> Select <strong>"Date is valid"</strong></li>
+                <li><strong>On invalid data:</strong> Select <strong>"Show warning"</strong></li>
+                <li>Click <strong>"Done"</strong></li>
+            </ol>
+            <div class="success-box">
+                <strong>✅ Result:</strong> Double-clicking cells now shows a calendar picker
+            </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="step-box no-break">
+            <h3><span class="emoji">🎨</span>Step 2: Add Conditional Formatting Rules</h3>
+            
+            <h4>Access Conditional Formatting</h4>
+            <ol>
+                <li>Click on the <strong>Column F header</strong></li>
+                <li>Menu: <strong>Format → Conditional formatting</strong></li>
+            </ol>
+        </div>
+
+        <!-- Rule 1 -->
+        <div class="rule-box rule-white no-break">
+            <h4>Rule 1: Blank Cells → White</h4>
+            <ol>
+                <li>Click <strong>"+ Add another rule"</strong></li>
+                <li><strong>Apply to range:</strong> <code>F3:F991</code> (or <code>F3:F</code> for unlimited)</li>
+                <li><strong>Format cells if:</strong> Custom formula is</li>
+                <li><strong>Formula:</strong> <code>=ISBLANK(F3)</code></li>
+                <li><strong>Formatting style:</strong> White background</li>
+                <li>Click <strong>"Done"</strong></li>
+            </ol>
+        </div>
+
+        <!-- Rule 2 -->
+        <div class="rule-box rule-brown no-break">
+            <h4>Rule 2: "Nil Finance" → Brown (Any Capitalization)</h4>
+            <ol>
+                <li>Click <strong>"+ Add another rule"</strong></li>
+                <li><strong>Apply to range:</strong> <code>F3:F991</code> (or <code>F3:F</code>)</li>
+                <li><strong>Format cells if:</strong> Custom formula is</li>
+                <li><strong>Formula:</strong></li>
+            </ol>
+            <pre><code>=OR(F3="NIL FINANCE", F3="Nil Finance", F3="nil finance", UPPER(TRIM(F3))="NIL FINANCE")</code></pre>
+            <ol start="5">
+                <li><strong>Formatting style:</strong> Brown background (#A0522D or #8B4513)</li>
+                <li>Click <strong>"Done"</strong></li>
+            </ol>
+        </div>
+
+        <!-- Rule 3 -->
+        <div class="rule-box rule-blue no-break">
+            <h4>Rule 3: Other Text → Light Blue</h4>
+            <ol>
+                <li>Click <strong>"+ Add another rule"</strong></li>
+                <li><strong>Apply to range:</strong> <code>F3:F991</code> (or <code>F3:F</code>)</li>
+                <li><strong>Format cells if:</strong> Custom formula is</li>
+                <li><strong>Formula:</strong></li>
+            </ol>
+            <pre><code>=AND(NOT(ISBLANK(F3)), NOT(ISNUMBER(F3)), UPPER(TRIM(F3))<>"NIL FINANCE")</code></pre>
+            <ol start="5">
+                <li><strong>Formatting style:</strong> Light Blue background (#CFE2F3 or #D0E0E3)</li>
+                <li>Click <strong>"Done"</strong></li>
+            </ol>
+        </div>
+
+        <!-- Rule 4 -->
+        <div class="rule-box rule-red no-break">
+            <h4>Rule 4: Past Dates → Red</h4>
+            <ol>
+                <li>Click <strong>"+ Add another rule"</strong></li>
+                <li><strong>Apply to range:</strong> <code>F3:F991</code> (or <code>F3:F</code>)</li>
+                <li><strong>Format cells if:</strong> Custom formula is</li>
+                <li><strong>Formula:</strong> <code>=AND(ISNUMBER(F3), F3<TODAY())</code></li>
+                <li><strong>Formatting style:</strong> Red background (#FF0000 or #EA4335)</li>
+                <li>Click <strong>"Done"</strong></li>
+            </ol>
+        </div>
+
+        <!-- Rule 5 -->
+        <div class="rule-box rule-amber no-break">
+            <h4>Rule 5: Dates Within 5 Days → Amber</h4>
+            <ol>
+                <li>Click <strong>"+ Add another rule"</strong></li>
+                <li><strong>Apply to range:</strong> <code>F3:F991</code> (or <code>F3:F</code>)</li>
+                <li><strong>Format cells if:</strong> Custom formula is</li>
+                <li><strong>Formula:</strong> <code>=AND(ISNUMBER(F3), F3>=TODAY(), F3<=TODAY()+5)</code></li>
+                <li><strong>Formatting style:</strong> Amber/Orange background (#FFA500 or #FBBC04)</li>
+                <li>Click <strong>"Done"</strong></li>
+            </ol>
+        </div>
+
+        <!-- Rule 6 -->
+        <div class="rule-box rule-green no-break">
+            <h4>Rule 6: Dates 6+ Days Away → Green</h4>
+            <ol>
+                <li>Click <strong>"+ Add another rule"</strong></li>
+                <li><strong>Apply to range:</strong> <code>F3:F991</code> (or <code>F3:F</code>)</li>
+                <li><strong>Format cells if:</strong> Custom formula is</li>
+                <li><strong>Formula:</strong> <code>=AND(ISNUMBER(F3), F3>TODAY()+5)</code></li>
+                <li><strong>Formatting style:</strong> Green background (#00FF00 or #34A853)</li>
+                <li>Click <strong>"Done"</strong></li>
+            </ol>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="page-break"></div>
+        <div class="step-box no-break">
+            <h3><span class="emoji">🔢</span>Step 3: Verify Rule Order</h3>
+            <div class="warning-box">
+                <strong>⚠️ CRITICAL:</strong> Rules must be in this exact order!
+            </div>
+            <ol>
+                <li>Open <strong>Format → Conditional formatting</strong></li>
+                <li><strong>Drag rules</strong> to match this order:
+                    <ol style="margin-top: 10px;">
+                        <li>⬜ Blank → White</li>
+                        <li>🟫 "Nil Finance" → Brown</li>
+                        <li>🔵 Other Text → Light Blue</li>
+                        <li>🔴 Past Date → Red</li>
+                        <li>🟠 Within 5 Days → Amber</li>
+                        <li>🟢 6+ Days → Green</li>
+                    </ol>
+                </li>
+                <li>Click <strong>"Done"</strong></li>
+            </ol>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="step-box no-break">
+            <h3><span class="emoji">⚙️</span>Step 4: Add Apps Script (Optional but Recommended)</h3>
+            <p><em>This auto-converts typed dates like "26/11/2025" to proper dates.</em></p>
+            <ol>
+                <li>Menu: <strong>Extensions → Apps Script</strong></li>
+                <li>Delete any existing code</li>
+                <li>Paste this code:</li>
+            </ol>
+            <pre><code>function onEdit(e) {
+  try {
+    const sh = e.range.getSheet();
+    const sheetName = "YOUR_SHEET_NAME_HERE"; // CHANGE THIS
+    
+    if (sh.getName() !== sheetName) return;
+    
+    const range = e.range;
+    const col = range.getColumn();
+    const row = range.getRow();
+    
+    if (col !== 6 || row < 3) return;
+    
+    const value = range.getValue();
+    
+    if (!value || value instanceof Date) return;
+    
+    const datePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+    if (datePattern.test(value)) {
+      const parts = value.split('/');
+      const date = new Date(parts[2], parts[1] - 1, parts[0]);
+      if (!isNaN(date)) {
+        range.setValue(date);
+        range.setNumberFormat('dd/mm/yyyy');
+      }
+    }
+    
+  } catch (err) {
+    // Fail silently
+  }
+}</code></pre>
+            <ol start="4">
+                <li><strong>Change line 4:</strong> Replace <code>YOUR_SHEET_NAME_HERE</code> with your actual sheet tab name (case-sensitive!)</li>
+                <li>Press <strong>Ctrl+S</strong> to save</li>
+                <li>Close Apps Script tab</li>
+                <li>Refresh your Google Sheet (F5)</li>
+            </ol>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="step-box no-break">
+            <h3><span class="emoji">🔧</span>Step 5: Fix Existing Text Dates</h3>
+            <p>If you have dates that were entered before adding the script:</p>
+            <ol>
+                <li>Select all cells in Column F with white dates</li>
+                <li>Menu: <strong>Format → Number → Date</strong></li>
+                <li>Done!</li>
+            </ol>
+        </div>
+
+        <!-- Step 6 -->
+        <div class="step-box no-break">
+            <h3><span class="emoji">✅</span>Step 6: Test Everything</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type This</th>
+                        <th>Expected Color</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>(Leave blank)</td>
+                        <td>⬜ White</td>
+                    </tr>
+                    <tr>
+                        <td><code>NIL FINANCE</code></td>
+                        <td>🟫 Brown</td>
+                    </tr>
+                    <tr>
+                        <td><code>Nil Finance</code></td>
+                        <td>🟫 Brown</td>
+                    </tr>
+                    <tr>
+                        <td><code>nil finance</code></td>
+                        <td>🟫 Brown</td>
+                    </tr>
+                    <tr>
+                        <td><code>REQUESTED BROKERS DETAILS</code></td>
+                        <td>🔵 Light Blue</td>
+                    </tr>
+                    <tr>
+                        <td><code>01/01/2025</code> (past date)</td>
+                        <td>🔴 Red</td>
+                    </tr>
+                    <tr>
+                        <td>Date 3 days from today</td>
+                        <td>🟠 Amber</td>
+                    </tr>
+                    <tr>
+                        <td>Date 10 days from today</td>
+                        <td>🟢 Green</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Quick Troubleshooting -->
+        <div class="info-box no-break">
+            <h3 style="margin-top: 0;">Quick Troubleshooting</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Problem</th>
+                        <th>Solution</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>"Nil Finance" is white, not brown</td>
+                        <td>Check Rule 2 range includes all rows (<code>F3:F991</code> or <code>F3:F</code>)</td>
+                    </tr>
+                    <tr>
+                        <td>Dates are white</td>
+                        <td>Select cells → Format → Number → Date</td>
+                    </tr>
+                    <tr>
+                        <td>Script not working</td>
+                        <td>Check sheet name matches exactly (case-sensitive)</td>
+                    </tr>
+                    <tr>
+                        <td>Wrong colors</td>
+                        <td>Check rule order (Nil Finance must be before Other Text)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- PART 2 -->
+        <div class="page-break"></div>
+        <div class="part-header">Part 2: Detailed Explanations</div>
+
+        <h2>Why This Setup Works</h2>
+
+        <h3>Understanding the Color System</h3>
+
+        <div class="rule-box rule-white no-break">
+            <h4>⬜ White (Blank)</h4>
+            <p><strong>Formula:</strong> <code>=ISBLANK(F3)</code></p>
+            <ul>
+                <li>Only matches completely empty cells</li>
+                <li>Keeps your sheet looking clean</li>
+            </ul>
+        </div>
+
+        <div class="rule-box rule-brown no-break">
+            <h4>🟫 Brown (Nil Finance)</h4>
+            <p><strong>Formula:</strong> <code>=OR(F3="NIL FINANCE", F3="Nil Finance", F3="nil finance", UPPER(TRIM(F3))="NIL FINANCE")</code></p>
+            <ul>
+                <li>Matches "Nil Finance" in ANY capitalization</li>
+                <li><code>TRIM()</code> removes extra spaces</li>
+                <li><code>UPPER()</code> converts to uppercase for comparison</li>
+                <li>Works with: "NIL FINANCE", "Nil Finance", "nil finance", " Nil Finance " (with spaces)</li>
+            </ul>
+        </div>
+
+        <div class="rule-box rule-blue no-break">
+            <h4>🔵 Light Blue (Other Text)</h4>
+            <p><strong>Formula:</strong> <code>=AND(NOT(ISBLANK(F3)), NOT(ISNUMBER(F3)), UPPER(TRIM(F3))<>"NIL FINANCE")</code></p>
+            <ul>
+                <li>Matches any text that isn't blank and isn't "Nil Finance"</li>
+                <li><code>NOT(ISNUMBER(F3))</code> excludes dates (dates are stored as numbers)</li>
+                <li>Catches: "REQUESTED BROKERS DETAILS", "TBC", "Pending", etc.</li>
+            </ul>
+        </div>
+
+        <div class="rule-box rule-red no-break">
+            <h4>🔴 Red (Past Dates)</h4>
+            <p><strong>Formula:</strong> <code>=AND(ISNUMBER(F3), F3<TODAY())</code></p>
+            <ul>
+                <li>Dates are stored as numbers in Google Sheets</li>
+                <li><code>TODAY()</code> returns the current date</li>
+                <li>Highlights overdue dates</li>
+            </ul>
+        </div>
+
+        <div class="rule-box rule-amber no-break">
+            <h4>🟠 Amber (Upcoming Dates)</h4>
+            <p><strong>Formula:</strong> <code>=AND(ISNUMBER(F3), F3>=TODAY(), F3<=TODAY()+5)</code></p>
+            <ul>
+                <li>Matches dates from today through 5 days from now</li>
+                <li>Warns about approaching deadlines</li>
+            </ul>
+        </div>
+
+        <div class="rule-box rule-green no-break">
+            <h4>🟢 Green (Future Dates)</h4>
+            <p><strong>Formula:</strong> <code>=AND(ISNUMBER(F3), F3>TODAY()+5)</code></p>
+            <ul>
+                <li>Matches dates more than 5 days away</li>
+                <li>Shows dates that are safely in the future</li>
+            </ul>
+        </div>
+
+        <div class="page-break"></div>
+        <h2>Why Rule Order Matters</h2>
+
+        <div class="info-box">
+            <p><strong>Key Concept:</strong> Google Sheets checks rules <strong>from top to bottom</strong> and applies the <strong>first matching rule</strong>.</p>
+        </div>
+
+        <h3>Example: Wrong Order</h3>
+        <p>If "Other Text" (Rule 3) comes BEFORE "Nil Finance" (Rule 2) and Rule 3 doesn't properly exclude "Nil Finance":</p>
+        
+        <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Cell contains:</strong> "NIL FINANCE"</p>
+            <p><strong>Check Rule 3 (Other Text):</strong></p>
+            <ul>
+                <li><code>NOT(ISBLANK(F3))</code> → TRUE (not blank)</li>
+                <li><code>NOT(ISNUMBER(F3))</code> → TRUE (not a number)</li>
+                <li><code>F3<>"Nil Finance"</code> → TRUE (because "NIL FINANCE" ≠ "Nil Finance")</li>
+            </ul>
+            <p><strong>Result:</strong> Cell turns LIGHT BLUE ❌ (wrong!)<br>
+            Rule 2 never gets checked!</p>
+        </div>
+
+        <h3>Correct Order Prevents Issues</h3>
+        <p>By putting "Nil Finance" (Rule 2) BEFORE "Other Text" (Rule 3):</p>
+        <ul>
+            <li>"Nil Finance" gets checked first and matched</li>
+            <li>Other text gets checked second and matched</li>
+            <li>No conflicts!</li>
+        </ul>
+
+        <div class="page-break"></div>
+        <h2>Why the Apps Script is Essential</h2>
+
+        <h3>The Text vs. Date Problem</h3>
+
+        <div class="warning-box">
+            <p><strong>The Issue:</strong> When you type <code>26/11/2025</code> in a cell, Google Sheets might interpret it as:</p>
+            <ol>
+                <li><span class="checkmark">✅</span> A proper date (if your locale is DD/MM/YYYY)</li>
+                <li><span class="crossmark">❌</span> Text (if your locale is MM/DD/YYYY and sees "month 26")</li>
+                <li><span class="crossmark">❌</span> Text (if you have a leading space)</li>
+                <li><span class="crossmark">❌</span> Text (if you copy/paste from elsewhere)</li>
+            </ol>
+        </div>
+
+        <h3>Why This Breaks Conditional Formatting</h3>
+        
+        <div style="background: #f8d7da; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Cell shows:</strong> "26/11/2025"<br>
+            <strong>Stored as:</strong> TEXT (not a date)</p>
+            <p><strong>Date Rule Check:</strong></p>
+            <ul>
+                <li><code>ISNUMBER(F3)</code> → FALSE (text is not a number)</li>
+                <li>Rule doesn't apply</li>
+            </ul>
+            <p><strong>Result:</strong> Cell stays WHITE ❌</p>
+        </div>
+
+        <h3>How Dates Should Work</h3>
+        
+        <div style="background: #d4edda; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Cell shows:</strong> 26/11/2025<br>
+            <strong>Stored as:</strong> 45646 (date serial number)<br>
+            <strong>Formatted as:</strong> dd/mm/yyyy</p>
+            <p><strong>Date Rule Check:</strong></p>
+            <ul>
+                <li><code>ISNUMBER(F3)</code> → TRUE (dates are numbers)</li>
+                <li><code>F3<TODAY()</code> → TRUE (if date is past)</li>
+            </ul>
+            <p><strong>Result:</strong> Cell turns RED ✅</p>
+        </div>
+
+        <h3>What the Script Does</h3>
+        <p>The script watches Column F and automatically converts text dates to real dates:</p>
+        <ol>
+            <li>Detects pattern: DD/MM/YYYY</li>
+            <li>Splits "26/11/2025" into ["26", "11", "2025"]</li>
+            <li>Creates date: new Date(year, month-1, day)</li>
+            <li>Replaces text with date</li>
+            <li>Formats as dd/mm/yyyy</li>
+        </ol>
+        <div class="success-box">
+            <strong>Result:</strong> You type <code>26/11/2025</code> → Script converts it → Conditional formatting works!
+        </div>
+
+        <div class="page-break"></div>
+        <h2>Color Reference Table</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Color</th>
+                    <th>Meaning</th>
+                    <th>Formula</th>
+                    <th>Example</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>⬜ White</td>
+                    <td>Blank</td>
+                    <td><code>=ISBLANK(F3)</code></td>
+                    <td>(empty cell)</td>
+                </tr>
+                <tr>
+                    <td>🟫 Brown</td>
+                    <td>Nil Finance</td>
+                    <td><code>=OR(F3="NIL FINANCE", ...)</code></td>
+                    <td>"NIL FINANCE", "Nil Finance"</td>
+                </tr>
+                <tr>
+                    <td>🔵 Light Blue</td>
+                    <td>Other text</td>
+                    <td><code>=AND(NOT(ISBLANK(F3)), ...)</code></td>
+                    <td>"REQUESTED BROKERS DETAILS"</td>
+                </tr>
+                <tr>
+                    <td>🔴 Red</td>
+                    <td>Past date</td>
+                    <td><code>=AND(ISNUMBER(F3), F3<TODAY())</code></td>
+                    <td>01/01/2025 (if today is later)</td>
+                </tr>
+                <tr>
+                    <td>🟠 Amber</td>
+                    <td>Within 5 days</td>
+                    <td><code>=AND(ISNUMBER(F3), F3>=TODAY(), F3<=TODAY()+5)</code></td>
+                    <td>27/01/2026 (if today is 24/01/2026)</td>
+                </tr>
+                <tr>
+                    <td>🟢 Green</td>
+                    <td>6+ days away</td>
+                    <td><code>=AND(ISNUMBER(F3), F3>TODAY()+5)</code></td>
+                    <td>05/02/2026 (if today is 24/01/2026)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="page-break"></div>
+        <h2>Summary Checklist</h2>
+
+        <ul class="checklist">
+            <li>Data validation added (Date is valid, Show warning)</li>
+            <li>Rule 1: Blank → White (<code>=ISBLANK(F3)</code>)</li>
+            <li>Rule 2: Nil Finance → Brown (case-insensitive OR formula)</li>
+            <li>Rule 3: Other text → Light Blue (excludes Nil Finance)</li>
+            <li>Rule 4: Past dates → Red</li>
+            <li>Rule 5: Dates within 5 days → Amber</li>
+            <li>Rule 6: Dates 6+ days away → Green</li>
+            <li><strong>All rules have range <code>F3:F991</code> or <code>F3:F</code> covering all data</strong></li>
+            <li><strong>Rules in correct order</strong> (Blank, Nil Finance, Other Text, then dates)</li>
+            <li>Tested: blank cell → white</li>
+            <li>Tested: "NIL FINANCE" → brown</li>
+            <li>Tested: "Nil Finance" → brown</li>
+            <li>Tested: "nil finance" → brown</li>
+            <li>Tested: other text → light blue</li>
+            <li>Tested: past date → red</li>
+            <li>Tested: date within 5 days → amber</li>
+            <li>Tested: date 6+ days away → green</li>
+            <li>Apps Script added and saved</li>
+            <li>Script sheet name matches actual tab name</li>
+            <li>Script authorized (permissions granted)</li>
+            <li>Existing text dates converted to proper dates</li>
+        </ul>
+
+        <div class="footer">
+            <p><strong>Google Sheets Conditional Formatting Guide</strong></p>
+            <p>Version 2.0 | Last Updated: January 24, 2026</p>
+        </div>
+    </div>
+</body>
+</html>

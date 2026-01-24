@@ -38,18 +38,24 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
   const [error, setError] = useState<string | null>(null);
   const [calculatedFor, setCalculatedFor] = useState<string | null>(null);
   const [overrideAddress, setOverrideAddress] = useState('');
+  const [hasAutoRun, setHasAutoRun] = useState(false); // Prevent infinite loops
 
   /**
    * Auto-run proximity calculation when component loads
    * Enhancement 2: Check for pre-fetched data first
    * Only runs if address is available and field is empty
+   * PROTECTION: Only runs ONCE per component mount to prevent API abuse
    */
   useEffect(() => {
+    // CRITICAL: Only run once per mount
+    if (hasAutoRun) return;
+    
     // If we already have data (either in value or pre-fetched), mark as calculated
     if (value) {
       if (!calculatedFor) {
         setCalculatedFor(address || 'pre-loaded');
       }
+      setHasAutoRun(true);
       return;
     }
     
@@ -57,12 +63,14 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
     if (preFetchedData && !value) {
       onChange(preFetchedData);
       setCalculatedFor(address || 'pre-loaded');
+      setHasAutoRun(true);
       return;
     }
     
-    // Otherwise, fetch as normal if we have address
+    // Otherwise, fetch as normal if we have address (ONLY ONCE)
     if (address && !calculatedFor) {
       calculateProximity(address);
+      setHasAutoRun(true);
     }
   }, [address, value, preFetchedData]); // Depend on all relevant values
 
@@ -148,7 +156,7 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
   return (
     <div className="space-y-4">
       <div>
-        <label className="label-field mb-1">Proximity & Amenities *</label>
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">Proximity & Amenities *</h3>
         
         {/* Loading State */}
         {loading && (

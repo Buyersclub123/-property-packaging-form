@@ -1,0 +1,36 @@
+========================================
+COPY THIS PROMPT INTO NEW SONNET 4.5 CHAT
+========================================
+
+You are analyzing Investment Highlights workflow for a Next.js property review system.
+
+READ THIS FILE:
+property-review-system/form-app/PROMPT-INVESTMENT-HIGHLIGHTS-WORKFLOW.md
+
+YOUR TASK:
+Analyze the workflow, answer all questions, provide implementation plan with phases.
+
+CRITICAL RULES:
+❌ DO NOT WRITE ANY CODE
+❌ DO NOT CREATE HELPER SCRIPTS
+✅ Analysis and planning ONLY
+✅ Save your analysis as: property-review-system/form-app/INVESTMENT-HIGHLIGHTS-ANALYSIS.md
+
+DELIVERABLES:
+1. Architecture overview (components, data flow, APIs)
+2. Implementation plan (Phase 1, 2, 3 with file changes)
+3. Edge case analysis
+4. Answers to all questions in requirements
+5. Recommendations
+
+========================================
+FILE NAMING CONVENTION
+========================================
+
+THEY SHOULD NAME THEIR OUTPUT:
+INVESTMENT-HIGHLIGHTS-ANALYSIS.md
+
+LOCATION:
+property-review-system/form-app/
+
+========================================

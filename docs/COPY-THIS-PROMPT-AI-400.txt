@@ -1,0 +1,95 @@
+I have a Next.js 14 API endpoint that's returning 400 errors but NOT logging anything on the server. Here's the situation:
+
+PROBLEM:
+- POST /api/ai/generate-content returns 400 (Bad Request)
+- NO error messages appear in server logs
+- The endpoint works for other content types ('why-property')
+- Fails specifically for 'investmentHighlights' type with 51,353 character rawText
+
+SERVER LOGS (what we see):
+```
+✅ Extracted text from PDF (25 pages, 51353 chars)
+POST /api/investment-highlights/extract-metadata 200 in 6077ms
+POST /api/ai/generate-content 400 in 930ms
+POST /api/investment-highlights/save 200 in 4363ms
+```
+
+Notice: NO console.log output from the AI endpoint at all!
+
+API ENDPOINT CODE:
+```typescript
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { suburb, lga, type, rawText, context } = body;
+    
+    console.log('🔍 AI generate-content request:', { 
+      type, 
+      hasRawText: !!rawText, 
+      rawTextLength: rawText?.length,
+      suburb, 
+      lga 
+    });
+    
+    // Validate required parameters based on type
+    if (type === 'investmentHighlights') {
+      if (!rawText) {
+        console.error('❌ Missing rawText for investmentHighlights');
+        return NextResponse.json(
+          { error: 'rawText is required for investmentHighlights type' },
+          { status: 400 }
+        );
+      }
+    }
+    
+    // ... rest of OpenAI API call
+  } catch (error) {
+    console.error('AI generation error:', error);
+    return NextResponse.json(
+      { error: 'Failed to generate content' },
+      { status: 500 }
+    );
+  }
+}
+```
+
+CLIENT REQUEST:
+```typescript
+const aiRequestBody = {
+  type: 'investmentHighlights',
+  rawText: extractResult?.mainBody || '', // 51,353 characters
+  context: {
+    suburb: address?.suburbName || '',
+    state: address?.state || '',
+  },
+};
+
+const parseResponse = await fetch('/api/ai/generate-content', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(aiRequestBody),
+});
+```
+
+QUESTIONS:
+1. Why is the 400 error NOT logging anything on the server?
+2. Could 51KB of text in the JSON body be too large for Next.js?
+3. Could JSON.stringify fail silently with certain characters in the rawText?
+4. Is there a Next.js body size limit I need to configure?
+5. How do I diagnose this when there are NO server logs?
+
+WHAT WORKS:
+- Same endpoint with type: 'why-property' (small request) works fine
+- PDF extraction works (51,353 chars extracted successfully)
+- Raw text saves to Google Sheets successfully
+
+ENVIRONMENT:
+- Next.js 14.2.35 (App Router)
+- Node.js runtime (not Edge)
+- OpenAI GPT-4 API
+
+Please provide:
+1. Most likely root cause
+2. How to diagnose with no logs
+3. Code fix
+4. Any Next.js config needed
