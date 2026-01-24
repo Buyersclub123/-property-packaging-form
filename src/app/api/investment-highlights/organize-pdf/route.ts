@@ -7,6 +7,28 @@ const INVESTMENT_HIGHLIGHTS_SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HI
 const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights';
 
 /**
+ * Clean report name for filename
+ * Removes:
+ * - Date suffixes like "(6)-2026-01-22"
+ * - Download counters like "(2)", "(3)"
+ * - Extra whitespace
+ */
+function cleanReportNameForFilename(reportName: string): string {
+  let cleaned = reportName.trim();
+  
+  // Remove date suffix pattern: (x)-YYYY-MM-DD
+  cleaned = cleaned.replace(/\s*\(\d+\)-\d{4}-\d{2}-\d{2}\s*$/i, '');
+  
+  // Remove download counter pattern: (x) at the end
+  cleaned = cleaned.replace(/\s*\(\d+\)\s*$/i, '');
+  
+  // Remove multiple spaces
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  return cleaned;
+}
+
+/**
  * Organize PDF into CURRENT/LEGACY folder structure
  * and save metadata to Google Sheet
  */
@@ -121,7 +143,13 @@ export async function POST(request: NextRequest) {
     }
     
     // Step 6: Move new file to CURRENT
-    const newFileName = `${reportName} - ${validPeriod}.pdf`;
+    // Clean report name (remove date suffix, download counter)
+    const cleanedReportName = cleanReportNameForFilename(reportName);
+    const newFileName = `${cleanedReportName} - ${validPeriod}.pdf`;
+    
+    console.log('[organize-pdf] Original report name:', reportName);
+    console.log('[organize-pdf] Cleaned report name:', cleanedReportName);
+    console.log('[organize-pdf] Final filename:', newFileName);
     
     await drive.files.update({
       fileId: fileId,
