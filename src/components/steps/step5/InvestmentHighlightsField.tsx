@@ -77,19 +77,119 @@ export function InvestmentHighlightsField({
   
   // AI Summary states (Phase 4C-2)
   const [generatingSummary, setGeneratingSummary] = useState(false);
-  const [showSectionEditor, setShowSectionEditor] = useState(false);
-  const [sections, setSections] = useState({
-    populationGrowthContext: '',
+  
+  // Custom dialogue states (Item 4 - redesigned)
+  const [customDialogue, setCustomDialogue] = useState({
+    populationGrowth: '',
     residential: '',
     industrial: '',
-    commercialAndCivic: '',
-    healthAndEducation: '',
+    commercialCivic: '',
+    healthEducation: '',
     transport: '',
     jobImplications: '',
   });
+  
+  // Track if custom dialogue has been loaded from sheet
+  const [customDialogueLoaded, setCustomDialogueLoaded] = useState(false);
+  
+  // Store base main body (without custom dialogue merged in)
+  const [baseMainBody, setBaseMainBody] = useState('');
 
   // Track if we've already done a lookup (prevent multiple calls)
   const hasLookedUpRef = useRef(false);
+  
+  /**
+   * Merge custom dialogue into main body
+   * Finds section headings and inserts custom content after them
+   */
+  const mergeCustomDialogueIntoMainBody = (
+    mainBody: string,
+    dialogue: typeof customDialogue
+  ): string => {
+    let merged = mainBody;
+    
+    // Define section mappings
+    const sectionMappings = [
+      {
+        heading: /^(.*population.*growth.*context)/im,
+        customContent: dialogue.populationGrowth,
+        insertAfter: true, // Insert after the paragraph
+      },
+      {
+        heading: /\*\*Residential:\*\*/i,
+        customContent: dialogue.residential,
+        insertAfter: true,
+      },
+      {
+        heading: /\*\*Industrial:\*\*/i,
+        customContent: dialogue.industrial,
+        insertAfter: true,
+      },
+      {
+        heading: /\*\*Commercial and Civic:\*\*/i,
+        customContent: dialogue.commercialCivic,
+        insertAfter: true,
+      },
+      {
+        heading: /\*\*Health and Education:\*\*/i,
+        customContent: dialogue.healthEducation,
+        insertAfter: true,
+      },
+      {
+        heading: /\*\*Transport:\*\*/i,
+        customContent: dialogue.transport,
+        insertAfter: true,
+      },
+      {
+        heading: /\*\*Job Implications:\*\*/i,
+        customContent: dialogue.jobImplications,
+        insertAfter: true,
+      },
+    ];
+    
+    // Process each section
+    sectionMappings.forEach(({ heading, customContent, insertAfter }) => {
+      if (!customContent || customContent.trim() === '') return;
+      
+      const match = merged.match(heading);
+      if (match) {
+        const matchIndex = match.index!;
+        const matchLength = match[0].length;
+        
+        // Find the end of the section (next heading or end of string)
+        const nextHeadingPattern = /\n\*\*[A-Z]/;
+        const nextHeadingMatch = merged.slice(matchIndex + matchLength).match(nextHeadingPattern);
+        const insertPosition = nextHeadingMatch 
+          ? matchIndex + matchLength + nextHeadingMatch.index!
+          : merged.length;
+        
+        // Insert custom content
+        const customBlock = `\n\n[CUSTOM ADDITIONS]\n${customContent.trim()}\n`;
+        merged = merged.slice(0, insertPosition) + customBlock + merged.slice(insertPosition);
+      }
+    });
+    
+    return merged;
+  };
+  
+  /**
+   * Handle custom dialogue field changes
+   * Updates state and merges into main body with debouncing
+   */
+  const handleCustomDialogueChange = (field: string, newValue: string) => {
+    const updatedDialogue = {
+      ...customDialogue,
+      [field]: newValue,
+    };
+    
+    setCustomDialogue(updatedDialogue);
+    
+    // Merge custom dialogue into main body
+    const mergedBody = mergeCustomDialogueIntoMainBody(baseMainBody, updatedDialogue);
+    
+    // Update parent form state
+    onChange(mergedBody);
+  };
   
   // Check for pre-loaded data from Step 1A
   useEffect(() => {
@@ -218,13 +318,33 @@ export function InvestmentHighlightsField({
         
         // Use Main Body for display
         const mainBody = result.data.mainBody || '';
-        const combined = mainBody;
         
-        console.log('[InvestmentHighlights] Combined length:', combined.length);
-        console.log('[InvestmentHighlights] Calling onChange with combined text...');
+        // Store base main body (without custom dialogue)
+        setBaseMainBody(mainBody);
         
-        // Update parent form state
-        onChange(combined);
+        // Load custom dialogue if available (from columns G-M)
+        if (result.data.customDialogue) {
+          const dialogue = {
+            populationGrowth: result.data.customDialogue.populationGrowth || '',
+            residential: result.data.customDialogue.residential || '',
+            industrial: result.data.customDialogue.industrial || '',
+            commercialCivic: result.data.customDialogue.commercialCivic || '',
+            healthEducation: result.data.customDialogue.healthEducation || '',
+            transport: result.data.customDialogue.transport || '',
+            jobImplications: result.data.customDialogue.jobImplications || '',
+          };
+          setCustomDialogue(dialogue);
+          setCustomDialogueLoaded(true);
+          
+          // Merge custom dialogue into main body
+          const mergedBody = mergeCustomDialogueIntoMainBody(mainBody, dialogue);
+          onChange(mergedBody);
+        } else {
+          // No custom dialogue, use main body as-is
+          onChange(mainBody);
+        }
+        
+        console.log('[InvestmentHighlights] Main body loaded with custom dialogue');
       } else {
         setMatchStatus('not-found');
       }
@@ -460,146 +580,6 @@ export function InvestmentHighlightsField({
     }
   };
   
-  const handleGenerateSummary = async () => {
-    if (!uploadedFileId) {
-      alert('No PDF file uploaded');
-      return;
-    }
-    
-    setGeneratingSummary(true);
-    setError(null);
-    
-    try {
-      const response = await fetch('/api/investment-highlights/generate-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileId: uploadedFileId }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate summary');
-      }
-      
-      const result = await response.json();
-      
-      // Update sections with AI-generated content
-      setSections(result.sections);
-      
-      // Update main body display
-      onChange(result.mainBody);
-      
-      // Show section editor
-      setShowSectionEditor(true);
-      
-      alert('AI summary generated successfully! You can now edit individual sections below.');
-    } catch (err: any) {
-      console.error('AI summary generation error:', err);
-      setError(err.message || 'Failed to generate AI summary. Please try again or enter manually.');
-    } finally {
-      setGeneratingSummary(false);
-    }
-  };
-  
-  const handleSectionChange = (sectionName: string, newValue: string) => {
-    setSections(prev => ({
-      ...prev,
-      [sectionName]: newValue,
-    }));
-    
-    // Regenerate main body when any section changes
-    const updatedSections = {
-      ...sections,
-      [sectionName]: newValue,
-    };
-    
-    const newMainBody = generateMainBodyFromSections(updatedSections);
-    onChange(newMainBody);
-  };
-  
-  const generateMainBodyFromSections = (secs: typeof sections): string => {
-    const parts: string[] = [];
-    
-    if (secs.populationGrowthContext) {
-      parts.push(secs.populationGrowthContext);
-    }
-    
-    if (secs.residential) {
-      parts.push(`**Residential:**\n${secs.residential}`);
-    }
-    
-    if (secs.industrial) {
-      parts.push(`**Industrial:**\n${secs.industrial}`);
-    }
-    
-    if (secs.commercialAndCivic) {
-      parts.push(`**Commercial and Civic:**\n${secs.commercialAndCivic}`);
-    }
-    
-    if (secs.healthAndEducation) {
-      parts.push(`**Health and Education:**\n${secs.healthAndEducation}`);
-    }
-    
-    if (secs.transport) {
-      parts.push(`**Transport:**\n${secs.transport}`);
-    }
-    
-    if (secs.jobImplications) {
-      parts.push(`**Job Implications:**\n${secs.jobImplications}`);
-    }
-    
-    return parts.join('\n\n');
-  };
-  
-  const handleSaveSections = async () => {
-    if ((!lga && !suburb) || !state || !reportName || !validPeriod) {
-      alert('Missing required information. Please ensure report name and valid period are set.');
-      return;
-    }
-    
-    setLoading(true);
-    
-    try {
-      // Generate main body from sections
-      const mainBody = generateMainBodyFromSections(sections);
-      
-      const response = await fetch('/api/investment-highlights/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          suburbs: suburb || '',
-          state,
-          reportName: reportName || extractedReportName,
-          validPeriod: validPeriod || extractedValidPeriod,
-          mainBody,
-          extraInfo: '', // Extra info is optional
-          // Individual sections (for columns G-M)
-          populationGrowthContext: sections.populationGrowthContext,
-          residential: sections.residential,
-          industrial: sections.industrial,
-          commercialAndCivic: sections.commercialAndCivic,
-          healthAndEducation: sections.healthAndEducation,
-          transport: sections.transport,
-          jobImplications: sections.jobImplications,
-          // PDF info (for columns N-O)
-          pdfLink: '', // Will be preserved from organize-pdf step
-          fileId: uploadedFileId,
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Save failed');
-      }
-      
-      alert('Investment highlights and sections saved successfully!');
-    } catch (err: any) {
-      console.error('Save error:', err);
-      alert('Failed to save investment highlights. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCancelUpload = () => {
     setShowVerification(false);
@@ -928,162 +908,123 @@ export function InvestmentHighlightsField({
           </div>
         )}
         
-        {/* AI Summary Generation Button (Phase 4C-2) */}
-        {matchStatus === 'found' && uploadedFileId && !showSectionEditor && (
-          <div className="mt-3 p-4 bg-purple-50 border border-purple-200 rounded-md">
-            <h4 className="font-medium text-purple-900 mb-2">🤖 AI Summary Generation</h4>
-            <p className="text-sm text-gray-700 mb-3">
-              Generate infrastructure summary from the uploaded PDF using AI.
-            </p>
-            <button
-              onClick={handleGenerateSummary}
-              disabled={generatingSummary}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center"
-            >
-              {generatingSummary ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Generating Summary...
-                </>
-              ) : (
-                '✨ Generate AI Summary'
-              )}
-            </button>
-          </div>
-        )}
-        
-        {/* Section Editor (Phase 4C-2) */}
-        {showSectionEditor && (
-          <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-md space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-medium text-green-900">📝 Edit Infrastructure Sections</h4>
-              <button
-                onClick={() => setShowSectionEditor(false)}
-                className="text-sm text-gray-600 hover:text-gray-800"
-              >
-                Hide Editor
-              </button>
+        {/* Custom Dialogue Fields - Always Visible (Item 4 - Redesigned) */}
+        {matchStatus === 'found' && (
+          <div className="mt-6 p-4 bg-purple-50 border-2 border-purple-300 rounded-md space-y-4">
+            <div className="mb-3">
+              <h4 className="font-semibold text-purple-900 flex items-center mb-2">
+                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                </svg>
+                Custom Dialogue (Optional)
+              </h4>
+              <p className="text-sm text-gray-700">
+                Add your own custom content to any section below. Your additions will be merged into the main body and saved for future users.
+              </p>
             </div>
-            <p className="text-sm text-gray-700 mb-3">
-              Edit individual sections below. The Main Body will update automatically.
-            </p>
             
-            {/* Section 1: Population Growth Context */}
+            {/* Field 1: Population Growth Context */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 1. Population Growth Context
               </label>
               <textarea
-                value={sections.populationGrowthContext}
-                onChange={(e) => handleSectionChange('populationGrowthContext', e.target.value)}
+                value={customDialogue.populationGrowth}
+                onChange={(e) => handleCustomDialogueChange('populationGrowth', e.target.value)}
                 className="w-full p-2 border rounded-md text-sm"
-                rows={3}
-                placeholder="Plain paragraph describing population growth trends..."
+                rows={2}
+                placeholder="Add custom content about population growth (optional)..."
               />
             </div>
             
-            {/* Section 2: Residential */}
+            {/* Field 2: Residential */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 2. Residential
               </label>
               <textarea
-                value={sections.residential}
-                onChange={(e) => handleSectionChange('residential', e.target.value)}
+                value={customDialogue.residential}
+                onChange={(e) => handleCustomDialogueChange('residential', e.target.value)}
                 className="w-full p-2 border rounded-md text-sm"
-                rows={4}
-                placeholder="**$500 million** Residential project description..."
+                rows={2}
+                placeholder="Add custom residential projects or details (optional)..."
               />
             </div>
             
-            {/* Section 3: Industrial */}
+            {/* Field 3: Industrial */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 3. Industrial
               </label>
               <textarea
-                value={sections.industrial}
-                onChange={(e) => handleSectionChange('industrial', e.target.value)}
+                value={customDialogue.industrial}
+                onChange={(e) => handleCustomDialogueChange('industrial', e.target.value)}
                 className="w-full p-2 border rounded-md text-sm"
-                rows={4}
-                placeholder="**$250 million** Industrial project description..."
+                rows={2}
+                placeholder="Add custom industrial projects or details (optional)..."
               />
             </div>
             
-            {/* Section 4: Commercial and Civic */}
+            {/* Field 4: Commercial and Civic */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 4. Commercial and Civic
               </label>
               <textarea
-                value={sections.commercialAndCivic}
-                onChange={(e) => handleSectionChange('commercialAndCivic', e.target.value)}
+                value={customDialogue.commercialCivic}
+                onChange={(e) => handleCustomDialogueChange('commercialCivic', e.target.value)}
                 className="w-full p-2 border rounded-md text-sm"
-                rows={4}
-                placeholder="**$180 million** Commercial project description..."
+                rows={2}
+                placeholder="Add custom commercial/civic projects or details (optional)..."
               />
             </div>
             
-            {/* Section 5: Health and Education */}
+            {/* Field 5: Health and Education */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 5. Health and Education
               </label>
               <textarea
-                value={sections.healthAndEducation}
-                onChange={(e) => handleSectionChange('healthAndEducation', e.target.value)}
+                value={customDialogue.healthEducation}
+                onChange={(e) => handleCustomDialogueChange('healthEducation', e.target.value)}
                 className="w-full p-2 border rounded-md text-sm"
-                rows={4}
-                placeholder="**$120 million** Health/Education project description..."
+                rows={2}
+                placeholder="Add custom health/education projects or details (optional)..."
               />
             </div>
             
-            {/* Section 6: Transport */}
+            {/* Field 6: Transport */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 6. Transport
               </label>
               <textarea
-                value={sections.transport}
-                onChange={(e) => handleSectionChange('transport', e.target.value)}
+                value={customDialogue.transport}
+                onChange={(e) => handleCustomDialogueChange('transport', e.target.value)}
                 className="w-full p-2 border rounded-md text-sm"
-                rows={4}
-                placeholder="**$2.5 billion** Transport project description..."
+                rows={2}
+                placeholder="Add custom transport projects or details (optional)..."
               />
             </div>
             
-            {/* Section 7: Job Implications */}
+            {/* Field 7: Job Implications */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 7. Job Implications
               </label>
               <textarea
-                value={sections.jobImplications}
-                onChange={(e) => handleSectionChange('jobImplications', e.target.value)}
+                value={customDialogue.jobImplications}
+                onChange={(e) => handleCustomDialogueChange('jobImplications', e.target.value)}
                 className="w-full p-2 border rounded-md text-sm"
                 rows={2}
-                placeholder="5,000 construction jobs and 2,000 ongoing jobs..."
+                placeholder="Add custom job impact details (optional)..."
               />
             </div>
             
-            <div className="flex space-x-2 mt-4">
-              <button
-                onClick={handleSaveSections}
-                disabled={loading}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
-              >
-                {loading ? 'Saving...' : '💾 Save All Sections'}
-              </button>
-              <button
-                onClick={handleGenerateSummary}
-                disabled={generatingSummary}
-                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400"
-              >
-                {generatingSummary ? 'Regenerating...' : '🔄 Regenerate from PDF'}
-              </button>
+            <div className="pt-3 border-t border-purple-300">
+              <p className="text-xs text-gray-600 mb-2">
+                💡 <strong>Tip:</strong> Your custom additions will appear in the main body above with a "[CUSTOM ADDITIONS]" label.
+              </p>
             </div>
           </div>
         )}

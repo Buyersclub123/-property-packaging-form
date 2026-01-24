@@ -172,7 +172,7 @@ export interface MarketPerformance {
 export interface ContentSections {
   whyThisProperty?: string;
   proximity?: string;
-  investmentHighlights?: string; // Main Body
+  investmentHighlights?: string; // Main Body (ChatGPT output)
   investmentHighlightsReportName?: string;
   investmentHighlightsValidFrom?: string;
   investmentHighlightsValidTo?: string;
@@ -186,6 +186,18 @@ export interface ContentSections {
   
   // Content review confirmation
   contentReviewed?: boolean;
+  
+  // Base main body (without custom dialogue merged in)
+  investmentHighlightsBase?: string;
+  
+  // 7 Custom Dialogue Fields (for human additions)
+  customDialogue1PopulationGrowth?: string;
+  customDialogue2Residential?: string;
+  customDialogue3Industrial?: string;
+  customDialogue4CommercialCivic?: string;
+  customDialogue5HealthEducation?: string;
+  customDialogue6Transport?: string;
+  customDialogue7JobImplications?: string;
 }
 
 // Agent Information
