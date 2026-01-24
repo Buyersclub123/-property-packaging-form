@@ -132,9 +132,9 @@ function formatOccupancy(val) {
 function normaliseNewlines(str) {
   if (!str) return "";
   return String(str)
-    .replace(/\\n/g, "\n")
-    .replace(/\\\\n/g, "\n")
-    .replace(/&#10;|&#13;/g, "\n");
+    .replace(/\\\\n/g, "\n")     // Handle double-escaped (from JSON.stringify)
+    .replace(/\\n/g, "\n")       // Handle single-escaped
+    .replace(/&#10;|&#13;/g, "\n"); // Handle HTML entities
 }
 
 // Format "Why This Property" as HTML

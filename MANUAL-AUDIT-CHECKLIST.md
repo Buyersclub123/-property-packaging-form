@@ -28,7 +28,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is active, identify its function, determine if it needs environment variable
-
+Verified: Name: 02b Form App Property Submission to GHL once approved, this is working. This ceates the record in the Deal Sheet
 ---
 
 ### Item 2: `https://hook.eu1.make.com/bkq23g13n4ae6qpkdbdwpnu7h1ac16d`
@@ -43,7 +43,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is active, identify its function, determine if it needs environment variable
-
+THIS CODE I BEKIEVE IS IN THE PROPRTY FORM CODE WHICH IS NOT A SCENARIO BUT IS IMPORTANT
 ---
 
 ### Item 3: `https://hook.eu1.make.com/u63eqhdemilc7wsaw3ub4mjxwbc6da75`
@@ -56,7 +56,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is active, identify its function, determine if it needs environment variable
-
+VERIFIED NAME: 98 GHL Check Address Webhook, I dont think this is needed but will keep in cse we wsnt to reuse or learn from
 ---
 
 ### Item 4: `https://hook.eu1.make.com/gsova3xd6kwrckiw3j5js2twfgu1i885`
@@ -72,7 +72,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is active, identify its function, determine if it needs environment variable
-
+VERIFIED NAME = 01 Test Stashproperty AP, this is used and is working. This checks Stash and GeoScape info
 ---
 
 ### Item 5: `https://hook.eu1.make.com/q85flukqhepku5rudd6bc1qbl9mqtlxk`
@@ -88,7 +88,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is active, identify its function, determine if it needs environment variable
-
+VERIED: Name: 03 Property Review Approval Webhook, this is working
 ---
 
 ### Item 6: `https://hook.eu1.make.com/bkq23g13n4ae6spskdbwpru7hleol6sl`
@@ -103,7 +103,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is active, identify its function, determine if it needs environment variable
-
+VERIFIED: Name: 02a GHL Property Review Submitted approval & email processing, this is working. This gets aproval  for property to be written to GHL and the processes emails
 ---
 
 ### Item 7: `https://hook.eu1.make.com/phqgvu4i3knw9p7y42i5d6dhyw54xbaci`
@@ -116,7 +116,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is still in use or deprecated
-
+Could not see it so no
 ---
 
 ### Item 8: `https://hook.eu1.make.com/swugj2vzbspklynea8n1q0zh7dq2pztt`
@@ -129,7 +129,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is still in use or deprecated
-
+Could not see it so no
 ---
 
 ### Item 9: `https://hook.eu1.make.com/fcjabbpzv88sya6twvn2pa8whalj2vei`
@@ -142,7 +142,7 @@ For each item below:
 - Check if scenario is active or inactive
 - Document the scenario name and purpose
 **Goal:** Verify if this webhook is still in use or deprecated
-
+THIS IS DELETED AS NOT BEING USED
 ---
 
 ## GHL API Bearer Token
@@ -161,8 +161,8 @@ For each item below:
 - Verify permissions/scope of this token
 - Check if there are other active tokens that should be used instead
 **Goal:** Verify this is the correct active token, check if it needs rotation, confirm permissions
-
----
+WE SHOULD ROTATE WHEN READY its called New GHL/Make.com Privste Itegratio
+There is 2nd connection which I Dont think we use anymore which has a key ending *e554 called Pipeline and pipeline stag
 
 ## Additional Items to Check in GHL
 
@@ -174,7 +174,7 @@ For each item below:
 - Verify Location ID matches: `UJWYn4mrgGodB7KZUcHt`
 - Confirm this is the correct location
 **Goal:** Verify Location ID is correct
-
+VERIFIED AS CORRECT
 ---
 
 ### Item 12: Object ID - `692d04e3662599ed0c29edfa`
@@ -186,7 +186,7 @@ For each item below:
 - Verify Object ID matches: `692d04e3662599ed0c29edfa`
 - Confirm this is the correct custom object
 **Goal:** Verify Object ID is correct
-
+VERIFIED AS CORRECT
 ---
 
 ## Additional Items to Check in Make.com
@@ -205,8 +205,11 @@ For each item below:
 - Compare with token `pit-d375efb5-f445-458d-af06-3cbbb4b331dd`
 - Check if any modules use different tokens
 **Goal:** Verify all Make.com scenarios use the correct GHL bearer token
-
----
+ 02a GHL Property Review Submitted approval & email processing - uses '4b331dd
+02b Form App Property Submission to GHL once approved - uses the same in 4 HTTP modules---
+03 Property Review Approval Webhook uses it
+98 GHL Check Address Webhook uses it (despite not being used)
+99 Stash Integration not currently being used is bit of a test bed uses iksnt configred to connect
 
 ### Item 14: All Webhook Modules
 **Source Platform:** Make.com  
@@ -221,8 +224,9 @@ For each item below:
 - Compare with the 9 webhook URLs listed above
 - Check if there are any additional webhook URLs not in the list
 **Goal:** Complete inventory of all Make.com webhooks
-
----
+For scenario "01 Test Stashproperty AP" this calls Stash and I want to say GeoScape but the URL says this https://api.psma.com.au/v2/addresses/geocoder?address=https://api.psma.com.au/v2/addresses/geocoder?address= - Stashhas password / username, API, PSMA has authorisatiopn header with value that looks like a string
+04 Opportunity SNAPSHOT does not have an HTTP module, this logged in with user password hich is hidden from the code / settings
+04 Realtime opportunity tracker- this does not use HTTP module. google sheets use user password which is hidden from code / settings
 
 ## Notes
 
@@ -235,3 +239,22 @@ For each item below:
 
 **Status:** Ready for manual verification  
 **Next Step:** User performs manual audit and reports findings
+
+
+ADDITIONALLY IN GHL THERE Are custom workflows: 
+PR  - Opportunity Pipeline stage change capture - using https://hooks.zapier.com/hooks/catch/15778686/ufcdq5p/
+PR - Opportunity Pipeline stage change capture Make - using https://hook.eu1.make.com/swugj2vzbspklynea8n1q0zh7dq2pztt
+PR Opportunity update Make.com - using https://hook.eu1.make.com/plrqpv4s5kxw9p7y425s6xhyn54xbxci
+
+SADDTIONALY GOOGLE SHEETS
+https://docs.google.com/spreadsheets/d/1qiQpeyBVBwMa4rDmGNbCR2bSTylTAldu2fgsh5uqjX8/edit?gid=0#gid=0 - This is the new deal sheet named "Deal Sheet" 
+https://docs.google.com/spreadsheets/d/1uxhNYe9Qx8g-ZCTOGP27_DS9SdoYe6CVmG1J4fxPsLQ/edit?gid=0#gid=0 - this the admin sheet where we can store users emails with friendly name for use in dropdowns named "Property Review System - Admin"
+https://docs.google.com/spreadsheets/d/1VkKVnxbcd1l33z9MrTBzdROskeyaMVV_MyVggiolj0U/edit?pli=1&gid=0#gid=0 - this is a log to capture what the form send to be pproved / GHL - I dont think we completed it ie set it up named "Property Review System Logs"
+https://docs.google.com/spreadsheets/d/1nR0upQ4eV4iiw-dY1FCVMP0cNzc3GElZUVZU4WcTf3Q/edit?gid=0#gid=0 - this is to capture the pipeline stage changes for the suitsle clients portsal we may habve freated more than one so we had one for testing, is this is wired to the client select portl its live (I know it works) named "Pipeline Stage changes via Make.com"
+https://docs.google.com/spreadsheets/d/1V2yc9mnFasfIc7mVqyE2xTA6QHUxMu9XBbk6FzBbQTM/edit?gid=0#gid=0 - this is the test opportunity list mentioned immediately above, not sure if this is plugged into the client select portal or not named "GHL Opportunities Test"
+https://docs.google.com/spreadsheets/d/1M_en0zLhJK6bQMNfZDGzEmPDMwtb3BksvgOsm8N3tlY/edit?gid=0#gid=0- this is for storing the msrket performance - named "Property Review Static Data - Market Performance"
+https://docs.google.com/spreadsheets/d/1i9ZNOFNkEy3KT0BJCJoxhVPnKkksqSi7A9TpAVpcqcI/edit?gid=0#gid=0this is for storing investment highlights named "Property Review Static Data - Investment Highlights"not really finisged finessing this
+
+https://drive.google.com/drive/u/1/folders/0AFVxBPJiTmjPUk9PVA is a shard Google Drive wihtin which we have a folder "https://drive.google.com/drive/u/1/folders/1RFOBoJKBVIBDZsMUih3tWJ-yOE8YLKoZ" Properties within wich we have a template folder https://drive.google.com/drive/u/1/folders/1R2g9dbaaQooocgV3FZe9KR-0F0C1xNh5 which has he 2 Googlesheets for cashflow, its this folder that is needed to be copied, renamed, and have the google sheets written to
+
+IN THE CAHFLOWSPREADSHEETS COULD BE API details - if tghere are youy need to tell me how to get them

@@ -25,14 +25,32 @@
 
 ## 🔄 IN PROGRESS
 
+### Phase 5: New Page Flow (3-Step Implementation) (2026-01-21)
+**Status:** 🔄 Ready to Start  
+**Priority:** HIGH  
+**Details:**
+- Phase 5 restructures the final submission flow from 1 combined step into 3 separate steps
+- **Step 6:** Washington Brown Calculator (NEW)
+- **Step 7:** Cashflow Review & Folder Creation (NEW logic)
+- **Step 8:** Pre-Submission Checklist & Final Submission (migrated from old Step 6)
+- **Handoff Documents Created:**
+  - `PHASE-5-STEP-6-HANDOFF.md` (Chat F)
+  - `PHASE-5-STEP-7-HANDOFF.md` (Chat G)
+  - `PHASE-5-STEP-8-HANDOFF.md` (Chat H)
+  - `PHASE-5-CHAT-ASSIGNMENT.md` (Coordination)
+  - `START-PHASE-5-HERE.md` (Quick start guide)
+- **Estimated Time:** 6-10 hours total (can be parallelized to 2-3 hours)
+- **Next Step:** Open 3 new Cursor chats and assign each step
+- **See:** `START-PHASE-5-HERE.md` for instructions
+
 ### Proximity Consolidation - Phase 1 (2026-01-XX)
-**Status:** ✅ COMPLETE - Shelved for integration later  
+**Status:** ✅ COMPLETE - Integrated in Phase 4A  
 **Details:**
 - ✅ Consolidated all 9 test endpoints into single `/api/geoapify/proximity` endpoint
 - ✅ All results now use Google Maps drive distances (Wednesday 9 AM traffic)
 - ✅ Implemented agreed rules for output format, filtering, and category appending
 - ✅ Baseline output verified and working
-- **Next Step:** Integration into form (page 5-6) - ON HOLD until folder creation and cashflow sheet writing are complete
+- ✅ **INTEGRATED:** Phase 4A - Proximity Tool Integration (auto-calculation on Step 5)
 - **Note:** No fallback logic - if Google Maps API fails, results are skipped (manual process required)
 
 ### Property Form Failure Points Discussion (2026-01-XX)

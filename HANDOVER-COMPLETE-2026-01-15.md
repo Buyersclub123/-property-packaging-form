@@ -727,7 +727,75 @@ npm run dev
 
 ---
 
+## 📋 LATEST IMPLEMENTATION PLAN (Jan 22, 2026)
+
+### Investment Highlights Enhanced Workflow - PHASE 1 COMPLETE ✅
+
+**WHAT:**
+- Searchable dropdown of reports from Google Sheet
+- Date validation (Valid Period field)
+- Drag & drop PDF upload
+- Auto-extract PDF metadata
+- Force save PDF to Hotspotting folder
+- Add Google Drive shortcut to property folder
+- Auto-add suburb to report's suburb list
+- Multi-layer validation for report name changes
+
+**STATUS:** 
+- ✅ Requirements documented in `PROMPT-INVESTMENT-HIGHLIGHTS-WORKFLOW.md`
+- ✅ Delegation prompt created in `COPY-THIS-PROMPT.txt`
+- ✅ **ANALYSIS COMPLETE** by external AI (Sonnet 4.5)
+- ✅ Analysis saved as `INVESTMENT-HIGHLIGHTS-ANALYSIS.md`
+
+**ANALYSIS SUMMARY:**
+- **4 Phases:** Core Date Validation (6-8h) → Suburb Mapping (5-6h) → Report Updates (5-6h) → Polish (4-5h)
+- **Total Time:** 16-20 hours
+- **10 API Endpoints:** 4 new, 2 modified, 4 existing
+- **8 Edge Case Categories:** Date parsing, suburb mapping, PDF upload, Google Drive, Google Sheets, user workflow, display names, dropdown performance
+- **18 Questions Answered:** All questions from requirements addressed
+- **Risk Level:** LOW - All requirements feasible with existing tech stack
+
+**PHASE 1 IMPLEMENTATION (COMPLETE):**
+- ✅ Date validation utility created (`src/lib/dateValidation.ts`)
+- ✅ List reports API created (`GET /api/investment-highlights/list-reports`)
+- ✅ Enhanced lookup API with date status
+- ✅ Searchable dropdown component (`ReportDropdown.tsx`)
+- ✅ Integrated into InvestmentHighlightsField
+- ✅ Date status warnings (expired, expiring soon)
+- ✅ No linter errors
+
+**READY TO TEST:**
+1. Start dev server: `npm run dev`
+2. Navigate to Step 5 (Investment Highlights)
+3. Test: Auto-match, dropdown search, report selection, date warnings
+
+**REMAINING PHASES (Not Yet Implemented):**
+- Phase 2: Suburb Mapping & PDF Shortcuts (5-6 hours)
+- Phase 3: Report Updates & Edge Cases (5-6 hours)
+- Phase 4: Polish & Testing (4-5 hours)
+
+---
+
+### Other P1 Items (On Hold)
+
+**Step 5 Field Clearing Issue:**
+- Investment Highlights & Why This Property clear when Proximity loads
+- Solution: Modify ProximityField.tsx to preserve existing values
+- Files: `src/components/steps/step5/ProximityField.tsx`
+
+**Fix Unit Number Bug (Page 2):**
+- hasUnitNumbers doesn't persist when navigating back
+- Solution: Update Step1DecisionTree.tsx to initialize from useFormStore
+
+**Add Hotspotting PDF to property folder:**
+- PDF link/shortcut not added when folder created
+
+**Fix Cashflow Spreadsheet Dropdown:**
+- Drawdown sheet calculation not working
+
+---
+
 **End of Handover Document**
 
-*Last Updated: January 15, 2026*  
+*Last Updated: January 22, 2026*  
 *For questions or updates, refer to project documentation or contact system administrator.*
