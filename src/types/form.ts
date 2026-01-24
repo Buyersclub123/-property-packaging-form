@@ -183,6 +183,9 @@ export interface ContentSections {
   investmentHighlightsExtra5?: string;
   investmentHighlightsExtra6?: string;
   investmentHighlightsExtra7?: string;
+  
+  // Content review confirmation
+  contentReviewed?: boolean;
 }
 
 // Agent Information

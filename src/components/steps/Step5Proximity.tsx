@@ -21,7 +21,9 @@ import { InvestmentHighlightsField } from './step5/InvestmentHighlightsField';
 export function Step5Proximity() {
   const { formData, updateFormData } = useFormStore();
   const { contentSections, address, proximityData, earlyProcessing } = formData;
-  const [contentReviewed, setContentReviewed] = useState(false);
+  
+  // Use form store state instead of local state
+  const contentReviewed = contentSections?.contentReviewed || false;
 
   // Use early processing data if available
   const proximityValue = contentSections?.proximity || 
@@ -33,24 +35,40 @@ export function Step5Proximity() {
                                '';
 
   const handleContentReviewChange = (checked: boolean) => {
-    setContentReviewed(checked);
+    // Update form store instead of local state
+    const updates: any = { 
+      contentSections: { 
+        ...contentSections,
+        contentReviewed: checked, // Store checkbox state
+      } 
+    };
     
-    // If checked, secretly add a space to any empty fields to satisfy validation
+    // If checked, add carriage return to fields (after content populates)
     if (checked) {
-      const updates: any = { contentSections: { ...contentSections } };
-      
+      // Add space to empty fields for validation
       if (!proximityValue || proximityValue.trim() === '') {
         updates.contentSections.proximity = ' ';
-      }
-      if (!whyThisPropertyValue || whyThisPropertyValue.trim() === '') {
-        updates.contentSections.whyThisProperty = ' ';
-      }
-      if (!contentSections?.investmentHighlights || contentSections.investmentHighlights.trim() === '') {
-        updates.contentSections.investmentHighlights = ' ';
+      } else {
+        // Add carriage return to existing content
+        updates.contentSections.proximity = proximityValue + '\n';
       }
       
-      updateFormData(updates);
+      if (!whyThisPropertyValue || whyThisPropertyValue.trim() === '') {
+        updates.contentSections.whyThisProperty = ' ';
+      } else {
+        // Add carriage return to existing content
+        updates.contentSections.whyThisProperty = whyThisPropertyValue + '\n';
+      }
+      
+      if (!contentSections?.investmentHighlights || contentSections.investmentHighlights.trim() === '') {
+        updates.contentSections.investmentHighlights = ' ';
+      } else {
+        // Add carriage return to existing content
+        updates.contentSections.investmentHighlights = contentSections.investmentHighlights + '\n';
+      }
     }
+    
+    updateFormData(updates);
   };
 
   return (
