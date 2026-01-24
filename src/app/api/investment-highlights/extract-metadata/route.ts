@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
     const metadata = extractMetadataFromText(text);
     
     console.log(`✅ Returning metadata with mainBody (${metadata.mainBody?.length || 0} chars)`);
+    console.log(`✅ Confidence levels:`, metadata.confidence);
     
     return NextResponse.json({
       reportName: metadata.reportName,

@@ -35,15 +35,24 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
  * Extract metadata (Report Name and Valid Period) from PDF text
  * 
  * @param text - The extracted PDF text
- * @returns Object with reportName, validPeriod, and mainBody
+ * @returns Object with reportName, validPeriod, mainBody, and confidence levels
  */
-export function extractMetadataFromText(text: string): { reportName: string; validPeriod: string; mainBody: string } {
+export function extractMetadataFromText(text: string): { 
+  reportName: string; 
+  validPeriod: string; 
+  mainBody: string;
+  confidence: {
+    reportName: 'high' | 'low';
+    validPeriod: 'high' | 'low';
+    mainBody: 'high' | 'low';
+  };
+} {
   const lines = text.split('\n').filter(line => line.trim().length > 0);
   
   // Extract SHORT report name (e.g., "Fraser Coast", "Sunshine Coast")
-  // Look for region name pattern in first few lines
+  // Note: User will verify this, so extraction doesn't need to be perfect
   let reportName = '';
-  const regionPattern = /(Fraser Coast|Sunshine Coast|Gold Coast|[\w\s]+Region|[\w\s]+Coast)/i;
+  const regionPattern = /([\w\s]+(?:Coast|Region|Valley|Highlands|Rivers|City))/i;
   
   for (let i = 0; i < Math.min(10, lines.length); i++) {
     const line = lines[i].trim();
@@ -54,7 +63,7 @@ export function extractMetadataFromText(text: string): { reportName: string; val
     }
   }
   
-  // If no region found, use first reasonable line (max 50 chars)
+  // Fallback: Use first reasonable line
   if (!reportName) {
     for (let i = 0; i < Math.min(5, lines.length); i++) {
       const line = lines[i].trim();
@@ -80,12 +89,18 @@ export function extractMetadataFromText(text: string): { reportName: string; val
     }
   }
   
-  // Main body is the FULL extracted text (will be formatted by AI later)
+  // Main body is the FULL extracted text
   const mainBody = text;
   
+  // IMPORTANT: Keep extracted values even if uncertain - user will verify
   return {
-    reportName: reportName || 'Unknown Report',
-    validPeriod: validPeriod || 'Date not found',
-    mainBody: mainBody,
+    reportName: reportName || '', // Empty string, not error message
+    validPeriod: validPeriod || '', // Empty string, not error message
+    mainBody: mainBody || '', // Keep whatever we extracted
+    confidence: {
+      reportName: reportName ? 'high' : 'low',
+      validPeriod: validPeriod ? 'high' : 'low',
+      mainBody: mainBody && mainBody.length > 100 ? 'high' : 'low',
+    },
   };
 }

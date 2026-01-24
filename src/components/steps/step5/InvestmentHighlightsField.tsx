@@ -67,9 +67,13 @@ export function InvestmentHighlightsField({
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [extractedReportName, setExtractedReportName] = useState('');
   const [extractedValidPeriod, setExtractedValidPeriod] = useState('');
+  const [extractedMainBody, setExtractedMainBody] = useState('');
   const [showVerification, setShowVerification] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [reportNameVerified, setReportNameVerified] = useState(false);
+  const [validPeriodVerified, setValidPeriodVerified] = useState(false);
+  const [extractionConfidence, setExtractionConfidence] = useState<any>(null);
   
   // AI Summary states (Phase 4C-2)
   const [generatingSummary, setGeneratingSummary] = useState(false);
@@ -337,6 +341,8 @@ export function InvestmentHighlightsField({
       const extractResult = await extractResponse.json();
       setExtractedReportName(extractResult.reportName || '');
       setExtractedValidPeriod(extractResult.validPeriod || '');
+      setExtractedMainBody(extractResult.mainBody || '');
+      setExtractionConfidence(extractResult.confidence || null);
       
       // Show verification UI
       setShowVerification(true);
@@ -385,11 +391,32 @@ export function InvestmentHighlightsField({
       return;
     }
     
+    if (!reportNameVerified || !validPeriodVerified) {
+      alert('Please verify both Report Name and Valid Period by checking the boxes');
+      return;
+    }
+    
     setLoading(true);
-    setUploadProgress('Organizing PDF...');
+    setUploadProgress('Checking for existing reports...');
     
     try {
-      // Organize PDF into CURRENT/LEGACY folders and save to sheet
+      // Step 1: Check if report already exists for this LGA
+      const lookupResponse = await fetch('/api/investment-highlights/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          lga: lga || '', 
+          suburb: suburb || '', 
+          state 
+        }),
+      });
+      
+      const lookupResult = await lookupResponse.json();
+      const isNewReportForExistingLGA = lookupResult.found;
+      
+      // Step 2: Organize PDF into CURRENT/LEGACY folders and save to sheet
+      setUploadProgress('Organizing PDF...');
+      
       const response = await fetch('/api/investment-highlights/organize-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -415,8 +442,15 @@ export function InvestmentHighlightsField({
       setReportName(extractedReportName);
       setValidPeriod(extractedValidPeriod);
       setShowVerification(false);
+      setReportNameVerified(false);
+      setValidPeriodVerified(false);
       
-      alert('PDF uploaded and organized successfully! Click "Generate AI Summary" to extract infrastructure information.');
+      // Show appropriate confirmation message
+      if (isNewReportForExistingLGA) {
+        alert('✅ PDF uploaded successfully!\n\n📋 This report and its content will be used moving forward for this LGA.\n\n🤖 Next Step: Click "Generate AI Summary" to extract infrastructure information.');
+      } else {
+        alert('✅ PDF uploaded successfully!\n\n🤖 Next Step: Click "Generate AI Summary" to extract infrastructure information.');
+      }
     } catch (err: any) {
       console.error('PDF organization error:', err);
       setError(err.message || 'Failed to organize PDF. Please try again.');
@@ -768,51 +802,117 @@ export function InvestmentHighlightsField({
         
         {/* PDF Verification UI */}
         {showVerification && (
-          <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-md">
-            <h4 className="font-medium text-blue-900 mb-3 flex items-center">
+          <div className="mt-3 p-4 bg-blue-50 border-2 border-blue-300 rounded-md">
+            <h4 className="font-semibold text-blue-900 mb-3 flex items-center">
               <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
               PDF Uploaded: {uploadedFileName}
             </h4>
-            <p className="text-sm text-blue-800 mb-3">📋 Extracted Information:</p>
+            <p className="text-sm text-blue-800 mb-3">
+              📋 <strong>Please verify the extracted information below:</strong>
+            </p>
             
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {/* Report Name Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Report Name *
                 </label>
+                {extractionConfidence?.reportName === 'low' && (
+                  <p className="text-sm text-amber-600 mb-2 flex items-center">
+                    <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    We couldn't automatically extract the Report Name. Please copy from the front page.
+                  </p>
+                )}
                 <input
                   type="text"
                   value={extractedReportName}
-                  onChange={(e) => setExtractedReportName(e.target.value)}
+                  onChange={(e) => {
+                    setExtractedReportName(e.target.value);
+                    setReportNameVerified(false); // Reset verification when edited
+                  }}
                   className="w-full p-2 border rounded-md"
-                  placeholder="Copy report name from front cover page of report"
+                  placeholder="e.g., Fraser Coast, Sunshine Coast"
                 />
+                <label className="flex items-center mt-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={reportNameVerified}
+                    onChange={(e) => setReportNameVerified(e.target.checked)}
+                    className="mr-2 h-4 w-4 text-blue-600"
+                  />
+                  <span className="text-gray-700">
+                    ✓ I have verified this Report Name is correct
+                  </span>
+                </label>
               </div>
               
+              {/* Valid Period Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Valid Period *
                 </label>
+                {extractionConfidence?.validPeriod === 'low' && (
+                  <p className="text-sm text-amber-600 mb-2 flex items-center">
+                    <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    We couldn't automatically extract the Valid Period. Please copy from the front page.
+                  </p>
+                )}
                 <input
                   type="text"
                   value={extractedValidPeriod}
-                  onChange={(e) => setExtractedValidPeriod(e.target.value)}
+                  onChange={(e) => {
+                    setExtractedValidPeriod(e.target.value);
+                    setValidPeriodVerified(false); // Reset verification when edited
+                  }}
                   className="w-full p-2 border rounded-md"
                   placeholder="e.g., October 2025 - January 2026"
                 />
+                <label className="flex items-center mt-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={validPeriodVerified}
+                    onChange={(e) => setValidPeriodVerified(e.target.checked)}
+                    className="mr-2 h-4 w-4 text-blue-600"
+                  />
+                  <span className="text-gray-700">
+                    ✓ I have verified this Valid Period is correct
+                  </span>
+                </label>
               </div>
+              
+              {/* Main Body Status */}
+              {(!extractedMainBody || extractedMainBody.trim().length < 100) && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-md">
+                  <p className="text-sm text-amber-800 font-medium mb-1">
+                    ⚠️ Main Body Content Not Found
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    Please run ChatGPT manually and paste the main body content so we can store it for next time.
+                  </p>
+                </div>
+              )}
             </div>
             
             <p className="text-xs text-gray-600 mt-3">
-              ⚠️ Please verify the information above is correct
+              ⚠️ Please verify both fields above before continuing
             </p>
             
             <div className="flex space-x-2 mt-3">
               <button
                 onClick={handleConfirmMetadata}
-                disabled={!extractedReportName || !extractedValidPeriod || loading}
+                disabled={
+                  !extractedReportName || 
+                  !extractedValidPeriod || 
+                  !reportNameVerified || 
+                  !validPeriodVerified || 
+                  loading
+                }
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 {loading ? uploadProgress || 'Processing...' : '✓ Confirm & Continue'}
