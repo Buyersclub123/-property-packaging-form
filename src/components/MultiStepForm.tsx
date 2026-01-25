@@ -904,7 +904,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       updateFormData({
         earlyProcessing: {
           ...formData.earlyProcessing,
-          proximity: { status: 'error', data: null },
+          proximity: { status: 'error', data: undefined },
         },
       });
     }
@@ -929,7 +929,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     updateFormData({
       earlyProcessing: {
         ...formData.earlyProcessing,
-        whyThisProperty: { status: 'processing', data: null },
+        whyThisProperty: { status: 'processing', data: undefined },
       },
     });
 
@@ -956,7 +956,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         updateFormData({
           earlyProcessing: {
             ...formData.earlyProcessing,
-            whyThisProperty: { status: 'error', data: null },
+            whyThisProperty: { status: 'error', data: undefined },
           },
         });
       }
@@ -965,7 +965,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       updateFormData({
         earlyProcessing: {
           ...formData.earlyProcessing,
-          whyThisProperty: { status: 'error', data: null },
+          whyThisProperty: { status: 'error', data: undefined },
         },
       });
     }
