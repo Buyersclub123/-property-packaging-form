@@ -31,7 +31,7 @@ function createTransporter() {
     throw new Error('Email configuration missing. Set ALERT_EMAIL_USER and ALERT_EMAIL_PASSWORD in .env');
   }
   
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     service: 'gmail',
     auth: {
       user: ALERT_EMAIL_USER,
