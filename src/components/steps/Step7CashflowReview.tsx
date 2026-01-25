@@ -57,7 +57,7 @@ export function Step7CashflowReview() {
     console.log('landPrice:', purchasePrice?.landPrice);
     console.log('buildPrice:', purchasePrice?.buildPrice);
     console.log('totalPrice:', purchasePrice?.totalPrice);
-    console.log('acceptedAcquisitionPriceTo:', purchasePrice?.acceptedAcquisitionPriceTo);
+    console.log('acceptableAcquisitionTo:', purchasePrice?.acceptableAcquisitionTo);
     
     if (contractType === 'Split Contract') {
       const land = parseFloat(purchasePrice?.landPrice || '0');
