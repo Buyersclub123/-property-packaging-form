@@ -455,7 +455,42 @@ export async function POST(request: Request) {
       return response;
     }
     
-    const { propertyAddress, latitude, longitude } = await request.json();
+    // Email Authentication - Extract and validate user email
+    const body = await request.json();
+    const { propertyAddress, latitude, longitude, userEmail } = body;
+    
+    console.log('🔐 Email validation - Received email:', userEmail);
+    
+    // Validate email is provided and matches allowed domain
+    if (!userEmail) {
+      return NextResponse.json(
+        { success: false, error: 'User email is required' },
+        { status: 401 }
+      );
+    }
+    
+    // Check if email is from allowed domain or is the specific allowed email
+    const allowedDomain = '@buyersclub.com.au';
+    const allowedSpecificEmail = 'johntruscott1971@gmail.com';
+    
+    const isValidEmail = userEmail.endsWith(allowedDomain) || userEmail === allowedSpecificEmail;
+    
+    if (!isValidEmail) {
+      await logRequest({
+        timestamp: new Date().toISOString(),
+        ip: clientIP,
+        endpoint: '/api/geoapify/proximity',
+        method: 'POST',
+        status: 401,
+        duration: Date.now() - startTime,
+        error: `Unauthorized email: ${userEmail}`,
+      });
+      
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized: Invalid email domain' },
+        { status: 401 }
+      );
+    }
 
     let lat: number;
     let lon: number;

@@ -72,12 +72,19 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
       calculateProximity(address);
       setHasAutoRun(true);
     }
-  }, [address, value, preFetchedData]); // Depend on all relevant values
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount only - hasAutoRun flag prevents multiple calls
 
   /**
    * Calculate proximity using the API
    */
   const calculateProximity = async (addr: string) => {
+    // 🚨 TRACKING: Count API calls
+    if (typeof window !== 'undefined') {
+      (window as any).proximityApiCallCount = ((window as any).proximityApiCallCount || 0) + 1;
+      console.log('🚨 PROXIMITY API CALLED - Count:', (window as any).proximityApiCallCount, 'Address:', addr);
+    }
+    
     setLoading(true);
     setError(null);
     
@@ -85,7 +92,10 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
       const response = await fetch('/api/geoapify/proximity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ propertyAddress: addr }),
+        body: JSON.stringify({ 
+          propertyAddress: addr,
+          userEmail: JSON.parse(localStorage.getItem('property-review-user-email') || '""')
+        }),
       });
       
       if (!response.ok) {
