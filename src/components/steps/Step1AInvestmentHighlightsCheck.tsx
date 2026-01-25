@@ -273,7 +273,7 @@ export function Step1AInvestmentHighlightsCheck() {
             };
             
             // Create clean mainBody by joining sections without headers or separators
-            const cleanedSections = sectionParts.map(cleanSection).filter(s => s.length > 0);
+            const cleanedSections = sectionParts.map(cleanSection).filter((s: string) => s.length > 0);
             formattedMainBody = cleanedSections.join('\n\n');
             
             // Store sections for later use
