@@ -872,7 +872,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     updateFormData({
       earlyProcessing: {
         ...formData.earlyProcessing,
-        proximity: { status: 'processing', data: null },
+        proximity: { status: 'processing', data: undefined },
       },
     });
 
@@ -895,7 +895,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         updateFormData({
           earlyProcessing: {
             ...formData.earlyProcessing,
-            proximity: { status: 'error', data: null },
+            proximity: { status: 'error', data: undefined },
           },
         });
       }
