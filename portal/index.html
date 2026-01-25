@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Buyers Agent Property Review Portal</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 40px; 
+      background: #f7f7f7; 
+    }
+    .container { 
+      background: #fff; 
+      border-radius: 12px; 
+      box-shadow: 0 0 10px #ccc; 
+      padding: 32px; 
+      max-width: 1400px; 
+      margin: auto; 
+    }
+    .logo { 
+      width: 180px; 
+      margin-bottom: 20px; 
+    }
+    .property-summary { 
+      font-weight: bold; 
+      font-size: 1.2em; 
+      margin-bottom: 24px; 
+    }
+    .standard-message-section { 
+      margin-bottom: 24px; 
+      padding: 16px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border-left: 4px solid #fbd721;
+    }
+    .standard-message-section label { 
+      display: block; 
+      margin-bottom: 8px; 
+      font-weight: bold; 
+    }
+    .standard-message-section textarea { 
+      width: 100%; 
+      min-height: 70px; 
+      font-size: 1em; 
+      margin-top: 8px; 
+      border-radius: 8px; 
+      padding: 8px; 
+      border: 1px solid #ddd;
+      font-family: Arial, sans-serif;
+      resize: vertical;
+      overflow-y: hidden;
+    }
+    .message-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .save-message-btn {
+      padding: 6px 16px;
+      background: #2aaa7e;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: 500;
+    }
+    .save-message-btn:hover {
+      background: #228a66;
+    }
+    .save-message-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .save-status {
+      font-size: 0.85em;
+      color: #666;
+      font-style: italic;
+    }
+    .save-status.saved {
+      color: #3c3;
+      font-weight: 500;
+    }
+    .save-status.warning {
+      color: #c33;
+    }
+    .helper-text {
+      font-size: 0.85em;
+      color: #666;
+      margin-top: 6px;
+      font-style: italic;
+    }
+    .filter-section {
+      margin-bottom: 20px;
+      padding: 16px;
+      background: #f0f0f0;
+      border-radius: 6px;
+    }
+    .filter-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .filter-row:last-child {
+      margin-bottom: 0;
+    }
+    .filter-row label {
+      font-weight: bold;
+      margin-right: 8px;
+      min-width: 150px;
+      padding-top: 6px;
+    }
+    .filter-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .filter-dropdown {
+      position: relative;
+      min-width: 200px;
+    }
+    .filter-select {
+      width: 100%;
+      padding: 6px 30px 6px 10px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-size: 0.95em;
+      background: white;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+    .filter-options {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-top: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .filter-options.show {
+      display: block;
+    }
+    .filter-option {
+      padding: 8px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .filter-option:hover {
+      background: #f0f0f0;
+    }
+    .filter-option input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+    }
+    .filter-option label {
+      cursor: pointer;
+      margin: 0;
+      font-weight: normal;
+      min-width: auto;
+      padding: 0;
+      flex: 1;
+    }
+    .selected-tags {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      min-height: 32px;
+    }
+    .selected-tag {
+      background: #2aaa7e;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .selected-tag .remove {
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 1.1em;
+      line-height: 1;
+    }
+    .selected-tag .remove:hover {
+      opacity: 0.8;
+    }
+    .filter-reset-btn {
+      padding: 6px 12px;
+      background: #999;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85em;
+      white-space: nowrap;
+    }
+    .filter-reset-btn:hover {
+      background: #777;
+    }
+    .filter-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      align-items: center;
+    }
+    .filter-section button.reset-all {
+      padding: 6px 16px;
+      background: #666;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9em;
+    }
+    .filter-section button.reset-all:hover {
+      background: #555;
+    }
+    .filter-count {
+      margin-left: auto;
+      font-weight: bold;
+      color: #333;
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      background: #f9f9f9; 
+      margin-bottom: 20px; 
+    }
+    th, td { 
+      padding: 10px 7px; 
+      text-align: left; 
+      border-bottom: 1px solid #ddd; 
+    }
+    th { 
+      background: #f1f1f1; 
+      font-weight: 600;
+    }
+    .client-name-col, .partner-name-col {
+      width: 15%;
+      min-width: 150px;
+    }
+    .stage-col {
+      width: 12%;
+      min-width: 120px;
+    }
+    .client-name-input, .partner-name-input {
+      width: 100%;
+      padding: 3px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      position: relative;
+    }
+    .name-cell {
+      position: relative;
+    }
+    .name-cell:hover::after {
+      content: attr(data-full-name);
+      position: absolute;
+      left: 0;
+      top: 100%;
+      background: #333;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+      z-index: 1000;
+      font-size: 0.9em;
+      margin-top: 5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .email-col {
+      width: 25%;
+    }
+    .email-input {
+      width: 100%;
+      padding: 3px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-family: monospace;
+      font-size: 0.9em;
+      line-height: 1.6;
+    }
+    .actions { 
+      margin-top: 30px; 
+      display: flex;
+      gap: 14px;
+    }
+    .actions button { 
+      padding: 10px 22px; 
+      border: none; 
+      border-radius: 8px; 
+      font-size: 1em; 
+      cursor: pointer; 
+      box-shadow: 0 2px 4px #eee; 
+      flex: 1;
+      font-weight: 500;
+    }
+    .actions button:first-child { 
+      background: #0a5599; 
+      color: #fff; 
+    }
+    .actions button:first-child:hover {
+      background: #084080;
+    }
+    .actions button:nth-child(2) { 
+      background: #2aaa7e; 
+      color: #fff; 
+    }
+    .actions button:nth-child(2):hover {
+      background: #228a66;
+    }
+    .actions button:last-child { 
+      background: #eb5858; 
+      color: #fff; 
+    }
+    .actions button:last-child:hover {
+      background: #d43d3d;
+    }
+    textarea.small { 
+      width: 98%; 
+      min-height: 40px; 
+      font-size: .97em; 
+      border-radius: 6px; 
+      padding: 4px;
+      border: 1px solid #ccc;
+      font-family: Arial, sans-serif;
+      resize: vertical;
+      overflow-y: hidden;
+    }
+    select { 
+      padding: 2px 5px; 
+      border-radius: 4px; 
+      border: 1px solid #ccc;
+    }
+    .grey { 
+      color: #aaa; 
+      font-style: italic;
+    }
+    .wider-column { 
+      width: 25%; 
+    }
+    .personal-message { 
+      width: 100%; 
+    }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+    .error-message {
+      background: #fee;
+      color: #c33;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      border-left: 4px solid #c33;
+    }
+    .success-message {
+      background: #d4edda;
+      color: #155724;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border-left: 5px solid #28a745;
+      font-size: 16px;
+      font-weight: 500;
+      text-align: center;
+    }
+    .success-message-large {
+      background: #d4edda;
+      color: #155724;
+      padding: 30px;
+      border-radius: 12px;
+      margin: 20px 0;
+      border: 2px solid #28a745;
+      font-size: 18px;
+      font-weight: 600;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
+    }
+    .countdown-message {
+      font-size: 14px;
+      color: #666;
+      margin-top: 10px;
+      font-weight: normal;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img class="logo" src="https://storage.googleapis.com/msgsndr/UJWYn4mrgGodB7KZUcHt/media/6938361650387f705884d8de.jpg" alt="BuyersClub Logo">
+    <h1>Buyers Agent Property Review Portal</h1>
+    <div class="property-summary" id="property-summary">Property Name: [Loading...]</div>
+    <div class="standard-message-section">
+      <label for="standard-message"><strong>Your Standard Client Message:</strong></label>
+      <textarea id="standard-message" rows="4" placeholder="💡 Tip: Your message formatting will be preserved exactly as you type it. Use line breaks (Enter) to create paragraphs or spacing in your email."></textarea>
+      <div class="message-actions">
+        <button id="save-message-btn" class="save-message-btn">Save Message</button>
+        <span id="save-status" class="save-status"></span>
+      </div>
+      <div class="helper-text">💡 Tip: Your message formatting will be preserved exactly as you type it. Use line breaks (Enter) to create paragraphs or spacing in your email.</div>
+    </div>
+    <div class="filter-section">
+      <div class="filter-row">
+        <label for="ba-filter-select">Filter by BA (Follower):</label>
+        <div class="filter-wrapper">
+          <div class="filter-dropdown">
+            <select id="ba-filter-select" class="filter-select"><option value="">Select BA(s)...</option></select>
+            <div id="ba-filter-options" class="filter-options"></div>
+          </div>
+          <div class="selected-tags" id="ba-selected-tags"></div>
+          <button class="filter-reset-btn" id="reset-ba-filter">Reset BA</button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <label for="stage-filter-select">Filter by Pipeline Stage:</label>
+        <div class="filter-wrapper">
+          <div class="filter-dropdown">
+            <select id="stage-filter-select" class="filter-select"><option value="">Select Stage(s)...</option></select>
+            <div id="stage-filter-options" class="filter-options"></div>
+          </div>
+          <div class="selected-tags" id="stage-selected-tags"></div>
+          <button class="filter-reset-btn" id="reset-stage-filter">Reset Stage</button>
+        </div>
+      </div>
+      <div class="filter-actions">
+        <button class="reset-all" id="reset-filter">Reset All Filters</button>
+        <div class="filter-count" id="filter-count">Showing 0 of 0 opportunities</div>
+      </div>
+    </div>
+    <div id="message-area"></div>
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="select-all"></th>
+          <th>Opportunity Name</th>
+          <th class="stage-col">Pipeline Stage</th>
+          <th class="client-name-col">Client Name</th>
+          <th class="partner-name-col">Partner Name</th>
+          <th class="email-col">Main Contact and Partner Emails</th>
+          <th>Message Type</th>
+          <th class="personal-message">Personalized Message</th>
+        </tr>
+      </thead>
+      <tbody id="opportunities-tbody">
+        <tr><td colspan="8" class="loading">Loading opportunities...</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top: 20px; margin-bottom: 20px;">
+      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.95em;">
+        <input type="checkbox" id="send-on-behalf-checkbox" style="width: 16px; height: 16px; cursor: pointer;">
+        <span>Send on behalf of someone else</span>
+      </label>
+      <div id="send-from-section" style="display: none; margin-top: 16px; padding: 16px; background: #f9f9f9; border-radius: 6px; border-left: 3px solid #4caf50;">
+        <div class="filter-row" style="margin-bottom: 12px;">
+          <label for="send-from-select" style="display: block; margin-bottom: 6px; font-weight: 600;">Send From (Email Address):</label>
+          <div style="display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;">
+            <select id="send-from-select" class="filter-select" style="flex: 1; min-width: 250px; max-width: 400px; padding: 8px;">
+              <option value="">Select BA from list...</option>
+            </select>
+            <div style="display: flex; align-items: center; gap: 4px; flex: 1; min-width: 200px;">
+              <span style="white-space: nowrap;">or enter manually:</span>
+              <input type="email" id="send-from-manual" placeholder="email@example.com" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95em;">
+            </div>
+          </div>
+          <div class="helper-text" style="margin-top: 6px;">Select which BA's email address to send from, or enter an email address manually. All selected opportunities will be sent from this address. Changing this will automatically load that BA's saved generic message (if available).</div>
+        </div>
+        <div style="margin-top: 16px; padding: 12px; background: #f0f0f0; border-radius: 4px;">
+          <strong style="font-size: 0.9em;">How "Send From" Works:</strong>
+          <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 0.85em; line-height: 1.6;">
+            <li><strong>Checkbox to Enable:</strong> Check "Send on behalf of someone else" to show the "Send From" dropdown</li>
+            <li><strong>Single Selection:</strong> One "Send From" selection applies to ALL opportunities selected by tick box</li>
+            <li><strong>Auto-Load Message:</strong> When you change "Send From", it automatically loads that BA's saved generic message</li>
+            <li><strong>Create/Save Messages:</strong> If the BA doesn't have a saved message, you can create one and save it for them</li>
+            <li><strong>Email Setup:</strong> Only email addresses that have been set up to send via this system can be used</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="send-standard">Send to All with Standard Message</button>
+      <button id="action-above">Action the Above</button>
+      <button id="non-suitable">Non-Suitable – Send Back to Packager</button>
+    </div>
+  </div>
+  <script>
+const GOOGLE_SHEET_ID = '1nR0upQ4eV4iiw-dY1FCVMP0cNzc3GElZUVZU4WcTf3Q';
+const OPPORTUNITIES_TAB = 'Opportunities';
+const GENERIC_MESSAGES_TAB = 'Generic BA messages';
+const MODULE_1_WEBHOOK = 'https://hook.eu1.make.com/bkq23g13n4ae6spskdbwpru7hleol6sl';
+const NON_SUITABLE_WEBHOOK = 'https://hook.eu1.make.com/q85flukqhepku5rudd6bc1qbl9mqtlxk';
+const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+let allOpportunities = [];
+let filteredOpportunities = [];
+let propertyInfo = {};
+let baEmail = '';
+let currentBAFilter = '';
+let selectedBAs = [];
+let selectedStages = [];
+let baEmailMap = {}; // Maps BA names to email addresses
+let selectedSendFromEmail = ''; // Selected "Send From" email address
+let sendFromChangeHandler = null; // Store reference to change handler to avoid duplicates
+function autoResizeTextarea(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = textarea.scrollHeight + 'px';
+}
+function getURLParams() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    recordId: params.get('recordId') || '',
+    propertyId: params.get('propertyId') || '',
+    propertyAddress: params.get('propertyAddress') || '',
+    baEmail: params.get('baEmail') || ''
+  };
+}
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+function showMessage(message, type = 'info') {
+  const messageArea = document.getElementById('message-area');
+  const className = type === 'error' ? 'error-message' : type === 'success' ? 'success-message' : 'loading';
+  messageArea.innerHTML = `<div class="${className}">${escapeHtml(message)}</div>`;
+  if (type === 'success') {
+    setTimeout(() => { messageArea.innerHTML = ''; }, 5000);
+  }
+}
+function updatePropertyInfo() {
+  const params = getURLParams();
+  propertyInfo = params;
+  baEmail = params.baEmail || '';
+  const address = params.propertyAddress || '[Property Name]';
+  document.getElementById('property-summary').textContent = `Property Name: ${address}`;
+  updateSaveButtonState();
+}
+function updateSaveButtonState() {
+  const saveBtn = document.getElementById('save-message-btn');
+  if (baEmail || selectedBAs.length === 1) {
+    saveBtn.disabled = false;
+    saveBtn.title = '';
+  } else {
+    saveBtn.disabled = true;
+    saveBtn.title = 'Please select exactly one BA filter or access via email link to save messages';
+  }
+}
+function updateFilterCount() {
+  const filterCountEl = document.getElementById('filter-count');
+  const filtered = filteredOpportunities.length;
+  const total = allOpportunities.length;
+  if (total === 0) {
+    filterCountEl.textContent = 'No opportunities';
+  } else if (filtered === total) {
+    filterCountEl.textContent = `Showing all ${total} opportunity${total !== 1 ? 'ies' : ''}`;
+  } else {
+    filterCountEl.textContent = `Showing ${filtered} of ${total} opportunit${total !== 1 ? 'ies' : 'y'}`;
+  }
+}
+function showSaveStatus(message, isSaved = false, isWarning = false) {
+  const statusEl = document.getElementById('save-status');
+  statusEl.textContent = message;
+  statusEl.className = 'save-status' + (isSaved ? ' saved' : '') + (isWarning ? ' warning' : '');
+  if (isSaved || isWarning) {
+    setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'save-status'; }, 3000);
+  }
+}
+function renderSelectedTags(containerId, selectedItems, type) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  selectedItems.forEach(item => {
+    const tag = document.createElement('div');
+    tag.className = 'selected-tag';
+    const displayValue = item === '' || item === null ? '(blank)' : item;
+    tag.innerHTML = `<span>${escapeHtml(displayValue)}</span><span class="remove" data-type="${type}" data-value="${escapeHtml(item)}">×</span>`;
+    container.appendChild(tag);
+  });
+  container.querySelectorAll('.remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const itemType = e.target.dataset.type;
+      const itemValue = e.target.dataset.value;
+      if (itemType === 'ba') {
+        selectedBAs = selectedBAs.filter(ba => ba !== itemValue);
+        updateBAFilterOptions();
+      } else if (itemType === 'stage') {
+        selectedStages = selectedStages.filter(stage => stage !== itemValue);
+        updateStageFilterOptions();
+      }
+      applyFilter();
+    });
+  });
+}
+async function fetchGoogleSheetJSON(sheetName) {
+  const sheetUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+  const url = CORS_PROXY + encodeURIComponent(sheetUrl);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const text = await response.text();
+    const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\((.+)\)/);
+    if (!jsonMatch) throw new Error('Invalid response format from Google Sheets');
+    const data = JSON.parse(jsonMatch[1]);
+    return parseGoogleSheetJSON(data);
+  } catch (error) {
+    console.error(`Error fetching ${sheetName}:`, error);
+    throw error;
+  }
+}
+function parseGoogleSheetJSON(data) {
+  if (!data.table || !data.table.rows) return [];
+  const rows = data.table.rows;
+  if (rows.length === 0) return [];
+  const headers = rows[0].c.map(cell => cell ? (cell.v || '').trim() : '');
+  const result = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const rowData = {};
+    headers.forEach((header, index) => {
+      const cell = row.c[index];
+      rowData[header] = cell ? (cell.v || '').toString().trim() : '';
+    });
+    if (Object.values(rowData).some(val => val.length > 0)) result.push(rowData);
+  }
+  return result;
+}
+async function loadOpportunities() {
+  showMessage("Loading opportunities from Google Sheet...", 'info');
+  try {
+    const data = await fetchGoogleSheetJSON(OPPORTUNITIES_TAB);
+    if (!data || data.length === 0) {
+      showMessage("No opportunities found in Google Sheet. Please check the sheet has data.", 'error');
+      allOpportunities = [];
+      filteredOpportunities = [];
+      renderOpportunities();
+      updateFilterCount();
+      return;
+    }
+    allOpportunities = data.map(row => {
+      const emails = [];
+      if (row['Email'] && row['Email'].trim()) emails.push(row['Email'].trim());
+      if (row['Partner Email'] && row['Partner Email'].trim()) emails.push(row['Partner Email'].trim());
+      return {
+        id: row['Opportunity ID'] || '',
+        name: row['Opportunity Name'] || '',
+        client: row['Contact Name'] || '',
+        partner: row['Partner Name'] || '',
+        emails: emails.join('\n'),
+        follower: row['Followers'] || '',
+        stage: row['Pipeline Stage'] || ''
+      };
+    }).filter(opp => opp.id && opp.id.length > 0);
+    if (allOpportunities.length === 0) {
+      showMessage("No valid opportunities found. Please check that 'Opportunity ID' column has values.", 'error');
+      filteredOpportunities = [];
+      renderOpportunities();
+      updateFilterCount();
+      return;
+    }
+    filteredOpportunities = [...allOpportunities];
+    populateBAFilter();
+    populateStageFilter();
+    await loadBAEmailMap(); // Load BA name-to-email mapping
+    populateSendFromDropdown();
+    renderOpportunities();
+    updateFilterCount();
+    showMessage(`Successfully loaded ${allOpportunities.length} opportunities.`, 'success');
+  } catch (error) {
+    console.error("Error loading opportunities:", error);
+    showMessage(`Error loading opportunities: ${error.message}. Please check: 1) Sheet is published, 2) Tab name matches exactly: "${OPPORTUNITIES_TAB}", 3) Internet connection.`, 'error');
+    allOpportunities = [];
+    filteredOpportunities = [];
+    renderOpportunities();
+    updateFilterCount();
+  }
+}
+function populateBAFilter() {
+  const uniqueBAs = [...new Set(allOpportunities.map(opp => opp.follower || ''))];
+  const optionsContainer = document.getElementById('ba-filter-options');
+  optionsContainer.innerHTML = '';
+  const sortedBAs = uniqueBAs.sort((a, b) => {
+    if (a === '') return -1;
+    if (b === '') return 1;
+    return a.localeCompare(b);
+  });
+  sortedBAs.forEach(ba => {
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'filter-option';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = ba;
+    checkbox.id = `ba-${ba === '' ? 'blank' : ba}`;
+    checkbox.checked = selectedBAs.includes(ba);
+    checkbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        if (!selectedBAs.includes(ba)) selectedBAs.push(ba);
+      } else {
+        selectedBAs = selectedBAs.filter(b => b !== ba);
+      }
+      renderSelectedTags('ba-selected-tags', selectedBAs, 'ba');
+      applyFilter();
+    });
+    const label = document.createElement('label');
+    label.htmlFor = `ba-${ba === '' ? 'blank' : ba}`;
+    label.textContent = ba === '' ? '(blank)' : ba;
+    optionDiv.appendChild(checkbox);
+    optionDiv.appendChild(label);
+    optionsContainer.appendChild(optionDiv);
+  });
+  renderSelectedTags('ba-selected-tags', selectedBAs, 'ba');
+  if (baEmail) {
+    const matchingBA = sortedBAs.find(ba => ba && (ba.toLowerCase().includes(baEmail.toLowerCase()) || baEmail.toLowerCase().includes(ba.toLowerCase())));
+    if (matchingBA !== undefined && !selectedBAs.includes(matchingBA)) {
+      selectedBAs.push(matchingBA);
+      const checkbox = document.getElementById(`ba-${matchingBA === '' ? 'blank' : matchingBA}`);
+      if (checkbox) checkbox.checked = true;
+      renderSelectedTags('ba-selected-tags', selectedBAs, 'ba');
+      currentBAFilter = matchingBA;
+      applyFilter();
+    }
+  }
+}
+function updateBAFilterOptions() {
+  const checkboxes = document.querySelectorAll('#ba-filter-options input[type="checkbox"]');
+  checkboxes.forEach(checkbox => { checkbox.checked = selectedBAs.includes(checkbox.value); });
+  renderSelectedTags('ba-selected-tags', selectedBAs, 'ba');
+}
+function populateStageFilter() {
+  const uniqueStages = [...new Set(allOpportunities.map(opp => opp.stage).filter(Boolean))];
+  const optionsContainer = document.getElementById('stage-filter-options');
+  optionsContainer.innerHTML = '';
+  uniqueStages.sort().forEach(stage => {
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'filter-option';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = stage;
+    checkbox.id = `stage-${stage}`;
+    checkbox.checked = selectedStages.includes(stage);
+    checkbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        if (!selectedStages.includes(stage)) selectedStages.push(stage);
+      } else {
+        selectedStages = selectedStages.filter(s => s !== stage);
+      }
+      renderSelectedTags('stage-selected-tags', selectedStages, 'stage');
+      applyFilter();
+    });
+    const label = document.createElement('label');
+    label.htmlFor = `stage-${stage}`;
+    label.textContent = stage;
+    optionDiv.appendChild(checkbox);
+    optionDiv.appendChild(label);
+    optionsContainer.appendChild(optionDiv);
+  });
+  renderSelectedTags('stage-selected-tags', selectedStages, 'stage');
+}
+function updateStageFilterOptions() {
+  const checkboxes = document.querySelectorAll('#stage-filter-options input[type="checkbox"]');
+  checkboxes.forEach(checkbox => { checkbox.checked = selectedStages.includes(checkbox.value); });
+  renderSelectedTags('stage-selected-tags', selectedStages, 'stage');
+}
+function setupFilterDropdowns() {
+  document.getElementById('ba-filter-select').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('ba-filter-options').classList.toggle('show');
+  });
+  document.getElementById('stage-filter-select').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('stage-filter-options').classList.toggle('show');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.filter-dropdown')) {
+      document.querySelectorAll('.filter-options').forEach(opt => opt.classList.remove('show'));
+    }
+  });
+}
+async function loadBAEmailMap() {
+  // Load BA name-to-email mapping from Generic BA messages sheet
+  try {
+    const data = await fetchGoogleSheetJSON(GENERIC_MESSAGES_TAB);
+    baEmailMap = {};
+    data.forEach(row => {
+      const baName = row['BA_Name'] || row['BA_Email'] || '';
+      const baEmailAddr = row['BA_Email'] || '';
+      if (baName && baEmailAddr) {
+        baEmailMap[baName] = baEmailAddr;
+      }
+    });
+    console.log("BA Email Map loaded:", baEmailMap);
+  } catch (error) {
+    console.error("Error loading BA email map:", error);
+    // Fallback: use BA names as emails if mapping fails
+    baEmailMap = {};
+  }
+}
+
+function populateSendFromDropdown() {
+  const select = document.getElementById('send-from-select');
+  select.innerHTML = '<option value="">Select BA to send from...</option>';
+  
+  // Remove existing event listener if it exists
+  if (sendFromChangeHandler) {
+    select.removeEventListener('change', sendFromChangeHandler);
+  }
+  
+  // Get unique BA names from opportunities
+  const uniqueBAs = [...new Set(allOpportunities.map(opp => opp.follower || '').filter(Boolean))];
+  
+  // Add each BA as an option
+  uniqueBAs.sort().forEach(baName => {
+    const email = baEmailMap[baName] || baEmail || '';
+    const option = document.createElement('option');
+    option.value = email || baName; // Use email if available, otherwise use name
+    option.textContent = email ? `${baName} (${email})` : baName;
+    select.appendChild(option);
+  });
+  
+  // Set default to current BA's email if available
+  if (baEmail) {
+    select.value = baEmail;
+    selectedSendFromEmail = baEmail;
+  } else if (currentBAFilter && baEmailMap[currentBAFilter]) {
+    select.value = baEmailMap[currentBAFilter];
+    selectedSendFromEmail = baEmailMap[currentBAFilter];
+  }
+  
+  // Create and attach change handler
+  sendFromChangeHandler = async function(e) {
+    const emailValue = e.target.value || '';
+    if (!emailValue) return;
+    
+    selectedSendFromEmail = emailValue;
+    
+    // Find the BA name for the selected email and load their generic message
+    if (selectedSendFromEmail) {
+      // Find BA name from email map (reverse lookup)
+      const baNameForEmail = Object.keys(baEmailMap).find(name => baEmailMap[name] === selectedSendFromEmail);
+      
+      if (baNameForEmail) {
+        // Temporarily set currentBAFilter to load the message
+        const previousFilter = currentBAFilter;
+        currentBAFilter = baNameForEmail;
+        await loadGenericMessage();
+        // Don't change currentBAFilter permanently - just for loading message
+        currentBAFilter = previousFilter;
+      } else {
+        // If no BA name found, try loading by email directly
+        const previousFilter = currentBAFilter;
+        currentBAFilter = selectedSendFromEmail;
+        await loadGenericMessage();
+        currentBAFilter = previousFilter;
+      }
+    }
+  };
+  
+  // Note: The change handler is attached in DOMContentLoaded to handle both dropdown and manual input
+}
+
+async function loadGenericMessage() {
+  let searchKey = baEmail || currentBAFilter;
+  if(!searchKey) return;
+  document.getElementById("standard-message").value = '';
+  const textarea = document.getElementById("standard-message");
+  autoResizeTextarea(textarea);
+  const key = `ba_message_${searchKey}`;
+  const saved = localStorage.getItem(key);
+  if (saved) {
+    try {
+      const data = JSON.parse(saved);
+      if (data.genericMessage) {
+        document.getElementById("standard-message").value = data.genericMessage;
+        autoResizeTextarea(textarea);
+        showSaveStatus('Loaded saved message', true);
+        return;
+      }
+    } catch(e) { console.error("Error parsing saved message:", e); }
+  }
+  try {
+    const data = await fetchGoogleSheetJSON(GENERIC_MESSAGES_TAB);
+    if (searchKey) {
+      const baMessage = data.find(row => row['BA_Email'] && row['BA_Email'].toLowerCase() === searchKey.toLowerCase());
+      if (baMessage && baMessage['Generic_Message']) {
+        document.getElementById("standard-message").value = baMessage['Generic_Message'];
+        autoResizeTextarea(textarea);
+        showSaveStatus('Loaded from Google Sheet', true);
+      } else {
+        document.getElementById("standard-message").value = '';
+        autoResizeTextarea(textarea);
+        showSaveStatus('No saved message for this BA', false);
+        setTimeout(() => { showSaveStatus('', false); }, 2000);
+      }
+    }
+  } catch (error) { console.error("Error loading generic message from sheet:", error); }
+}
+async function saveGenericMessage(showFeedback = true) {
+  // Determine which BA to save for:
+  // 1. If "Send on behalf" is checked and a BA is selected, save for that BA
+  // 2. Otherwise, save for current user (existing logic)
+  const sendOnBehalfCheckbox = document.getElementById('send-on-behalf-checkbox');
+  const sendFromSelect = document.getElementById('send-from-select');
+  
+  let saveKey = null;
+  
+  if (sendOnBehalfCheckbox && sendOnBehalfCheckbox.checked && selectedSendFromEmail) {
+    // Saving for the BA we're sending on behalf of
+    // Find BA name from email (reverse lookup)
+    const baNameForEmail = Object.keys(baEmailMap).find(name => baEmailMap[name] === selectedSendFromEmail);
+    saveKey = baNameForEmail || selectedSendFromEmail;
+  } else {
+    // Original logic: save for current user
+    saveKey = baEmail || (selectedBAs.length === 1 ? selectedBAs[0] : null);
+  }
+  
+  if(!saveKey) {
+    if(showFeedback) {
+      if (sendOnBehalfCheckbox && sendOnBehalfCheckbox.checked) {
+        showSaveStatus('Please select a BA to send from first', false, true);
+      } else {
+        showSaveStatus('Please select exactly one BA filter first', false, true);
+      }
+    }
+    return false;
+  }
+  
+  // Only restrict saving if NOT sending on behalf of someone else
+  if (!sendOnBehalfCheckbox || !sendOnBehalfCheckbox.checked) {
+    if (baEmail && selectedBAs.length > 0 && !selectedBAs.includes(baEmail)) {
+      if(showFeedback) showSaveStatus('Cannot save: You can only save messages for your own account', false, true);
+      return false;
+    }
+  }
+  
+  const message = document.getElementById("standard-message").value.trim();
+  try {
+    const key = `ba_message_${saveKey}`;
+    localStorage.setItem(key, JSON.stringify({ baEmail: saveKey, genericMessage: message, lastUpdated: new Date().toISOString() }));
+    console.log("Generic message saved (localStorage):", { baEmail: saveKey, message, sendOnBehalf: sendOnBehalfCheckbox && sendOnBehalfCheckbox.checked });
+    if(showFeedback) {
+      if(message) {
+        const baDisplayName = Object.keys(baEmailMap).find(name => baEmailMap[name] === saveKey) || saveKey;
+        showSaveStatus(`✓ Message saved for ${baDisplayName}!`, true);
+      } else {
+        showSaveStatus('Message cleared', true);
+      }
+    }
+    return true;
+  } catch(error) {
+    console.error("Error saving generic message:", error);
+    if(showFeedback) showSaveStatus('Error saving message', false, true);
+    return false;
+  }
+}
+function formatEmailsForDisplay(emails) {
+  if (!emails) return '';
+  return emails.split(/[,\n]/).map(e => e.trim()).filter(e => e.length > 0).join('\n');
+}
+function formatEmailsForStorage(emails) {
+  if (!emails) return '';
+  return emails.split('\n').map(e => e.trim()).filter(e => e.length > 0).join('\n');
+}
+function renderOpportunities() {
+  const tbody = document.getElementById("opportunities-tbody");
+  tbody.innerHTML = "";
+  if (filteredOpportunities.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #666;">No opportunities found. Try adjusting your filter or check the Google Sheet has data.</td></tr>';
+    updateFilterCount();
+    return;
+  }
+  filteredOpportunities.forEach((opp, i) => {
+    const tr = document.createElement("tr");
+    tr.dataset.opportunityId = opp.id;
+    tr.dataset.index = i;
+    const clientName = opp.client || '';
+    const partnerName = opp.partner || '';
+    const clientInput = `<input type="text" value="${escapeHtml(clientName)}" class="client-name-input">`;
+    const partnerInput = `<input type="text" value="${escapeHtml(partnerName)}" class="partner-name-input">`;
+    const emailsDisplay = formatEmailsForDisplay(opp.emails || '');
+    const emailInput = `<textarea class="email-input" rows="3" placeholder="Enter email addresses, one per line">${escapeHtml(emailsDisplay)}</textarea>`;
+    tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox" checked></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(opp.stage || '')}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
+    const sel = tr.querySelector(".message-type-select");
+    const msgCell = tr.querySelector(".msg-cell");
+    sel.addEventListener("change", () => {
+      if(sel.value === "personalised"){
+        const clientNameInput = tr.querySelector(".client-name-input").value.trim();
+        const partnerNameInput = tr.querySelector(".partner-name-input").value.trim();
+        let names = clientNameInput;
+        if(partnerNameInput) names += (names ? " & " : "") + partnerNameInput;
+        const textarea = document.createElement("textarea");
+        textarea.className = "small personal-msg-textarea";
+        textarea.rows = 2;
+        textarea.style.width = "98%";
+        textarea.placeholder = "Enter personalized message...";
+        textarea.value = ""; // Start blank
+        textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+        msgCell.innerHTML = '';
+        msgCell.appendChild(textarea);
+        autoResizeTextarea(textarea);
+      } else {
+        msgCell.innerHTML = `<span class="grey">[Uses standard message]</span>`;
+      }
+    });
+    const clientInputEl = tr.querySelector(".client-name-input");
+    const partnerInputEl = tr.querySelector(".partner-name-input");
+    const clientCell = tr.querySelector("td.name-cell:nth-of-type(4)");
+    const partnerCell = tr.querySelector("td.name-cell:nth-of-type(5)");
+    clientInputEl.addEventListener("input", () => { clientCell.setAttribute("data-full-name", clientInputEl.value); });
+    partnerInputEl.addEventListener("input", () => { partnerCell.setAttribute("data-full-name", partnerInputEl.value); });
+    tbody.appendChild(tr);
+  });
+  updateSelectAllCheckbox();
+  updateFilterCount();
+}
+function updateSelectAllCheckbox() {
+  const checkboxes = document.querySelectorAll(".opp-checkbox");
+  const selectAllCheckbox = document.getElementById("select-all");
+  if (checkboxes.length === 0) {
+    selectAllCheckbox.checked = false;
+    return;
+  }
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+  const someChecked = Array.from(checkboxes).some(cb => cb.checked);
+  selectAllCheckbox.checked = allChecked;
+  selectAllCheckbox.indeterminate = someChecked && !allChecked;
+}
+function applyFilter() {
+  filteredOpportunities = allOpportunities.filter(opp => {
+    const baMatch = selectedBAs.length === 0 || selectedBAs.includes(opp.follower || '');
+    const stageMatch = selectedStages.length === 0 || selectedStages.includes(opp.stage);
+    return baMatch && stageMatch;
+  });
+  if (selectedBAs.length === 1 && selectedBAs[0] !== '') {
+    currentBAFilter = selectedBAs[0];
+    loadGenericMessage();
+  } else {
+    document.getElementById("standard-message").value = '';
+    autoResizeTextarea(document.getElementById("standard-message"));
+    currentBAFilter = '';
+  }
+  updateSaveButtonState();
+  renderOpportunities();
+}
+function collectSelections() {
+  const rows = [...document.querySelectorAll("#opportunities-tbody tr")];
+  const selected = [];
+  const standardMessage = document.getElementById("standard-message").value.trim();
+  rows.forEach(tr => {
+    const checked = tr.querySelector(".opp-checkbox").checked;
+    if(!checked) return;
+    const oppId = tr.dataset.opportunityId;
+    const oppName = tr.querySelector("td:nth-child(2)").textContent.trim();
+    const oppStage = tr.querySelector("td:nth-child(3)").textContent.trim();
+    const clientName = tr.querySelector(".client-name-input").value.trim();
+    const partnerName = tr.querySelector(".partner-name-input").value.trim();
+    const emailTextarea = tr.querySelector(".email-input");
+    const emailsRaw = emailTextarea ? emailTextarea.value.trim() : '';
+    const emails = formatEmailsForStorage(emailsRaw).split('\n').filter(e => e.length > 0);
+    const type = tr.querySelector(".message-type-select").value;
+    let message = standardMessage;
+    if(type === "personalised"){
+      const ta = tr.querySelector(".personal-msg-textarea");
+      if(ta && ta.value.trim()) {
+        message = ta.value.trim();
+      } else {
+        message = standardMessage;
+      }
+    }
+    selected.push({ id: oppId, name: oppName, stage: oppStage, clientName, partnerName, emails: emails, type, message });
+  });
+  return selected;
+}
+function validateSelections(action) {
+  const selected = collectSelections();
+  if(selected.length === 0) {
+    showMessage("Please select at least one opportunity.", 'error');
+    return null;
+  }
+  const invalidEmails = selected.filter(opp => !opp.emails || opp.emails.length === 0);
+  if(invalidEmails.length > 0) {
+    showMessage(`Please ensure all selected opportunities have valid email addresses.`, 'error');
+    return null;
+  }
+  if(action === 'action_selected') {
+    const missingPersonalized = selected.filter(opp => opp.type === 'personalised' && (!opp.message || opp.message.trim() === ''));
+    if(missingPersonalized.length > 0) {
+      showMessage(`Please provide personalized messages for all opportunities marked as "Personalised".`, 'error');
+      return null;
+    }
+  }
+  return selected;
+}
+async function sendEmailsToClients(selectedClients, action) {
+  showMessage(`Sending emails to ${selectedClients.length} client(s)...`, 'info');
+  try {
+    const baIdentifier = baEmail || currentBAFilter;
+    if (!baIdentifier) {
+      showMessage("Unable to identify BA. Please ensure you're accessing via email link or have selected a BA filter.", 'error');
+      return;
+    }
+    // Determine "Send From" email - use manual input, dropdown, or fallback to BA identifier
+    const sendOnBehalfCheckbox = document.getElementById('send-on-behalf-checkbox');
+    const sendFromManualInput = document.getElementById('send-from-manual');
+    let sendFromEmail = baIdentifier || baEmail;
+    
+    if (sendOnBehalfCheckbox && sendOnBehalfCheckbox.checked) {
+      // Check manual input first, then dropdown, then fallback
+      if (sendFromManualInput && sendFromManualInput.value.trim()) {
+        sendFromEmail = sendFromManualInput.value.trim();
+      } else if (selectedSendFromEmail) {
+        sendFromEmail = selectedSendFromEmail;
+      }
+    }
+    
+    const payload = {
+      source: "portal",
+      id: propertyInfo.recordId,
+      propertyId: propertyInfo.propertyId,
+      propertyAddress: propertyInfo.propertyAddress,
+      baEmail: baIdentifier,
+      baName: currentBAFilter || baIdentifier,
+      sendFromEmail: sendFromEmail, // New field for "Send From" email
+      selectedClients: selectedClients,
+      action: action,
+      timestamp: new Date().toISOString()
+    };
+    const response = await fetch(MODULE_1_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const result = await response.json().catch(() => ({ success: true }));
+    if (result.success !== false) {
+      const messageArea = document.getElementById('message-area');
+      const batchId = generateBatchId();
+      trackSends(propertyInfo.propertyAddress, currentBAFilter || baIdentifier, selectedClients, batchId);
+      
+      // Show "Processing..." message immediately
+      messageArea.innerHTML = `
+        <div class="success-message-large" style="background: #e7f3ff; border-color: #007bff; color: #004085;">
+          <div style="font-size: 24px; margin-bottom: 10px;">⏳ Processing...</div>
+          <span style="font-size: 16px; font-weight: normal; margin-top: 10px; display: block;">
+            Sending ${selectedClients.length} email(s) to selected clients...
+          </span>
+        </div>
+      `;
+      
+      // After 4 seconds, show final message with instruction to check sent items
+      setTimeout(() => {
+        let countdown = 5;
+        const updateMessage = () => {
+          messageArea.innerHTML = `
+            <div class="success-message-large" style="background: #fff3cd; border-color: #ffc107; color: #856404;">
+              ✓ Emails are being sent<br>
+              <span style="font-size: 16px; font-weight: normal; margin-top: 10px; display: block;">
+                The request has been processed. ${selectedClients.length} email(s) should be sent shortly.<br><br>
+                <strong>Please verify by checking your Gmail Sent Items folder.</strong>
+              </span>
+              <div class="countdown-message">
+                This window will auto-close in ${countdown} second${countdown !== 1 ? 's' : ''}...
+              </div>
+            </div>
+          `;
+        };
+        
+        updateMessage();
+        
+        // Update countdown every second
+        const countdownInterval = setInterval(() => {
+          countdown--;
+          if (countdown > 0) {
+            updateMessage();
+          } else {
+            clearInterval(countdownInterval);
+            window.close();
+            setTimeout(() => {
+              window.location.href = 'https://mail.google.com';
+            }, 500);
+          }
+        }, 1000);
+      }, 4000);
+    } else {
+      throw new Error(result.error || 'Unknown error from webhook');
+    }
+  } catch (error) {
+    console.error("Error sending emails:", error);
+    // Show detailed error message - portal stays open for screenshot
+    const messageArea = document.getElementById('message-area');
+    messageArea.innerHTML = `
+      <div class="error-message" style="padding: 20px; font-size: 16px;">
+        <strong>❌ Error: Failed to send emails</strong><br><br>
+        <strong>Error Details:</strong><br>
+        ${escapeHtml(error.message)}<br><br>
+        <strong>What to do:</strong><br>
+        Please take a screenshot of this error message and send it to support.<br>
+        The portal will remain open so you can capture this information.
+      </div>
+    `;
+  }
+}
+// ============================================
+// TRACKING CODE
+// ============================================
+function generateBatchId() {
+    return 'BATCH_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+function trackSends(propertyAddress, baName, selectedClients, batchId) {
+    const timestamp = new Date().toLocaleString('en-AU', {
+        timeZone: 'Australia/Sydney',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    
+    // Create one tracking record per client
+    const trackingRecords = selectedClients.map(client => ({
+        propertyAddress: propertyAddress || '',
+        baName: baName || '',
+        clientName: client.clientName || '',
+        opportunityName: client.name || '',
+        timestamp: timestamp,
+        batchId: batchId || generateBatchId()
+    }));
+    
+    fetch(MODULE_1_WEBHOOK, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: 'track_sends',
+            records: trackingRecords
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Tracking successful:', data);
+    })
+    .catch(error => {
+        console.error('Tracking error:', error);
+        // Store locally if webhook fails
+        const stored = JSON.parse(localStorage.getItem('pendingTracking') || '[]');
+        stored.push(...trackingRecords);
+        localStorage.setItem('pendingTracking', JSON.stringify(stored));
+    });
+}
+function retryFailedTracking() {
+    const pending = JSON.parse(localStorage.getItem('pendingTracking') || '[]');
+    if (pending.length === 0) return;
+    
+    fetch(MODULE_1_WEBHOOK, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: 'track_sends',
+            records: pending
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Retry tracking successful:', data);
+        localStorage.removeItem('pendingTracking');
+    })
+    .catch(error => {
+        console.error('Retry tracking error:', error);
+    });
+}
+async function handleAction(action) {
+  let selected;
+  if(action === "send_standard") {
+    selected = validateSelections('send_standard');
+    if(!selected) return;
+    const standardMessage = document.getElementById("standard-message").value.trim();
+    if(!standardMessage) {
+      showMessage("Please enter a standard message.", 'error');
+      return;
+    }
+    selected = selected.map(opp => ({ ...opp, type: 'standard', message: standardMessage }));
+    await sendEmailsToClients(selected, action);
+  } else if(action === "action_selected") {
+    selected = validateSelections('action_selected');
+    if(!selected) return;
+    await sendEmailsToClients(selected, action);
+  } else if(action === "non_suitable") {
+    if(!confirm("Are you sure you want to mark this property as non-suitable and send it back to the packager?")) return;
+    try {
+      const nonSuitableUrl = NON_SUITABLE_WEBHOOK + "?recordId=" + encodeURIComponent(propertyInfo.recordId) + "&propertyId=" + encodeURIComponent(propertyInfo.propertyId) + "&action=reject";
+      const response = await fetch(nonSuitableUrl);
+      if (response.ok) {
+        showMessage("Property marked as non-suitable and sent back to packager.", 'success');
+      } else {
+        throw new Error('Failed to send non-suitable request');
+      }
+    } catch (error) {
+      showMessage(`Error sending non-suitable request: ${error.message}`, 'error');
+    }
+    return;
+  }
+}
+document.addEventListener("DOMContentLoaded", () => {
+  updatePropertyInfo();
+  loadOpportunities();
+  setupFilterDropdowns();
+  retryFailedTracking();
+  const standardMessageTextarea = document.getElementById("standard-message");
+  standardMessageTextarea.addEventListener('input', () => { autoResizeTextarea(standardMessageTextarea); });
+  document.getElementById("save-message-btn").addEventListener("click", () => { saveGenericMessage(true); });
+  
+  // Handle "Send on behalf" checkbox
+  const sendOnBehalfCheckbox = document.getElementById("send-on-behalf-checkbox");
+  const sendFromSection = document.getElementById("send-from-section");
+  const sendFromSelect = document.getElementById("send-from-select");
+  const sendFromManual = document.getElementById("send-from-manual");
+  
+  if (sendOnBehalfCheckbox && sendFromSection) {
+    sendOnBehalfCheckbox.addEventListener("change", (e) => {
+      if (e.target.checked) {
+        sendFromSection.style.display = "block";
+        // If no selection yet, ensure dropdown is populated
+        if (sendFromSelect && sendFromSelect.options.length <= 1) {
+          populateSendFromDropdown();
+        }
+      } else {
+        sendFromSection.style.display = "none";
+        selectedSendFromEmail = '';
+        if (sendFromManual) sendFromManual.value = '';
+        if (sendFromSelect) sendFromSelect.value = '';
+        // Reload current user's message
+        loadGenericMessage();
+      }
+    });
+  }
+  
+  // Handle manual email input - update selectedSendFromEmail when user types
+  if (sendFromManual) {
+    sendFromManual.addEventListener("input", (e) => {
+      const manualEmail = e.target.value.trim();
+      if (manualEmail) {
+        selectedSendFromEmail = manualEmail;
+        // Clear dropdown selection when manual entry is used
+        if (sendFromSelect) sendFromSelect.value = '';
+      } else {
+        // If manual field cleared, use dropdown value if set
+        if (sendFromSelect && sendFromSelect.value) {
+          selectedSendFromEmail = sendFromSelect.value;
+        } else {
+          selectedSendFromEmail = '';
+        }
+      }
+    });
+    
+    sendFromManual.addEventListener("blur", (e) => {
+      // Validate email format
+      const email = e.target.value.trim();
+      if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        e.target.style.borderColor = '#eb5858';
+        showSaveStatus('Please enter a valid email address', false, true);
+      } else {
+        e.target.style.borderColor = '#ccc';
+      }
+    });
+  }
+  
+  // Handle dropdown change - clear manual input when dropdown is selected
+  if (sendFromSelect && sendFromChangeHandler) {
+    // Store original handler
+    const originalHandler = sendFromChangeHandler;
+    sendFromSelect.addEventListener("change", (e) => {
+      if (e.target.value) {
+        selectedSendFromEmail = e.target.value;
+        // Clear manual input when dropdown is used
+        if (sendFromManual) sendFromManual.value = '';
+        // Call original handler if it exists
+        if (originalHandler) originalHandler(e);
+      }
+    });
+  }
+  
+  document.getElementById("select-all").addEventListener("change", (e) => {
+    document.querySelectorAll(".opp-checkbox").forEach(cb => cb.checked = e.target.checked);
+  });
+  document.getElementById("reset-ba-filter").addEventListener("click", () => {
+    selectedBAs = [];
+    updateBAFilterOptions();
+    applyFilter();
+  });
+  document.getElementById("reset-stage-filter").addEventListener("click", () => {
+    selectedStages = [];
+    updateStageFilterOptions();
+    applyFilter();
+  });
+  document.getElementById("reset-filter").addEventListener("click", () => {
+    selectedBAs = [];
+    selectedStages = [];
+    updateBAFilterOptions();
+    updateStageFilterOptions();
+    currentBAFilter = '';
+    applyFilter();
+  });
+  document.getElementById("send-standard").addEventListener("click", () => handleAction("send_standard"));
+  document.getElementById("action-above").addEventListener("click", () => handleAction("action_selected"));
+  document.getElementById("non-suitable").addEventListener("click", () => handleAction("non_suitable"));
+  let saveTimeout;
+  standardMessageTextarea.addEventListener("input", () => {
+    clearTimeout(saveTimeout);
+    showSaveStatus('Typing...', false);
+    saveTimeout = setTimeout(() => {
+      saveGenericMessage(false);
+      showSaveStatus('Auto-saved', true);
+    }, 2000);
+  });
+  document.addEventListener("change", (e) => {
+    if(e.target.classList.contains("opp-checkbox")) updateSelectAllCheckbox();
+  });
+});
+  </script>
+</body>
+</html>

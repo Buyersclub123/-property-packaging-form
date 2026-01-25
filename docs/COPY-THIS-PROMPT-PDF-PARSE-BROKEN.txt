@@ -1,0 +1,50 @@
+URGENT: pdf-parse is fundamentally broken in Next.js 14
+
+We implemented your dynamic import solution and it WORKED to register the route (no more 404!), but now we're getting a different error:
+
+ERROR:
+```
+Error: ENOENT: no such file or directory, open 'C:\Users\User\.cursor\extensions\property-review-system\form-app\test\data\05-versions-space.pdf'
+    at Object.openSync (node:fs:561:18)
+    at Object.readFileSync (node:fs:445:35)
+    at eval (webpack-internal:///(rsc)/./node_modules/pdf-parse/index.js:16:25)
+```
+
+pdf-parse is trying to open a test file from its own package internals. This happens even with dynamic imports because the library itself has bad code.
+
+OUR CODE:
+```typescript
+export async function extractPdfText(buffer: Buffer): Promise<string> {
+  try {
+    const pdf = (await import('pdf-parse')).default;
+    const data = await pdf(buffer, { max: 3 });  // We're passing a Buffer!
+    return data.text;
+  } catch (error) {
+    console.error('Error extracting PDF text:', error);
+    throw new Error('Failed to extract text from PDF');
+  }
+}
+```
+
+We're passing a Buffer, not a file path, but pdf-parse is still trying to read a file from disk.
+
+QUESTION:
+What's the BEST alternative to pdf-parse that:
+1. Works reliably in Next.js 14 App Router
+2. Can extract text from a Buffer (we download PDFs from Google Drive)
+3. Only needs first 2-3 pages
+4. Actually works in production
+
+OPTIONS YOU MENTIONED:
+- pdfjs-dist (legacy build) - How exactly do we use this?
+- unpdf - Is this stable?
+- pdf-lib - You said "weak text extraction"?
+- Something else?
+
+PLEASE PROVIDE:
+1. Your #1 recommended library
+2. Exact installation command
+3. Working code example for our use case (Buffer → text extraction)
+4. Any gotchas
+
+WE NEED THIS TO WORK. pdf-parse is clearly not the answer.

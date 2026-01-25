@@ -1,0 +1,5 @@
+Occupancy Value,Show Occupancy,Show Current Rent,Show Expiry,Show Current Yield,Show Appraisal,Show Appraised Yield
+owner_occupied,YES,NO,NO,NO,YES,YES
+tenanted,YES,YES (if value exists),YES (if value exists),YES (if value exists),YES,YES
+vacant,YES,NO,NO,NO,YES,YES
+tbc,YES,NO,NO,NO,YES,YES

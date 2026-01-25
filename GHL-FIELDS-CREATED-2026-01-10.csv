@@ -1,0 +1,111 @@
+Field Name,Object,Folder,Unique Key,Created On
+Property Address,Property Review,Property Review Info,{{ custom_objects.property_reviews.property_address }},12/1/2025at 1:00 PM
+Template Type,Property Review,Property Review Info,{{ custom_objects.property_reviews.template_type }},12/1/2025at 3:29 PM
+Deal Type,Property Review,Property Review Info,{{ custom_objects.property_reviews.deal_type }},12/1/2025at 4:28 PM
+Review Date,Property Review,Property Review Info,{{ custom_objects.property_reviews.review_date }},12/1/2025at 4:30 PM
+Unit / Lot (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.unit__lot }},12/1/2025at 4:48 PM
+Street Number,Property Review,Property Review Info,{{ custom_objects.property_reviews.street_number }},12/1/2025at 4:48 PM
+Street Name,Property Review,Property Review Info,{{ custom_objects.property_reviews.street_name }},12/1/2025at 4:49 PM
+Suburb Name,Property Review,Property Review Info,{{ custom_objects.property_reviews.suburb_name }},12/1/2025at 5:05 PM
+State,Property Review,Property Review Info,{{ custom_objects.property_reviews.state }},12/1/2025at 5:13 PM
+Why this property?,Property Review,Property Review Info,{{ custom_objects.property_reviews.why_this_property }},12/1/2025at 5:17 PM
+Google Map,Property Review,Property Review Info,{{ custom_objects.property_reviews.google_map }},12/1/2025at 5:17 PM
+Bed (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.beds_primary }},12/1/2025at 5:26 PM
+Bed (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.beds_additional__secondary__dual_key }},12/1/2025at 5:29 PM
+Bath (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.bath_primary }},12/1/2025at 5:42 PM
+Bath (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.baths_additional__secondary__dual_key }},12/1/2025at 5:49 PM
+Land Size,Property Review,Property Review Info,{{ custom_objects.property_reviews.land_size }},12/1/2025at 5:52 PM
+Title,Property Review,Property Review Info,{{ custom_objects.property_reviews.title }},12/1/2025at 5:59 PM
+Body corp $ (per quarter),Property Review,Property Review Info,{{ custom_objects.property_reviews.body_corp__per_quarter }},12/1/2025at 6:03 PM
+Garage (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.garage_primary }},12/1/2025at 6:06 PM
+Garage (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.garage_additional__secondary__dual_key }},12/1/2025at 6:08 PM
+Car-port (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.carport_primary }},12/1/2025at 6:10 PM
+Car-port (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.carport_additional__secondary__dual_key }},12/1/2025at 6:12 PM
+Car-space (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.carspace_additional__secondary__dual_key }},12/1/2025at 6:14 PM
+Car-space (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.carspace_primary }},12/1/2025at 6:15 PM
+Zoning,Property Review,Property Review Info,{{ custom_objects.property_reviews.zoning }},12/1/2025at 6:16 PM
+Flood,Property Review,Property Review Info,{{ custom_objects.property_reviews.flood }},12/1/2025at 6:18 PM
+Bushfire,Property Review,Property Review Info,{{ custom_objects.property_reviews.bushfire }},12/1/2025at 6:19 PM
+Mining,Property Review,Property Review Info,{{ custom_objects.property_reviews.mining }},12/1/2025at 6:20 PM
+Other (Overlay),Property Review,Property Review Info,{{ custom_objects.property_reviews.other_overlay }},12/1/2025at 6:22 PM
+Special Infrastructure,Property Review,Property Review Info,{{ custom_objects.property_reviews.special_infrastructure }},12/1/2025at 6:23 PM
+Due Diligence Acceptance,Property Review,Property Review Info,{{ custom_objects.property_reviews.due_diligence_acceptance }},12/1/2025at 6:25 PM
+Asking,Property Review,Property Review Info,{{ custom_objects.property_reviews.asking }},12/1/2025at 6:29 PM
+Asking Text,Property Review,Property Review Info,{{ custom_objects.property_reviews.asking_text }},12/1/2025at 6:30 PM
+Accepted Acquisition Target,Property Review,Property Review Info,{{ custom_objects.property_reviews.accepted_acquisition_target }},12/1/2025at 6:31 PM
+Occupancy,Property Review,Property Review Info,{{ custom_objects.property_reviews.occupancy }},12/1/2025at 6:33 PM
+Current Rent (Primary) $ per week,Property Review,Property Review Info,{{ custom_objects.property_reviews.current_rent_primary__per_week }},12/1/2025at 6:36 PM
+Current Rent (Secondary) $ per week,Property Review,Property Review Info,{{ custom_objects.property_reviews.current_rent_secondary__per_week }},12/1/2025at 6:37 PM
+Expiry (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.expiry_secondary }},12/1/2025at 6:38 PM
+Expiry (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.expiry_primary }},12/1/2025at 6:38 PM
+Yield,Property Review,Property Review Info,{{ custom_objects.property_reviews.yield }},12/1/2025at 6:39 PM
+Rent Appraisal (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.rent_appraisal_primary }},12/1/2025at 6:40 PM
+Rent Appraisal (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.rent_appraisal_secondary }},12/1/2025at 6:40 PM
+Appraised Yield,Property Review,Property Review Info,{{ custom_objects.property_reviews.appraised_yield }},12/1/2025at 6:41 PM
+Proximity,Property Review,Property Review Info,{{ custom_objects.property_reviews.proximity }},12/1/2025at 6:41 PM
+Median price change - 3 months,Property Review,Property Review Info,{{ custom_objects.property_reviews.median_price_change__3_months }},12/1/2025at 6:42 PM
+Median price change - 1 year:,Property Review,Property Review Info,{{ custom_objects.property_reviews.median_price_change__1_year }},12/1/2025at 6:42 PM
+Median price change - 3 year,Property Review,Property Review Info,{{ custom_objects.property_reviews.median_price_change__3_year }},12/1/2025at 6:43 PM
+Median price change - 5 year,Property Review,Property Review Info,{{ custom_objects.property_reviews.median_price_change__5_year }},12/1/2025at 6:43 PM
+Median yield,Property Review,Property Review Info,{{ custom_objects.property_reviews.median_yield }},12/1/2025at 6:43 PM
+Median rent change - 1 year,Property Review,Property Review Info,{{ custom_objects.property_reviews.median_rent_change__1_year }},12/1/2025at 6:44 PM
+Rental Population,Property Review,Property Review Info,{{ custom_objects.property_reviews.rental_population }},12/1/2025at 6:44 PM
+Vacancy Rate,Property Review,Property Review Info,{{ custom_objects.property_reviews.vacancy_rate }},12/1/2025at 6:44 PM
+Investment Highlights,Property Review,Property Review Info,{{ custom_objects.property_reviews.investment_highlights }},12/1/2025at 6:45 PM
+Status,Property Review,Property Review Info,{{ custom_objects.property_reviews.status }},12/1/2025at 6:48 PM
+Price_group,Property Review,Property Review Info,{{ custom_objects.property_reviews.price_group }},12/1/2025at 6:50 PM
+Acceptable Acquisition $ From,Property Review,Property Review Info,{{ custom_objects.property_reviews.acceptable_acquisition__from }},12/1/2025at 6:52 PM
+Acceptable Acquisition $ To,Property Review,Property Review Info,{{ custom_objects.property_reviews.acceptable_acquisition__to }},12/1/2025at 6:52 PM
+Year Built,Property Review,Property Review Info,{{ custom_objects.property_reviews.year_built }},12/2/2025at 5:48 PM
+Body Corp Description,Property Review,Property Review Info,{{ custom_objects.property_reviews.body_corp_description }},12/2/2025at 5:57 PM
+Does this property have 2 dwellings?,Property Review,Property Review Info,{{ custom_objects.property_reviews.does_this_property_have_2_dwellings }},12/2/2025at 6:07 PM
+Flood Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.flood_dialogue }},12/2/2025at 6:14 PM
+Bushfire Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.bushfire_dialogue }},12/2/2025at 6:18 PM
+Mining Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.mining_dialogie }},12/2/2025at 6:21 PM
+Other (Overlay) Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.other_overlay_dialogue }},12/2/2025at 6:21 PM
+Special Infrastructure Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.special_infrastructure_dialogue }},12/2/2025at 6:22 PM
+Comparable Sales,Property Review,Property Review Info,{{ custom_objects.property_reviews.comparable_sales }},12/2/2025at 6:27 PM
+Post Code,Property Review,Property Review Info,{{ custom_objects.property_reviews.post_code }},12/2/2025at 6:49 PM
+Unit / Lot (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.unit__lot_secondary }},12/2/2025at 6:53 PM
+Agent Name,Property Review,Property Review Info,{{ custom_objects.property_reviews.agent_name }},12/3/2025at 2:55 PM
+Agent Mobile,Property Review,Property Review Info,{{ custom_objects.property_reviews.agent_mobile }},12/3/2025at 2:56 PM
+Agent Email,Property Review,Property Review Info,{{ custom_objects.property_reviews.agent_email }},12/3/2025at 2:56 PM
+Push Record to Deal Sheet?,Property Review,Property Review Info,{{ custom_objects.property_reviews.push_record_to_deal_sheet }},12/3/2025at 3:13 PM
+Rent Dialogue (Primary),Property Review,Property Review Info,{{ custom_objects.property_reviews.rent_dialogue_primary }},12/4/2025at 9:20 AM
+Rent Dialogue (Secondary),Property Review,Property Review Info,{{ custom_objects.property_reviews.rent_dialogue_secondary }},12/4/2025at 9:21 AM
+Property Description Additional Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.property_description_additional_dialogue }},12/4/2025at 9:29 AM
+Purchase Price Additional Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.purchase_price_additional_dialogue }},12/4/2025at 9:30 AM
+Rental Assessment Additional Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.rental_assessment_additional_dialogue }},12/4/2025at 9:31 AM
+Market Performance Additional Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.market_perfornance_additional_dialogue }},12/4/2025at 9:33 AM
+Attachments Additional Dialogue,Property Review,Property Review Info,{{ custom_objects.property_reviews.attachments_additional_dialogue }},12/4/2025at 9:33 AM
+Message for BA,Property Review,Property Review Info,{{ custom_objects.property_reviews.message_for_ba }},12/4/2025at 1:20 PM
+Resubmit for testing?,Property Review,Property Review Info,{{ custom_objects.property_reviews.resubmit_for_testing }},12/6/2025at 12:11 PM
+Packager Approved,Property Review,Property Review Info,{{ custom_objects.property_reviews.packager_approved }},12/8/2025at 9:02 PM
+BA Approved,Property Review,Property Review Info,{{ custom_objects.property_reviews.ba_approved }},12/9/2025at 2:28 PM
+lot_number,Property Review,Property Review Info,{{ custom_objects.property_reviews.lot_number }},1/8/2026at 9:49 PM
+project_parent_id,Property Review,Property Review Info,{{ custom_objects.property_reviews.project_parent_id }},1/8/2026at 9:50 PM
+is_parent_record,Property Review,Property Review Info,{{ custom_objects.property_reviews.is_parent_record }},1/8/2026at 9:57 PM
+project_identifier,Property Review,Property Review Info,{{ custom_objects.property_reviews.project_identifier }},1/8/2026at 9:58 PM
+email_template_html,Property Review,Property Review Info,{{ custom_objects.property_reviews.email_template_html }},1/8/2026at 9:58 PM
+email_template_text,Property Review,Property Review Info,{{ custom_objects.property_reviews.email_template_text }},1/8/2026at 9:59 PM
+build_size,Property Review,Property Review Info,{{ custom_objects.property_reviews.build_size }},1/8/2026at 10:00 PM
+land_registration,Property Review,Property Review Info,{{ custom_objects.property_reviews.land_registration }},1/8/2026at 10:01 PM
+lga,Property Review,Property Review Info,{{ custom_objects.property_reviews.lga }},1/8/2026at 10:02 PM
+folder_link,Property Review,Property Review Info,{{ custom_objects.property_reviews.folder_link }},1/8/2026at 10:03 PM
+land_price,Property Review,Property Review Info,{{ custom_objects.property_reviews.land_price }},1/9/2026at 9:06 AM
+build_price,Property Review,Property Review Info,{{ custom_objects.property_reviews.build_price }},1/9/2026at 9:07 AM
+total_price,Property Review,Property Review Info,{{ custom_objects.property_reviews.total_price }},1/9/2026at 9:08 AM
+cashback_rebate_value,Property Review,Property Review Info,{{ custom_objects.property_reviews.cashback_rebate_value }},1/9/2026at 9:10 AM
+cashback_rebate_type,Property Review,Property Review Info,{{ custom_objects.property_reviews.cashback_rebate_type }},1/9/2026at 9:13 AM
+rent_appraisal_primary_from,Property Review,Property Review Info,{{ custom_objects.property_reviews.rent_appraisal_primary_from }},1/9/2026at 9:16 AM
+rent_appraisal_primary_to,Property Review,Property Review Info,{{ custom_objects.property_reviews.rent_appraisal_primary_to }},1/9/2026at 9:17 AM
+rent_appraisal_secondary_from,Property Review,Property Review Info,{{ custom_objects.property_reviews.rent_appraisal_secondary_from }},1/9/2026at 9:18 AM
+rent_appraisal_secondary_to,Property Review,Property Review Info,{{ custom_objects.property_reviews.rent_appraisal_secondary_to }},1/9/2026at 9:19 AM
+build_size_primary,Property Review,Property Review Info,{{ custom_objects.property_reviews.build_size_primary }},1/9/2026at 9:20 AM
+build_size_secondary,Property Review,Property Review Info,{{ custom_objects.property_reviews.build_size_secondary }},1/9/2026at 9:21 AM
+project_brief,Property Review,Property Review Info,{{ custom_objects.property_reviews.project_brief }},1/9/2026at 9:21 AM
+project_overview,Property Review,Property Review Info,{{ custom_objects.property_reviews.project_overview }},1/9/2026at 9:22 AM
+Sourcer,Property Review,Property Review Info,{{ custom_objects.property_reviews.sourcer }},1/9/2026at 3:30 PM
+Packager,Property Review,Property Review Info,{{ custom_objects.property_reviews.packager }},1/9/2026at 3:31 PM
+occupancy_primary,Property Review,Property Review Info,{{ custom_objects.property_reviews.occupancy_primary }},1/10/2026at 10:18 AM
+occupancy_secondary,Property Review,Property Review Info,{{ custom_objects.property_reviews.occupancy_secondary }},1/10/2026at 10:19 AM

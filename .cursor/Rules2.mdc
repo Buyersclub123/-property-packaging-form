@@ -1,0 +1,33 @@
+---
+description: Critical security, testing, and deployment safeguards
+globs: "**/*"
+alwaysApply: true
+---
+# DEVELOPMENT & DEPLOYMENT GUARDRAILS
+
+<CRITICAL_SECURITY>
+- **ZERO HARDCODING:** Never hardcode API keys, secrets, or credentials.
+- **ENV MANAGEMENT:** Use `.env.local` for local development and Vercel Environment Variables for production.
+- **SYNC:** Ensure .env.local keys exist in the Vercel dashboard before deployment.
+</CRITICAL_SECURITY>
+
+<STRICT_WORKFLOW>
+1. **FIX CREATED:** Code is written locally but UNTESTED (after explicit approval).
+2. **FIX TESTED:** Code is verified working in local Dev environment (after explicit approval).
+3. **GIT COMMIT:** Commit after each completed item.
+4. **PERMISSION:** Ask "May I deploy to Vercel?" after Fix is Tested. 
+5. **DEPLOY:** Only execute `git push` or Vercel deploy after explicit "Yes".
+</STRICT_WORKFLOW>
+
+<TERMINOLOGY_REQUIREMENTS>
+- Use "Fix created in Dev" for local code changes.
+- Use "Fix tested in Dev" ONLY after successful local verification.
+- Use "Backup committed to git" when changes are committed locally.
+- Use "Fix deployed to Vercel" ONLY after the Vercel build completes successfully.
+</TERMINOLOGY_REQUIREMENTS>
+
+<ERROR_HANDLING>
+- If a task fails, state "I made a mistake" directly.
+- Check your own code implementation before suggesting external API or system issues.
+- If the user says "STOP", cease all operations immediately.
+</ERROR_HANDLING>

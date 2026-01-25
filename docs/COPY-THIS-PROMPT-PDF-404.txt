@@ -1,0 +1,70 @@
+PROBLEM: Next.js 14 App Router - API route returns 404 despite file existing and compiling successfully
+
+CONTEXT:
+- Next.js 14.2.35 with App Router
+- Route file: src/app/api/investment-highlights/extract-metadata/route.ts
+- The route uses pdf-parse library to extract text from PDFs
+- Route compiles successfully (logs show "✓ Compiled /api/investment-highlights/extract-metadata in 2.8s")
+- BUT returns 404 at runtime
+- We believe Next.js is silently dropping the route from manifest due to pdf-parse's dynamic requires/native addons
+
+WHAT WE'VE TRIED:
+✅ Added export const runtime = 'nodejs' - Still 404
+✅ Restarted server multiple times - Still 404  
+✅ Cleared .next cache - Still 404
+✅ Tried --experimental-old-dev (Webpack) - Still 404
+✅ Created minimal test route - Works (proves routing is functional)
+✅ Incremental testing - Confirmed pdf-parse import is the culprit
+
+EVIDENCE:
+Terminal shows: "✓ Compiled /api/investment-highlights/extract-metadata in 2.8s (1538 modules)"
+Then: "POST /api/investment-highlights/extract-metadata 404 in 3922ms"
+
+Browser console: "POST http://localhost:3001/api/investment-highlights/extract-metadata 404 (Not Found)"
+Returns HTML error page, causing: "SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON"
+
+THE ROUTE CODE:
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { google } from 'googleapis';
+import { extractPdfText, extractMetadataFromText } from '@/lib/pdfExtractor';
+
+export async function POST(request: NextRequest) {
+  // Downloads PDF from Google Drive
+  // Extracts text using pdf-parse
+  // Returns metadata
+}
+```
+
+THE PDF EXTRACTOR:
+```typescript
+import pdf from 'pdf-parse';
+
+export async function extractPdfText(buffer: Buffer): Promise<string> {
+  const data = await pdf(buffer);
+  return data.text;
+}
+```
+
+QUESTIONS:
+1. Is pdf-parse incompatible with Next.js 14 App Router's static analysis?
+2. What PDF libraries work well with Next.js 14 App Router? (We tried pdfjs-dist and react-pdf, both failed with "Object.defineProperty called on non-object")
+3. Would dynamic import work? `const pdf = (await import('pdf-parse')).default;`
+4. Should we move PDF extraction to a separate serverless function/microservice?
+5. Can we configure webpack to handle pdf-parse properly?
+6. What's the recommended approach for PDF processing in Next.js 14 in 2026?
+
+CONSTRAINTS:
+- Need to extract text from PDFs in Google Drive
+- PDFs are 20-50 pages, we only need first 2-3 pages
+- Must work in Next.js 14 App Router
+- Prefer server-side processing
+- Want to avoid excessive complexity
+
+PLEASE PROVIDE:
+1. Root cause analysis
+2. Recommended solution with pros/cons
+3. Implementation steps
+4. Code examples
+
+NOTE: We have another route /api/investment-highlights/organize-pdf that also uses pdf-parse and WORKS. Not sure why that one works and this one doesn't.
