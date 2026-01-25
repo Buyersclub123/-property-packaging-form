@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialize Google Drive API (using same credentials as organize-pdf)
-    const credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
+    let credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
     if (!credentialsJson) {
       console.error('❌ GOOGLE_SHEETS_CREDENTIALS environment variable is not set');
       return NextResponse.json(
@@ -50,15 +50,29 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Remove quotes and clean up the string
+    credentialsJson = credentialsJson.trim();
+    if (credentialsJson.startsWith("'") && credentialsJson.endsWith("'")) {
+      credentialsJson = credentialsJson.slice(1, -1);
+    }
+    if (credentialsJson.startsWith('"') && credentialsJson.endsWith('"')) {
+      credentialsJson = credentialsJson.slice(1, -1);
+    }
+    
     let credentials;
     try {
       credentials = JSON.parse(credentialsJson);
     } catch (error) {
-      console.error('❌ Failed to parse GOOGLE_SHEETS_CREDENTIALS');
-      return NextResponse.json(
-        { success: false, error: 'Server configuration error. Please contact support.' },
-        { status: 500 }
-      );
+      try {
+        const cleanedJson = credentialsJson.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+        credentials = JSON.parse(cleanedJson);
+      } catch (parseError) {
+        console.error('❌ Failed to parse GOOGLE_SHEETS_CREDENTIALS');
+        return NextResponse.json(
+          { success: false, error: 'Server configuration error. Please contact support.' },
+          { status: 500 }
+        );
+      }
     }
     
     const auth = new google.auth.GoogleAuth({
