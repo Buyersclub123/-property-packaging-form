@@ -1,0 +1,221 @@
+You are an expert Implementation Agent using Claude Sonnet 4.5.
+
+⚠️ CRITICAL: The previous implementation attempt FAILED all 4 tested items. Requirements were misunderstood and wrong components were modified.
+
+My goal is to fix 7 Hotspotting/Investment Highlights issues in the Property Review System form application (Next.js/TypeScript/React).
+
+---
+
+CONTEXT - READ THESE FIRST (IN ORDER):
+
+1. batches/batch-1/HANDOVER-TO-PLANNING-AGENT-2026-01-24.md
+   ⚠️ START HERE - Comprehensive overview of what happened and current status
+
+2. batches/batch-1/STATUS-REPORT-2026-01-24.md
+   Why the previous implementation failed (all 4 tested items)
+
+3. batches/batch-1/TESTING-ISSUES-FOUND.md
+   Specific test failures and what went wrong
+
+4. batches/batch-1/IMPLEMENTATION-BRIEF-BATCH-1.md
+   ✅ CORRECTED requirements for all 7 items (updated Jan 24, 2026)
+
+5. batches/batch-1/ISSUE-PAGE-1-BLOCKING.md
+   Critical workflow issue to address after Batch 1
+
+---
+
+CRITICAL LEARNINGS FROM PREVIOUS FAILURE:
+
+❌ Items 1 & 2 were implemented in InvestmentHighlightsField.tsx (WRONG)
+✅ Items 1 & 2 must be in Step1AInvestmentHighlightsCheck.tsx (Page 1/2 where PDF is uploaded)
+
+❌ Item 4 was understood as "split AI output into 7 sections" (WRONG)
+✅ Item 4 is "add 7 fields for custom dialogue that merges INTO main body" (CORRECT)
+
+❌ Code was committed without testing in browser (WRONG)
+✅ Each item must be tested in browser before committing (CORRECT)
+
+---
+
+YOUR TASK:
+
+Step 1: READ ALL DOCUMENTS ABOVE
+- Understand what failed and why
+- Understand corrected requirements
+- Understand correct component architecture
+
+Step 2: CREATE NEW PROPOSAL
+Create batches/batch-1/PROPOSED-SOLUTION-BATCH-1-REVISED.md with:
+
+For each of the 7 items, document:
+- Analysis of current implementation (with file paths and line numbers)
+- What went wrong in previous attempt (if applicable)
+- Proposed changes (with before/after code snippets)
+- CORRECT component to modify
+- Rationale for your approach
+- Potential risks and edge cases
+- Testing approach (specific steps to verify in browser)
+
+Use this structure:
+
+```markdown
+# Proposed Solution - Batch 1: Hotspotting Fixes (REVISED)
+
+## 📊 What Went Wrong Previously
+
+[Brief summary of why previous implementation failed]
+
+## 🔧 Proposed Changes (CORRECTED)
+
+### Item 1: Report Name & Valid Period Verification
+**CORRECT Component**: `src/components/steps/step1/Step1AInvestmentHighlightsCheck.tsx`
+**Previous Mistake**: Implemented in InvestmentHighlightsField.tsx (wrong component)
+
+**Current Implementation** (file:line):
+[Code snippet showing current behavior]
+
+**Analysis**:
+[What you found, why previous approach was wrong]
+
+**Proposed Changes** (file:line):
+[Code snippet showing your solution]
+
+**Rationale**: [Why this approach]
+**Risks**: [Potential issues]
+**Testing**: [Specific browser steps to verify]
+
+[Repeat for Items 2-7]
+
+## ⚠️ Architectural Verification
+
+For Items 1 & 2:
+- [ ] Confirmed working in Step1AInvestmentHighlightsCheck.tsx (Page 1/2)
+- [ ] NOT in InvestmentHighlightsField.tsx
+
+For Item 4:
+- [ ] Confirmed 7 fields are for ADDING custom dialogue
+- [ ] NOT for splitting AI output
+- [ ] Main body stays as ONE BLOCK
+
+## 📋 Implementation Order
+1. [Which item to do first and why]
+2. [Second item]
+...
+
+## ✅ Ready for Approval
+- [ ] All 7 items analyzed
+- [ ] Previous mistakes understood
+- [ ] CORRECT components identified
+- [ ] Changes documented with file paths and line numbers
+- [ ] Risks identified
+- [ ] Browser testing steps defined
+
+**Awaiting approval to proceed with implementation.**
+```
+
+Step 3: STOP AND WAIT
+After creating PROPOSED-SOLUTION-BATCH-1-REVISED.md, say:
+
+"✅ REVISED PROPOSED SOLUTION READY
+
+I've completed my analysis and created batches/batch-1/PROPOSED-SOLUTION-BATCH-1-REVISED.md.
+
+I have read the previous failure reports and understand:
+- Items 1 & 2 work in Step1AInvestmentHighlightsCheck.tsx (NOT InvestmentHighlightsField.tsx)
+- Item 4 is for ADDING custom dialogue (NOT splitting AI output)
+- Each item must be tested in browser before committing
+
+The Planning Agent will review this and either:
+- Approve → I proceed with implementation
+- Request changes → I revise the proposal
+
+I will NOT start coding until approved."
+
+---
+
+CRITICAL CONSTRAINTS:
+
+1. ⚠️ DO NOT start coding until Planning Agent approves your proposal
+2. ⚠️ DO NOT work on InvestmentHighlightsField.tsx for Items 1 & 2
+3. ⚠️ DO NOT split AI output for Item 4
+4. ⚠️ DO NOT commit code without testing in browser first
+5. ✅ DO implement one item at a time
+6. ✅ DO test each item in browser before committing
+7. ✅ DO report back to Planning Agent after each item
+
+---
+
+IMPLEMENTATION PROCESS (AFTER APPROVAL):
+
+For EACH item:
+1. Implement code changes
+2. Save files
+3. Verify dev server reloaded
+4. Open browser to http://localhost:3001
+5. Fill out form to relevant page
+6. Test the specific item
+7. Check console for errors
+8. If working → commit with descriptive message
+9. If not working → debug and repeat
+10. Report to Planning Agent for verification
+11. Wait for Planning Agent approval before next item
+
+---
+
+TESTING PROTOCOL:
+
+Item 1 & 2 Testing (Page 1/2):
+- Upload hotspotting PDF
+- Verify verification UI shows
+- Verify checkboxes for Report Name + Valid Period
+- Verify filename is cleaned (no suburb/date/counter)
+- Check console logs
+
+Item 4 Testing (Page 6):
+- Navigate to Page 6
+- Verify 7 custom dialogue fields are visible
+- Type in a custom dialogue field
+- Verify it merges into main body with [CUSTOM ADDITIONS] label
+- Check Google Sheet columns G-M
+
+Item 6 Testing (Page 6):
+- Tick checkbox
+- Navigate away and back
+- Verify checkbox still ticked
+- Verify carriage return added
+
+---
+
+COMMIT MESSAGE FORMAT:
+
+```
+Item X: Brief description
+
+- Change 1
+- Change 2
+- Change 3
+
+Tested: [What you tested in browser]
+Result: [Working as expected / Fixed issue]
+```
+
+---
+
+⚠️ FINAL REMINDER:
+
+The previous implementation failed because:
+1. Wrong components were modified
+2. Requirements were misunderstood
+3. No browser testing was done
+
+DO NOT repeat these mistakes.
+
+READ the failure reports carefully.
+UNDERSTAND the corrected requirements.
+VERIFY correct components before coding.
+TEST in browser before committing.
+
+---
+
+Ready? Start by reading the documents above and creating your revised proposal.
