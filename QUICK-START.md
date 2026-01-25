@@ -1,70 +1,106 @@
-# Quick Start Guide
+# Quick Start Guide - Resuming Work
 
-## What's Been Built
+## If You're Starting Fresh
 
-✅ **Complete Next.js project structure** with TypeScript  
-✅ **Multi-step workflow UI** (8 steps)  
-✅ **Flexible Stash API integration** (configurable, handles errors)  
-✅ **Form state management** with persistence (save/resume)  
-✅ **Step 0:** Decision Tree (complete)  
-✅ **Step 1:** Address Entry with Stash integration (complete)  
-✅ **Step 2:** Risk Overlays with Stash auto-population (complete)  
-✅ **Steps 3-7:** Placeholders (ready for implementation)
+1. **Read These Files First** (in order):
+   - `README.md` - Project overview
+   - `STATUS.md` - Current state and what needs to be done
+   - `CONFIG.md` - All configuration values
+   - `docs/workflow.md` - How the system works
 
-## Installation
+2. **Key Files to Reference**:
+   - `docs/make-scenario.md` - Make.com module details
+   - `docs/portal-code.md` - Portal code documentation
+   - `code/make-code-module-6.js` - Webhook preprocessor code
+   - `code/make-code-module-7.js` - HTML extractor code
 
-```bash
-cd property-review-system/form-app
-npm install
-```
+## Current Task: Portal Integration
 
-## Run Development Server
+**What We're Working On**: Completing the portal-to-Make.com integration so BAs can select clients and send emails.
 
-```bash
-npm run dev
-```
+**Immediate Steps**:
 
-Open [http://localhost:3000](http://localhost:3000)
+1. **Update Portal Webhook URL**
+   - File: Portal HTML code (see `docs/portal-code.md`)
+   - Find: `const MODULE_1_WEBHOOK = 'https://hook.eu1.make.com/YOUR_MODULE_1_WEBHOOK_URL';`
+   - Replace with: `const MODULE_1_WEBHOOK = 'https://hook.eu1.make.com/bkq23g13n4ae6spskdbwpru7hleol6sl';`
 
-## What Works Now
+2. **Verify Module 3 Portal Handling**
+   - Module 3 code handles portal requests and returns array of client email data
+   - Need to ensure it properly merges GHL property data with portal client selection
+   - Check that email template includes BA message at top for client emails
 
-1. **Multi-step form navigation** - Click through steps
-2. **Step 0:** Select property type, contract type, lot type - shows subject line preview
-3. **Step 1:** Enter address, click "Check Stash" - calls webhook, shows loading/error states
-4. **Step 2:** Risk overlays auto-populated from Stash (Flood, Bushfire), manual fields (Mining, Other Overlay, Special Infrastructure)
-5. **Form state persists** - Refresh page, data is saved in localStorage
+3. **Configure Path 4 Gmail Module**
+   - Path 4 should receive array from Module 3 (portal request)
+   - Need to iterate over array and send email to each client
+   - Emails should come from BA's Gmail account
 
-## Next Steps
+4. **Test End-to-End**
+   - GHL webhook → Packager email → BA email → Portal → Client emails
+   - Verify all email templates render correctly
+   - Verify approval buttons work
 
-1. **Test Stash webhook** - Call with test address, capture full response
-2. **Update Stash integration** - Adjust field mapping based on actual response
-3. **Build Step 4:** Market Performance (Google Sheets integration)
-4. **Build Step 6:** Property Details (all form fields)
-5. **Build Step 7:** Review & Submit (GHL API integration)
+## Important Context
 
-## Key Files
+### What's Already Done
+- ✅ Make.com scenario structure is set up
+- ✅ Portal code exists and is documented
+- ✅ Email template builder code exists
+- ✅ Webhook preprocessor handles portal requests
+- ✅ Router configured with 4 paths
 
-- `src/lib/stash.ts` - Flexible Stash API integration (easy to update)
-- `src/store/formStore.ts` - Form state with persistence
-- `src/types/form.ts` - TypeScript types
-- `src/components/MultiStepForm.tsx` - Main form component
-- `src/components/steps/` - Individual step components
+### What Needs Work
+- ⚠️ Portal webhook URL needs updating
+- ⚠️ Path 4 needs to iterate over client array and send emails
+- ⚠️ Module 3 portal handling may need refinement
+- ⚠️ End-to-end testing not completed
 
-## Configuration
+### Testing Setup
+- All emails currently go to: `john.t@buyersclub.com.au`
+- This is intentional for testing
+- Once working, will switch to actual recipients
 
-Stash webhook URL is configured in:
-- `next.config.js` - Environment variable
-- `src/lib/stash.ts` - CONFIG object (can be updated easily)
+## Key Code Locations
 
-## Notes
+**Portal Code**: 
+- Full HTML/JS in `docs/portal-code.md`
+- Key function: `sendEmailsToClients()` sends payload to webhook
+- Payload structure documented in `docs/make-scenario.md`
 
-- Form works with or without Stash data (graceful error handling)
-- State persists in localStorage (can resume later)
-- Field mapping is flexible (update `CONFIG.fieldMapping` in `stash.ts`)
+**Make.com Modules**:
+- Module 6: `code/make-code-module-6.js` (complete)
+- Module 7: `code/make-code-module-7.js` (complete)
+- Module 3: Full code in `docs/make-scenario.md` (too large for separate file)
 
+**Configuration**:
+- All webhooks, credentials, and settings in `CONFIG.md`
 
+## Common Questions
 
+**Q: Where is the full portal code?**
+A: In `docs/portal-code.md` - it's documented there because it's a large HTML file.
 
+**Q: Where is Module 3 code?**
+A: In `docs/make-scenario.md` - it's documented there because it's very large.
 
+**Q: How do I test?**
+A: Use `john.t@buyersclub.com.au` for all email paths. Portal sends to Module 1 webhook.
 
+**Q: What's the next priority?**
+A: Complete portal integration - update webhook URL, configure Path 4, test end-to-end.
+
+## If You Get Stuck
+
+1. Check `STATUS.md` for current state
+2. Check `docs/workflow.md` for how things should work
+3. Check `CONFIG.md` for all configuration values
+4. Review original documentation in `docs/` folder
+
+## Next Session Checklist
+
+- [ ] Read STATUS.md
+- [ ] Review current task in QUICK-START.md
+- [ ] Check CONFIG.md for all values
+- [ ] Review relevant code files
+- [ ] Continue with immediate steps above
 
