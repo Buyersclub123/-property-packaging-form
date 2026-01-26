@@ -174,25 +174,25 @@
      - Logs detailed error information in catch blocks
      - Logs when suburb addition is skipped (with reasons)
 
-4. **How to Read Logs:**
+5. **How to Read Logs:**
    - **During Test:** Logs are written in real-time to `server-api.log`
    - **After Test:** AI can read file directly: `read_file('form-app/server-api.log')`
    - **Manual Check:** PowerShell: `Get-Content "server-api.log" -Tail 100`
    - **Note:** File is created automatically on first log write
 
-5. **Log Prefixes:**
+6. **Log Prefixes:**
    - `[create-property-folder]` - Folder creation and PDF shortcut logs (server-side)
    - `[add-suburb]` - Suburb addition to Investment Highlights sheet logs (server-side)
    - `[Step6]` - Form submission and suburb addition logs (client-side)
    - `[createShortcut]` - Shortcut creation function logs (server-side)
 
-6. **Recent Enhancements (2026-01-26):**
+7. **Recent Enhancements (2026-01-26):**
    - ✅ Enhanced error logging in `create-property-folder/route.ts` with detailed error objects
    - ✅ Added condition check logging in `Step6FolderCreation.tsx` before suburb addition
    - ✅ Added API response status logging for suburb addition
    - ✅ Improved error catch blocks with message, stack, and full error object
 
-7. **Status:**
+8. **Status:**
    - ✅ **ACTIVE** - Committed and pushed to main branch
    - ✅ **ENHANCED** - Comprehensive logging for Test 7
    - ✅ **READY** - Will capture detailed logs from next test automatically
