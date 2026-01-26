@@ -9,9 +9,9 @@
 
 ## Executive Summary
 
-**Last Updated:** 2026-01-26 (Updated with Test 5 findings + File logging infrastructure)  
-**Tests Completed:** 3 (Point Vernon, Torquay, Kawungan)  
-**Current Test:** Test 6 (Torquay - In Progress)
+**Last Updated:** 2026-01-26 (Updated with Test 6 fixes: createShortcut function + improved error logging)  
+**Tests Completed:** 4 (Point Vernon, Torquay, Kawungan, Scarness)  
+**Current Test:** Test 7 (Scarness - Ready to Test with Fixes)
 
 ### ✅ **FIXED ISSUES**
 
@@ -48,22 +48,40 @@
    - Issue: Server terminal logs not easily accessible for debugging
    - Fix: Created `serverLogger.ts` utility that logs to both console and file
    - Result: Logs now written to `form-app/server-api.log` - can be read directly by AI
-   - **Status:** ✅ **ACTIVE** - Ready for Test 6 (commit: e46dda8)
+   - **Status:** ✅ **ACTIVE** (commit: e46dda8)
+
+7. **PDF Shortcut Creation Function Missing** - ✅ **FIXED** (2026-01-26)
+   - Issue: `createShortcut` function was imported but didn't exist in `googleDrive.ts`
+   - Root Cause: Function was never implemented, causing shortcut creation to fail silently
+   - Fix: Implemented `createShortcut` function in `googleDrive.ts` with full Google Drive API integration
+   - Result: Function now creates shortcuts using `application/vnd.google-apps.shortcut` mimeType
+   - **Status:** ✅ **IMPLEMENTED** - Ready for testing (commit: ff22aaf)
+
+8. **Error Logging Improvements** - ✅ **ENHANCED** (2026-01-26)
+   - Issue: Error logs were empty `{}` objects, not providing useful debugging info
+   - Fix: Enhanced error logging in both `create-property-folder/route.ts` and `Step6FolderCreation.tsx`
+   - Result: Now logs error message, code, status, statusText, responseData, and stack trace
+   - **Status:** ✅ **ACTIVE** - Comprehensive error tracking in place (commit: ff22aaf)
 
 ### 🚨 **REMAINING CRITICAL ISSUES**
 
-1. **PDF Shortcut Not Created in Folder** - ⚠️ **BLOCKING** (Test 5 - 2026-01-26)
+1. **PDF Shortcut Not Created in Folder** - ✅ **FIXED - READY FOR TEST** (2026-01-26)
    - PDF data is stored correctly in form state ✅
    - PDF shortcut does NOT appear in folder after creation ❌
-   - **Root Cause:** `formData?.hotspottingPdfFileId` appears empty when folder creation API is called
-   - **Investigation:** Added detailed logging to diagnose data flow
-   - **Status:** 🔍 **INVESTIGATING** (logging added, awaiting next test)
+   - **Root Cause Found:** `createShortcut` function was missing from `googleDrive.ts`
+   - **Fix Applied:** Implemented `createShortcut` function with full Google Drive API support
+   - **Enhanced Logging:** Added detailed error logging to capture any remaining issues
+   - **Status:** ✅ **FIXED** - Ready for Test 7 verification (commit: ff22aaf)
 
-2. **Suburb Not Added to Column A** - ⚠️ **BLOCKING** (Test 5 - 2026-01-26)
-   - Suburb "Kawungan" not added to Investment Highlights sheet column A
-   - **Root Cause:** Condition check likely failing or data not stored
-   - **Investigation:** Added logging to show when/why suburb addition is skipped
-   - **Status:** 🔍 **INVESTIGATING** (logging added, awaiting next test)
+2. **Suburb Not Added to Column A** - 🔍 **ENHANCED LOGGING - READY FOR TEST** (2026-01-26)
+   - Suburb "Kawungan" not added to Investment Highlights sheet column A (Test 5)
+   - Suburb "Scarness" not added to Investment Highlights sheet column A (Test 6)
+   - **Root Cause:** Unknown - condition check or API call may be failing
+   - **Enhanced Logging:** Added comprehensive logging to track:
+     - Condition checks before suburb addition attempt
+     - API request/response status
+     - Detailed error information if API call fails
+   - **Status:** 🔍 **INVESTIGATING** - Enhanced logging active, ready for Test 7 (commit: ff22aaf)
 
 3. **Dropdown Selection Not Populating Form Field** - ⚠️ **BLOCKING**
    - User can see reports in dropdown ✅
@@ -143,10 +161,18 @@
      - Logs PDF shortcut creation attempts
      - Logs `formData?.hotspottingPdfFileId`, `hotspottingPdfLink`, `hotspottingReportName`
      - Logs success/failure of shortcut creation
+     - **Enhanced:** Now logs detailed error info (message, code, status, responseData, stack)
    - ✅ `src/app/api/investment-highlights/add-suburb/route.ts`
      - Logs suburb addition requests
      - Logs matching process (row-by-row comparison)
      - Logs when match is found or skipped
+   
+4. **Client-Side Logging (Browser Console):**
+   - ✅ `src/components/steps/Step6FolderCreation.tsx`
+     - Logs condition checks before suburb addition attempt
+     - Logs API request/response status
+     - Logs detailed error information in catch blocks
+     - Logs when suburb addition is skipped (with reasons)
 
 4. **How to Read Logs:**
    - **During Test:** Logs are written in real-time to `server-api.log`
@@ -155,30 +181,39 @@
    - **Note:** File is created automatically on first log write
 
 5. **Log Prefixes:**
-   - `[create-property-folder]` - Folder creation and PDF shortcut logs
-   - `[add-suburb]` - Suburb addition to Investment Highlights sheet logs
+   - `[create-property-folder]` - Folder creation and PDF shortcut logs (server-side)
+   - `[add-suburb]` - Suburb addition to Investment Highlights sheet logs (server-side)
+   - `[Step6]` - Form submission and suburb addition logs (client-side)
+   - `[createShortcut]` - Shortcut creation function logs (server-side)
 
-6. **Status:**
+6. **Recent Enhancements (2026-01-26):**
+   - ✅ Enhanced error logging in `create-property-folder/route.ts` with detailed error objects
+   - ✅ Added condition check logging in `Step6FolderCreation.tsx` before suburb addition
+   - ✅ Added API response status logging for suburb addition
+   - ✅ Improved error catch blocks with message, stack, and full error object
+
+7. **Status:**
    - ✅ **ACTIVE** - Committed and pushed to main branch
-   - ✅ **READY** - Will capture logs from next test automatically
+   - ✅ **ENHANCED** - Comprehensive logging for Test 7
+   - ✅ **READY** - Will capture detailed logs from next test automatically
    - 📝 **Next Test:** Logs will be available immediately after test completion
 
 ---
 
 ### ⚠️ **ISSUES FOUND IN TEST 5 (Kawungan - 2026-01-26)**
 
-1. **PDF Shortcut Not Created in Folder** - 🔍 **INVESTIGATING**
+1. **PDF Shortcut Not Created in Folder** - ✅ **FIXED** (Test 6 analysis)
    - PDF data stored correctly in form state ✅
    - PDF shortcut does NOT appear in folder ❌
-   - **Investigation:** Added logging to folder creation API and Step6 component
-   - **Logging:** File logging active - will capture server-side logs in next test
-   - **Status:** 🔍 **INVESTIGATING** - Logging added, awaiting next test
+   - **Root Cause Found:** `createShortcut` function was missing
+   - **Fix Applied:** Function implemented in Test 6 fixes
+   - **Status:** ✅ **FIXED** - Ready for Test 7 verification
 
-2. **Suburb Not Added to Column A** - 🔍 **INVESTIGATING**
-   - Suburb "Kawungan" not added to Investment Highlights sheet
-   - **Investigation:** Added logging to show when/why suburb addition is skipped
-   - **Logging:** File logging active - will capture matching process in next test
-   - **Status:** 🔍 **INVESTIGATING** - Logging added, awaiting next test
+2. **Suburb Not Added to Column A** - 🔍 **ENHANCED LOGGING** (Test 6 analysis)
+   - Suburb "Kawungan" not added to Investment Highlights sheet (Test 5)
+   - Suburb "Scarness" not added to Investment Highlights sheet (Test 6)
+   - **Enhanced Logging:** Comprehensive logging added in Test 6 fixes
+   - **Status:** 🔍 **INVESTIGATING** - Enhanced logging active, ready for Test 7
 
 3. **Step 4 (Market Performance) Slow Loading** - ⚠️ **MINOR**
    - Page 4 takes long time to load initially
@@ -191,37 +226,76 @@
    - **Fix:** Should use `useMemo` or remove logs
    - **Status:** ⚠️ **NEEDS OPTIMIZATION**
 
-### 🔄 **TEST 6 (Torquay - 2026-01-26 - IN PROGRESS)**
+### ✅ **TEST 6 (Scarness - 2026-01-26 - COMPLETED)**
 
-**Test Property:** 9 Cleo Ct Torquay QLD 4655  
-**Status:** 🔄 **TESTING IN PROGRESS**  
+**Test Property:** 16 Koloi St Scarness QLD 4655  
+**Status:** ✅ **COMPLETED** - Issues identified, fixes implemented  
+**File Logging:** ✅ **ACTIVE** - Logs captured to `server-api.log`
+
+**Test Results:**
+1. ✅ **Dropdown Selection:** Working - "FRASER COAST Wide Bay Burnett Region" selected
+2. ✅ **PDF Data Storage:** Working - PDF link and file ID stored in form state
+3. ❌ **PDF Shortcut:** NOT created in folder (root cause: missing `createShortcut` function)
+4. ❌ **Suburb Addition:** "Scarness" NOT added to column A (investigating with enhanced logging)
+
+**Key Findings:**
+- Server logs showed: `[create-property-folder] Error creating PDF shortcut: {}`
+- Root cause identified: `createShortcut` function was imported but didn't exist
+- PDF data was present: `hotspottingPdfFileId: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"`
+- No `[add-suburb]` logs found - suburb addition API may not have been called
+
+**Fixes Applied:**
+- ✅ Implemented `createShortcut` function in `googleDrive.ts`
+- ✅ Enhanced error logging in folder creation route
+- ✅ Enhanced logging in Step6FolderCreation for suburb addition
+
+**Status:** ✅ **ANALYSIS COMPLETE** - Fixes ready for Test 7
+
+---
+
+### 🔄 **TEST 7 (Scarness - 2026-01-26 - READY TO TEST)**
+
+**Test Property:** 16 Koloi St Scarness QLD 4655 (or any property)  
+**Status:** 🔄 **READY TO TEST** - All fixes implemented and deployed  
 **File Logging:** ✅ **ACTIVE** - Logs will be captured to `server-api.log`
 
 **What to Test:**
 1. Select investment highlights report from dropdown (FRASER COAST Wide Bay Burnett Region)
 2. Complete form and submit
-3. Check if PDF shortcut is created in folder
-4. Check if suburb "Torquay" is added to column A of Investment Highlights sheet
+3. **Verify:** PDF shortcut appears in property folder ✅
+4. **Verify:** Suburb is added to column A of Investment Highlights sheet ✅
 
-**Logs to Check After Test:**
-- **File:** `form-app/server-api.log`
-- **Look for:**
-  - `[create-property-folder]` - PDF shortcut creation logs
-  - `[add-suburb]` - Suburb addition logs
-- **Access:** AI can read file directly after test completion
+**Enhanced Logging Active:**
 
-**Expected Logs:**
-```
-[create-property-folder] Checking for PDF shortcut...
-[create-property-folder] formData?.hotspottingPdfFileId: <value or undefined>
-[create-property-folder] formData?.hotspottingPdfLink: <value or undefined>
-[create-property-folder] formData?.hotspottingReportName: <value or undefined>
-[add-suburb] Matching request: { suburb: "Torquay", state: "QLD", reportName: "FRASER COAST Wide Bay Burnett Region" }
-[add-suburb] Checking row X: { ... }
-[add-suburb] Match found at row X
-```
+**Client-Side (Browser Console):**
+- `[Step6] Checking suburb addition conditions:` - Shows if conditions are met
+- `[Step6] Adding suburb to Investment Highlights report:` - Shows API call attempt
+- `[Step6] Suburb addition API response status:` - Shows HTTP status
+- `[Step6] Suburb added successfully:` - Success confirmation
+- `[Step6] Skipping suburb addition - missing data:` - Shows why skipped (if applicable)
 
-**Status:** 🔄 **AWAITING TEST COMPLETION**
+**Server-Side (server-api.log):**
+- `[create-property-folder] Checking for PDF shortcut...` - PDF data check
+- `[create-property-folder] formData?.hotspottingPdfFileId:` - Shows PDF file ID value
+- `[create-property-folder] Adding PDF shortcut to property folder...` - Shortcut creation attempt
+- `[create-property-folder] PDF shortcut created successfully:` - Success ✅
+- `[create-property-folder] Error creating PDF shortcut:` - Detailed error info (if fails)
+- `[add-suburb] Matching request:` - Suburb addition request received
+- `[add-suburb] Checking row X:` - Row-by-row matching process
+- `[add-suburb] Match found at row X` - Match successful ✅
+
+**Expected Results:**
+- ✅ PDF shortcut file appears in property folder
+- ✅ Suburb name appears in column A of Investment Highlights sheet (comma-separated with existing suburbs)
+- ✅ No errors in server logs
+- ✅ Success messages in browser console
+
+**How to Verify:**
+1. **After folder creation:** Check Google Drive folder for "Hotspotting Report.pdf" shortcut
+2. **After form submission:** Check Investment Highlights Google Sheet column A for suburb name
+3. **Check logs:** Run `Get-Content "server-api.log" -Tail 50` or AI can read directly
+
+**Status:** 🔄 **READY FOR TESTING** - All fixes deployed, enhanced logging active
 
 ---
 
