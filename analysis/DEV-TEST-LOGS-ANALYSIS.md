@@ -9,9 +9,9 @@
 
 ## Executive Summary
 
-**Last Updated:** 2026-01-26 (Updated with Test 6 fixes: createShortcut function + improved error logging)  
-**Tests Completed:** 4 (Point Vernon, Torquay, Kawungan, Scarness)  
-**Current Test:** Test 7 (Scarness - Ready to Test with Fixes)
+**Last Updated:** 2026-01-26 (Updated with Test 7 findings: PDF shortcut working, permissions fix added)  
+**Tests Completed:** 5 (Point Vernon, Torquay, Kawungan, Scarness x2)  
+**Current Test:** Test 8 (Ready to Test - Permissions Fix + Suburb Addition Investigation)
 
 ### ✅ **FIXED ISSUES**
 
@@ -63,25 +63,35 @@
    - Result: Now logs error message, code, status, statusText, responseData, and stack trace
    - **Status:** ✅ **ACTIVE** - Comprehensive error tracking in place (commit: ff22aaf)
 
+9. **PDF Shortcut Permissions** - ✅ **FIXED** (2026-01-26)
+   - Issue: PDF shortcut created but couldn't be opened when forwarded to others
+   - Root Cause: Permissions not set on shortcut after creation
+   - Fix: Added `setFilePermissions()` call after shortcut creation
+   - Result: Shortcut now has "anyone with link can view" permissions
+   - **Status:** ✅ **FIXED** - Ready for Test 8 verification (commit: 94aeeb4)
+
 ### 🚨 **REMAINING CRITICAL ISSUES**
 
-1. **PDF Shortcut Not Created in Folder** - ✅ **FIXED - READY FOR TEST** (2026-01-26)
+1. **PDF Shortcut Not Created in Folder** - ✅ **FIXED** (Test 7 - 2026-01-26)
    - PDF data is stored correctly in form state ✅
    - PDF shortcut does NOT appear in folder after creation ❌
    - **Root Cause Found:** `createShortcut` function was missing from `googleDrive.ts`
    - **Fix Applied:** Implemented `createShortcut` function with full Google Drive API support
-   - **Enhanced Logging:** Added detailed error logging to capture any remaining issues
-   - **Status:** ✅ **FIXED** - Ready for Test 7 verification (commit: ff22aaf)
+   - **Test 7 Result:** ✅ **WORKING** - PDF shortcut successfully created in folder
+   - **Server Logs:** `[create-property-folder] PDF shortcut created successfully: "108KGpx3_4PiWQquTuyc9T0vyAo1don2f"`
+   - **Status:** ✅ **RESOLVED** (commit: ff22aaf)
 
-2. **Suburb Not Added to Column A** - 🔍 **ENHANCED LOGGING - READY FOR TEST** (2026-01-26)
+2. **Suburb Not Added to Column A** - 🔍 **INVESTIGATING** (Test 7 - 2026-01-26)
    - Suburb "Kawungan" not added to Investment Highlights sheet column A (Test 5)
-   - Suburb "Scarness" not added to Investment Highlights sheet column A (Test 6)
-   - **Root Cause:** Unknown - condition check or API call may be failing
-   - **Enhanced Logging:** Added comprehensive logging to track:
-     - Condition checks before suburb addition attempt
-     - API request/response status
-     - Detailed error information if API call fails
-   - **Status:** 🔍 **INVESTIGATING** - Enhanced logging active, ready for Test 7 (commit: ff22aaf)
+   - Suburb "Scarness" not added to Investment Highlights sheet column A (Test 6 & Test 7)
+   - **Test 7 Finding:** No `[add-suburb]` logs in `server-api.log` - API was never called
+   - **Possible Causes:**
+     1. Condition check failed (would show in browser console as `[Step6] Skipping suburb addition`)
+     2. Form submission failed before reaching suburb addition code
+     3. Code path not executed (need browser console logs to verify)
+   - **Enhanced Logging:** Comprehensive logging in place, but need browser console logs to diagnose
+   - **Next Step:** Check browser console for `[Step6]` logs to see why API wasn't called
+   - **Status:** 🔍 **INVESTIGATING** - Need browser console logs from Test 7 (commit: ff22aaf)
 
 3. **Dropdown Selection Not Populating Form Field** - ⚠️ **BLOCKING**
    - User can see reports in dropdown ✅
@@ -253,17 +263,50 @@
 
 ---
 
-### 🔄 **TEST 7 (Scarness - 2026-01-26 - READY TO TEST)**
+### ✅ **TEST 7 (Scarness - 2026-01-26 - COMPLETED)**
+
+**Test Property:** 16 Koloi St Scarness QLD 4655  
+**Status:** ✅ **COMPLETED** - Partial success, issues identified  
+**File Logging:** ✅ **ACTIVE** - Logs captured to `server-api.log`
+
+**Test Results:**
+1. ✅ **PDF Shortcut Creation:** **WORKING** - Shortcut successfully created in folder
+   - Server logs: `[create-property-folder] PDF shortcut created successfully: "108KGpx3_4PiWQquTuyc9T0vyAo1don2f"`
+   - Folder shows: "Hotspotting Report.pdf" file present ✅
+2. ❌ **PDF Permissions:** **ISSUE FOUND** - PDF couldn't be opened when forwarded
+   - Root Cause: Permissions not set on shortcut after creation
+   - Fix Applied: Added `setFilePermissions()` call after shortcut creation
+   - Status: ✅ **FIXED** - Ready for Test 8 verification
+3. ❌ **Suburb Addition:** **STILL NOT WORKING** - "Scarness" not added to column A
+   - Server logs: No `[add-suburb]` logs found - API was never called
+   - Need: Browser console logs to diagnose why API wasn't called
+
+**Key Findings:**
+- ✅ `createShortcut` function working correctly
+- ✅ PDF shortcut appears in folder as expected
+- ❌ Shortcut permissions need to be set (fix added)
+- ❌ Suburb addition API not being called (need browser console logs)
+
+**Fixes Applied:**
+- ✅ Added `setFilePermissions()` call after shortcut creation
+- ✅ Enhanced logging already in place
+
+**Status:** ✅ **ANALYSIS COMPLETE** - Permissions fix ready for Test 8
+
+---
+
+### 🔄 **TEST 8 (Scarness - 2026-01-26 - READY TO TEST)**
 
 **Test Property:** 16 Koloi St Scarness QLD 4655 (or any property)  
-**Status:** 🔄 **READY TO TEST** - All fixes implemented and deployed  
+**Status:** 🔄 **READY TO TEST** - Permissions fix deployed  
 **File Logging:** ✅ **ACTIVE** - Logs will be captured to `server-api.log`
 
 **What to Test:**
 1. Select investment highlights report from dropdown (FRASER COAST Wide Bay Burnett Region)
 2. Complete form and submit
-3. **Verify:** PDF shortcut appears in property folder ✅
-4. **Verify:** Suburb is added to column A of Investment Highlights sheet ✅
+3. **Verify:** PDF shortcut appears in property folder ✅ (Test 7 confirmed)
+4. **Verify:** PDF shortcut can be opened when forwarded to others ✅ (NEW - Test 8)
+5. **Investigate:** Why suburb addition API isn't being called (need browser console logs)
 
 **Enhanced Logging Active:**
 
@@ -285,17 +328,26 @@
 - `[add-suburb] Match found at row X` - Match successful ✅
 
 **Expected Results:**
-- ✅ PDF shortcut file appears in property folder
+- ✅ PDF shortcut file appears in property folder (Test 7 confirmed)
+- ✅ PDF shortcut can be opened when forwarded (NEW - Test 8)
 - ✅ Suburb name appears in column A of Investment Highlights sheet (comma-separated with existing suburbs)
 - ✅ No errors in server logs
 - ✅ Success messages in browser console
 
 **How to Verify:**
-1. **After folder creation:** Check Google Drive folder for "Hotspotting Report.pdf" shortcut
-2. **After form submission:** Check Investment Highlights Google Sheet column A for suburb name
-3. **Check logs:** Run `Get-Content "server-api.log" -Tail 50` or AI can read directly
+1. **After folder creation:** Check Google Drive folder for "Hotspotting Report.pdf" shortcut ✅
+2. **After form submission:** Forward PDF link to someone - should be accessible ✅ (NEW)
+3. **After form submission:** Check Investment Highlights Google Sheet column A for suburb name
+4. **Check server logs:** Run `Get-Content "server-api.log" -Tail 50` or AI can read directly
+5. **Check browser console:** Look for `[Step6]` logs to see why suburb addition API wasn't called
 
-**Status:** 🔄 **READY FOR TESTING** - All fixes deployed, enhanced logging active
+**What to Check in Browser Console:**
+- `[Step6] Checking suburb addition conditions:` - Shows if conditions are met
+- `[Step6] Adding suburb to Investment Highlights report:` - Shows if API call was attempted
+- `[Step6] Skipping suburb addition - missing data:` - Shows why it was skipped (if applicable)
+- `[Step6] Suburb addition API response status:` - Shows HTTP status if API was called
+
+**Status:** 🔄 **READY FOR TESTING** - Permissions fix deployed, need browser console logs for suburb investigation
 
 ---
 
