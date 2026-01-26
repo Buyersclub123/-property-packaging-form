@@ -9,8 +9,8 @@
 
 ## Executive Summary
 
-**Last Updated:** 2026-01-26  
-**Tests Completed:** 2 (Point Vernon, Torquay)
+**Last Updated:** 2026-01-26 (Updated with Test 5 findings)  
+**Tests Completed:** 3 (Point Vernon, Torquay, Kawungan)
 
 ### ✅ **FIXED ISSUES**
 
@@ -31,22 +31,47 @@
    - 73% reduction in re-renders
    - **Status:** ✅ **SIGNIFICANTLY IMPROVED** (can optimize further later)
 
+4. **PDF Link Property Name Mismatch** - ✅ **FIXED** (Test 5 - 2026-01-26)
+   - Issue: Lookup API returns `pdfDriveLink` and `pdfFileId`, but code was looking for `pdfLink` and `fileId`
+   - Fix: Updated `InvestmentHighlightsField.tsx` to use correct property names
+   - Result: PDF data now stored correctly in form state
+   - **Status:** ✅ **RESOLVED** (commit: 94dd95b)
+
+5. **Vercel Auto-Deployment to Production** - ✅ **FIXED** (2026-01-26)
+   - Issue: Every push to `main` was triggering Production deployments
+   - Fix: Added `"git": { "deploymentEnabled": false }` to `vercel.json`
+   - Result: Git push = backup only, manual deployment required
+   - **Status:** ✅ **RESOLVED** (commit: b00affa)
+
 ### 🚨 **REMAINING CRITICAL ISSUES**
 
-1. **Dropdown Selection Not Populating Form Field** - ⚠️ **BLOCKING**
+1. **PDF Shortcut Not Created in Folder** - ⚠️ **BLOCKING** (Test 5 - 2026-01-26)
+   - PDF data is stored correctly in form state ✅
+   - PDF shortcut does NOT appear in folder after creation ❌
+   - **Root Cause:** `formData?.hotspottingPdfFileId` appears empty when folder creation API is called
+   - **Investigation:** Added detailed logging to diagnose data flow
+   - **Status:** 🔍 **INVESTIGATING** (logging added, awaiting next test)
+
+2. **Suburb Not Added to Column A** - ⚠️ **BLOCKING** (Test 5 - 2026-01-26)
+   - Suburb "Kawungan" not added to Investment Highlights sheet column A
+   - **Root Cause:** Condition check likely failing or data not stored
+   - **Investigation:** Added logging to show when/why suburb addition is skipped
+   - **Status:** 🔍 **INVESTIGATING** (logging added, awaiting next test)
+
+3. **Dropdown Selection Not Populating Form Field** - ⚠️ **BLOCKING**
    - User can see reports in dropdown ✅
    - Selecting report does NOT populate form field ❌
    - **Root Cause:** `report.suburbs[0]` treats string as array
    - **Status:** ❌ **NEEDS FIX**
 
-2. **Form Field Not Populating After PDF Upload** - ⚠️ **BLOCKING**
+4. **Form Field Not Populating After PDF Upload** - ⚠️ **BLOCKING**
    - PDF upload and ChatGPT formatting work ✅
    - Formatted content saved to Google Sheet ✅
    - Form field remains empty ❌
    - **Root Cause:** Missing `onChange(formattedMainBody)` after upload
    - **Status:** ❌ **NEEDS FIX**
 
-3. **PDF File Permissions** - ⚠️ **BLOCKING**
+5. **PDF File Permissions** - ⚠️ **BLOCKING**
    - Users cannot access PDFs after submission
    - "Need permission" error
    - **Root Cause:** No permission setting after file move
@@ -54,25 +79,64 @@
 
 ### ⚠️ **MINOR ISSUES**
 
-1. **Inconsistent Checkbox Validation** - Needs investigation
-2. **PDF File Naming** - Valid period may be missing (needs verification)
-3. **Re-renders** - Still 36 renders (acceptable but can optimize)
+1. **Step 4 (Market Performance) Slow Loading** - ⚠️ **MINOR** (Test 5 - 2026-01-26)
+   - Page 4 takes a long time to load initially
+   - Clicking previous and then next makes it load straight away
+   - **Possible Cause:** Google Sheets API call slow on first load, no caching
+   - **Status:** ⚠️ **INVESTIGATING**
+
+2. **Step7CashflowReview Excessive Logging** - ⚠️ **MINOR** (Test 5 - 2026-01-26)
+   - `calculateTotalCost()` function runs on every render, causing repeated console logs
+   - **Fix:** Should use `useMemo` to memoize calculation or remove/conditionally enable logs
+   - **Status:** ⚠️ **NEEDS OPTIMIZATION**
+
+3. **Inconsistent Checkbox Validation** - Needs investigation
+4. **PDF File Naming** - Valid period may be missing (needs verification)
+5. **Re-renders** - Still 36 renders (acceptable but can optimize)
 
 ### ⚠️ **ISSUES FOUND IN TEST 3 (Torquay - Dropdown Selection)**
 
-1. **Google Sheets Columns - Writing to N&O Instead of F&G** - ❌ **NOT RESOLVED**
+1. **Google Sheets Columns - Writing to N&O Instead of F&G** - ✅ **PARTIALLY FIXED**
    - Issue: `/api/investment-highlights/save` route still using 15 columns (A-O)
    - Old code writing PDF link/fileId to columns N&O instead of F&G
-   - **Status:** ❌ **NEEDS FIX** - Update save route to use 7 columns (A-G)
+   - **Update:** Property name fix applied (Test 5), but save route still needs update
+   - **Status:** ⚠️ **PARTIALLY RESOLVED** - Update save route to use 7 columns (A-G)
 
-2. **Suburb Not Added to Google Sheet** - ❌ **NOT RESOLVED**
-   - When selecting report from dropdown, suburb (Torquay) not added to column A
-   - **Status:** ❌ **NEEDS FIX** - Add suburb on form submission
+2. **Suburb Not Added to Google Sheet** - 🔍 **INVESTIGATING** (Test 5)
+   - When selecting report from dropdown, suburb not added to column A
+   - **Update:** Added detailed logging to diagnose issue
+   - **Status:** 🔍 **INVESTIGATING** - Logging added, awaiting next test
 
-3. **PDF Link Not Stored on Dropdown Selection** - ❌ **NOT RESOLVED**
-   - PDF link not stored in form state when selecting from dropdown
-   - PDF link not added to folder when folder is created
-   - **Status:** ❌ **NEEDS FIX** - Store PDF link/fileId on dropdown selection
+3. **PDF Link Not Stored on Dropdown Selection** - ✅ **FIXED** (Test 5)
+   - Issue: PDF link not stored in form state when selecting from dropdown
+   - **Fix:** Property name mismatch fixed (`pdfLink` → `pdfDriveLink`, `fileId` → `pdfFileId`)
+   - **Result:** PDF data now stored correctly in form state
+   - **Remaining:** PDF shortcut still not created in folder (investigating)
+   - **Status:** ✅ **PARTIALLY RESOLVED** - Storage fixed, folder creation still investigating
+
+### ⚠️ **ISSUES FOUND IN TEST 5 (Kawungan - 2026-01-26)**
+
+1. **PDF Shortcut Not Created in Folder** - 🔍 **INVESTIGATING**
+   - PDF data stored correctly in form state ✅
+   - PDF shortcut does NOT appear in folder ❌
+   - **Investigation:** Added logging to folder creation API and Step6 component
+   - **Status:** 🔍 **INVESTIGATING** - Logging added, awaiting next test
+
+2. **Suburb Not Added to Column A** - 🔍 **INVESTIGATING**
+   - Suburb "Kawungan" not added to Investment Highlights sheet
+   - **Investigation:** Added logging to show when/why suburb addition is skipped
+   - **Status:** 🔍 **INVESTIGATING** - Logging added, awaiting next test
+
+3. **Step 4 (Market Performance) Slow Loading** - ⚠️ **MINOR**
+   - Page 4 takes long time to load initially
+   - Faster on second visit (suggests caching issue)
+   - **Status:** ⚠️ **INVESTIGATING**
+
+4. **Step7CashflowReview Excessive Logging** - ⚠️ **MINOR**
+   - `calculateTotalCost()` runs on every render
+   - Causes repeated console logs
+   - **Fix:** Should use `useMemo` or remove logs
+   - **Status:** ⚠️ **NEEDS OPTIMIZATION**
 
 4. **Checkbox Validation Inconsistent** - ❌ **NOT RESOLVED**
    - Page 5 allows progression without checking checkbox in some scenarios
