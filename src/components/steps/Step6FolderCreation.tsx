@@ -290,66 +290,8 @@ export function Step6FolderCreation() {
         setGhlRecordId(recordId);
       }
 
-      // Add suburb to Investment Highlights Google Sheet if report was selected from dropdown
-      // (Only if reportName exists and suburb exists - indicates dropdown selection, not upload)
-      // Use getState() to get latest state values (avoids stale closure issue in async handler)
-      const currentFormData = useFormStore.getState().formData;
-      console.log('[Step6] Checking suburb addition conditions:', {
-        hasReportName: !!currentFormData.hotspottingReportName,
-        hasSuburbName: !!currentFormData.address?.suburbName,
-        hasState: !!currentFormData.address?.state,
-        reportName: currentFormData.hotspottingReportName,
-        suburbName: currentFormData.address?.suburbName,
-        state: currentFormData.address?.state,
-      });
-      
-      if (currentFormData.hotspottingReportName && currentFormData.address?.suburbName && currentFormData.address?.state) {
-        try {
-          console.log('[Step6] Adding suburb to Investment Highlights report:', {
-            suburb: currentFormData.address.suburbName,
-            state: currentFormData.address.state,
-            reportName: currentFormData.hotspottingReportName,
-          });
-          
-          const addSuburbResponse = await fetch('/api/investment-highlights/add-suburb', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              suburb: currentFormData.address.suburbName,
-              state: currentFormData.address.state,
-              reportName: currentFormData.hotspottingReportName,
-            }),
-          });
-          
-          console.log('[Step6] Suburb addition API response status:', addSuburbResponse.status);
-          
-          if (addSuburbResponse.ok) {
-            const result = await addSuburbResponse.json();
-            console.log('[Step6] Suburb added successfully:', result);
-          } else {
-            const errorText = await addSuburbResponse.text();
-            console.warn('[Step6] Failed to add suburb to report (non-blocking):', {
-              status: addSuburbResponse.status,
-              error: errorText,
-            });
-          }
-        } catch (error: any) {
-          console.warn('[Step6] Error adding suburb to report (non-blocking):', {
-            message: error?.message,
-            stack: error?.stack,
-            error: error,
-          });
-          // Non-blocking - don't fail submission if this fails
-        }
-      } else {
-        console.log('[Step6] Skipping suburb addition - missing data:', {
-          hasReportName: !!currentFormData.hotspottingReportName,
-          hasSuburb: !!currentFormData.address?.suburbName,
-          hasState: !!currentFormData.address?.state,
-        });
-      }
-
       // Email status - assume sent if Make.com succeeds
+      // Note: Suburb addition to Investment Highlights sheet happens in Step 9 (Step8Submission)
       setEmailStatus('sent');
 
       // Show success screen

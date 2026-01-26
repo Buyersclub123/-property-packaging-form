@@ -228,6 +228,110 @@ export function Step8Submission() {
         setGhlRecordId(recordId);
       }
 
+      // Add suburb to Investment Highlights Google Sheet if report was selected from dropdown
+      // (Only if reportName exists and suburb exists - indicates dropdown selection, not upload)
+      // Use getState() to get latest state values (avoids stale closure issue in async handler)
+      const currentFormData = useFormStore.getState().formData;
+      const conditionCheck = {
+        hasReportName: !!currentFormData.hotspottingReportName,
+        hasSuburbName: !!currentFormData.address?.suburbName,
+        hasState: !!currentFormData.address?.state,
+        reportName: currentFormData.hotspottingReportName,
+        suburbName: currentFormData.address?.suburbName,
+        state: currentFormData.address?.state,
+      };
+      
+      // Log to both console and server for debugging
+      console.log('[Step9] Checking suburb addition conditions:', conditionCheck);
+      
+      // Also log to server so we can see it in server-api.log
+      try {
+        await fetch('/api/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: '[Step9] Checking suburb addition conditions',
+            data: conditionCheck,
+          }),
+        }).catch(() => {}); // Don't fail if logging fails
+      } catch (e) {
+        // Ignore logging errors
+      }
+      
+      if (currentFormData.hotspottingReportName && currentFormData.address?.suburbName && currentFormData.address?.state) {
+        try {
+          const addSuburbData = {
+            suburb: currentFormData.address.suburbName,
+            state: currentFormData.address.state,
+            reportName: currentFormData.hotspottingReportName,
+          };
+          
+          console.log('[Step9] Adding suburb to Investment Highlights report:', addSuburbData);
+          
+          // Log to server
+          try {
+            await fetch('/api/log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: '[Step9] Adding suburb to Investment Highlights report',
+                data: addSuburbData,
+              }),
+            }).catch(() => {}); // Don't fail if logging fails
+          } catch (e) {
+            // Ignore logging errors
+          }
+          
+          const addSuburbResponse = await fetch('/api/investment-highlights/add-suburb', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(addSuburbData),
+          });
+          
+          console.log('[Step9] Suburb addition API response status:', addSuburbResponse.status);
+          
+          if (addSuburbResponse.ok) {
+            const result = await addSuburbResponse.json();
+            console.log('[Step9] Suburb added successfully:', result);
+          } else {
+            const errorText = await addSuburbResponse.text();
+            console.warn('[Step9] Failed to add suburb to report (non-blocking):', {
+              status: addSuburbResponse.status,
+              error: errorText,
+            });
+          }
+        } catch (error: any) {
+          console.warn('[Step9] Error adding suburb to report (non-blocking):', {
+            message: error?.message,
+            stack: error?.stack,
+            error: error,
+          });
+          // Non-blocking - don't fail submission if this fails
+        }
+      } else {
+        const skipData = {
+          hasReportName: !!currentFormData.hotspottingReportName,
+          hasSuburb: !!currentFormData.address?.suburbName,
+          hasState: !!currentFormData.address?.state,
+        };
+        
+        console.log('[Step9] Skipping suburb addition - missing data:', skipData);
+        
+        // Log to server
+        try {
+          await fetch('/api/log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: '[Step9] Skipping suburb addition - missing data',
+              data: skipData,
+            }),
+          }).catch(() => {}); // Don't fail if logging fails
+        } catch (e) {
+          // Ignore logging errors
+        }
+      }
+
       // Email status - assume sent if Make.com succeeds
       setEmailStatus('sent');
       

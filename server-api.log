@@ -14,3 +14,53 @@
 [2026-01-26T09:15:53.192Z] [create-property-folder] File ID: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
 [2026-01-26T09:15:53.193Z] [create-property-folder] Folder ID: "15lqw1u8JkO288oZoL_04k9sCjoy5BdDL"
 [2026-01-26T09:15:55.038Z] [create-property-folder] PDF shortcut created successfully: "108KGpx3_4PiWQquTuyc9T0vyAo1don2f"
+[2026-01-26T09:37:44.579Z] [create-property-folder] Checking for PDF shortcut...
+[2026-01-26T09:37:44.582Z] [create-property-folder] formData?.hotspottingPdfFileId: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
+[2026-01-26T09:37:44.583Z] [create-property-folder] formData?.hotspottingPdfLink: "https://drive.google.com/file/d/1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz/view?usp=drivesdk"
+[2026-01-26T09:37:44.585Z] [create-property-folder] formData?.hotspottingReportName: "FRASER COAST Wide Bay Burnett Region"
+[2026-01-26T09:37:44.586Z] [create-property-folder] Adding PDF shortcut to property folder...
+[2026-01-26T09:37:44.588Z] [create-property-folder] File ID: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
+[2026-01-26T09:37:44.589Z] [create-property-folder] Folder ID: "1e6EktA1rwr8Q2XQU90HxzMEsgF3jKGzj"
+[2026-01-26T09:37:46.337Z] [create-property-folder] PDF shortcut created successfully: "1lFQSGBk6PvkCc3kTAOaccwnXekDgGJOE"
+[2026-01-26T09:37:47.091Z] [create-property-folder] Warning: Failed to set shortcut permissions (non-blocking): {
+  "message": "Bad Request",
+  "code": 400
+}
+[2026-01-26T10:11:49.188Z] [create-property-folder] Checking for PDF shortcut...
+[2026-01-26T10:11:49.190Z] [create-property-folder] formData?.hotspottingPdfFileId: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
+[2026-01-26T10:11:49.191Z] [create-property-folder] formData?.hotspottingPdfLink: "https://drive.google.com/file/d/1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz/view?usp=drivesdk"
+[2026-01-26T10:11:49.194Z] [create-property-folder] formData?.hotspottingReportName: "FRASER COAST Wide Bay Burnett Region"
+[2026-01-26T10:11:49.195Z] [create-property-folder] Adding PDF shortcut to property folder...
+[2026-01-26T10:11:49.196Z] [create-property-folder] File ID: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
+[2026-01-26T10:11:49.198Z] [create-property-folder] Folder ID: "1ju8MCcAeGDTKxc_Y_FdI0ji4hqkJVOuj"
+[2026-01-26T10:11:50.592Z] [create-property-folder] PDF shortcut created successfully: "1m-4Hsv1Rr1rE4ZqGBYo963bbTuALebSg"
+[2026-01-26T10:11:51.358Z] [create-property-folder] Warning: Failed to set shortcut permissions (non-blocking): {
+  "message": "Bad Request",
+  "code": 400
+}
+[2026-01-26T11:42:48.227Z] [create-property-folder] Checking for PDF shortcut...
+[2026-01-26T11:42:48.228Z] [create-property-folder] formData?.hotspottingPdfFileId: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
+[2026-01-26T11:42:48.229Z] [create-property-folder] formData?.hotspottingPdfLink: "https://drive.google.com/file/d/1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz/view?usp=drivesdk"
+[2026-01-26T11:42:48.231Z] [create-property-folder] formData?.hotspottingReportName: "FRASER COAST Wide Bay Burnett Region"
+[2026-01-26T11:42:48.232Z] [create-property-folder] Adding PDF shortcut to property folder...
+[2026-01-26T11:42:48.234Z] [create-property-folder] File ID: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
+[2026-01-26T11:42:48.236Z] [create-property-folder] Folder ID: "10SmlV_EG1eW-xNyRH_As2_B1K-Fksga4"
+[2026-01-26T11:42:48.710Z] [create-property-folder] Using original PDF name for shortcut: "FRASER COAST Wide Bay Burnett Region - January - April 2026.pdf"
+[2026-01-26T11:42:50.055Z] [create-property-folder] PDF shortcut created successfully: "1ZQNX9K0-2Lr0XWTBkOnIj1elHmixd2K0"
+[2026-01-26T11:42:50.768Z] [create-property-folder] Warning: Failed to set permissions on original PDF (non-blocking): {
+  "message": "Cannot modify a permission on an item to be less than the inherited access from a direct or indirect parent.",
+  "code": 403
+}
+[2026-01-26T11:49:19.630Z] [create-property-folder] Checking for PDF shortcut...
+[2026-01-26T11:49:19.631Z] [create-property-folder] formData?.hotspottingPdfFileId: "1HmlBurkLIfR_uQ9rEq4zXxEGMgroEENP"
+[2026-01-26T11:49:19.632Z] [create-property-folder] formData?.hotspottingPdfLink: "https://drive.google.com/file/d/1HmlBurkLIfR_uQ9rEq4zXxEGMgroEENP/view?usp=drivesdk"
+[2026-01-26T11:49:19.634Z] [create-property-folder] formData?.hotspottingReportName:
+[2026-01-26T11:49:19.635Z] [create-property-folder] Adding PDF shortcut to property folder...
+[2026-01-26T11:49:19.636Z] [create-property-folder] File ID: "1HmlBurkLIfR_uQ9rEq4zXxEGMgroEENP"
+[2026-01-26T11:49:19.636Z] [create-property-folder] Folder ID: "1jhJJYwTejMs408d8e2dAWxWKJLeT9smF"
+[2026-01-26T11:49:20.139Z] [create-property-folder] Using original PDF name for shortcut: "SUNSHINE COAST South East Queensland - October 2025 - January 2026.pdf"
+[2026-01-26T11:49:21.444Z] [create-property-folder] PDF shortcut created successfully: "1H6Vj4NzjmFyM31bdZa35cviedC7BSt5k"
+[2026-01-26T11:49:22.127Z] [create-property-folder] Warning: Failed to set permissions on original PDF (non-blocking): {
+  "message": "Cannot modify a permission on an item to be less than the inherited access from a direct or indirect parent.",
+  "code": 403
+}

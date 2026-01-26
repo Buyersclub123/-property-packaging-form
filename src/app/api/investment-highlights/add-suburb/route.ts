@@ -77,16 +77,31 @@ export async function POST(request: NextRequest) {
     const existingRow = rows[rowIndex];
     const existingSuburbs = (existingRow[0] || '').trim();
     
+    serverLog(`[add-suburb] Found row ${rowIndex + 2}, existing suburbs: "${existingSuburbs}"`);
+    
     // Parse existing suburbs
     const suburbList = existingSuburbs
       .split(',')
       .map((s: string) => s.trim())
       .filter((s: string) => s.length > 0);
     
+    // Check if suburb already exists (case-insensitive comparison)
+    const suburbExists = suburbList.some(
+      (existingSuburb: string) => existingSuburb.toLowerCase() === newSuburb.toLowerCase()
+    );
+    
+    serverLog(`[add-suburb] Suburb check:`, {
+      newSuburb,
+      existingSuburbs: suburbList,
+      suburbExists,
+    });
+    
     // Add new suburb if not already in list
-    if (!suburbList.includes(newSuburb)) {
+    if (!suburbExists) {
       suburbList.push(newSuburb);
       const updatedSuburbs = suburbList.join(', ');
+      
+      serverLog(`[add-suburb] Updating column A at row ${rowIndex + 2} with: "${updatedSuburbs}"`);
       
       // Update column A with new suburb list
       const actualRowNumber = rowIndex + 2; // +2 for header row and 0-index
@@ -99,12 +114,15 @@ export async function POST(request: NextRequest) {
         },
       });
       
+      serverLog(`[add-suburb] Successfully updated column A`);
+      
       return NextResponse.json({
         success: true,
         message: `Suburb "${newSuburb}" added to report`,
         updatedSuburbs: updatedSuburbs,
       });
     } else {
+      serverLog(`[add-suburb] Suburb already exists, skipping update`);
       return NextResponse.json({
         success: true,
         message: `Suburb "${newSuburb}" already in report`,
