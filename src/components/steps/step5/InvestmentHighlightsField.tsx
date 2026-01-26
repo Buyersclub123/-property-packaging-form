@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import { ReportDropdown, type ReportOption } from './ReportDropdown';
+import { useFormStore } from '@/store/formStore';
 
 /**
  * InvestmentHighlightsField Component (Phase 4C)
@@ -40,6 +41,7 @@ export function InvestmentHighlightsField({
   disabled = false 
 }: InvestmentHighlightsFieldProps) {
   const textareaRef = useAutoResize(value);
+  const { updateFormData } = useFormStore();
   
   const [loading, setLoading] = useState(false);
   const [matchStatus, setMatchStatus] = useState<'checking' | 'found' | 'not-found' | null>(null);
@@ -77,119 +79,9 @@ export function InvestmentHighlightsField({
   
   // AI Summary states (Phase 4C-2)
   const [generatingSummary, setGeneratingSummary] = useState(false);
-  
-  // Custom dialogue states (Item 4 - redesigned)
-  const [customDialogue, setCustomDialogue] = useState({
-    populationGrowth: '',
-    residential: '',
-    industrial: '',
-    commercialCivic: '',
-    healthEducation: '',
-    transport: '',
-    jobImplications: '',
-  });
-  
-  // Track if custom dialogue has been loaded from sheet
-  const [customDialogueLoaded, setCustomDialogueLoaded] = useState(false);
-  
-  // Store base main body (without custom dialogue merged in)
-  const [baseMainBody, setBaseMainBody] = useState('');
 
   // Track if we've already done a lookup (prevent multiple calls)
   const hasLookedUpRef = useRef(false);
-  
-  /**
-   * Merge custom dialogue into main body
-   * Finds section headings and inserts custom content after them
-   */
-  const mergeCustomDialogueIntoMainBody = (
-    mainBody: string,
-    dialogue: typeof customDialogue
-  ): string => {
-    let merged = mainBody;
-    
-    // Define section mappings
-    const sectionMappings = [
-      {
-        heading: /^(.*population.*growth.*context)/im,
-        customContent: dialogue.populationGrowth,
-        insertAfter: true, // Insert after the paragraph
-      },
-      {
-        heading: /\*\*Residential:\*\*/i,
-        customContent: dialogue.residential,
-        insertAfter: true,
-      },
-      {
-        heading: /\*\*Industrial:\*\*/i,
-        customContent: dialogue.industrial,
-        insertAfter: true,
-      },
-      {
-        heading: /\*\*Commercial and Civic:\*\*/i,
-        customContent: dialogue.commercialCivic,
-        insertAfter: true,
-      },
-      {
-        heading: /\*\*Health and Education:\*\*/i,
-        customContent: dialogue.healthEducation,
-        insertAfter: true,
-      },
-      {
-        heading: /\*\*Transport:\*\*/i,
-        customContent: dialogue.transport,
-        insertAfter: true,
-      },
-      {
-        heading: /\*\*Job Implications:\*\*/i,
-        customContent: dialogue.jobImplications,
-        insertAfter: true,
-      },
-    ];
-    
-    // Process each section
-    sectionMappings.forEach(({ heading, customContent, insertAfter }) => {
-      if (!customContent || customContent.trim() === '') return;
-      
-      const match = merged.match(heading);
-      if (match) {
-        const matchIndex = match.index!;
-        const matchLength = match[0].length;
-        
-        // Find the end of the section (next heading or end of string)
-        const nextHeadingPattern = /\n\*\*[A-Z]/;
-        const nextHeadingMatch = merged.slice(matchIndex + matchLength).match(nextHeadingPattern);
-        const insertPosition = nextHeadingMatch 
-          ? matchIndex + matchLength + nextHeadingMatch.index!
-          : merged.length;
-        
-        // Insert custom content
-        const customBlock = `\n\n[CUSTOM ADDITIONS]\n${customContent.trim()}\n`;
-        merged = merged.slice(0, insertPosition) + customBlock + merged.slice(insertPosition);
-      }
-    });
-    
-    return merged;
-  };
-  
-  /**
-   * Handle custom dialogue field changes
-   * Updates state and merges into main body with debouncing
-   */
-  const handleCustomDialogueChange = (field: string, newValue: string) => {
-    const updatedDialogue = {
-      ...customDialogue,
-      [field]: newValue,
-    };
-    
-    setCustomDialogue(updatedDialogue);
-    
-    // Merge custom dialogue into main body
-    const mergedBody = mergeCustomDialogueIntoMainBody(baseMainBody, updatedDialogue);
-    
-    // Update parent form state
-    onChange(mergedBody);
-  };
   
   // Check for pre-loaded data from Step 1A
   useEffect(() => {
@@ -224,7 +116,8 @@ export function InvestmentHighlightsField({
       hasLookedUpRef.current = true;
       lookupReport();
     }
-  }, [lga, suburb, state, value]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lga, suburb, state]); // Removed 'value' to prevent infinite loop
 
   const handleDropdownSelect = async (report: ReportOption) => {
     console.log('[InvestmentHighlights] Dropdown selection:', report);
@@ -319,32 +212,10 @@ export function InvestmentHighlightsField({
         // Use Main Body for display
         const mainBody = result.data.mainBody || '';
         
-        // Store base main body (without custom dialogue)
-        setBaseMainBody(mainBody);
+        // Update parent form state with main body
+        onChange(mainBody);
         
-        // Load custom dialogue if available (from columns G-M)
-        if (result.data.customDialogue) {
-          const dialogue = {
-            populationGrowth: result.data.customDialogue.populationGrowth || '',
-            residential: result.data.customDialogue.residential || '',
-            industrial: result.data.customDialogue.industrial || '',
-            commercialCivic: result.data.customDialogue.commercialCivic || '',
-            healthEducation: result.data.customDialogue.healthEducation || '',
-            transport: result.data.customDialogue.transport || '',
-            jobImplications: result.data.customDialogue.jobImplications || '',
-          };
-          setCustomDialogue(dialogue);
-          setCustomDialogueLoaded(true);
-          
-          // Merge custom dialogue into main body
-          const mergedBody = mergeCustomDialogueIntoMainBody(mainBody, dialogue);
-          onChange(mergedBody);
-        } else {
-          // No custom dialogue, use main body as-is
-          onChange(mainBody);
-        }
-        
-        console.log('[InvestmentHighlights] Main body loaded with custom dialogue');
+        console.log('[InvestmentHighlights] Main body loaded');
       } else {
         setMatchStatus('not-found');
       }
@@ -534,7 +405,76 @@ export function InvestmentHighlightsField({
       const lookupResult = await lookupResponse.json();
       const isNewReportForExistingLGA = lookupResult.found;
       
-      // Step 2: Organize PDF into CURRENT/LEGACY folders and save to sheet
+      // Step 2: Format with ChatGPT (match Production workflow)
+      setUploadProgress('Formatting with AI...');
+      
+      let formattedMainBody = extractedMainBody || '';
+      
+      console.log('📝 Preparing AI request:', {
+        hasMainBody: !!extractedMainBody,
+        mainBodyLength: extractedMainBody?.length,
+        suburb: suburb || '',
+        state: state
+      });
+      
+      try {
+        const aiRequestBody = {
+          type: 'investmentHighlights',
+          rawText: extractedMainBody || '',
+          context: {
+            suburb: suburb || '',
+            state: state || '',
+            lga: lga || '',
+          },
+        };
+        
+        console.log('📤 Sending to AI:', {
+          type: aiRequestBody.type,
+          rawTextLength: aiRequestBody.rawText.length,
+          hasRawText: !!aiRequestBody.rawText
+        });
+        
+        const parseResponse = await fetch('/api/ai/generate-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(aiRequestBody),
+        });
+        
+        if (parseResponse.ok) {
+          const parseResult = await parseResponse.json();
+          const aiContent = parseResult.content || formattedMainBody;
+          
+          // Parse the 7 sections from AI response (separated by "---")
+          const sectionParts = aiContent.split('---').map((s: string) => s.trim());
+          
+          if (sectionParts.length >= 7) {
+            // Extract each section (remove any section headers if present)
+            const cleanSection = (text: string) => {
+              // Remove lines that look like headers (e.g., "SECTION 1: POPULATION GROWTH")
+              return text.replace(/^SECTION \d+:.*$/gm, '').trim();
+            };
+            
+            // Create clean mainBody by joining sections without headers or separators
+            const cleanedSections = sectionParts.map(cleanSection).filter((s: string) => s.length > 0);
+            formattedMainBody = cleanedSections.join('\n\n');
+            
+            console.log('✅ Text formatted by AI into 7 sections');
+            console.log('📊 Formatted Main Body length:', formattedMainBody.length);
+          } else {
+            console.warn(`AI returned ${sectionParts.length} sections instead of 7, using as-is`);
+            formattedMainBody = aiContent;
+          }
+        } else {
+          const errorText = await parseResponse.text();
+          console.warn('AI formatting failed, using raw text. Error:', errorText);
+          // Continue with raw text if AI fails
+        }
+      } catch (err) {
+        console.warn('AI formatting error, using raw text:', err);
+        // Continue with raw text if AI fails
+      }
+      
+      // Step 3: Organize PDF into CURRENT/LEGACY folders and save to sheet
       setUploadProgress('Organizing PDF...');
       
       const response = await fetch('/api/investment-highlights/organize-pdf', {
@@ -547,6 +487,7 @@ export function InvestmentHighlightsField({
           suburbs: suburb || '',
           state,
           userEmail: userEmail || 'unknown',
+          mainBody: formattedMainBody, // Pass formatted Main Body (not raw text)
         }),
       });
       
@@ -556,6 +497,12 @@ export function InvestmentHighlightsField({
       }
       
       const result = await response.json();
+      
+      // Store PDF link and file ID in form state
+      updateFormData({
+        hotspottingPdfLink: result.webViewLink || '',
+        hotspottingPdfFileId: result.fileId || '',
+      });
       
       // Success - update UI
       setMatchStatus('found');
@@ -567,9 +514,9 @@ export function InvestmentHighlightsField({
       
       // Show appropriate confirmation message
       if (isNewReportForExistingLGA) {
-        alert('✅ PDF uploaded successfully!\n\n📋 This report and its content will be used moving forward for this LGA.\n\n🤖 Next Step: Click "Generate AI Summary" to extract infrastructure information.');
+        alert('✅ PDF uploaded and processed successfully!\n\n📋 This report and its content will be used moving forward for this LGA.\n\n✅ Investment Highlights have been formatted with AI and saved to the database.');
       } else {
-        alert('✅ PDF uploaded successfully!\n\n🤖 Next Step: Click "Generate AI Summary" to extract infrastructure information.');
+        alert('✅ PDF uploaded and processed successfully!\n\n✅ Investment Highlights have been formatted with AI and saved to the database.');
       }
     } catch (err: any) {
       console.error('PDF organization error:', err);
@@ -651,28 +598,53 @@ export function InvestmentHighlightsField({
                 <strong>Report:</strong> {reportName}<br />
                 {validPeriod && <><strong>Valid Period:</strong> {validPeriod}</>}
               </p>
+              {suburb && (
+                <p className="text-xs text-gray-600 mt-2">
+                  ℹ️ <strong>{suburb}</strong> will be associated with this report for future lookups.
+                </p>
+              )}
             </div>
             
             {/* Date Status Warning */}
             {dateStatus && dateStatus.status === 'expired' && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                <div className="flex items-center space-x-2 text-red-600 mb-2">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+                <div className="flex items-center space-x-2 text-red-600 mb-3">
                   <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                   </svg>
                   <span className="font-medium">Report Out of Date</span>
                 </div>
-                <p className="text-sm text-gray-700 mb-3">
-                  {dateStatus.displayText}. Check if a new report is available:
+                <p className="text-sm text-gray-700 mb-4">
+                  This report is outside its valid period. Please check if a new report is available at{' '}
+                  <a 
+                    href="https://membership.hotspotting.com.au/hotspotting-reports"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    https://membership.hotspotting.com.au/hotspotting-reports
+                  </a>
                 </p>
-                <a 
-                  href="https://membership.hotspotting.com.au/hotspotting-reports"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Hotspotting Membership →
-                </a>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      // Continue with existing report - just keep the current state
+                      // User can proceed with the existing report
+                    }}
+                    className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                  >
+                    No new report available, continue with existing
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMatchStatus('not-found');
+                      setShowVerification(false);
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  >
+                    Yes, new report available, upload here
+                  </button>
+                </div>
               </div>
             )}
             
@@ -799,6 +771,9 @@ export function InvestmentHighlightsField({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Report Name *
                 </label>
+                <p className="text-xs text-gray-600 mb-2">
+                  Report Name should match the name when downloaded from Hotspotting
+                </p>
                 {extractionConfidence?.reportName === 'low' && (
                   <p className="text-sm text-amber-600 mb-2 flex items-center">
                     <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
@@ -879,9 +854,11 @@ export function InvestmentHighlightsField({
               )}
             </div>
             
-            <p className="text-xs text-gray-600 mt-3">
-              ⚠️ Please verify both fields above before continuing
-            </p>
+            <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded">
+              <p className="text-xs text-gray-700">
+                <strong>⚠️ Important:</strong> Please check both fields carefully. If the extracted values are incorrect, copy the correct information from the front page of the PDF, then check both verification boxes before confirming.
+              </p>
+            </div>
             
             <div className="flex space-x-2 mt-3">
               <button
@@ -904,127 +881,6 @@ export function InvestmentHighlightsField({
               >
                 ✗ Cancel
               </button>
-            </div>
-          </div>
-        )}
-        
-        {/* Custom Dialogue Fields - Always Visible (Item 4 - Redesigned) */}
-        {matchStatus === 'found' && (
-          <div className="mt-6 p-4 bg-purple-50 border-2 border-purple-300 rounded-md space-y-4">
-            <div className="mb-3">
-              <h4 className="font-semibold text-purple-900 flex items-center mb-2">
-                <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                </svg>
-                Custom Dialogue (Optional)
-              </h4>
-              <p className="text-sm text-gray-700">
-                Add your own custom content to any section below. Your additions will be merged into the main body and saved for future users.
-              </p>
-            </div>
-            
-            {/* Field 1: Population Growth Context */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                1. Population Growth Context
-              </label>
-              <textarea
-                value={customDialogue.populationGrowth}
-                onChange={(e) => handleCustomDialogueChange('populationGrowth', e.target.value)}
-                className="w-full p-2 border rounded-md text-sm"
-                rows={2}
-                placeholder="Add custom content about population growth (optional)..."
-              />
-            </div>
-            
-            {/* Field 2: Residential */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                2. Residential
-              </label>
-              <textarea
-                value={customDialogue.residential}
-                onChange={(e) => handleCustomDialogueChange('residential', e.target.value)}
-                className="w-full p-2 border rounded-md text-sm"
-                rows={2}
-                placeholder="Add custom residential projects or details (optional)..."
-              />
-            </div>
-            
-            {/* Field 3: Industrial */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                3. Industrial
-              </label>
-              <textarea
-                value={customDialogue.industrial}
-                onChange={(e) => handleCustomDialogueChange('industrial', e.target.value)}
-                className="w-full p-2 border rounded-md text-sm"
-                rows={2}
-                placeholder="Add custom industrial projects or details (optional)..."
-              />
-            </div>
-            
-            {/* Field 4: Commercial and Civic */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                4. Commercial and Civic
-              </label>
-              <textarea
-                value={customDialogue.commercialCivic}
-                onChange={(e) => handleCustomDialogueChange('commercialCivic', e.target.value)}
-                className="w-full p-2 border rounded-md text-sm"
-                rows={2}
-                placeholder="Add custom commercial/civic projects or details (optional)..."
-              />
-            </div>
-            
-            {/* Field 5: Health and Education */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                5. Health and Education
-              </label>
-              <textarea
-                value={customDialogue.healthEducation}
-                onChange={(e) => handleCustomDialogueChange('healthEducation', e.target.value)}
-                className="w-full p-2 border rounded-md text-sm"
-                rows={2}
-                placeholder="Add custom health/education projects or details (optional)..."
-              />
-            </div>
-            
-            {/* Field 6: Transport */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                6. Transport
-              </label>
-              <textarea
-                value={customDialogue.transport}
-                onChange={(e) => handleCustomDialogueChange('transport', e.target.value)}
-                className="w-full p-2 border rounded-md text-sm"
-                rows={2}
-                placeholder="Add custom transport projects or details (optional)..."
-              />
-            </div>
-            
-            {/* Field 7: Job Implications */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                7. Job Implications
-              </label>
-              <textarea
-                value={customDialogue.jobImplications}
-                onChange={(e) => handleCustomDialogueChange('jobImplications', e.target.value)}
-                className="w-full p-2 border rounded-md text-sm"
-                rows={2}
-                placeholder="Add custom job impact details (optional)..."
-              />
-            </div>
-            
-            <div className="pt-3 border-t border-purple-300">
-              <p className="text-xs text-gray-600 mb-2">
-                💡 <strong>Tip:</strong> Your custom additions will appear in the main body above with a "[CUSTOM ADDITIONS]" label.
-              </p>
             </div>
           </div>
         )}

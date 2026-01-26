@@ -5,7 +5,7 @@ import { useFormStore } from '@/store/formStore';
 import { StepIndicator } from './StepIndicator';
 import { exportFormDataToExcel } from '@/lib/excelExport';
 import { Step0AddressAndRisk } from './steps/Step0AddressAndRisk';
-import { Step1AInvestmentHighlightsCheck } from './steps/Step1AInvestmentHighlightsCheck';
+// import { Step1AInvestmentHighlightsCheck } from './steps/Step1AInvestmentHighlightsCheck'; // Removed - functionality moved to Page 6 (InvestmentHighlightsField)
 import { Step1DecisionTree } from './steps/Step1DecisionTree';
 import { Step2PropertyDetails } from './steps/Step2PropertyDetails';
 import { Step3MarketPerformance } from './steps/Step3MarketPerformance';
@@ -21,15 +21,14 @@ import { getUserEmail } from '@/lib/userAuth';
 // Steps numbered starting from 1
 const STEPS = [
   { number: 1, title: 'Address & Risk Check', component: Step0AddressAndRisk },
-  { number: 2, title: 'Investment Highlights Check', component: Step1AInvestmentHighlightsCheck },
-  { number: 3, title: 'Decision Tree', component: Step1DecisionTree },
-  { number: 4, title: 'Property Details', component: Step2PropertyDetails },
-  { number: 5, title: 'Market Performance', component: Step3MarketPerformance },
-  { number: 6, title: 'Proximity & Content', component: Step5Proximity },
-  { number: 7, title: 'Insurance Calculator', component: Step6InsuranceCalculator },
-  { number: 8, title: 'Washington Brown', component: Step6WashingtonBrown },
-  { number: 9, title: 'Cashflow Review', component: Step7CashflowReview },
-  { number: 10, title: 'Submission', component: Step8Submission },
+  { number: 2, title: 'Decision Tree', component: Step1DecisionTree },
+  { number: 3, title: 'Property Details', component: Step2PropertyDetails },
+  { number: 4, title: 'Market Performance', component: Step3MarketPerformance },
+  { number: 5, title: 'Proximity & Content', component: Step5Proximity },
+  { number: 6, title: 'Insurance Calculator', component: Step6InsuranceCalculator },
+  { number: 7, title: 'Washington Brown', component: Step6WashingtonBrown },
+  { number: 8, title: 'Cashflow Review', component: Step7CashflowReview },
+  { number: 9, title: 'Submission', component: Step8Submission },
 ];
 
 interface MultiStepFormProps {
@@ -288,26 +287,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         }
         return true;
 
-      case 2: // Investment Highlights Check
-        // Check that user has either:
-        // 1. Found a match (status: 'ready')
-        // 2. Selected from dropdown (status: 'ready')
-        // 3. Uploaded a PDF (status: 'processing' or 'ready')
-        const ihStatus = formData.earlyProcessing?.investmentHighlights?.status;
-        
-        if (!ihStatus || ihStatus === 'pending') {
-          setValidationErrorWithRef('Please select an Investment Highlights report from the dropdown or upload a PDF before proceeding.');
-          return false;
-        }
-        
-        if (ihStatus === 'error') {
-          setValidationErrorWithRef('There was an error processing the Investment Highlights. Please try again or select a different report.');
-          return false;
-        }
-        
-        return true;
-
-      case 3: // Decision Tree
+      case 2: // Decision Tree
         // All decision tree fields are required
         if (!decisionTree?.propertyType || !decisionTree?.status) {
           setValidationErrorWithRef('Property Type and Status are required.');
@@ -422,7 +402,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 4: // Property Details
+      case 3: // Property Details
         const isProject = decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple';
         const isDualOccupancy = decisionTree?.dualOccupancy === 'Yes';
         const isHAndL = decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Individual';
@@ -673,7 +653,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 5: // Market Performance
+      case 4: // Market Performance
         const { marketPerformance } = formData;
         
         // All market performance fields are required
@@ -743,7 +723,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 6: // Proximity & Content
+      case 5: // Proximity & Content
         const { contentSections } = formData;
         
         // All content sections are required
@@ -770,7 +750,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 7: // Insurance Calculator
+      case 6: // Insurance Calculator
         const { insurance } = formData;
         
         if (!insurance || insurance.trim() === '') {
@@ -787,7 +767,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 8: // Washington Brown
+      case 7: // Washington Brown
         const { depreciation } = formData;
         
         if (!depreciation) {
@@ -826,7 +806,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 9: // Cashflow Review
+      case 8: // Cashflow Review
         // Check if folder has been created
         if (!formData.address?.folderLink) {
           setValidationError('Please create the property folder before proceeding.');
@@ -835,7 +815,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 10: // Submission
+      case 9: // Submission
         // Step 9 handles its own validation (checklist must be complete)
         // No validation needed here as user can't proceed past Step 9
         return true;
@@ -880,7 +860,10 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       const res = await fetch('/api/geoapify/proximity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ propertyAddress: address?.propertyAddress }),
+        body: JSON.stringify({ 
+          propertyAddress: address?.propertyAddress,
+          userEmail: userEmail 
+        }),
       });
 
       if (res.ok) {
@@ -998,7 +981,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     }
     
     // Log if user proceeds with data > 30 days old without checking
-    if (currentStep === 4) {
+    if (currentStep === 4) { // Market Performance step
       const { marketPerformance, address } = formData;
       if (marketPerformance?.isSaved && 
           marketPerformance.isVerified === undefined && 
@@ -1068,8 +1051,8 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       return;
     }
     
-    // Trigger early processing for Proximity & Why This Property after Step 4 (Property Details)
-    if (currentStep === 4) {
+    // Trigger early processing for Proximity & Why This Property after Step 3 (Property Details)
+    if (currentStep === 3) {
       console.log('🚀 Triggering early processing for Proximity & Why This Property...');
       startProximityProcessing();
       startWhyThisPropertyProcessing();
@@ -1087,7 +1070,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       // Clear validation errors when going back
       setValidationErrorWithRef(null);
       
-      // If leaving Step 4, reset isVerified to undefined if it's false
+      // If leaving Step 4 (Market Performance), reset isVerified to undefined if it's false
       // This allows users to proceed without clicking "Check data" again when they return
       if (currentStep === 4) {
         const { marketPerformance } = formData;
