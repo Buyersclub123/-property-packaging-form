@@ -21,16 +21,32 @@ export async function POST(request: NextRequest) {
     // Step 1: Download PDF from Google Drive
     console.log('Downloading PDF from Google Drive, fileId:', fileId);
     
-    const credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
+    let credentialsJson = process.env.GOOGLE_SHEETS_CREDENTIALS;
     if (!credentialsJson) {
       throw new Error('GOOGLE_SHEETS_CREDENTIALS environment variable is not set');
     }
     
+    // Remove single quotes if present at start/end (from .env file)
+    credentialsJson = credentialsJson.trim();
+    if (credentialsJson.startsWith("'") && credentialsJson.endsWith("'")) {
+      credentialsJson = credentialsJson.slice(1, -1);
+    }
+    if (credentialsJson.startsWith('"') && credentialsJson.endsWith('"')) {
+      credentialsJson = credentialsJson.slice(1, -1);
+    }
+    
+    // Parse JSON - handle multi-line format
     let credentials;
     try {
       credentials = JSON.parse(credentialsJson);
     } catch (error) {
-      throw new Error('Failed to parse GOOGLE_SHEETS_CREDENTIALS');
+      // If parsing fails, try to clean up newlines and parse again
+      try {
+        const cleanedJson = credentialsJson.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+        credentials = JSON.parse(cleanedJson);
+      } catch (parseError) {
+        throw new Error(`Failed to parse GOOGLE_SHEETS_CREDENTIALS: ${parseError instanceof Error ? parseError.message : 'Invalid JSON format'}`);
+      }
     }
     
     const auth = new google.auth.GoogleAuth({
