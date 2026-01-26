@@ -34,12 +34,35 @@ export async function POST(request: NextRequest) {
     const normalizedState = state.trim().toUpperCase();
     const newSuburb = suburb.trim();
     
+    console.log('[add-suburb] Matching request:', {
+      suburb: newSuburb,
+      state: normalizedState,
+      reportName: normalizedReportName,
+    });
+    
     // Find existing row by report name and state
-    const rowIndex = rows.findIndex((row) => {
+    let rowIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       const rowReportName = (row[2] || '').trim().toLowerCase(); // Column C
       const rowState = (row[1] || '').trim().toUpperCase(); // Column B
-      return rowReportName === normalizedReportName && rowState === normalizedState;
-    });
+      const matches = rowReportName === normalizedReportName && rowState === normalizedState;
+      
+      if (i < 5) { // Log first 5 rows for debugging
+        console.log('[add-suburb] Checking row', i + 2, ':', {
+          rowReportName,
+          rowState,
+          normalizedReportName,
+          normalizedState,
+          matches,
+        });
+      }
+      
+      if (matches) {
+        rowIndex = i;
+        break;
+      }
+    }
     
     if (rowIndex < 0) {
       return NextResponse.json(

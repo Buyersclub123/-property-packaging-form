@@ -163,16 +163,29 @@ export function InvestmentHighlightsField({
         onChange(combined);
         
         // Store PDF link, fileId, and reportName in form state (for folder creation and submission)
+        // Note: Lookup API returns pdfDriveLink and pdfFileId (matching column headers F&G)
         updateFormData({
-          hotspottingPdfLink: result.data.pdfLink || report.pdfLink || '',
-          hotspottingPdfFileId: result.data.fileId || report.fileId || '',
+          hotspottingPdfLink: result.data.pdfDriveLink || report.pdfLink || '',
+          hotspottingPdfFileId: result.data.pdfFileId || report.fileId || '',
           hotspottingReportName: result.data.reportName || report.reportName || '',
           hotspottingValidPeriod: result.data.validPeriod || report.validPeriod || '',
         });
         
+        console.log('[InvestmentHighlights] Dropdown report object:', {
+          pdfLink: report.pdfLink,
+          fileId: report.fileId,
+          reportName: report.reportName,
+        });
+        
+        console.log('[InvestmentHighlights] Lookup result data:', {
+          pdfDriveLink: result.data.pdfDriveLink,
+          pdfFileId: result.data.pdfFileId,
+          reportName: result.data.reportName,
+        });
+        
         console.log('[InvestmentHighlights] PDF link and report info stored:', {
-          pdfLink: result.data.pdfLink || report.pdfLink,
-          fileId: result.data.fileId || report.fileId,
+          pdfLink: result.data.pdfDriveLink || report.pdfLink,
+          fileId: result.data.pdfFileId || report.fileId,
           reportName: result.data.reportName || report.reportName,
           validPeriod: result.data.validPeriod || report.validPeriod,
         });

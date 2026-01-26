@@ -289,6 +289,12 @@ export function Step6FolderCreation() {
       // (Only if reportName exists and suburb exists - indicates dropdown selection, not upload)
       if (formData.hotspottingReportName && formData.address?.suburbName && formData.address?.state) {
         try {
+          console.log('[Step6] Adding suburb to Investment Highlights report:', {
+            suburb: formData.address.suburbName,
+            state: formData.address.state,
+            reportName: formData.hotspottingReportName,
+          });
+          
           const addSuburbResponse = await fetch('/api/investment-highlights/add-suburb', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -300,14 +306,25 @@ export function Step6FolderCreation() {
           });
           
           if (addSuburbResponse.ok) {
-            console.log('Suburb added to Investment Highlights report:', formData.address.suburbName);
+            const result = await addSuburbResponse.json();
+            console.log('[Step6] Suburb added successfully:', result);
           } else {
-            console.warn('Failed to add suburb to report (non-blocking):', await addSuburbResponse.text());
+            const errorText = await addSuburbResponse.text();
+            console.warn('[Step6] Failed to add suburb to report (non-blocking):', {
+              status: addSuburbResponse.status,
+              error: errorText,
+            });
           }
         } catch (error) {
-          console.warn('Error adding suburb to report (non-blocking):', error);
+          console.warn('[Step6] Error adding suburb to report (non-blocking):', error);
           // Non-blocking - don't fail submission if this fails
         }
+      } else {
+        console.log('[Step6] Skipping suburb addition - missing data:', {
+          hasReportName: !!formData.hotspottingReportName,
+          hasSuburb: !!formData.address?.suburbName,
+          hasState: !!formData.address?.state,
+        });
       }
 
       // Email status - assume sent if Make.com succeeds
