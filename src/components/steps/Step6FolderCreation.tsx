@@ -79,6 +79,11 @@ export function Step6FolderCreation() {
       console.log('FormData decisionTree:', formData.decisionTree);
       console.log('LotType:', formData.decisionTree?.lotType);
       console.log('ContractTypeSimplified:', formData.decisionTree?.contractTypeSimplified);
+      console.log('[Step6] PDF data in formData:', {
+        hotspottingPdfFileId: formData.hotspottingPdfFileId,
+        hotspottingPdfLink: formData.hotspottingPdfLink,
+        hotspottingReportName: formData.hotspottingReportName,
+      });
       
       const response = await fetch('/api/create-property-folder', {
         method: 'POST',

@@ -223,20 +223,29 @@ export async function POST(request: Request) {
     // New property folders inherit these permissions automatically
     
     // Step 4: Add PDF shortcut if hotspottingPdfFileId exists
+    console.log('[create-property-folder] Checking for PDF shortcut...');
+    console.log('[create-property-folder] formData?.hotspottingPdfFileId:', formData?.hotspottingPdfFileId);
+    console.log('[create-property-folder] formData?.hotspottingPdfLink:', formData?.hotspottingPdfLink);
+    console.log('[create-property-folder] formData?.hotspottingReportName:', formData?.hotspottingReportName);
+    
     if (formData?.hotspottingPdfFileId) {
       try {
-        console.log('Adding PDF shortcut to property folder...');
+        console.log('[create-property-folder] Adding PDF shortcut to property folder...');
+        console.log('[create-property-folder] File ID:', formData.hotspottingPdfFileId);
+        console.log('[create-property-folder] Folder ID:', propertyFolder.id);
         const pdfShortcut = await createShortcut(
           formData.hotspottingPdfFileId,
           propertyFolder.id,
           'Hotspotting Report.pdf',
           SHARED_DRIVE_ID
         );
-        console.log('PDF shortcut created:', pdfShortcut.id);
+        console.log('[create-property-folder] PDF shortcut created successfully:', pdfShortcut.id);
       } catch (error) {
-        console.error('Error creating PDF shortcut:', error);
+        console.error('[create-property-folder] Error creating PDF shortcut:', error);
         // Don't fail folder creation if shortcut creation fails
       }
+    } else {
+      console.log('[create-property-folder] No PDF fileId found - skipping shortcut creation');
     }
     
     return NextResponse.json({
