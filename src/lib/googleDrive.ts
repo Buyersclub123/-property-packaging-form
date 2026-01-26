@@ -1205,3 +1205,33 @@ export async function createShortcut(
     throw error;
   }
 }
+
+/**
+ * Get file name from Google Drive file ID
+ */
+export async function getFileName(
+  fileId: string,
+  driveId?: string
+): Promise<string | null> {
+  try {
+    const drive = getDriveClient();
+    
+    const getOptions: any = {
+      fileId: fileId,
+      fields: 'name',
+      supportsAllDrives: true,
+    };
+    
+    if (driveId) {
+      getOptions.driveId = driveId;
+      getOptions.includeItemsFromAllDrives = true;
+      getOptions.corpora = 'drive';
+    }
+    
+    const response = await drive.files.get(getOptions);
+    return response.data.name || null;
+  } catch (error) {
+    console.error('Error getting file name:', error);
+    return null;
+  }
+}

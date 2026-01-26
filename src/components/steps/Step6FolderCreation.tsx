@@ -292,30 +292,32 @@ export function Step6FolderCreation() {
 
       // Add suburb to Investment Highlights Google Sheet if report was selected from dropdown
       // (Only if reportName exists and suburb exists - indicates dropdown selection, not upload)
+      // Use getState() to get latest state values (avoids stale closure issue in async handler)
+      const currentFormData = useFormStore.getState().formData;
       console.log('[Step6] Checking suburb addition conditions:', {
-        hasReportName: !!formData.hotspottingReportName,
-        hasSuburbName: !!formData.address?.suburbName,
-        hasState: !!formData.address?.state,
-        reportName: formData.hotspottingReportName,
-        suburbName: formData.address?.suburbName,
-        state: formData.address?.state,
+        hasReportName: !!currentFormData.hotspottingReportName,
+        hasSuburbName: !!currentFormData.address?.suburbName,
+        hasState: !!currentFormData.address?.state,
+        reportName: currentFormData.hotspottingReportName,
+        suburbName: currentFormData.address?.suburbName,
+        state: currentFormData.address?.state,
       });
       
-      if (formData.hotspottingReportName && formData.address?.suburbName && formData.address?.state) {
+      if (currentFormData.hotspottingReportName && currentFormData.address?.suburbName && currentFormData.address?.state) {
         try {
           console.log('[Step6] Adding suburb to Investment Highlights report:', {
-            suburb: formData.address.suburbName,
-            state: formData.address.state,
-            reportName: formData.hotspottingReportName,
+            suburb: currentFormData.address.suburbName,
+            state: currentFormData.address.state,
+            reportName: currentFormData.hotspottingReportName,
           });
           
           const addSuburbResponse = await fetch('/api/investment-highlights/add-suburb', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              suburb: formData.address.suburbName,
-              state: formData.address.state,
-              reportName: formData.hotspottingReportName,
+              suburb: currentFormData.address.suburbName,
+              state: currentFormData.address.state,
+              reportName: currentFormData.hotspottingReportName,
             }),
           });
           
@@ -341,9 +343,9 @@ export function Step6FolderCreation() {
         }
       } else {
         console.log('[Step6] Skipping suburb addition - missing data:', {
-          hasReportName: !!formData.hotspottingReportName,
-          hasSuburb: !!formData.address?.suburbName,
-          hasState: !!formData.address?.state,
+          hasReportName: !!currentFormData.hotspottingReportName,
+          hasSuburb: !!currentFormData.address?.suburbName,
+          hasState: !!currentFormData.address?.state,
         });
       }
 

@@ -9,9 +9,9 @@
 
 ## Executive Summary
 
-**Last Updated:** 2026-01-26 (Updated with Test 7 findings: PDF shortcut working, permissions fix added)  
-**Tests Completed:** 5 (Point Vernon, Torquay, Kawungan, Scarness x2)  
-**Current Test:** Test 8 (Ready to Test - Permissions Fix + Suburb Addition Investigation)
+**Last Updated:** 2026-01-26 (Updated with Test 8 findings: PDF shortcut created but permissions still failing)  
+**Tests Completed:** 6 (Point Vernon, Torquay, Kawungan, Scarness x3)  
+**Current Test:** Test 8 (COMPLETED - Permissions issue identified, needs fix)
 
 ### ✅ **FIXED ISSUES**
 
@@ -63,12 +63,15 @@
    - Result: Now logs error message, code, status, statusText, responseData, and stack trace
    - **Status:** ✅ **ACTIVE** - Comprehensive error tracking in place (commit: ff22aaf)
 
-9. **PDF Shortcut Permissions** - ✅ **FIXED** (2026-01-26)
+9. **PDF Shortcut Permissions** - ✅ **SOLUTION FOUND** (Test 8 - 2026-01-26)
    - Issue: PDF shortcut created but couldn't be opened when forwarded to others
-   - Root Cause: Permissions not set on shortcut after creation
-   - Fix: Added `setFilePermissions()` call after shortcut creation
-   - Result: Shortcut now has "anyone with link can view" permissions
-   - **Status:** ✅ **FIXED** - Ready for Test 8 verification (commit: 94aeeb4)
+   - Root Cause (Initial): Permissions not set on shortcut after creation
+   - Fix Attempted: Added `setFilePermissions()` call after shortcut creation
+   - Test 8 Finding: Permissions setting fails with 400 Bad Request
+   - **New Root Cause:** Google Drive API doesn't allow setting permissions directly on shortcuts
+   - **Manual Solution:** Changed "Hotspotting Reports" folder to "Anyone with link can view" = Viewer, PDF inherited permissions, shortcut works ✅
+   - **Code Fix Needed:** Set permissions on the original PDF file (`hotspottingPdfFileId`), not on the shortcut, for automatic fix
+   - **Status:** ✅ **SOLUTION FOUND** - Manual fix works, code update needed for automation
 
 ### 🚨 **REMAINING CRITICAL ISSUES**
 
@@ -81,17 +84,23 @@
    - **Server Logs:** `[create-property-folder] PDF shortcut created successfully: "108KGpx3_4PiWQquTuyc9T0vyAo1don2f"`
    - **Status:** ✅ **RESOLVED** (commit: ff22aaf)
 
-2. **Suburb Not Added to Column A** - 🔍 **INVESTIGATING** (Test 7 - 2026-01-26)
+2. **Suburb Not Added to Column A** - ✅ **FIX APPLIED** (2026-01-26)
    - Suburb "Kawungan" not added to Investment Highlights sheet column A (Test 5)
    - Suburb "Scarness" not added to Investment Highlights sheet column A (Test 6 & Test 7)
    - **Test 7 Finding:** No `[add-suburb]` logs in `server-api.log` - API was never called
-   - **Possible Causes:**
-     1. Condition check failed (would show in browser console as `[Step6] Skipping suburb addition`)
-     2. Form submission failed before reaching suburb addition code
-     3. Code path not executed (need browser console logs to verify)
-   - **Enhanced Logging:** Comprehensive logging in place, but need browser console logs to diagnose
-   - **Next Step:** Check browser console for `[Step6]` logs to see why API wasn't called
-   - **Status:** 🔍 **INVESTIGATING** - Need browser console logs from Test 7 (commit: ff22aaf)
+   - **Root Cause Identified (Google AI Analysis):** Stale closure issue - async submission handler using hook-based state access (`formData`) may capture old state values instead of latest
+   - **Google AI Recommendations:**
+     1. Use direct store access `useFormStore.getState().formData` in async submission handler to get absolute latest state values
+     2. Avoid stale closures by accessing state directly from store rather than through hook
+     3. Common issue: Component unmounting or conditional rendering can destroy local state
+   - **Solution Applied:** Changed from hook-based `formData` to `useFormStore.getState().formData` in submission handler
+   - **Location:** `src/components/steps/Step6FolderCreation.tsx` line 296-306
+   - **Code Change:** 
+     ```typescript
+     // Before: const { formData } = useFormStore(); // Used formData directly
+     // After: const currentFormData = useFormStore.getState().formData; // Gets latest state
+     ```
+   - **Status:** ✅ **FIX APPLIED** - Ready for testing
 
 3. **Dropdown Selection Not Populating Form Field** - ⚠️ **BLOCKING**
    - User can see reports in dropdown ✅
@@ -106,11 +115,26 @@
    - **Root Cause:** Missing `onChange(formattedMainBody)` after upload
    - **Status:** ❌ **NEEDS FIX**
 
-5. **PDF File Permissions** - ⚠️ **BLOCKING**
+5. **PDF File Permissions** - ✅ **SOLUTION FOUND** (Test 8 - 2026-01-26)
    - Users cannot access PDFs after submission
-   - "Need permission" error
-   - **Root Cause:** No permission setting after file move
-   - **Status:** ❌ **NEEDS FIX**
+   - "Need permission" error when forwarding PDF link
+   - **Root Cause:** Code tries to set permissions on shortcut, but Google Drive doesn't allow this
+   - **Manual Solution:** Changed parent folder permissions, PDF inherited settings, works ✅
+   - **Code Fix Needed:** Set permissions on original PDF file (`hotspottingPdfFileId`) instead of shortcut for automation
+   - **Status:** ✅ **SOLUTION FOUND** - Manual fix works, code update needed
+
+6. **PDF Shortcut Name Not Using Original Document Name** - ✅ **FIX APPLIED** (Test 8 - 2026-01-26)
+   - Issue: Shortcut in property folder is named "Hotspotting Report.pdf" (hardcoded) instead of using the original PDF's name
+   - Example: Original PDF is "FRASER COAST Wide Bay Burnett Region.pdf" but shortcut shows as "Hotspotting Report.pdf"
+   - **Root Cause:** Code hardcodes shortcut name in `create-property-folder/route.ts` line 241: `'Hotspotting Report.pdf'`
+   - **Solution Applied:** 
+     - Created `getFileName()` helper function in `googleDrive.ts` to fetch original PDF name
+     - Updated `create-property-folder/route.ts` to fetch original PDF name before creating shortcut
+     - Uses original PDF name for shortcut, falls back to "Hotspotting Report.pdf" if fetch fails
+   - **Location:** 
+     - `src/lib/googleDrive.ts` - `getFileName()` function
+     - `src/app/api/create-property-folder/route.ts` lines 235-245
+   - **Status:** ✅ **FIX APPLIED** - Shortcut now uses original PDF name
 
 ### ⚠️ **MINOR ISSUES**
 
@@ -348,6 +372,48 @@
 - `[Step6] Suburb addition API response status:` - Shows HTTP status if API was called
 
 **Status:** 🔄 **READY FOR TESTING** - Permissions fix deployed, need browser console logs for suburb investigation
+
+---
+
+### ✅ **TEST 8 (Scarness - 2026-01-26 - COMPLETED)**
+
+**Test Property:** 18 Koloi St Scarness QLD 4655  
+**Status:** ✅ **COMPLETED** - PDF shortcut created, permissions issue identified  
+**File Logging:** ✅ **ACTIVE** - Logs captured to `server-api.log`
+
+**Test Results:**
+1. ✅ **PDF Shortcut Creation:** **WORKING** - Shortcut successfully created in folder
+   - Server logs: `[create-property-folder] PDF shortcut created successfully: "1lFQSGBk6PvkCc3kTAOaccwnXekDgGJOE"`
+   - Folder shows: "Hotspotting Report.pdf" file present ✅
+2. ✅ **PDF Permissions:** **SOLUTION FOUND** - Manual fix confirmed working
+   - Server logs: `Warning: Failed to set shortcut permissions (non-blocking): { "message": "Bad Request", "code": 400 }`
+   - Root Cause Identified: Code is trying to set permissions on the shortcut, but Google Drive shortcuts don't support direct permission changes
+   - **Solution Found:** Changed "Hotspotting Reports" folder (where original PDF lives) from "Restricted" to "Anyone with the link can view" = Viewer
+   - **Result:** PDF document inherited folder permissions, shortcut now works when forwarded ✅
+   - **Code Fix Still Needed:** Update code to set permissions on original PDF file (`hotspottingPdfFileId`), not on shortcut, so this works automatically
+
+**Key Findings:**
+- ✅ PDF shortcut appears in folder as expected
+- ❌ Permissions setting fails with 400 Bad Request when trying to set on shortcut
+- 🔍 **Root Cause:** Google Drive API doesn't allow setting permissions directly on shortcuts
+- ✅ **Manual Solution:** Changed parent folder permissions, PDF inherited settings, shortcut works
+- 💡 **Code Fix Required:** Set permissions on the original PDF file (`hotspottingPdfFileId`) instead of shortcut for automatic fix
+
+**Server Logs Analysis:**
+```
+[2026-01-26T09:37:44.586Z] [create-property-folder] Adding PDF shortcut to property folder...
+[2026-01-26T09:37:46.337Z] [create-property-folder] PDF shortcut created successfully: "1lFQSGBk6PvkCc3kTAOaccwnXekDgGJOE"
+[2026-01-26T09:37:47.091Z] [create-property-folder] Warning: Failed to set shortcut permissions (non-blocking): {
+  "message": "Bad Request",
+  "code": 400
+}
+```
+
+**Next Steps:**
+- ✅ Manual fix confirmed working (folder permissions changed)
+- ⏳ Update code to set permissions on original PDF file (`hotspottingPdfFileId`) instead of shortcut (for automatic fix)
+
+**Status:** ✅ **SOLUTION FOUND** - Manual fix works, code update needed for automation
 
 ---
 

@@ -8,7 +8,8 @@ import {
   deleteFile,
   populateHLSpreadsheet,
   createShortcut,
-  setFilePermissions
+  setFilePermissions,
+  getFileName
 } from '@/lib/googleDrive';
 import { constructAndSanitizeFolderName } from '@/lib/addressFormatter';
 import { serverLog } from '@/lib/serverLogger';
@@ -235,24 +236,38 @@ export async function POST(request: Request) {
         serverLog('[create-property-folder] Adding PDF shortcut to property folder...');
         serverLog('[create-property-folder] File ID:', formData.hotspottingPdfFileId);
         serverLog('[create-property-folder] Folder ID:', propertyFolder.id);
+        
+        // Fetch original PDF file name to use for shortcut
+        let shortcutName = 'Hotspotting Report.pdf'; // Fallback name
+        const originalFileName = await getFileName(formData.hotspottingPdfFileId, SHARED_DRIVE_ID);
+        if (originalFileName) {
+          shortcutName = originalFileName;
+          serverLog('[create-property-folder] Using original PDF name for shortcut:', shortcutName);
+        } else {
+          serverLog('[create-property-folder] Warning: Could not fetch original PDF name, using fallback:', shortcutName);
+        }
+        
         const pdfShortcut = await createShortcut(
           formData.hotspottingPdfFileId,
           propertyFolder.id,
-          'Hotspotting Report.pdf',
+          shortcutName,
           SHARED_DRIVE_ID
         );
         serverLog('[create-property-folder] PDF shortcut created successfully:', pdfShortcut.id);
         
-        // Set permissions on the shortcut so it can be accessed by anyone with the link
+        // Set permissions on the ORIGINAL PDF file (not the shortcut)
+        // Google Drive API v3 does not support setting permissions directly on shortcuts
+        // Shortcuts inherit access from the original file they point to
         try {
-          await setFilePermissions(pdfShortcut.id, 'reader', SHARED_DRIVE_ID);
-          serverLog('[create-property-folder] PDF shortcut permissions set successfully');
+          await setFilePermissions(formData.hotspottingPdfFileId, 'reader', SHARED_DRIVE_ID);
+          serverLog('[create-property-folder] Original PDF permissions set to "Anyone with the link"');
         } catch (permError: any) {
-          serverLog('[create-property-folder] Warning: Failed to set shortcut permissions (non-blocking):', {
+          serverLog('[create-property-folder] Warning: Failed to set permissions on original PDF (non-blocking):', {
             message: permError?.message,
             code: permError?.code,
           });
-          // Don't fail - shortcut is created, permissions might already be set or inherited
+          // Don't fail - shortcut is created, permissions might already be set
+          // Note: If this is a "Master" PDF file used for all shortcuts, permissions may already be set
         }
       } catch (error: any) {
         // Log detailed error information
