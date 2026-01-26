@@ -6,3 +6,11 @@
 [2026-01-26T08:37:22.723Z] [create-property-folder] File ID: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
 [2026-01-26T08:37:22.724Z] [create-property-folder] Folder ID: "1AmHUIgn_12KcA3GN4N76h61StP43FPDx"
 [2026-01-26T08:37:22.726Z] [create-property-folder] Error creating PDF shortcut: {}
+[2026-01-26T09:15:53.186Z] [create-property-folder] Checking for PDF shortcut...
+[2026-01-26T09:15:53.187Z] [create-property-folder] formData?.hotspottingPdfFileId: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
+[2026-01-26T09:15:53.189Z] [create-property-folder] formData?.hotspottingPdfLink: "https://drive.google.com/file/d/1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz/view?usp=drivesdk"
+[2026-01-26T09:15:53.190Z] [create-property-folder] formData?.hotspottingReportName: "FRASER COAST Wide Bay Burnett Region"
+[2026-01-26T09:15:53.191Z] [create-property-folder] Adding PDF shortcut to property folder...
+[2026-01-26T09:15:53.192Z] [create-property-folder] File ID: "1v7DKjwCVRCSPTEYfv3huIViWUdWS1jIz"
+[2026-01-26T09:15:53.193Z] [create-property-folder] Folder ID: "15lqw1u8JkO288oZoL_04k9sCjoy5BdDL"
+[2026-01-26T09:15:55.038Z] [create-property-folder] PDF shortcut created successfully: "108KGpx3_4PiWQquTuyc9T0vyAo1don2f"

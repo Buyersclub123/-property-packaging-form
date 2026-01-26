@@ -7,7 +7,8 @@ import {
   renameFile,
   deleteFile,
   populateHLSpreadsheet,
-  createShortcut
+  createShortcut,
+  setFilePermissions
 } from '@/lib/googleDrive';
 import { constructAndSanitizeFolderName } from '@/lib/addressFormatter';
 import { serverLog } from '@/lib/serverLogger';
@@ -241,6 +242,18 @@ export async function POST(request: Request) {
           SHARED_DRIVE_ID
         );
         serverLog('[create-property-folder] PDF shortcut created successfully:', pdfShortcut.id);
+        
+        // Set permissions on the shortcut so it can be accessed by anyone with the link
+        try {
+          await setFilePermissions(pdfShortcut.id, 'reader', SHARED_DRIVE_ID);
+          serverLog('[create-property-folder] PDF shortcut permissions set successfully');
+        } catch (permError: any) {
+          serverLog('[create-property-folder] Warning: Failed to set shortcut permissions (non-blocking):', {
+            message: permError?.message,
+            code: permError?.code,
+          });
+          // Don't fail - shortcut is created, permissions might already be set or inherited
+        }
       } catch (error: any) {
         // Log detailed error information
         serverLog('[create-property-folder] Error creating PDF shortcut:', {
