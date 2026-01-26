@@ -9,8 +9,9 @@
 
 ## Executive Summary
 
-**Last Updated:** 2026-01-26 (Updated with Test 5 findings)  
-**Tests Completed:** 3 (Point Vernon, Torquay, Kawungan)
+**Last Updated:** 2026-01-26 (Updated with Test 5 findings + File logging infrastructure)  
+**Tests Completed:** 3 (Point Vernon, Torquay, Kawungan)  
+**Current Test:** Test 6 (Torquay - In Progress)
 
 ### ✅ **FIXED ISSUES**
 
@@ -42,6 +43,12 @@
    - Fix: Added `"git": { "deploymentEnabled": false }` to `vercel.json`
    - Result: Git push = backup only, manual deployment required
    - **Status:** ✅ **RESOLVED** (commit: b00affa)
+
+6. **File-Based Server Logging** - ✅ **IMPLEMENTED** (2026-01-26)
+   - Issue: Server terminal logs not easily accessible for debugging
+   - Fix: Created `serverLogger.ts` utility that logs to both console and file
+   - Result: Logs now written to `form-app/server-api.log` - can be read directly by AI
+   - **Status:** ✅ **ACTIVE** - Ready for Test 6 (commit: e46dda8)
 
 ### 🚨 **REMAINING CRITICAL ISSUES**
 
@@ -114,17 +121,63 @@
    - **Remaining:** PDF shortcut still not created in folder (investigating)
    - **Status:** ✅ **PARTIALLY RESOLVED** - Storage fixed, folder creation still investigating
 
+### 📋 **LOGGING INFRASTRUCTURE** (Added 2026-01-26)
+
+**File-Based Server Logging System:**
+
+1. **Log File Location:**
+   - **Path:** `form-app/server-api.log`
+   - **Full Path:** `c:\Users\User\.cursor\extensions\property-review-system\form-app\server-api.log`
+   - **Format:** Text file with timestamped JSON logs
+   - **Access:** Can be read directly by AI assistant using `read_file` tool
+
+2. **Logging Utility:**
+   - **File:** `src/lib/serverLogger.ts`
+   - **Function:** `serverLog(message: string, data?: any)`
+   - **Behavior:** Logs to both console (terminal) AND file simultaneously
+   - **Timestamp:** ISO format `[2026-01-26T18:30:45.123Z]`
+   - **Data:** JSON stringified with 2-space indentation
+
+3. **API Routes with File Logging:**
+   - ✅ `src/app/api/create-property-folder/route.ts`
+     - Logs PDF shortcut creation attempts
+     - Logs `formData?.hotspottingPdfFileId`, `hotspottingPdfLink`, `hotspottingReportName`
+     - Logs success/failure of shortcut creation
+   - ✅ `src/app/api/investment-highlights/add-suburb/route.ts`
+     - Logs suburb addition requests
+     - Logs matching process (row-by-row comparison)
+     - Logs when match is found or skipped
+
+4. **How to Read Logs:**
+   - **During Test:** Logs are written in real-time to `server-api.log`
+   - **After Test:** AI can read file directly: `read_file('form-app/server-api.log')`
+   - **Manual Check:** PowerShell: `Get-Content "server-api.log" -Tail 100`
+   - **Note:** File is created automatically on first log write
+
+5. **Log Prefixes:**
+   - `[create-property-folder]` - Folder creation and PDF shortcut logs
+   - `[add-suburb]` - Suburb addition to Investment Highlights sheet logs
+
+6. **Status:**
+   - ✅ **ACTIVE** - Committed and pushed to main branch
+   - ✅ **READY** - Will capture logs from next test automatically
+   - 📝 **Next Test:** Logs will be available immediately after test completion
+
+---
+
 ### ⚠️ **ISSUES FOUND IN TEST 5 (Kawungan - 2026-01-26)**
 
 1. **PDF Shortcut Not Created in Folder** - 🔍 **INVESTIGATING**
    - PDF data stored correctly in form state ✅
    - PDF shortcut does NOT appear in folder ❌
    - **Investigation:** Added logging to folder creation API and Step6 component
+   - **Logging:** File logging active - will capture server-side logs in next test
    - **Status:** 🔍 **INVESTIGATING** - Logging added, awaiting next test
 
 2. **Suburb Not Added to Column A** - 🔍 **INVESTIGATING**
    - Suburb "Kawungan" not added to Investment Highlights sheet
    - **Investigation:** Added logging to show when/why suburb addition is skipped
+   - **Logging:** File logging active - will capture matching process in next test
    - **Status:** 🔍 **INVESTIGATING** - Logging added, awaiting next test
 
 3. **Step 4 (Market Performance) Slow Loading** - ⚠️ **MINOR**
@@ -137,6 +190,40 @@
    - Causes repeated console logs
    - **Fix:** Should use `useMemo` or remove logs
    - **Status:** ⚠️ **NEEDS OPTIMIZATION**
+
+### 🔄 **TEST 6 (Torquay - 2026-01-26 - IN PROGRESS)**
+
+**Test Property:** 9 Cleo Ct Torquay QLD 4655  
+**Status:** 🔄 **TESTING IN PROGRESS**  
+**File Logging:** ✅ **ACTIVE** - Logs will be captured to `server-api.log`
+
+**What to Test:**
+1. Select investment highlights report from dropdown (FRASER COAST Wide Bay Burnett Region)
+2. Complete form and submit
+3. Check if PDF shortcut is created in folder
+4. Check if suburb "Torquay" is added to column A of Investment Highlights sheet
+
+**Logs to Check After Test:**
+- **File:** `form-app/server-api.log`
+- **Look for:**
+  - `[create-property-folder]` - PDF shortcut creation logs
+  - `[add-suburb]` - Suburb addition logs
+- **Access:** AI can read file directly after test completion
+
+**Expected Logs:**
+```
+[create-property-folder] Checking for PDF shortcut...
+[create-property-folder] formData?.hotspottingPdfFileId: <value or undefined>
+[create-property-folder] formData?.hotspottingPdfLink: <value or undefined>
+[create-property-folder] formData?.hotspottingReportName: <value or undefined>
+[add-suburb] Matching request: { suburb: "Torquay", state: "QLD", reportName: "FRASER COAST Wide Bay Burnett Region" }
+[add-suburb] Checking row X: { ... }
+[add-suburb] Match found at row X
+```
+
+**Status:** 🔄 **AWAITING TEST COMPLETION**
+
+---
 
 4. **Checkbox Validation Inconsistent** - ❌ **NOT RESOLVED**
    - Page 5 allows progression without checking checkbox in some scenarios

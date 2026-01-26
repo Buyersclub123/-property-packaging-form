@@ -292,6 +292,15 @@ export function Step6FolderCreation() {
 
       // Add suburb to Investment Highlights Google Sheet if report was selected from dropdown
       // (Only if reportName exists and suburb exists - indicates dropdown selection, not upload)
+      console.log('[Step6] Checking suburb addition conditions:', {
+        hasReportName: !!formData.hotspottingReportName,
+        hasSuburbName: !!formData.address?.suburbName,
+        hasState: !!formData.address?.state,
+        reportName: formData.hotspottingReportName,
+        suburbName: formData.address?.suburbName,
+        state: formData.address?.state,
+      });
+      
       if (formData.hotspottingReportName && formData.address?.suburbName && formData.address?.state) {
         try {
           console.log('[Step6] Adding suburb to Investment Highlights report:', {
@@ -310,6 +319,8 @@ export function Step6FolderCreation() {
             }),
           });
           
+          console.log('[Step6] Suburb addition API response status:', addSuburbResponse.status);
+          
           if (addSuburbResponse.ok) {
             const result = await addSuburbResponse.json();
             console.log('[Step6] Suburb added successfully:', result);
@@ -320,8 +331,12 @@ export function Step6FolderCreation() {
               error: errorText,
             });
           }
-        } catch (error) {
-          console.warn('[Step6] Error adding suburb to report (non-blocking):', error);
+        } catch (error: any) {
+          console.warn('[Step6] Error adding suburb to report (non-blocking):', {
+            message: error?.message,
+            stack: error?.stack,
+            error: error,
+          });
           // Non-blocking - don't fail submission if this fails
         }
       } else {

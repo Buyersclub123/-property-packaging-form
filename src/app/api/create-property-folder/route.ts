@@ -241,8 +241,16 @@ export async function POST(request: Request) {
           SHARED_DRIVE_ID
         );
         serverLog('[create-property-folder] PDF shortcut created successfully:', pdfShortcut.id);
-      } catch (error) {
-        serverLog('[create-property-folder] Error creating PDF shortcut:', error);
+      } catch (error: any) {
+        // Log detailed error information
+        serverLog('[create-property-folder] Error creating PDF shortcut:', {
+          message: error?.message || 'Unknown error',
+          code: error?.code,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          responseData: error?.response?.data,
+          stack: error?.stack,
+        });
         // Don't fail folder creation if shortcut creation fails
       }
     } else {

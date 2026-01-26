@@ -1136,3 +1136,72 @@ export async function syncFolderPermissions(
     return results;
   }
 }
+
+/**
+ * Create a shortcut to a file in Google Drive
+ * Shortcuts allow you to reference a file from multiple locations without duplicating it
+ * 
+ * @param targetFileId - The ID of the file to create a shortcut to
+ * @param parentFolderId - The ID of the folder where the shortcut will be created
+ * @param shortcutName - The name for the shortcut
+ * @param driveId - Optional Shared Drive ID if working with Shared Drives
+ * @returns The created shortcut file with id, name, and webViewLink
+ */
+export async function createShortcut(
+  targetFileId: string,
+  parentFolderId: string,
+  shortcutName: string,
+  driveId?: string
+): Promise<{ id: string; name: string; webViewLink: string }> {
+  try {
+    const drive = getDriveClient();
+    
+    const fileMetadata: any = {
+      name: shortcutName,
+      mimeType: 'application/vnd.google-apps.shortcut',
+      parents: [parentFolderId],
+      shortcutDetails: {
+        targetId: targetFileId,
+      },
+    };
+
+    const requestOptions: any = {
+      requestBody: fileMetadata,
+      fields: 'id, name, webViewLink',
+      supportsAllDrives: true, // Required for Shared Drive compatibility
+    };
+
+    // If driveId is provided, include it in the request for Shared Drives
+    if (driveId) {
+      requestOptions.driveId = driveId;
+      requestOptions.includeItemsFromAllDrives = true;
+      requestOptions.corpora = 'drive';
+    }
+
+    const response = await drive.files.create(requestOptions);
+
+    if (!response.data.id) {
+      throw new Error('Failed to create shortcut: No ID returned');
+    }
+
+    return {
+      id: response.data.id,
+      name: response.data.name || shortcutName,
+      webViewLink: response.data.webViewLink || '',
+    };
+  } catch (error: any) {
+    console.error('[createShortcut] Error creating shortcut:', error);
+    // Log more details about the error for debugging
+    if (error.response) {
+      console.error('[createShortcut] Error response status:', error.response.status);
+      console.error('[createShortcut] Error response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    if (error.message) {
+      console.error('[createShortcut] Error message:', error.message);
+    }
+    if (error.code) {
+      console.error('[createShortcut] Error code:', error.code);
+    }
+    throw error;
+  }
+}
