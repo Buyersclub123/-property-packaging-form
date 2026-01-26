@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSheetsClient } from '@/lib/googleSheets';
+import { serverLog } from '@/lib/serverLogger';
 
 const INVESTMENT_HIGHLIGHTS_SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS || '';
 const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights';
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     const normalizedState = state.trim().toUpperCase();
     const newSuburb = suburb.trim();
     
-    console.log('[add-suburb] Matching request:', {
+    serverLog('[add-suburb] Matching request:', {
       suburb: newSuburb,
       state: normalizedState,
       reportName: normalizedReportName,
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
       const matches = rowReportName === normalizedReportName && rowState === normalizedState;
       
       if (i < 5) { // Log first 5 rows for debugging
-        console.log('[add-suburb] Checking row', i + 2, ':', {
+        serverLog(`[add-suburb] Checking row ${i + 2}:`, {
           rowReportName,
           rowState,
           normalizedReportName,
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
       
       if (matches) {
         rowIndex = i;
+        serverLog(`[add-suburb] Match found at row ${i + 2}`);
         break;
       }
     }
