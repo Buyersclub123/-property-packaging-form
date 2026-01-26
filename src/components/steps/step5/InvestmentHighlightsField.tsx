@@ -130,7 +130,10 @@ export function InvestmentHighlightsField({
       // For now, we'll use the lookup API with the report's suburbs
       // In Phase 2, we'll add an API to fetch by fileId
       
-      const firstSuburb = report.suburbs[0] || '';
+      // Parse suburbs string (comma-separated) into array
+      const suburbsArray = report.suburbs.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+      const firstSuburb = suburbsArray[0] || '';
+      
       const response = await fetch('/api/investment-highlights/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -503,6 +506,9 @@ export function InvestmentHighlightsField({
         hotspottingPdfLink: result.webViewLink || '',
         hotspottingPdfFileId: result.fileId || '',
       });
+      
+      // Populate the form field with formatted content
+      onChange(formattedMainBody);
       
       // Success - update UI
       setMatchStatus('found');

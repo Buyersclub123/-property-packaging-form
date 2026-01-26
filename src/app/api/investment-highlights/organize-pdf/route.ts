@@ -42,6 +42,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { fileId, reportName, validPeriod, suburbs, state, userEmail, mainBody } = body;
     
+    // Log input values for debugging
+    console.log('[organize-pdf] Input values:', {
+      reportName,
+      validPeriod,
+      hasValidPeriod: !!validPeriod,
+      validPeriodLength: validPeriod?.length || 0,
+      suburbs,
+      state,
+    });
+    
     if (!fileId || !reportName || !validPeriod || !state) {
       return NextResponse.json(
         { error: 'File ID, report name, valid period, and state are required' },
@@ -183,6 +193,22 @@ export async function POST(request: NextRequest) {
       supportsAllDrives: true,
     });
     
+    // Set file permissions: anyone with link can view (read-only)
+    try {
+      await drive.permissions.create({
+        fileId: fileId,
+        requestBody: {
+          role: 'reader',
+          type: 'anyone',
+        },
+        supportsAllDrives: true,
+      });
+      console.log('[organize-pdf] File permissions set: anyone with link can view');
+    } catch (permError: any) {
+      console.warn('[organize-pdf] Failed to set file permissions:', permError.message);
+      // Continue even if permissions fail - file will inherit folder permissions
+    }
+    
     // Get updated file info
     const updatedFile = await drive.files.get({
       fileId: fileId,
@@ -191,6 +217,14 @@ export async function POST(request: NextRequest) {
     });
     
     const webViewLink = updatedFile.data.webViewLink || '';
+    
+    // Log final filename for debugging (to verify valid period is included)
+    console.log('[organize-pdf] Final file name in Drive:', updatedFile.data.name);
+    console.log('[organize-pdf] Valid period used:', validPeriod);
+    console.log('[organize-pdf] Expected filename:', newFileName);
+    if (updatedFile.data.name !== newFileName) {
+      console.warn('[organize-pdf] WARNING: File name mismatch! Expected:', newFileName, 'Got:', updatedFile.data.name);
+    }
     
     // Step 7: Save to Google Sheet
     await saveToGoogleSheet(
@@ -270,8 +304,8 @@ async function findOrCreateFolder(
 
 /**
  * Save PDF metadata to Google Sheet
- * Structure: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:ExtraInfo, G-M:Sections, N:PDFLink, O:FileID
- * Updated to support 15 columns (A-O) to match Production structure
+ * Structure: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:PDFLink, G:FileID
+ * 7 columns (A-G) to match requirements
  */
 async function saveToGoogleSheet(
   suburbs: string,
@@ -284,10 +318,10 @@ async function saveToGoogleSheet(
 ): Promise<void> {
   const sheets = getSheetsClient();
   
-  // Check if row exists for this report (read all 15 columns)
+  // Check if row exists for this report (read 7 columns: A-G)
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-    range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:O`,
+    range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:G`,
   });
   
   const rows = response.data.values || [];
@@ -302,24 +336,15 @@ async function saveToGoogleSheet(
     return rowReportName === normalizedReportName && rowState === normalizedState;
   });
   
-  // Prepare row data (15 columns: A-O)
-  // Columns G-M (sections) left empty for now - can be populated later if needed
+  // Prepare row data (7 columns: A-G)
   const rowData = [
     suburbs || '', // A: Suburbs (comma-separated)
     state, // B: State
     reportName, // C: Report Name
     validPeriod, // D: Valid Period
     mainBody || '', // E: Main Body
-    '', // F: Extra Info (empty for now)
-    '', // G: Population Growth Context (empty for now)
-    '', // H: Residential (empty for now)
-    '', // I: Industrial (empty for now)
-    '', // J: Commercial and Civic (empty for now)
-    '', // K: Health and Education (empty for now)
-    '', // L: Transport (empty for now)
-    '', // M: Job Implications (empty for now)
-    pdfLink, // N: PDF Drive Link
-    fileId, // O: PDF File ID
+    pdfLink, // F: PDF Drive Link
+    fileId, // G: PDF File ID
   ];
   
   if (rowIndex >= 0) {
@@ -346,43 +371,24 @@ async function saveToGoogleSheet(
     console.log('[organize-pdf] New suburb:', newSuburb);
     console.log('[organize-pdf] Updated suburbs:', updatedSuburbs);
     
-    // Preserve existing Extra Info and sections if they exist
-    const existingExtraInfo = existingRow[5] || ''; // Column F
-    const existingSections = {
-      populationGrowthContext: existingRow[6] || '', // G
-      residential: existingRow[7] || '', // H
-      industrial: existingRow[8] || '', // I
-      commercialAndCivic: existingRow[9] || '', // J
-      healthAndEducation: existingRow[10] || '', // K
-      transport: existingRow[11] || '', // L
-      jobImplications: existingRow[12] || '', // M
-    };
+    // Update suburbs in row data
+    rowData[0] = updatedSuburbs;
     
-    // Update row data with preserved values
-    rowData[5] = existingExtraInfo; // F: Extra Info
-    rowData[6] = existingSections.populationGrowthContext; // G
-    rowData[7] = existingSections.residential; // H
-    rowData[8] = existingSections.industrial; // I
-    rowData[9] = existingSections.commercialAndCivic; // J
-    rowData[10] = existingSections.healthAndEducation; // K
-    rowData[11] = existingSections.transport; // L
-    rowData[12] = existingSections.jobImplications; // M
-    
-    // Update existing row (all 15 columns: A-O)
+    // Update existing row (7 columns: A-G)
     const actualRowNumber = rowIndex + 2; // +2 for header row and 0-index
     await sheets.spreadsheets.values.update({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A${actualRowNumber}:O${actualRowNumber}`,
+      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A${actualRowNumber}:G${actualRowNumber}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [rowData],
       },
     });
   } else {
-    // Append new row (all 15 columns: A-O)
+    // Append new row (7 columns: A-G)
     await sheets.spreadsheets.values.append({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:O`,
+      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:G`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [rowData],

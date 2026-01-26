@@ -1034,3 +1034,105 @@ export async function populateHLSpreadsheet(
   return populateSpreadsheet(spreadsheetId, formData);
 }
 
+/**
+ * Set file permissions (anyone with link can view)
+ */
+export async function setFilePermissions(
+  fileId: string,
+  role: 'reader' | 'writer' = 'reader',
+  driveId?: string
+): Promise<void> {
+  try {
+    const drive = getDriveClient();
+    
+    await drive.permissions.create({
+      fileId: fileId,
+      requestBody: {
+        role: role,
+        type: 'anyone', // Anyone with the link can access
+      },
+      supportsAllDrives: true,
+    });
+  } catch (error: any) {
+    console.error('Error setting file permissions:', error);
+    // Don't throw - permissions might already be set or folder permissions might be sufficient
+    if (!error.message?.includes('already exists')) {
+      throw error;
+    }
+  }
+}
+
+/**
+ * Sync folder permissions - ensure all files in folder have "anyone with link can view"
+ * This is useful for manually-added files that might not inherit folder permissions correctly
+ */
+export async function syncFolderPermissions(
+  folderId: string,
+  role: 'reader' | 'writer' = 'reader',
+  driveId?: string
+): Promise<{ 
+  success: boolean; 
+  filesProcessed: number; 
+  filesUpdated: number; 
+  errors: Array<{ fileId: string; fileName: string; error: string }> 
+}> {
+  const drive = getDriveClient();
+  const results = {
+    success: true,
+    filesProcessed: 0,
+    filesUpdated: 0,
+    errors: [] as Array<{ fileId: string; fileName: string; error: string }>,
+  };
+  
+  try {
+    // List all files in folder (non-recursive for now)
+    const queryOptions: any = {
+      q: `'${folderId}' in parents and trashed=false`,
+      fields: 'files(id, name, mimeType)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    };
+    
+    if (driveId) {
+      queryOptions.driveId = driveId;
+      queryOptions.corpora = 'drive';
+    }
+    
+    const response = await drive.files.list(queryOptions);
+    const files = response.data.files || [];
+    
+    results.filesProcessed = files.length;
+    
+    // Set permissions on each file
+    for (const file of files) {
+      if (!file.id || !file.name) continue;
+      
+      // Skip folders (we only sync file permissions, not folder permissions)
+      if (file.mimeType === 'application/vnd.google-apps.folder') {
+        continue;
+      }
+      
+      try {
+        await setFilePermissions(file.id, role, driveId);
+        results.filesUpdated++;
+      } catch (error: any) {
+        results.errors.push({
+          fileId: file.id,
+          fileName: file.name,
+          error: error?.message || error?.toString() || 'Unknown error',
+        });
+        results.success = false;
+      }
+    }
+    
+    return results;
+  } catch (error: any) {
+    results.success = false;
+    results.errors.push({
+      fileId: folderId,
+      fileName: 'Folder',
+      error: error?.message || error?.toString() || 'Unknown error',
+    });
+    return results;
+  }
+}
