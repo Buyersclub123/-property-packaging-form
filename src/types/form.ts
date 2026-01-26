@@ -314,6 +314,12 @@ export interface FormData {
   // Workflow
   messageForBA?: string;
   pushRecordToDealSheet?: YesNo;
+  
+  // Investment Highlights (hotspotting report)
+  hotspottingPdfLink?: string; // PDF link from dropdown selection or upload
+  hotspottingPdfFileId?: string; // PDF file ID from dropdown selection or upload
+  hotspottingReportName?: string; // Report name (for adding suburb on submission)
+  hotspottingValidPeriod?: string; // Valid period (for adding suburb on submission)
 }
 
 // Form State

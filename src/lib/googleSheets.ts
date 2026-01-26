@@ -643,10 +643,10 @@ export async function lookupInvestmentHighlights(
     const sheets = getSheetsClient();
     
     // Read all data from the Investment Highlights tab
-    // NEW STRUCTURE: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:ExtraInfo, G-M:Sections, N-O:PDF
+    // NEW STRUCTURE: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:PDFLink, G:FileID
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:O`, 
+      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:G`,
     });
 
     const rows = response.data.values || [];
@@ -684,7 +684,7 @@ export async function lookupInvestmentHighlights(
       return { found: false };
     }
 
-    // Extract data (all 15 columns A-O)
+    // Extract data (7 columns A-G)
     // NOTE: Google Sheets API may return shorter arrays if trailing cells are empty
     console.log('[googleSheets] matchingRow length:', matchingRow.length);
     console.log('[googleSheets] matchingRow[4] (Main Body):', matchingRow[4]);
@@ -697,17 +697,17 @@ export async function lookupInvestmentHighlights(
         reportName: matchingRow[2] || '',
         validPeriod: matchingRow[3] || '',
         mainBody: matchingRow[4] || '',
-        extraInfo: matchingRow[5] || '',
-        populationGrowthContext: matchingRow[6] || '',
-        residential: matchingRow[7] || '',
-        industrial: matchingRow[8] || '',
-        commercialAndCivic: matchingRow[9] || '',
-        healthAndEducation: matchingRow[10] || '',
-        transport: matchingRow[11] || '',
-        jobImplications: matchingRow[12] || '',
-        pdfDriveLink: matchingRow[13] || '',
-        pdfFileId: matchingRow[14] || '',
         // Legacy fields (no longer used but kept for compatibility)
+        extraInfo: '',
+        populationGrowthContext: '',
+        residential: '',
+        industrial: '',
+        commercialAndCivic: '',
+        healthAndEducation: '',
+        transport: '',
+        jobImplications: '',
+        pdfDriveLink: matchingRow[5] || '', // Column F
+        pdfFileId: matchingRow[6] || '', // Column G
         lga: '',
         validFrom: '',
         validTo: '',

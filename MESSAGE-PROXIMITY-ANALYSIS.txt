@@ -1,0 +1,32 @@
+CRITICAL: Proximity API Broken - Analysis Required
+
+Proximity API is failing (401, 400 errors). This was working before the redesign.
+
+ISSUES:
+1. Line 863 (MultiStepForm.tsx) - early processing call missing userEmail
+2. API call flow changed - causing duplicate calls and failures
+
+QUESTIONS:
+- Did you change proximity code? (It wasn't in the plan)
+- What was the old code doing that worked?
+- What did you change that broke it?
+
+ACTION REQUIRED - REVIEW ISSUES 1, 2 & 3 TOGETHER:
+
+1. Security context: Email required for API (security change made earlier)
+2. Possible root cause: When Page 2 deleted, did you use old code from Page 5 instead of new code on Page 6?
+3. Compare old code vs new code - did you copy old code that doesn't include userEmail?
+4. Check production code - how does it work there?
+5. Identify what broke
+6. Document your findings
+7. Propose solution (with code changes)
+8. DO NOT FIX YET - wait for review and approval
+
+CRITICAL RULES:
+- NEVER use cached data - API must always be called
+- NEVER skip API calls - Security requirement
+- Proximity is address-specific - Cannot reuse data
+
+Analysis request saved at: property-review-system/form-app/analysis/PROXIMITY-ANALYSIS-REQUEST.md
+
+Investigate and report. Planning chat will review before approval.

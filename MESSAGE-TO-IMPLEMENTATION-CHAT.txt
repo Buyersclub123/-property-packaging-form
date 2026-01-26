@@ -1,0 +1,28 @@
+REVIEW AND NEXT STEPS
+
+Good work on completing the implementation. Here's what to do next:
+
+1. CREATE REVIEW DOCUMENT
+   - Location: property-review-system/form-app/analysis/implementation-review.md
+   - Include: Summary of changes, files modified, deviations from plan, testing checklist, known issues, deployment readiness
+   - This will be reviewed by the planning chat before deployment approval
+
+2. STEP1A FILE CLEANUP
+   - File deletion was blocked (optional cleanup)
+   - Decision: Comment out the import in MultiStepForm.tsx (line 8) and keep the file for now
+   - We can delete it later if everything works
+   - Action: Comment out the Step1AInvestmentHighlightsCheck import
+
+3. READ DEPLOYMENT INSTRUCTIONS
+   - Full instructions saved at: property-review-system/form-app/REVIEW-AND-DEPLOY-INSTRUCTIONS.md
+   - Includes: Where to save review doc, Step1A decision, deployment steps (server restart, cache clearing)
+
+4. WAIT FOR APPROVAL BEFORE DEPLOYING
+   - After creating review document, wait for review and approval
+   - Do NOT deploy to dev until explicitly approved
+   - When approved, follow deployment steps in REVIEW-AND-DEPLOY-INSTRUCTIONS.md
+   - User cannot test until code is deployed to dev
+   - Deploy first, then user will test
+
+QUESTIONS?
+If anything is unclear, ask before proceeding.

@@ -5,8 +5,8 @@ const INVESTMENT_HIGHLIGHTS_SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HI
 const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights';
 
 /**
- * Save investment highlights with all 15 columns (A-O)
- * Phase 4C-2: Now includes individual sections (G-M) and PDF info (N-O)
+ * Save investment highlights with 7 columns (A-G)
+ * Structure: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:PDFLink, G:FileID
  */
 export async function POST(request: NextRequest) {
   try {
@@ -17,15 +17,6 @@ export async function POST(request: NextRequest) {
       reportName, 
       validPeriod, 
       mainBody, 
-      extraInfo,
-      // Individual sections (Phase 4C-2)
-      populationGrowthContext,
-      residential,
-      industrial,
-      commercialAndCivic,
-      healthAndEducation,
-      transport,
-      jobImplications,
       // PDF info
       pdfLink,
       fileId,
@@ -59,14 +50,6 @@ export async function POST(request: NextRequest) {
         reportName,
         validPeriod,
         mainBody: mainBody || '',
-        extraInfo: extraInfo || '',
-        populationGrowthContext: populationGrowthContext || '',
-        residential: residential || '',
-        industrial: industrial || '',
-        commercialAndCivic: commercialAndCivic || '',
-        healthAndEducation: healthAndEducation || '',
-        transport: transport || '',
-        jobImplications: jobImplications || '',
         pdfLink: pdfLink || '',
         fileId: fileId || '',
       }
@@ -83,23 +66,15 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Save investment highlights data with all 15 columns (A-O)
+ * Save investment highlights data with 7 columns (A-G)
  * Google Sheet Structure:
  * A: Suburbs (comma-separated)
  * B: State
  * C: Report Name
  * D: Valid Period
- * E: Main Body (combined text of sections G-M)
- * F: Extra Info
- * G: Population Growth Context
- * H: Residential
- * I: Industrial
- * J: Commercial and Civic
- * K: Health and Education
- * L: Transport
- * M: Job Implications
- * N: PDF Drive Link
- * O: PDF File ID
+ * E: Main Body
+ * F: PDF Drive Link
+ * G: PDF File ID
  */
 async function saveInvestmentHighlightsDataWithSections(
   lga: string,
@@ -111,14 +86,14 @@ async function saveInvestmentHighlightsDataWithSections(
     reportName: string;
     validPeriod: string;
     mainBody: string;
-    extraInfo: string;
-    populationGrowthContext: string;
-    residential: string;
-    industrial: string;
-    commercialAndCivic: string;
-    healthAndEducation: string;
-    transport: string;
-    jobImplications: string;
+    extraInfo?: string;
+    populationGrowthContext?: string;
+    residential?: string;
+    industrial?: string;
+    commercialAndCivic?: string;
+    healthAndEducation?: string;
+    transport?: string;
+    jobImplications?: string;
     pdfLink: string;
     fileId: string;
   }
@@ -126,10 +101,10 @@ async function saveInvestmentHighlightsDataWithSections(
   try {
     const sheets = getSheetsClient();
     
-    // Check if row exists (by report name and state)
+    // Check if row exists (by report name and state) - read 7 columns: A-G
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:O`,
+      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:G`,
     });
 
     const rows = response.data.values || [];
@@ -144,55 +119,65 @@ async function saveInvestmentHighlightsDataWithSections(
       return rowReportName === normalizedReportName && rowState === normalizedState;
     });
 
-    // Prepare row data (15 columns: A-O)
+    // Prepare row data (7 columns: A-G)
     const rowData = [
       data.suburbs || '', // A: Suburbs (comma-separated)
       data.state, // B: State
       data.reportName, // C: Report Name
       data.validPeriod, // D: Valid Period
-      data.mainBody || '', // E: Main Body (combined text)
-      data.extraInfo || '', // F: Extra Info
-      data.populationGrowthContext || '', // G: Population Growth Context
-      data.residential || '', // H: Residential
-      data.industrial || '', // I: Industrial
-      data.commercialAndCivic || '', // J: Commercial and Civic
-      data.healthAndEducation || '', // K: Health and Education
-      data.transport || '', // L: Transport
-      data.jobImplications || '', // M: Job Implications
-      data.pdfLink || '', // N: PDF Drive Link
-      data.fileId || '', // O: PDF File ID
+      data.mainBody || '', // E: Main Body
+      data.pdfLink || '', // F: PDF Drive Link
+      data.fileId || '', // G: PDF File ID
     ];
 
     if (rowIndex >= 0) {
-      // Update existing row
-      const actualRowNumber = rowIndex + 2; // +2 for header row and 0-index
+      // EXISTING ROW - Append suburb if not already in list
+      const existingRow = rows[rowIndex];
+      const existingSuburbs = (existingRow[0] || '').trim();
+      
+      // Parse existing suburbs
+      const suburbList = existingSuburbs
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.length > 0);
+      
+      // Add new suburb if not already in list
+      const newSuburb = (suburb || '').trim();
+      if (newSuburb && !suburbList.includes(newSuburb)) {
+        suburbList.push(newSuburb);
+      }
+      
+      // Combine back into comma-separated string
+      const updatedSuburbs = suburbList.join(', ');
+      rowData[0] = updatedSuburbs;
       
       // Get existing PDF link and file ID if not provided in data
-      const existingRow = rows[rowIndex];
-      const existingPdfLink = existingRow[13] || ''; // Column N
-      const existingFileId = existingRow[14] || ''; // Column O
+      const existingPdfLink = existingRow[5] || ''; // Column F
+      const existingFileId = existingRow[6] || ''; // Column G
       
       // Use existing PDF info if not provided in update
       if (!data.pdfLink && existingPdfLink) {
-        rowData[13] = existingPdfLink;
+        rowData[5] = existingPdfLink;
       }
       if (!data.fileId && existingFileId) {
-        rowData[14] = existingFileId;
+        rowData[6] = existingFileId;
       }
       
+      // Update existing row (7 columns: A-G)
+      const actualRowNumber = rowIndex + 2; // +2 for header row and 0-index
       await sheets.spreadsheets.values.update({
         spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A${actualRowNumber}:O${actualRowNumber}`,
+        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A${actualRowNumber}:G${actualRowNumber}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [rowData],
         },
       });
     } else {
-      // Append new row
+      // Append new row (7 columns: A-G)
       await sheets.spreadsheets.values.append({
         spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:O`,
+        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:G`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [rowData],

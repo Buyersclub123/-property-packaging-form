@@ -285,6 +285,31 @@ export function Step6FolderCreation() {
         setGhlRecordId(recordId);
       }
 
+      // Add suburb to Investment Highlights Google Sheet if report was selected from dropdown
+      // (Only if reportName exists and suburb exists - indicates dropdown selection, not upload)
+      if (formData.hotspottingReportName && formData.address?.suburbName && formData.address?.state) {
+        try {
+          const addSuburbResponse = await fetch('/api/investment-highlights/add-suburb', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              suburb: formData.address.suburbName,
+              state: formData.address.state,
+              reportName: formData.hotspottingReportName,
+            }),
+          });
+          
+          if (addSuburbResponse.ok) {
+            console.log('Suburb added to Investment Highlights report:', formData.address.suburbName);
+          } else {
+            console.warn('Failed to add suburb to report (non-blocking):', await addSuburbResponse.text());
+          }
+        } catch (error) {
+          console.warn('Error adding suburb to report (non-blocking):', error);
+          // Non-blocking - don't fail submission if this fails
+        }
+      }
+
       // Email status - assume sent if Make.com succeeds
       setEmailStatus('sent');
 

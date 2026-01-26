@@ -6,7 +6,8 @@ import {
   findGoogleSheetsInFolder,
   renameFile,
   deleteFile,
-  populateHLSpreadsheet
+  populateHLSpreadsheet,
+  createShortcut
 } from '@/lib/googleDrive';
 import { constructAndSanitizeFolderName } from '@/lib/addressFormatter';
 
@@ -220,6 +221,23 @@ export async function POST(request: Request) {
     // - "Anyone with the link" = Viewer
     // - Specific @buyersclub.com.au users = Editor
     // New property folders inherit these permissions automatically
+    
+    // Step 4: Add PDF shortcut if hotspottingPdfFileId exists
+    if (formData?.hotspottingPdfFileId) {
+      try {
+        console.log('Adding PDF shortcut to property folder...');
+        const pdfShortcut = await createShortcut(
+          formData.hotspottingPdfFileId,
+          propertyFolder.id,
+          'Hotspotting Report.pdf',
+          SHARED_DRIVE_ID
+        );
+        console.log('PDF shortcut created:', pdfShortcut.id);
+      } catch (error) {
+        console.error('Error creating PDF shortcut:', error);
+        // Don't fail folder creation if shortcut creation fails
+      }
+    }
     
     return NextResponse.json({
       success: true,

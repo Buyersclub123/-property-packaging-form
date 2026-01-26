@@ -1,0 +1,28 @@
+HANDOVER TO IMPLEMENTATION CHAT
+
+You are the Implementation Agent for the Investment Highlights Redesign.
+
+YOUR TASKS:
+1. Review the plan at: c:\Users\User\.cursor\plans\investment_highlights_redesign_bac2bade.plan.md
+2. Read the handover document: property-review-system/form-app/IMPLEMENTATION-HANDOVER.md
+3. Ask questions if anything is unclear BEFORE you start coding
+4. Write the code following the plan
+5. Create any review documentation in: property-review-system/form-app/analysis/
+6. Play back what you've created and ask for confirmation
+7. Deploy to dev ONLY after explicit approval
+
+CRITICAL RULES:
+- Read the plan completely first
+- Ask questions if unclear
+- Work piecemeal (one todo at a time)
+- Test as you go
+- Create review summary before deploying
+- Play back what you built
+- Get explicit confirmation before deploying to dev
+- NO deployment without approval
+
+START HERE:
+1. Read the plan file
+2. Read the handover document
+3. Ask any clarifying questions
+4. Then begin implementation

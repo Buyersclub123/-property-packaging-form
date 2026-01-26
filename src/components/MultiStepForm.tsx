@@ -748,6 +748,12 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           return false;
         }
         
+        // ONE EXIT RULE: Checkbox must be checked (applies to all scenarios)
+        if (!contentSections.contentReviewed) {
+          setValidationError('Please confirm you have reviewed all content by checking the checkbox.');
+          return false;
+        }
+        
         return true;
 
       case 6: // Insurance Calculator
@@ -809,7 +815,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       case 8: // Cashflow Review
         // Check if folder has been created
         if (!formData.address?.folderLink) {
-          setValidationError('Please create the property folder before proceeding.');
+          setValidationError('Please fill in all required fields before proceeding, or you have not created the folder for the property. Check the form for highlighted fields.');
           return false;
         }
         

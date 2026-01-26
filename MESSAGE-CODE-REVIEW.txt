@@ -1,0 +1,52 @@
+COMPREHENSIVE CODE REVIEW REQUIRED
+
+CONTEXT:
+- Pages were moved around (Step1A removed, steps renumbered)
+- Investment Highlights moved from Page 2 to Page 6
+- Multiple issues found - code may be broken
+
+WHAT WE NEED:
+
+1. Review working code (before last deployment to dev):
+   - What was working in production?
+   - What was working in dev?
+   - How did things work before?
+
+2. Identify what broke:
+   - Compare working code vs current code
+   - What changed that broke things?
+   - Why did it break?
+
+3. Identify unused/old code:
+   - Code that hasn't been used recently
+   - Old code paths no longer needed
+   - Dead code that can be removed
+   - Code from deleted pages still referenced
+
+4. Provide recommendations:
+   - What to restore
+   - What to fix
+   - What to delete
+   - What to update
+
+FILES TO REVIEW:
+- MultiStepForm.tsx
+- InvestmentHighlightsField.tsx
+- ProximityField.tsx
+- organize-pdf/route.ts
+- get-reports/route.ts
+- proximity/route.ts
+- create-property-folder/route.ts
+- googleSheets.ts
+- googleDrive.ts
+- Step1AInvestmentHighlightsCheck.tsx (should be deleted?)
+
+DELIVERABLES:
+1. Working code documentation
+2. Breakage analysis
+3. Unused code list
+4. Recommendations
+
+Full request: property-review-system/form-app/CODE-REVIEW-REQUEST.md
+
+Be thorough. Check actual code. Don't assume.

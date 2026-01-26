@@ -162,8 +162,20 @@ export function InvestmentHighlightsField({
         // Update parent form state
         onChange(combined);
         
-        // TODO Phase 2: Add suburb to report's suburb list if not already there
-        console.log('[InvestmentHighlights] TODO: Add suburb to report');
+        // Store PDF link, fileId, and reportName in form state (for folder creation and submission)
+        updateFormData({
+          hotspottingPdfLink: result.data.pdfLink || report.pdfLink || '',
+          hotspottingPdfFileId: result.data.fileId || report.fileId || '',
+          hotspottingReportName: result.data.reportName || report.reportName || '',
+          hotspottingValidPeriod: result.data.validPeriod || report.validPeriod || '',
+        });
+        
+        console.log('[InvestmentHighlights] PDF link and report info stored:', {
+          pdfLink: result.data.pdfLink || report.pdfLink,
+          fileId: result.data.fileId || report.fileId,
+          reportName: result.data.reportName || report.reportName,
+          validPeriod: result.data.validPeriod || report.validPeriod,
+        });
       }
     } catch (err) {
       console.error('Error fetching selected report:', err);

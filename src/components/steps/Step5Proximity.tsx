@@ -76,34 +76,7 @@ export function Step5Proximity() {
       <h2 className="text-2xl font-bold mb-6">Proximity & Content</h2>
       
       <div className="space-y-8">
-        {/* Component 1: Proximity */}
-        <ProximityField
-          value={proximityValue}
-          onChange={(value) => updateFormData({
-            contentSections: {
-              ...contentSections,
-              proximity: value
-            }
-          })}
-          address={address?.propertyAddress}
-          preFetchedData={earlyProcessing?.proximity?.data || proximityData}
-        />
-
-        {/* Component 2: Why This Property */}
-        <WhyThisPropertyField
-          value={whyThisPropertyValue}
-          onChange={(value) => updateFormData({
-            contentSections: {
-              ...contentSections,
-              whyThisProperty: value
-            }
-          })}
-          suburb={address?.suburbName}
-          lga={address?.lga}
-          preFetchedData={earlyProcessing?.whyThisProperty?.data}
-        />
-
-        {/* Component 3: Investment Highlights */}
+        {/* Component 1: Investment Highlights (moved to top) */}
         <InvestmentHighlightsField
           value={contentSections?.investmentHighlights || ''}
           onChange={(value) => updateFormData({
@@ -117,6 +90,33 @@ export function Step5Proximity() {
           state={address?.state}
           streetAddress={address?.propertyAddress}
           userEmail="unknown"
+        />
+
+        {/* Component 2: Proximity */}
+        <ProximityField
+          value={proximityValue}
+          onChange={(value) => updateFormData({
+            contentSections: {
+              ...contentSections,
+              proximity: value
+            }
+          })}
+          address={address?.propertyAddress}
+          preFetchedData={earlyProcessing?.proximity?.data || proximityData}
+        />
+
+        {/* Component 3: Why This Property */}
+        <WhyThisPropertyField
+          value={whyThisPropertyValue}
+          onChange={(value) => updateFormData({
+            contentSections: {
+              ...contentSections,
+              whyThisProperty: value
+            }
+          })}
+          suburb={address?.suburbName}
+          lga={address?.lga}
+          preFetchedData={earlyProcessing?.whyThisProperty?.data}
         />
 
         {/* Content Review Confirmation */}
