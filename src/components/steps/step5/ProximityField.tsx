@@ -107,6 +107,7 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
       if (data.success && data.proximity) {
         onChange(data.proximity);
         setCalculatedFor(addr);
+        setError(null); // Explicitly clear error on success
       } else {
         throw new Error(data.error || 'Failed to calculate proximity');
       }

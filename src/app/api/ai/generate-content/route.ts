@@ -172,106 +172,74 @@ function getPrompt(suburb: string, lga: string, type: string, rawText?: string, 
     const stateName = context?.state || '';
     const lgaName = context?.lga || lga || '';
     
-    return `You are a professional real estate content formatter. Extract and organize the following Hotspotting report content into a structured investment brief.
+    return `You are an infrastructure summary generator that produces structured, investment-focused overviews of infrastructure projects in Australian LGAs. Your output must strictly follow the layout and formatting rules provided below:
 
-RAW TEXT FROM PDF:
-${rawText}
+CRITICAL REQUIREMENT: You MUST output each section heading on its own line in your response. Do NOT skip any section headings.
 
-REQUIRED OUTPUT FORMAT:
+STRUCTURE ENFORCEMENT: You must include all section headings in this exact order. Do not skip any. If a section has no data, still include the heading with no entries under it. Every heading must be present, on its own line.
 
-FIRST LINE: LGA NAME AS HEADING
-Start with the LGA name (e.g., "Fraser Coast Regional" or "${lgaName}") as the very first line.
-Do NOT add any prefix like "SECTION" or numbering.
+Output Layout (YOU MUST FOLLOW THIS EXACT STRUCTURE):
 
----
+[LGA Name]
+Population growth context
+[introductory paragraph]
+Residential
+[project entries]
+Industrial
+[project entries]
+Commercial and civic
+[project entries]
+Health and education
+[project entries]
+Transport
+[project entries]
+Job implications (construction + ongoing)
+[job summary paragraph]
 
-SECTION 1: POPULATION GROWTH CONTEXT
-Write a single paragraph summarizing:
-- Absolute population growth (e.g., "+45,000 people")
-- Percentage growth (e.g., "+34% by 2041")
-- Key drivers (e.g., affordability, job growth, infrastructure)
-Focus on ${lgaName || suburbName}${stateName ? ', ' + stateName : ''}.
+Formatting Rules:
+No bullets or indentation
+No blank lines between entries
+Each project line starts with bolded dollar figure or status, e.g. $200 million or Cost to be determined
+Each line is a single paragraph describing the project and its investment relevance
+No empty lines between section headers and content
+Text must be Google Docs and Gmail table compatible
 
----
+Tone & Style:
+Concise and factual
+Use bolding only for cost/status at the start of each line
+Focus on financial scale, capital allocation, and timing relevance
 
-SECTION 2: RESIDENTIAL
-Extract residential projects and format each as ONE LINE:
-**$[amount]** [project description]
-OR
-**Cost to be determined** [project description]
-Examples:
-**$400 million** River Park Estate to deliver 1,200 homes with integrated open space and retail centre
-**Cost to be determined** New build-to-rent housing precinct proposed near transport corridor
+Example Output:
 
----
+Moreton Bay
 
-SECTION 3: INDUSTRIAL
-Extract industrial projects and format each as ONE LINE:
-**$[amount]** [project description]
-OR
-**Status: [status]** [project description]
-Example:
-**$70 million** Battery manufacturing plant in Maryborough creating 500 jobs
+Population growth context
+Moreton Bay is forecast to grow by 240,000 people by 2041, driven by affordability, new housing supply, and major transport investments.
 
----
+Residential
+$300 million Caboolture West development delivering 3,000 new dwellings over 10 years
+Cost to be determined Build-to-rent housing project near Petrie University with 400 units
 
-SECTION 4: COMMERCIAL AND CIVIC
-Extract commercial and civic projects and format each as ONE LINE:
-**$[amount]** [project description]
-Example:
-**$108.7 million** Hervey Bay Community Hub with sports facilities and community spaces
+Industrial
+$120 million Food processing plant in Narangba employing 150 people upon completion
 
----
+Commercial and civic
+$90 million Redcliffe Civic Centre with council chambers, library, and event space
 
-SECTION 5: HEALTH AND EDUCATION
-Extract health and education projects and format each as ONE LINE:
-**$[amount]** [project description]
-Example:
-**$100 million** Hervey Bay Hospital expansion including new emergency department
+Health and education
+$450 million expansion of Caboolture Hospital with new emergency and surgical wards
+Cost to be determined New TAFE campus at Morayfield supporting 2,000 students annually
 
----
+Transport
+$2.1 billion Bruce Highway upgrades between Caboolture and Pine Rivers
+$250 million North Lakes busway extension improving regional connectivity
 
-SECTION 6: TRANSPORT
-Extract transport projects and format each as ONE LINE:
-**$[amount]** [project description]
-Example:
-**$260 million** Bruce Highway upgrades improving regional connectivity
+Job implications (construction + ongoing)
+These projects will create over 20,000 construction jobs and sustain thousands of ongoing roles across health, education, manufacturing, and retail.
 
----
+Now, process the following input and generate the output in this exact format:
 
-SECTION 7: JOB IMPLICATIONS
-Summarize employment impact in 2-3 sentences covering:
-- Construction jobs during project delivery
-- Ongoing operational jobs after completion
-- Key employment sectors
-
-CRITICAL FORMATTING RULES:
-1. Use plain text only - NO markdown except for bold dollar amounts/status
-2. Each project is ONE PARAGRAPH (no line breaks within a project)
-3. Start each project line with bold cost: **$[amount]** or **Cost to be determined** or **Status: [status]**
-4. NO bullet points, NO indentation, NO blank lines between projects
-5. Remove all page numbers, headers, footers (e.g., "1 / 251 / 25")
-6. Remove location identifiers like "Butchulla Country1 / 251 / 25"
-7. Gmail and Google Docs compatible formatting only
-8. If a section has no projects, write: "No specific projects identified in this report."
-
-EXAMPLE OUTPUT STRUCTURE:
-Fraser Coast Regional
-
----
-
-[Population growth context paragraph]
-
----
-
-**$400 million** Project description here
-**Cost to be determined** Another project description
-
----
-
-[Continue with remaining sections...]
-
-OUTPUT FORMAT: Start with LGA name, then "---", then the 7 sections with "---" separators. NO section headings like "SECTION 1:", NO preamble.`;
+${rawText}`;
   }
   
   if (type === 'why-property') {

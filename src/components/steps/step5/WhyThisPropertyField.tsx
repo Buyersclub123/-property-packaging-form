@@ -93,6 +93,7 @@ export function WhyThisPropertyField({
       
       const data = await response.json();
       onChange(data.content);
+      setError(null); // Explicitly clear error on success
     } catch (err) {
       console.error('AI generation error:', err);
       setError('The AI service could not be reached. Please generate content manually via Chat GPT and paste the results below.');

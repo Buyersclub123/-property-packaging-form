@@ -153,7 +153,7 @@ export function InvestmentHighlightsField({
         setMatchStatus('found');
         setReportName(result.data.reportName || '');
         setValidPeriod(result.data.validPeriod || '');
-        setDateStatus(report.dateStatus);
+        setDateStatus(result.dateStatus || null);
         
         // Use Main Body for display
         const mainBody = result.data.mainBody || '';
@@ -358,7 +358,35 @@ export function InvestmentHighlightsField({
       }
       
       const extractResult = await extractResponse.json();
-      setExtractedReportName(extractResult.reportName || '');
+      
+      // Check if report already exists for this LGA/suburb/state
+      // If it does, pre-populate with existing report name (but keep editable)
+      let reportNameToUse = extractResult.reportName || '';
+      try {
+        const lookupResponse = await fetch('/api/investment-highlights/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            lga: lga || '', 
+            suburb: suburb || '', 
+            state 
+          }),
+        });
+        
+        if (lookupResponse.ok) {
+          const lookupResult = await lookupResponse.json();
+          if (lookupResult.found && lookupResult.data?.reportName) {
+            // Use existing report name from sheet instead of extracted one
+            reportNameToUse = lookupResult.data.reportName;
+            console.log('[InvestmentHighlights] Using existing report name from sheet:', reportNameToUse);
+          }
+        }
+      } catch (lookupErr) {
+        // Non-critical - continue with extracted name if lookup fails
+        console.warn('[InvestmentHighlights] Could not check for existing report:', lookupErr);
+      }
+      
+      setExtractedReportName(reportNameToUse);
       setExtractedValidPeriod(extractResult.validPeriod || '');
       setExtractedMainBody(extractResult.mainBody || '');
       setExtractionConfidence(extractResult.confidence || null);
@@ -472,26 +500,35 @@ export function InvestmentHighlightsField({
           const parseResult = await parseResponse.json();
           const aiContent = parseResult.content || formattedMainBody;
           
-          // Parse the 7 sections from AI response (separated by "---")
-          const sectionParts = aiContent.split('---').map((s: string) => s.trim());
+          // Use ChatGPT's response directly - it should already include all section headers
+          // ChatGPT is instructed to provide the complete formatted output with headers
+          // No parsing, no splitting, no header removal - use exactly as ChatGPT provides it
+          formattedMainBody = aiContent;
           
-          if (sectionParts.length >= 7) {
-            // Extract each section (remove any section headers if present)
-            const cleanSection = (text: string) => {
-              // Remove lines that look like headers (e.g., "SECTION 1: POPULATION GROWTH")
-              return text.replace(/^SECTION \d+:.*$/gm, '').trim();
-            };
-            
-            // Create clean mainBody by joining sections without headers or separators
-            const cleanedSections = sectionParts.map(cleanSection).filter((s: string) => s.length > 0);
-            formattedMainBody = cleanedSections.join('\n\n');
-            
-            console.log('✅ Text formatted by AI into 7 sections');
-            console.log('📊 Formatted Main Body length:', formattedMainBody.length);
+          // Optional: Validate that all required section headers are present
+          const requiredHeadings = [
+            'Population growth context',
+            'Residential',
+            'Industrial',
+            'Commercial and civic',
+            'Health and education',
+            'Transport',
+            'Job implications (construction + ongoing)'
+          ];
+          
+          const missingSections = requiredHeadings.filter(
+            heading => !aiContent.includes(heading)
+          );
+          
+          if (missingSections.length > 0) {
+            console.warn('⚠️ Some section headers may be missing:', missingSections);
+            // Non-blocking - still use the content, user can review/edit
           } else {
-            console.warn(`AI returned ${sectionParts.length} sections instead of 7, using as-is`);
-            formattedMainBody = aiContent;
+            console.log('✅ All required section headers present in AI response');
           }
+          
+          console.log('✅ Text formatted by AI');
+          console.log('📊 Formatted Main Body length:', formattedMainBody.length);
         } else {
           const errorText = await parseResponse.text();
           console.warn('AI formatting failed, using raw text. Error:', errorText);
@@ -539,6 +576,7 @@ export function InvestmentHighlightsField({
       setMatchStatus('found');
       setReportName(extractedReportName);
       setValidPeriod(extractedValidPeriod);
+      setDateStatus(null); // Clear date status warning since we have a new/updated report
       setShowVerification(false);
       setReportNameVerified(false);
       setValidPeriodVerified(false);
@@ -634,6 +672,27 @@ export function InvestmentHighlightsField({
                   ℹ️ <strong>{suburb}</strong> will be associated with this report for future lookups.
                 </p>
               )}
+              <div className="mt-3 pt-3 border-t border-green-300">
+                <button
+                  onClick={() => {
+                    setMatchStatus('not-found');
+                    setSelectedFromDropdown(false);
+                    setReportName('');
+                    setValidPeriod('');
+                    setDateStatus(null);
+                    onChange(''); // Clear the content
+                    updateFormData({
+                      hotspottingPdfLink: '',
+                      hotspottingPdfFileId: '',
+                      hotspottingReportName: '',
+                      hotspottingValidPeriod: '',
+                    });
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-700 underline"
+                >
+                  Change Selection or Enter Manually
+                </button>
+              </div>
             </div>
             
             {/* Date Status Warning */}
