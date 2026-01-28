@@ -243,7 +243,22 @@ export function InvestmentHighlightsField({
         // Update parent form state with main body
         onChange(mainBody);
         
+        // Store PDF link, fileId, and reportName in form state (for folder creation and submission)
+        // Note: Lookup API returns pdfDriveLink and pdfFileId (matching column headers F&G)
+        updateFormData({
+          hotspottingPdfLink: result.data.pdfDriveLink || '',
+          hotspottingPdfFileId: result.data.pdfFileId || '',
+          hotspottingReportName: result.data.reportName || '',
+          hotspottingValidPeriod: result.data.validPeriod || '',
+        });
+        
         console.log('[InvestmentHighlights] Main body loaded');
+        console.log('[InvestmentHighlights] PDF link and report info stored:', {
+          pdfLink: result.data.pdfDriveLink,
+          fileId: result.data.pdfFileId,
+          reportName: result.data.reportName,
+          validPeriod: result.data.validPeriod,
+        });
       } else {
         setMatchStatus('not-found');
       }

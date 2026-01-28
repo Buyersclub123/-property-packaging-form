@@ -13,7 +13,7 @@ interface ChecklistItem {
 }
 
 export function Step8Submission() {
-  const { formData, resetForm, setCurrentStep } = useFormStore();
+  const { formData, resetForm, setCurrentStep, updateFormData } = useFormStore();
   const { address, decisionTree } = formData;
   
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
@@ -549,17 +549,47 @@ export function Step8Submission() {
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
+      </div>
 
-        {/* Submit button */}
-        <div className="mt-6">
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !allChecked}
-            className="btn-primary w-full text-lg py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? 'Submitting...' : 'Submit Property'}
-          </button>
-        </div>
+      {/* Attachments Additional Dialogue Section */}
+      <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
+        <label className="label-field">Attachments Additional Dialogue (Optional)</label>
+        <p className="text-xs text-gray-500 mb-2">
+          Additional notes or dialogue related to attachments and supporting documentation.
+        </p>
+        <textarea
+          value={formData.attachmentsAdditionalDialogue || ''}
+          onChange={(e) => updateFormData({ attachmentsAdditionalDialogue: e.target.value })}
+          className="input-field min-h-[120px] resize-y"
+          placeholder="Enter any additional notes about attachments..."
+          spellCheck={true}
+        />
+      </div>
+
+      {/* Message for BA Section */}
+      <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
+        <label className="text-lg font-semibold mb-4 block">Message for BA (Optional)</label>
+        <p className="text-xs text-gray-500 mb-2">
+          This message will appear at the beginning of the email sent to the Business Analyst. Use it to provide any additional context or instructions.
+        </p>
+        <textarea
+          value={formData.messageForBA || ''}
+          onChange={(e) => updateFormData({ messageForBA: e.target.value })}
+          className="input-field min-h-[120px] resize-y"
+          placeholder="Enter any additional information or instructions for the BA..."
+          spellCheck={true}
+        />
+      </div>
+
+      {/* Submit button */}
+      <div className="mt-6">
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || !allChecked}
+          className="btn-primary w-full text-lg py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {submitting ? 'Submitting...' : 'Submit Property'}
+        </button>
       </div>
     </div>
   );
