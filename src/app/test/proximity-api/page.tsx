@@ -31,6 +31,12 @@ export default function TestProximityPage() {
     finalList?: Array<{ name: string; address?: string; distance: number; distanceKm: string; coordinates: { lat: number; lon: number }; type: string; category?: string }>;
     totalResults: number;
     categoryCounts: Record<string, number>;
+    debug?: {
+      allCategoriesFromGeoapify?: string[];
+      tramFeaturesFound?: Array<{ name: string; categories: string[]; distance: number }>;
+      publicTransportOnlyFeatures?: Array<{ name: string; categories: string[]; distance: number }>;
+      featuresWithin50m?: Array<{ name: string; categories: string[]; distance: number }>;
+    };
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
