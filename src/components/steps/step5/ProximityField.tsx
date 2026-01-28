@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAutoResize } from '@/hooks/useAutoResize';
+import { useFormStore } from '@/store/formStore';
 
 /**
  * ProximityField Component (Phase 4A + Enhancements)
@@ -27,62 +28,117 @@ interface ProximityFieldProps {
   address?: string;
   disabled?: boolean;
   preFetchedData?: string; // Pre-fetched proximity data from Step 2
+  earlyProcessing?: {
+    proximity?: {
+      status: 'pending' | 'processing' | 'ready' | 'error';
+      data?: string;
+      error?: string;
+    };
+  };
 }
 
-export function ProximityField({ value, onChange, address, disabled = false, preFetchedData }: ProximityFieldProps) {
+export function ProximityField({ value, onChange, address, disabled = false, preFetchedData, earlyProcessing }: ProximityFieldProps) {
   // Auto-resize textarea based on content
   const textareaRef = useAutoResize(value);
+  
+  // Access form store for earlyProcessing status (reactive subscription)
+  const earlyProcessingStatus = useFormStore((state) => state.formData.earlyProcessing?.proximity?.status);
+  const earlyProcessingData = useFormStore((state) => state.formData.earlyProcessing?.proximity?.data);
   
   // State management for automation features
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [calculatedFor, setCalculatedFor] = useState<string | null>(null);
   const [overrideAddress, setOverrideAddress] = useState('');
-  const [hasAutoRun, setHasAutoRun] = useState(false); // Prevent infinite loops
+  const hasAutoRunRef = useRef(false); // Use ref to prevent duplicate runs across re-renders
+
+  /**
+   * PHASE 1 FIX: Watch for earlyProcessing status changes (reactive subscription)
+   * This replaces polling - component automatically reacts when status changes
+   */
+  useEffect(() => {
+    // If status is 'ready' and we have data, use it
+    if (earlyProcessingStatus === 'ready' && earlyProcessingData) {
+      // Only update if we don't already have this data
+      if (!value || value !== earlyProcessingData) {
+        onChange(earlyProcessingData);
+        setCalculatedFor(address || 'pre-loaded');
+      }
+      // Always clear loading when status is ready
+      setLoading(false);
+      hasAutoRunRef.current = true;
+    } else if (earlyProcessingStatus === 'error') {
+      // Clear loading on error too
+      setLoading(false);
+    }
+  }, [earlyProcessingStatus, earlyProcessingData, value, address, onChange]);
 
   /**
    * Auto-run proximity calculation when component loads
-   * Enhancement 2: Check for pre-fetched data first
-   * Only runs if address is available and field is empty
-   * PROTECTION: Only runs ONCE per component mount to prevent API abuse
+   * PHASE 1 FIX: Check earlyProcessing status to prevent duplicate API calls
    */
   useEffect(() => {
     // CRITICAL: Only run once per mount
-    if (hasAutoRun) return;
+    if (hasAutoRunRef.current) {
+      return;
+    }
     
-    // If we already have data (either in value or pre-fetched), mark as calculated
+    // If we already have data, mark as calculated
     if (value) {
       if (!calculatedFor) {
         setCalculatedFor(address || 'pre-loaded');
       }
-      setHasAutoRun(true);
+      hasAutoRunRef.current = true;
       return;
+    }
+    
+    // Check earlyProcessing status
+    const proximityStatus = earlyProcessing?.proximity?.status || earlyProcessingStatus;
+    
+    if (proximityStatus === 'processing') {
+      // Early processing is still running - wait for subscription to detect completion
+      setLoading(true);
+      hasAutoRunRef.current = true; // Mark as run so we don't make API call
+      return;
+    }
+    
+    if (proximityStatus === 'ready') {
+      // Early processing completed - use the data directly
+      const proximityData = earlyProcessing?.proximity?.data || earlyProcessingData;
+      if (proximityData) {
+        onChange(proximityData);
+        setCalculatedFor(address || 'pre-loaded');
+        setLoading(false); // Clear loading state
+        hasAutoRunRef.current = true;
+        return;
+      }
     }
     
     // If we have pre-fetched data but it's not in value yet, use it
     if (preFetchedData && !value) {
       onChange(preFetchedData);
       setCalculatedFor(address || 'pre-loaded');
-      setHasAutoRun(true);
+      hasAutoRunRef.current = true;
       return;
     }
     
     // Otherwise, fetch as normal if we have address (ONLY ONCE)
-    if (address && !calculatedFor) {
+    // This handles: earlyProcessing status is 'error', undefined, or no earlyProcessing
+    if (address && !calculatedFor && proximityStatus !== 'processing') {
       calculateProximity(address);
-      setHasAutoRun(true);
+      hasAutoRunRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount only - hasAutoRun flag prevents multiple calls
+  }, []); // Run once on mount only
 
   /**
    * Calculate proximity using the API
    */
   const calculateProximity = async (addr: string) => {
-    // 🚨 TRACKING: Count API calls
+    // Track API calls for debugging
     if (typeof window !== 'undefined') {
       (window as any).proximityApiCallCount = ((window as any).proximityApiCallCount || 0) + 1;
-      console.log('🚨 PROXIMITY API CALLED - Count:', (window as any).proximityApiCallCount, 'Address:', addr);
+      console.log('🚨 Proximity API call #' + (window as any).proximityApiCallCount);
     }
     
     setLoading(true);

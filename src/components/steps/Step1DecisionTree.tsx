@@ -51,8 +51,7 @@ export function Step1DecisionTree() {
     updateLots([]); // Clear project lots
   };
   
-  // Debug log
-  console.log('Step1DecisionTree - isHAndL:', isHAndL, 'propertyType:', decisionTree.propertyType, 'lotType:', decisionTree.lotType);
+  // Debug logging removed - was causing excessive logs
 
   // Sync lotNumber state with address
   useEffect(() => {

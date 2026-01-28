@@ -406,8 +406,6 @@ export function Step0AddressAndRisk() {
   const [sourcerOptions, setSourcerOptions] = useState<string[]>([]);
   
   useEffect(() => {
-    console.log('Step0AddressAndRisk component mounted');
-    console.log('address:', address);
     // Sync state from address data
     if (address.addressFieldsEditable !== undefined) {
       setAddressFieldsEditable(address.addressFieldsEditable);

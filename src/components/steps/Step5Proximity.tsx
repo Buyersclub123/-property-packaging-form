@@ -103,6 +103,7 @@ export function Step5Proximity() {
           })}
           address={address?.propertyAddress}
           preFetchedData={earlyProcessing?.proximity?.data || proximityData}
+          earlyProcessing={earlyProcessing}
         />
 
         {/* Component 3: Why This Property */}
@@ -125,7 +126,16 @@ export function Step5Proximity() {
             <input
               type="checkbox"
               checked={contentReviewed}
-              onChange={(e) => handleContentReviewChange(e.target.checked)}
+              onChange={(e) => {
+                // Store current scroll position to prevent unwanted page jump
+                const scrollPosition = window.scrollY;
+                e.stopPropagation();
+                handleContentReviewChange(e.target.checked);
+                // Restore scroll position after state update
+                requestAnimationFrame(() => {
+                  window.scrollTo({ top: scrollPosition, behavior: 'auto' });
+                });
+              }}
               className="mt-1 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               required
             />

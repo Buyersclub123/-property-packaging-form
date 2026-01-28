@@ -851,9 +851,10 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     // Don't re-run if already processing or ready
     if (earlyProcessing?.proximity?.status === 'processing' || 
         earlyProcessing?.proximity?.status === 'ready') {
-      console.log('⏭️ Proximity already processing or ready, skipping');
+      console.log('⏭️ [EARLY PROCESSING] Proximity already processing or ready, skipping');
       return;
     }
+    
     
     updateFormData({
       earlyProcessing: {

@@ -51,11 +51,7 @@ export function InvestmentHighlightsField({
   const [dateStatus, setDateStatus] = useState<any>(null);
   const [selectedFromDropdown, setSelectedFromDropdown] = useState(false);
   
-  // Debug: Track render count
-  const renderCountRef = useRef(0);
-  renderCountRef.current++;
-  console.log('[InvestmentHighlights] Component render #', renderCountRef.current);
-  console.log('[InvestmentHighlights] Current value length:', value.length);
+  // Debug logging removed - was causing excessive logs on every render
   
   // Form fields for saving new report
   const [newReportName, setNewReportName] = useState('');

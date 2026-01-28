@@ -50,29 +50,17 @@ export function Step7CashflowReview() {
     const contractType = decisionTree?.contractTypeSimplified;
     const propertyType = decisionTree?.propertyType;
     
-    console.log('=== TOTAL COST DEBUG ===');
-    console.log('contractType:', contractType);
-    console.log('propertyType:', propertyType);
-    console.log('purchasePrice:', purchasePrice);
-    console.log('landPrice:', purchasePrice?.landPrice);
-    console.log('buildPrice:', purchasePrice?.buildPrice);
-    console.log('totalPrice:', purchasePrice?.totalPrice);
-    console.log('acceptableAcquisitionTo:', purchasePrice?.acceptableAcquisitionTo);
-    
     if (contractType === 'Split Contract') {
       const land = parseFloat(purchasePrice?.landPrice || '0');
       const build = parseFloat(purchasePrice?.buildPrice || '0');
       const total = land + build;
-      console.log('Split Contract - Land:', land, 'Build:', build, 'Total:', total);
       return total;
     } else if (propertyType === 'New') {
       const total = parseFloat(purchasePrice?.totalPrice || '0');
-      console.log('New Property - Total:', total);
       return total;
     } else {
       // Established property - use acceptableAcquisitionTo (NOT acceptedAcquisitionPriceTo)
       const total = parseFloat(purchasePrice?.acceptableAcquisitionTo || '0');
-      console.log('Established Property - Total:', total);
       return total;
     }
   };

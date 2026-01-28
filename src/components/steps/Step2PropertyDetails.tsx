@@ -94,16 +94,7 @@ export function Step2PropertyDetails() {
     }
   }, []);
 
-  // Debug: Log what Step 2 is reading
-  useEffect(() => {
-    console.log('=== STEP 2 COMPONENT MOUNTED/RENDERED ===');
-    console.log('propertyDescription:', propertyDescription);
-    console.log('purchasePrice:', purchasePrice);
-    console.log('rentalAssessment:', rentalAssessment);
-    console.log('propertyDescription keys:', Object.keys(propertyDescription || {}));
-    console.log('purchasePrice keys:', Object.keys(purchasePrice || {}));
-    console.log('rentalAssessment keys:', Object.keys(rentalAssessment || {}));
-  }, [propertyDescription, purchasePrice, rentalAssessment]);
+  // Debug logging removed - was causing excessive logs on every keystroke
 
   const isProject = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple';
   const isHAndL = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual';
