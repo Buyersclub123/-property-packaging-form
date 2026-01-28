@@ -19,11 +19,13 @@ if (!GEOSCAPE_API_KEY) {
   throw new Error('NEXT_PUBLIC_GEOSCAPE_API_KEY environment variable is required');
 }
 
-// Hardcoded lists for airports and cities
+// Hardcoded lists for airports and cities with coordinates
 interface Airport {
   name: string;
   code: string;
   address: string;
+  latitude: number;
+  longitude: number;
   group: 1 | 2 | 3;
 }
 
@@ -31,70 +33,41 @@ interface City {
   name: string;
   state: string;
   address: string;
+  latitude: number;
+  longitude: number;
   group: 1 | 2 | 3;
 }
 
+// PHASE 2: Reduced to top 11 airports (from 26) for batch optimization
+// Added back Sunshine Coast Airport (MCY) - important for QLD properties
+// Now includes hardcoded coordinates for Haversine distance calculation
 const AUSTRALIAN_AIRPORTS: Airport[] = [
-  { name: 'Sydney Kingsford Smith Airport', code: 'SYD', address: 'Sydney Airport NSW 2020, Australia', group: 1 },
-  { name: 'Melbourne Airport', code: 'MEL', address: 'Melbourne Airport VIC 3045, Australia', group: 1 },
-  { name: 'Brisbane Airport', code: 'BNE', address: 'Brisbane Airport QLD 4008, Australia', group: 1 },
-  { name: 'Perth Airport', code: 'PER', address: 'Perth Airport WA 6105, Australia', group: 1 },
-  { name: 'Adelaide Airport', code: 'ADL', address: 'Adelaide Airport SA 5950, Australia', group: 1 },
-  { name: 'Cairns Airport', code: 'CNS', address: 'Cairns Airport QLD 4870, Australia', group: 1 },
-  { name: 'Darwin International Airport', code: 'DRW', address: 'Darwin Airport NT 0820, Australia', group: 1 },
-  { name: 'Gold Coast Airport', code: 'OOL', address: 'Gold Coast Airport QLD 4218, Australia', group: 2 },
-  { name: 'Canberra Airport', code: 'CBR', address: 'Canberra Airport ACT 2609, Australia', group: 2 },
-  { name: 'Hobart International Airport', code: 'HBA', address: 'Hobart Airport TAS 7170, Australia', group: 2 },
-  { name: 'Avalon Airport', code: 'AVV', address: 'Avalon Airport VIC 3214, Australia', group: 2 },
-  { name: 'Sunshine Coast Airport', code: 'MCY', address: 'Sunshine Coast Airport QLD 4564, Australia', group: 2 },
-  { name: 'Townsville Airport', code: 'TSV', address: 'Townsville Airport QLD 4810, Australia', group: 2 },
-  { name: 'Newcastle Airport', code: 'NTL', address: 'Newcastle Airport NSW 2300, Australia', group: 2 },
-  { name: 'Broome International Airport', code: 'BME', address: 'Broome Airport WA 6725, Australia', group: 2 },
-  { name: 'Port Hedland International Airport', code: 'PHE', address: 'Port Hedland Airport WA 6721, Australia', group: 2 },
-  { name: 'Toowoomba Wellcamp Airport', code: 'WTB', address: 'Toowoomba Wellcamp Airport QLD 4350, Australia', group: 2 },
-  { name: 'Launceston Airport', code: 'LST', address: 'Launceston Airport TAS 7250, Australia', group: 3 },
-  { name: 'Whitsunday Coast Airport', code: 'PPP', address: 'Proserpine Airport QLD 4800, Australia', group: 3 },
-  { name: 'Alice Springs Airport', code: 'ASP', address: 'Alice Springs Airport NT 0870, Australia', group: 3 },
-  { name: 'Rockhampton Airport', code: 'ROK', address: 'Rockhampton Airport QLD 4700, Australia', group: 3 },
-  { name: 'Mackay Airport', code: 'MKY', address: 'Mackay Airport QLD 4740, Australia', group: 3 },
-  { name: 'Ballina Byron Gateway Airport', code: 'BNK', address: 'Ballina Airport NSW 2478, Australia', group: 3 },
-  { name: 'Hamilton Island Airport', code: 'HTI', address: 'Hamilton Island Airport QLD 4803, Australia', group: 3 },
-  { name: 'Karratha Airport', code: 'KTA', address: 'Karratha Airport WA 6714, Australia', group: 3 },
-  { name: 'Ayers Rock Airport', code: 'AYQ', address: 'Ayers Rock Airport NT 0872, Australia', group: 3 },
+  { name: 'Sydney Kingsford Smith Airport', code: 'SYD', address: 'Sydney Airport NSW 2020, Australia', latitude: -33.9399, longitude: 151.1753, group: 1 },
+  { name: 'Melbourne Airport', code: 'MEL', address: 'Melbourne Airport VIC 3045, Australia', latitude: -37.6733, longitude: 144.8433, group: 1 },
+  { name: 'Brisbane Airport', code: 'BNE', address: 'Brisbane Airport QLD 4008, Australia', latitude: -27.3842, longitude: 153.1171, group: 1 },
+  { name: 'Perth Airport', code: 'PER', address: 'Perth Airport WA 6105, Australia', latitude: -31.9402, longitude: 115.9669, group: 1 },
+  { name: 'Adelaide Airport', code: 'ADL', address: 'Adelaide Airport SA 5950, Australia', latitude: -34.9455, longitude: 138.5306, group: 1 },
+  { name: 'Cairns Airport', code: 'CNS', address: 'Cairns Airport QLD 4870, Australia', latitude: -16.8858, longitude: 145.7553, group: 1 },
+  { name: 'Darwin International Airport', code: 'DRW', address: 'Darwin Airport NT 0820, Australia', latitude: -12.4083, longitude: 130.8727, group: 1 },
+  { name: 'Gold Coast Airport', code: 'OOL', address: 'Gold Coast Airport QLD 4218, Australia', latitude: -28.1644, longitude: 153.5047, group: 2 },
+  { name: 'Sunshine Coast Airport', code: 'MCY', address: 'Sunshine Coast Airport QLD 4564, Australia', latitude: -26.6033, longitude: 153.0911, group: 2 },
+  { name: 'Canberra Airport', code: 'CBR', address: 'Canberra Airport ACT 2609, Australia', latitude: -35.3069, longitude: 149.1950, group: 2 },
+  { name: 'Hobart International Airport', code: 'HBA', address: 'Hobart Airport TAS 7170, Australia', latitude: -42.8361, longitude: 147.5103, group: 2 },
 ];
 
+// PHASE 2: Reduced to top 9 cities (from 30) for batch optimization
+// Added back Sunshine Coast - important for QLD properties
+// Now includes hardcoded coordinates for Haversine distance calculation
 const AUSTRALIAN_CITIES: City[] = [
-  { name: 'Melbourne', state: 'Victoria', address: 'Melbourne VIC, Australia', group: 1 },
-  { name: 'Sydney', state: 'New South Wales', address: 'Sydney NSW, Australia', group: 1 },
-  { name: 'Brisbane', state: 'Queensland', address: 'Brisbane QLD, Australia', group: 1 },
-  { name: 'Perth', state: 'Western Australia', address: 'Perth WA, Australia', group: 1 },
-  { name: 'Adelaide', state: 'South Australia', address: 'Adelaide SA, Australia', group: 1 },
-  { name: 'Canberra', state: 'Australian Capital Territory', address: 'Canberra ACT, Australia', group: 1 },
-  { name: 'Hobart', state: 'Tasmania', address: 'Hobart TAS, Australia', group: 1 },
-  { name: 'Darwin', state: 'Northern Territory', address: 'Darwin NT, Australia', group: 1 },
-  { name: 'Gold Coast', state: 'Queensland', address: 'Gold Coast QLD, Australia', group: 2 },
-  { name: 'Newcastle', state: 'New South Wales', address: 'Newcastle NSW, Australia', group: 2 },
-  { name: 'Sunshine Coast', state: 'Queensland', address: 'Sunshine Coast QLD, Australia', group: 2 },
-  { name: 'Wollongong', state: 'New South Wales', address: 'Wollongong NSW, Australia', group: 2 },
-  { name: 'Geelong', state: 'Victoria', address: 'Geelong VIC, Australia', group: 2 },
-  { name: 'Townsville', state: 'Queensland', address: 'Townsville QLD, Australia', group: 2 },
-  { name: 'Cairns', state: 'Queensland', address: 'Cairns QLD, Australia', group: 2 },
-  { name: 'Toowoomba', state: 'Queensland', address: 'Toowoomba QLD, Australia', group: 2 },
-  { name: 'Ballarat', state: 'Victoria', address: 'Ballarat VIC, Australia', group: 2 },
-  { name: 'Bendigo', state: 'Victoria', address: 'Bendigo VIC, Australia', group: 2 },
-  { name: 'Launceston', state: 'Tasmania', address: 'Launceston TAS, Australia', group: 3 },
-  { name: 'Albury-Wodonga', state: 'New South Wales/Victoria', address: 'Albury NSW, Australia', group: 3 },
-  { name: 'Wagga Wagga', state: 'New South Wales', address: 'Wagga Wagga NSW, Australia', group: 3 },
-  { name: 'Mildura', state: 'Victoria', address: 'Mildura VIC, Australia', group: 3 },
-  { name: 'Mackay', state: 'Queensland', address: 'Mackay QLD, Australia', group: 3 },
-  { name: 'Bundaberg', state: 'Queensland', address: 'Bundaberg QLD, Australia', group: 3 },
-  { name: 'Tamworth', state: 'New South Wales', address: 'Tamworth NSW, Australia', group: 3 },
-  { name: 'Dubbo', state: 'New South Wales', address: 'Dubbo NSW, Australia', group: 3 },
-  { name: 'Kalgoorlie-Boulder', state: 'Western Australia', address: 'Kalgoorlie WA, Australia', group: 3 },
-  { name: 'Geraldton', state: 'Western Australia', address: 'Geraldton WA, Australia', group: 3 },
-  { name: 'Port Macquarie', state: 'New South Wales', address: 'Port Macquarie NSW, Australia', group: 3 },
-  { name: 'Coffs Harbour', state: 'New South Wales', address: 'Coffs Harbour NSW, Australia', group: 3 },
-  { name: 'Gladstone', state: 'Queensland', address: 'Gladstone QLD, Australia', group: 3 },
+  { name: 'Melbourne', state: 'Victoria', address: 'Melbourne VIC, Australia', latitude: -37.8136, longitude: 144.9631, group: 1 },
+  { name: 'Sydney', state: 'New South Wales', address: 'Sydney NSW, Australia', latitude: -33.8688, longitude: 151.2093, group: 1 },
+  { name: 'Brisbane', state: 'Queensland', address: 'Brisbane QLD, Australia', latitude: -27.4698, longitude: 153.0251, group: 1 },
+  { name: 'Perth', state: 'Western Australia', address: 'Perth WA, Australia', latitude: -31.9505, longitude: 115.8605, group: 1 },
+  { name: 'Adelaide', state: 'South Australia', address: 'Adelaide SA, Australia', latitude: -34.9285, longitude: 138.6007, group: 1 },
+  { name: 'Canberra', state: 'Australian Capital Territory', address: 'Canberra ACT, Australia', latitude: -35.2809, longitude: 149.1300, group: 1 },
+  { name: 'Hobart', state: 'Tasmania', address: 'Hobart TAS, Australia', latitude: -42.8821, longitude: 147.3272, group: 1 },
+  { name: 'Gold Coast', state: 'Queensland', address: 'Gold Coast QLD, Australia', latitude: -28.0167, longitude: 153.4000, group: 2 },
+  { name: 'Sunshine Coast', state: 'Queensland', address: 'Sunshine Coast QLD, Australia', latitude: -26.6500, longitude: 153.0667, group: 2 },
 ];
 
 interface GeoapifyPlace {
@@ -369,16 +342,108 @@ async function getDistancesFromGoogleMaps(
 }
 
 /**
+ * PHASE 2: Consolidated batching function - handles both addresses and coordinates
+ * This allows us to batch airports/cities (addresses) with amenities (coordinates) in one call
+ */
+interface ConsolidatedDestination {
+  address?: string;  // For airports/cities
+  lat?: number;      // For Geoapify places
+  lon?: number;      // For Geoapify places
+  metadata?: any;    // Store original data for later use
+}
+
+async function getConsolidatedDistances(
+  originAddress: string,
+  originLat: number,
+  originLon: number,
+  destinations: ConsolidatedDestination[]
+): Promise<Array<{ distance: number; duration: number }>> {
+  if (!GOOGLE_MAPS_API_KEY) {
+    throw new Error('GOOGLE_MAPS_API_KEY not configured');
+  }
+
+  // PHASE 2: Track API calls
+  let apiCallCount = 0;
+  const batchSize = 25;
+  const results: Array<{ distance: number; duration: number }> = [];
+  const departureTime = getNextWednesday9AM();
+
+  // Split destinations into batches
+  for (let i = 0; i < destinations.length; i += batchSize) {
+    const batch = destinations.slice(i, i + batchSize);
+    
+    // Build destination string - use address if available, otherwise use coordinates
+    const destStr = batch.map(d => {
+      if (d.address) {
+        return d.address;
+      } else if (d.lat !== undefined && d.lon !== undefined) {
+        return `${d.lat},${d.lon}`;
+      }
+      return '';
+    }).filter(Boolean).join('|');
+
+    if (!destStr) continue;
+
+    // Use coordinates for origin if we have them (more accurate)
+    const originStr = `${originLat},${originLon}`;
+
+    const url = `${GOOGLE_MAPS_API_BASE_URL}?` +
+      `origins=${encodeURIComponent(originStr)}` +
+      `&destinations=${encodeURIComponent(destStr)}` +
+      `&departure_time=${departureTime}` +
+      `&traffic_model=best_guess` +
+      `&mode=driving` +
+      `&key=${GOOGLE_MAPS_API_KEY}`;
+
+    try {
+      apiCallCount++;
+      console.log(`🚨 [PHASE 2] Google Maps API call #${apiCallCount} - ${batch.length} destinations`);
+      
+      const response = await axios.get(url, { timeout: 30000 });
+      
+      if (response.data.status !== 'OK') {
+        console.error('Google Maps API error:', response.data.status);
+        // Push zeros to maintain alignment
+        for (let j = 0; j < batch.length; j++) {
+          results.push({ distance: 0, duration: 0 });
+        }
+        continue;
+      }
+
+      const elements = response.data.rows[0]?.elements || [];
+      elements.forEach((element: any) => {
+        if (element.status === 'OK') {
+          results.push({
+            distance: element.distance.value,
+            duration: element.duration_in_traffic?.value || element.duration.value,
+          });
+        } else {
+          results.push({ distance: 0, duration: 0 });
+        }
+      });
+    } catch (error) {
+      console.error(`Error fetching batch ${i}-${i + batchSize}:`, error);
+      // Push zeros for failed batch to maintain alignment
+      for (let j = 0; j < batch.length; j++) {
+        results.push({ distance: 0, duration: 0 });
+      }
+    }
+  }
+
+  console.log(`📊 [PHASE 2] Total Google Maps API calls: ${apiCallCount}`);
+  return results;
+}
+
+/**
  * Search Geoapify for places
+ * OPTIMIZED: Uses bias only (no filter) and limit 500 for maximum results
  */
 async function searchGeoapify(
   lon: number,
   lat: number,
   categories: string,
-  radius: number = 50000,
-  limit: number = 100
+  limit: number = 500
 ): Promise<GeoapifyPlace[]> {
-  const filterStr = `circle:${lon},${lat},${radius}`;
   const biasStr = `proximity:${lon},${lat}`;
   
   const params = new URLSearchParams({
@@ -386,7 +451,7 @@ async function searchGeoapify(
     limit: String(limit),
     apiKey: GEOAPIFY_API_KEY!,
   });
-  const url = `${GEOAPIFY_API_BASE_URL}?${params.toString()}&filter=${filterStr}&bias=${biasStr}`;
+  const url = `${GEOAPIFY_API_BASE_URL}?${params.toString()}&bias=${biasStr}`;
   
   try {
     const response = await axios.get(url, { timeout: 30000 });
@@ -520,557 +585,503 @@ export async function POST(request: Request) {
     }
 
     const allResults: ProximityResult[] = [];
+    let geoapifyDebug: { geoapifyTotalResults: number; geoapifyCategoryBreakdown: any } | null = null;
 
-    // 1. AIRPORTS - Use hardcoded list + Google Maps
-    if (GOOGLE_MAPS_API_KEY) {
-      try {
-        const distanceResults = await getDistancesFromGoogleMaps(
-          addressForGoogleMaps,
-          AUSTRALIAN_AIRPORTS.map(a => ({ address: a.address }))
-        );
+    if (!GOOGLE_MAPS_API_KEY) {
+      return NextResponse.json(
+        { success: false, error: 'Google Maps API key not configured' },
+        { status: 500 }
+      );
+    }
 
-        const airportsWithDistance = AUSTRALIAN_AIRPORTS.map((airport, idx) => ({
-          airport,
-          distance: distanceResults[idx]?.distance || 0,
-          duration: distanceResults[idx]?.duration || 0,
-        })).filter(a => a.distance > 0);
+    // OPTIMIZED: Use Haversine for airports/cities, apply tier logic, then combine with amenities for single Google Maps call
+    console.log('🚀 [OPTIMIZED] Processing airports and cities with Haversine distance');
+    
+    // Calculate Haversine distances for airports
+    const airportsWithDistance = AUSTRALIAN_AIRPORTS.map(airport => ({
+      airport,
+      distance: calculateDistance(lat, lon, airport.latitude, airport.longitude),
+    }));
 
-        // Group by tier and find closest from each
-        const closestByGroup: { [key: number]: typeof airportsWithDistance[0] } = {};
-        airportsWithDistance.forEach(result => {
-          const group = result.airport.group;
-          if (!closestByGroup[group] || result.distance < closestByGroup[group].distance) {
-            closestByGroup[group] = result;
-          }
-        });
+    // Apply tier logic for airports using Haversine distances
+    const closestAirportByGroup: { [key: number]: typeof airportsWithDistance[0] } = {};
+    airportsWithDistance.forEach(result => {
+      const group = result.airport.group;
+      if (!closestAirportByGroup[group] || result.distance < closestAirportByGroup[group].distance) {
+        closestAirportByGroup[group] = result;
+      }
+    });
 
-        // Apply tier logic: Tier 3 closest → show Tier 3 + Tier 1, etc.
-        const closestOverall = airportsWithDistance.sort((a, b) => a.distance - b.distance)[0];
-        const closestGroup = closestOverall?.airport.group;
+    const closestOverallAirport = airportsWithDistance.sort((a, b) => a.distance - b.distance)[0];
+    const closestAirportGroup = closestOverallAirport?.airport.group;
 
-        const airportsToShow: typeof airportsWithDistance = [];
-        if (closestGroup === 3) {
-          // Tier 3 closest → show Tier 3 + Tier 1
-          if (closestByGroup[3]) airportsToShow.push(closestByGroup[3]);
-          if (closestByGroup[1]) airportsToShow.push(closestByGroup[1]);
-        } else if (closestGroup === 2) {
-          // Tier 2 closest → show Tier 2 + Tier 1
-          if (closestByGroup[2]) airportsToShow.push(closestByGroup[2]);
-          if (closestByGroup[1]) airportsToShow.push(closestByGroup[1]);
-        } else {
-          // Tier 1 closest → show Tier 1 + closest from Tier 2 & 3
-          if (closestByGroup[1]) airportsToShow.push(closestByGroup[1]);
-          const tier2And3 = [closestByGroup[2], closestByGroup[3]].filter(Boolean);
-          if (tier2And3.length > 0) {
-            tier2And3.sort((a, b) => a!.distance - b!.distance);
-            airportsToShow.push(tier2And3[0]!);
-          }
-        }
-
-        airportsToShow.forEach(result => {
-          const { distance: distStr, time: timeStr } = formatDistanceTime(result.distance, result.duration);
-          allResults.push({
-            name: `${result.airport.name} (${result.airport.code})`,
-            distance: result.distance,
-            category: 'airport',
-            formattedLine: `${distStr} (${timeStr}), ${result.airport.name} (${result.airport.code})`,
-          });
-        });
-      } catch (error) {
-        console.error('Error getting airports:', error);
+    const filteredAirports: typeof airportsWithDistance = [];
+    if (closestAirportGroup === 3) {
+      if (closestAirportByGroup[3]) filteredAirports.push(closestAirportByGroup[3]);
+      if (closestAirportByGroup[1]) filteredAirports.push(closestAirportByGroup[1]);
+    } else if (closestAirportGroup === 2) {
+      if (closestAirportByGroup[2]) filteredAirports.push(closestAirportByGroup[2]);
+      if (closestAirportByGroup[1]) filteredAirports.push(closestAirportByGroup[1]);
+    } else {
+      if (closestAirportByGroup[1]) filteredAirports.push(closestAirportByGroup[1]);
+      const tier2And3 = [closestAirportByGroup[2], closestAirportByGroup[3]].filter(Boolean);
+      if (tier2And3.length > 0) {
+        tier2And3.sort((a, b) => a!.distance - b!.distance);
+        filteredAirports.push(tier2And3[0]!);
       }
     }
 
-    // 2. CAPITAL CITIES - Use hardcoded list + Google Maps (same logic as airports)
-    if (GOOGLE_MAPS_API_KEY) {
-      try {
-        const distanceResults = await getDistancesFromGoogleMaps(
-          addressForGoogleMaps,
-          AUSTRALIAN_CITIES.map(c => ({ address: c.address }))
-        );
+    // Calculate Haversine distances for cities
+    const citiesWithDistance = AUSTRALIAN_CITIES.map(city => ({
+      city,
+      distance: calculateDistance(lat, lon, city.latitude, city.longitude),
+    }));
 
-        const citiesWithDistance = AUSTRALIAN_CITIES.map((city, idx) => ({
-          city,
-          distance: distanceResults[idx]?.distance || 0,
-          duration: distanceResults[idx]?.duration || 0,
-        })).filter(c => c.distance > 0);
+    // Apply tier logic for cities using Haversine distances
+    const closestCityByGroup: { [key: number]: typeof citiesWithDistance[0] } = {};
+    citiesWithDistance.forEach(result => {
+      const group = result.city.group;
+      if (!closestCityByGroup[group] || result.distance < closestCityByGroup[group].distance) {
+        closestCityByGroup[group] = result;
+      }
+    });
 
-        const closestByGroup: { [key: number]: typeof citiesWithDistance[0] } = {};
-        citiesWithDistance.forEach(result => {
-          const group = result.city.group;
-          if (!closestByGroup[group] || result.distance < closestByGroup[group].distance) {
-            closestByGroup[group] = result;
-          }
-        });
+    const closestOverallCity = citiesWithDistance.sort((a, b) => a.distance - b.distance)[0];
+    const closestCityGroup = closestOverallCity?.city.group;
 
-        const closestOverall = citiesWithDistance.sort((a, b) => a.distance - b.distance)[0];
-        const closestGroup = closestOverall?.city.group;
-
-        const citiesToShow: typeof citiesWithDistance = [];
-        if (closestGroup === 3) {
-          if (closestByGroup[3]) citiesToShow.push(closestByGroup[3]);
-          if (closestByGroup[1]) citiesToShow.push(closestByGroup[1]);
-        } else if (closestGroup === 2) {
-          if (closestByGroup[2]) citiesToShow.push(closestByGroup[2]);
-          if (closestByGroup[1]) citiesToShow.push(closestByGroup[1]);
-        } else {
-          if (closestByGroup[1]) citiesToShow.push(closestByGroup[1]);
-          const tier2And3 = [closestByGroup[2], closestByGroup[3]].filter(Boolean);
-          if (tier2And3.length > 0) {
-            tier2And3.sort((a, b) => a!.distance - b!.distance);
-            citiesToShow.push(tier2And3[0]!);
-          }
-        }
-
-        citiesToShow.forEach(result => {
-          const { distance: distStr, time: timeStr } = formatDistanceTime(result.distance, result.duration);
-          allResults.push({
-            name: `${result.city.name}, ${result.city.state}`,
-            distance: result.distance,
-            category: 'city',
-            formattedLine: `${distStr} (${timeStr}), ${result.city.name}, ${result.city.state}`,
-          });
-        });
-      } catch (error) {
-        console.error('Error getting cities:', error);
+    const filteredCities: typeof citiesWithDistance = [];
+    if (closestCityGroup === 3) {
+      if (closestCityByGroup[3]) filteredCities.push(closestCityByGroup[3]);
+      if (closestCityByGroup[1]) filteredCities.push(closestCityByGroup[1]);
+    } else if (closestCityGroup === 2) {
+      if (closestCityByGroup[2]) filteredCities.push(closestCityByGroup[2]);
+      if (closestCityByGroup[1]) filteredCities.push(closestCityByGroup[1]);
+    } else {
+      if (closestCityByGroup[1]) filteredCities.push(closestCityByGroup[1]);
+      const tier2And3 = [closestCityByGroup[2], closestCityByGroup[3]].filter(Boolean);
+      if (tier2And3.length > 0) {
+        tier2And3.sort((a, b) => a!.distance - b!.distance);
+        filteredCities.push(tier2And3[0]!);
       }
     }
 
-    // 3. TRAIN STATIONS - Use only public_transport.train, include trams (max 10km), filter single-word names
+    console.log(`✅ [OPTIMIZED] Selected ${filteredAirports.length} airports and ${filteredCities.length} cities using Haversine + tier logic`);
+
+    // OPTIMIZED: Get all Geoapify results, use Haversine to sort, apply logic, then combine with airports/cities for single Google Maps call
+    console.log('🚀 [OPTIMIZED] Starting amenities processing with Haversine sorting');
     try {
-      const trainPlaces = await searchGeoapify(lon, lat, 'public_transport.train', 100000, 50);
-      const tramPlaces = await searchGeoapify(lon, lat, 'public_transport.tram', 10000, 20);
+      // Step 1: Get all Geoapify results in ONE call (all categories combined, limit 500)
+      const allCategories = 'public_transport.train,public_transport.tram,public_transport.bus,childcare.kindergarten,childcare,education.school,commercial.supermarket,healthcare.hospital';
+      const allPlaces = await searchGeoapify(lon, lat, allCategories, 500);
+      console.log(`📊 [OPTIMIZED] Combined Geoapify call returned ${allPlaces.length} total results`);
+      
+      // Step 1b: Second call for hospitals only to ensure enough results
+      const hospitalPlacesAdditional = await searchGeoapify(lon, lat, 'healthcare.hospital', 500);
+      console.log(`📊 [OPTIMIZED] Hospital-only Geoapify call returned ${hospitalPlacesAdditional.length} total results`);
+      
+      // Merge hospital results with main results (deduplicate by place_id)
+      const existingPlaceIds = new Set(allPlaces.map(p => p.properties?.place_id).filter(Boolean));
+      hospitalPlacesAdditional.forEach(place => {
+        if (!existingPlaceIds.has(place.properties?.place_id)) {
+          allPlaces.push(place);
+          existingPlaceIds.add(place.properties?.place_id);
+        }
+      });
+      console.log(`📊 [OPTIMIZED] Total places after merging: ${allPlaces.length}`);
+      
+      // Step 2: Separate results by category and calculate Haversine distances, then sort
+      const trainPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('public_transport.train')));
+      const tramPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('public_transport.tram')));
+      const busPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('public_transport.bus')));
+      const kindergartenPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('childcare.kindergarten')));
+      const childcarePlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('childcare')) && !p.properties.categories?.some(c => c.includes('kindergarten')));
+      const schoolPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('education.school')));
+      const supermarketPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('commercial.supermarket')));
+      const hospitalPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('healthcare.hospital')));
+      
+      // Helper function to calculate Haversine distance and sort
+      const sortByHaversine = (places: GeoapifyPlace[]) => {
+        return places
+          .map(place => {
+            const coords = place.geometry?.coordinates;
+            if (!coords || coords.length < 2) return null;
+            const placeLat = coords[1];
+            const placeLon = coords[0];
+            const distance = calculateDistance(lat, lon, placeLat, placeLon);
+            return { place, distance };
+          })
+          .filter((item): item is { place: GeoapifyPlace; distance: number } => item !== null)
+          .sort((a, b) => a.distance - b.distance);
+      };
 
-      const allTrainTram = [...trainPlaces, ...tramPlaces];
+      // Sort each category by Haversine distance
+      const trainSorted = sortByHaversine(trainPlaces);
+      const tramSorted = sortByHaversine(tramPlaces);
+      const busSorted = sortByHaversine(busPlaces);
+      const kindergartenSorted = sortByHaversine(kindergartenPlaces);
+      const childcareSorted = sortByHaversine(childcarePlaces);
+      const schoolSorted = sortByHaversine(schoolPlaces);
+      const supermarketSorted = sortByHaversine(supermarketPlaces);
+      const hospitalSorted = sortByHaversine(hospitalPlaces);
+      
+      const categoryBreakdown = {
+        train: trainPlaces.length,
+        tram: tramPlaces.length,
+        bus: busPlaces.length,
+        kindergarten: kindergartenPlaces.length,
+        childcare: childcarePlaces.length,
+        school: schoolPlaces.length,
+        supermarket: supermarketPlaces.length,
+        hospital: hospitalPlaces.length,
+      };
+      
+      console.log(`📊 [OPTIMIZED] Category breakdown: Train=${trainPlaces.length}, Tram=${tramPlaces.length}, Bus=${busPlaces.length}, Kindergarten=${kindergartenPlaces.length}, Childcare=${childcarePlaces.length}, School=${schoolPlaces.length}, Supermarket=${supermarketPlaces.length}, Hospital=${hospitalPlaces.length}`);
+      
+      // Store for response
+      geoapifyDebug = {
+        geoapifyTotalResults: allPlaces.length,
+        geoapifyCategoryBreakdown: categoryBreakdown,
+      };
 
-      // Filter out non-station railway features while preserving valid station names
-      const validStations = allTrainTram.filter(place => {
-        const name = (place.properties.name || '').trim().toLowerCase();
-        const words = name.split(/\s+/);
-        
-        // Exclude railway societies, clubs, modellers, etc. (not actual stations)
-        // These are the main false positives we want to exclude
+      // Step 3: Apply production logic to filter and prepare destinations
+      const batch2Destinations: ConsolidatedDestination[] = [];
+      const batch2Metadata: Array<{ type: string; place: any; category?: string; haversineDistance?: number }> = [];
+
+      // Train stations (filter and take top 1 from up to 10, sorted by Haversine)
+      const allTrainTram = [...trainSorted.slice(0, 10), ...tramSorted.slice(0, 10)];
+      const validStations = allTrainTram.filter(item => {
+        const name = (item.place.properties.name || '').trim().toLowerCase();
         const excludeTerms = ['society', 'club', 'modellers', 'modeller', 'association', 'group', 'railway society'];
-        if (excludeTerms.some(term => name.includes(term))) {
-          return false;
-        }
-        
-        // Exclude known problematic single-word names (like "Koala")
-        // BUT trust the category for other single-word names - they might be valid stations (e.g., "Nambour", "Landsborough")
-        if (words.length === 1) {
-          const problematicNames = ['koala']; // Known false positives - add more as discovered
-          if (problematicNames.includes(name)) {
-            return false;
-          }
-          // Otherwise, trust the public_transport.train category - allow single-word names
-        }
-        
-        // Trust the public_transport.train category - if it's in the category, it's likely a valid station
-        // This allows valid station names like "Nambour", "Landsborough" even if they're single-word or don't contain "station"
+        if (excludeTerms.some(term => name.includes(term))) return false;
+        if (name.split(/\s+/).length === 1 && name === 'koala') return false;
         return true;
       });
-
-      // Get Google Maps distances for valid stations
-      if (validStations.length > 0 && GOOGLE_MAPS_API_KEY) {
-        const stationsWithCoords = validStations
-          .filter(place => place.geometry?.coordinates)
-          .map(place => ({
-            place,
+      validStations.slice(0, 1).forEach(item => {
+        const place = item.place;
+        if (place.geometry?.coordinates) {
+          batch2Destinations.push({
             lat: place.geometry.coordinates[1],
             lon: place.geometry.coordinates[0],
-          }));
-
-        if (stationsWithCoords.length > 0) {
-          const distanceResults = await getDistancesFromGoogleMapsCoordinates(
-            lat,
-            lon,
-            stationsWithCoords.map(s => ({ lat: s.lat, lon: s.lon }))
-          );
-
-          const stationsWithDistance = stationsWithCoords.map((station, idx) => ({
-            ...station.place,
-            calculatedDistance: distanceResults[idx]?.distance || 0,
-            calculatedDuration: distanceResults[idx]?.duration || 0,
-          })).filter(s => s.calculatedDistance > 0);
-
-          stationsWithDistance.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-          const closestStation = stationsWithDistance[0];
-
-          if (closestStation) {
-            const { distance: distStr, time: timeStr } = formatDistanceTime(
-              closestStation.calculatedDistance,
-              closestStation.calculatedDuration
-            );
-            let stationName = (closestStation.properties.name || '').trim();
-            if (!stationName) {
-              stationName = closestStation.properties.address_line1 || 'Train Station';
-            }
-            stationName = appendCategoryName(stationName, 'train_station');
-            
-            allResults.push({
-              name: stationName,
-              distance: closestStation.calculatedDistance,
-              category: 'train_station',
-              formattedLine: `${distStr} (${timeStr}), ${stationName}`,
-            });
-          }
+            metadata: { type: 'train_station', place },
+          });
+          batch2Metadata.push({ type: 'train_station', place, haversineDistance: item.distance });
         }
-      }
-    } catch (error) {
-      console.error('Error getting train stations:', error);
-    }
-
-    // 4. BUS STOPS
-    try {
-      const busPlaces = await searchGeoapify(lon, lat, 'public_transport.bus', 50000, 100);
-      
-      if (busPlaces.length > 0 && GOOGLE_MAPS_API_KEY) {
-        const busesWithCoords = busPlaces
-          .filter(place => place.geometry?.coordinates)
-          .map(place => ({
-            place,
-            lat: place.geometry.coordinates[1],
-            lon: place.geometry.coordinates[0],
-          }));
-
-        if (busesWithCoords.length > 0) {
-          const distanceResults = await getDistancesFromGoogleMapsCoordinates(
-            lat,
-            lon,
-            busesWithCoords.map(b => ({ lat: b.lat, lon: b.lon }))
-          );
-
-          const busesWithDistance = busesWithCoords.map((bus, idx) => ({
-            ...bus.place,
-            calculatedDistance: distanceResults[idx]?.distance || 0,
-            calculatedDuration: distanceResults[idx]?.duration || 0,
-          })).filter(b => b.calculatedDistance > 0);
-
-          busesWithDistance.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-          const closestBus = busesWithDistance[0];
-
-          if (closestBus) {
-            const { distance: distStr, time: timeStr } = formatDistanceTime(
-              closestBus.calculatedDistance,
-              closestBus.calculatedDuration
-            );
-            let busName = (closestBus.properties.name || '').trim();
-            if (!busName) {
-              busName = closestBus.properties.address_line1 || 'Bus Stop';
-            }
-            busName = appendCategoryName(busName, 'bus_stop');
-            
-            allResults.push({
-              name: busName,
-              distance: closestBus.calculatedDistance,
-              category: 'bus_stop',
-              formattedLine: `${distStr} (${timeStr}), ${busName}`,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error getting bus stops:', error);
-    }
-
-    // 5. KINDERGARTEN & CHILDCARE - Combined (3-4 total)
-    try {
-      const kindergartenPlaces = await searchGeoapify(lon, lat, 'childcare.kindergarten', 50000, 50);
-      const childcarePlaces = await searchGeoapify(lon, lat, 'childcare', 50000, 100);
-
-      // Filter childcare to exclude kindergartens
-      const childcareOnly = childcarePlaces.filter(place => {
-        const categories = place.properties.categories || [];
-        return !categories.some(cat => cat.includes('kindergarten'));
       });
 
-      const combined = [
-        ...kindergartenPlaces.map(p => ({ ...p, type: 'kindergarten' as const })),
-        ...childcareOnly.map(p => ({ ...p, type: 'childcare' as const })),
-      ];
-
-      if (combined.length > 0 && GOOGLE_MAPS_API_KEY) {
-        const placesWithCoords = combined
-          .filter(place => place.geometry?.coordinates)
-          .map(place => ({
-            place,
+      // Bus stops (take top 1 from up to 10, sorted by Haversine)
+      busSorted.slice(0, 10).slice(0, 1).forEach(item => {
+        const place = item.place;
+        if (place.geometry?.coordinates) {
+          batch2Destinations.push({
             lat: place.geometry.coordinates[1],
             lon: place.geometry.coordinates[0],
-          }));
+            metadata: { type: 'bus_stop', place },
+          });
+          batch2Metadata.push({ type: 'bus_stop', place });
+        }
+      });
 
-        if (placesWithCoords.length > 0) {
-          const distanceResults = await getDistancesFromGoogleMapsCoordinates(
-            lat,
-            lon,
-            placesWithCoords.map(p => ({ lat: p.lat, lon: p.lon }))
-          );
+      // Kindergarten & Childcare (take top 4 from up to 10 each, sorted by Haversine)
+      const childcareOnly = childcareSorted.slice(0, 10).filter(item => {
+        const categories = item.place.properties.categories || [];
+        return !categories.some(cat => cat.includes('kindergarten'));
+      });
+      const combined = [
+        ...kindergartenSorted.slice(0, 10).map(item => ({ ...item, type: 'kindergarten' as const })),
+        ...childcareOnly.map(item => ({ ...item, type: 'childcare' as const })),
+      ].sort((a, b) => a.distance - b.distance);
+      combined.slice(0, 4).forEach(item => {
+        const place = item.place;
+        if (place.geometry?.coordinates) {
+          batch2Destinations.push({
+            lat: place.geometry.coordinates[1],
+            lon: place.geometry.coordinates[0],
+            metadata: { type: item.type, place },
+          });
+          batch2Metadata.push({ type: item.type, place });
+        }
+      });
 
-          const placesWithDistance = placesWithCoords.map((item, idx) => ({
-            ...item.place,
-            calculatedDistance: distanceResults[idx]?.distance || 0,
-            calculatedDuration: distanceResults[idx]?.duration || 0,
-          })).filter(p => p.calculatedDistance > 0);
+      // Schools (take top 3 from up to 10, sorted by Haversine)
+      schoolSorted.slice(0, 10).slice(0, 3).forEach(item => {
+        const place = item.place;
+        if (place.geometry?.coordinates) {
+          batch2Destinations.push({
+            lat: place.geometry.coordinates[1],
+            lon: place.geometry.coordinates[0],
+            metadata: { type: 'school', place },
+          });
+          batch2Metadata.push({ type: 'school', place });
+        }
+      });
 
-          placesWithDistance.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-          const top3to4 = placesWithDistance.slice(0, 4);
+      // Supermarkets (take top 5 from up to 10, sorted by Haversine)
+      supermarketSorted.slice(0, 10).slice(0, 5).forEach(item => {
+        const place = item.place;
+        if (place.geometry?.coordinates) {
+          batch2Destinations.push({
+            lat: place.geometry.coordinates[1],
+            lon: place.geometry.coordinates[0],
+            metadata: { type: 'supermarket', place },
+          });
+          batch2Metadata.push({ type: 'supermarket', place });
+        }
+      });
 
-          top3to4.forEach(place => {
-            const { distance: distStr, time: timeStr } = formatDistanceTime(
-              place.calculatedDistance,
-              place.calculatedDuration
-            );
-            let placeName = (place.properties.name || '').trim();
-            if (!placeName) {
-              placeName = place.properties.address_line1 || (place.type === 'kindergarten' ? 'Kindergarten' : 'Childcare');
-            }
-            placeName = appendCategoryName(placeName, place.type);
-            
+      // Hospitals (take top 2 from up to 10, sorted by Haversine)
+      hospitalSorted.slice(0, 10).slice(0, 2).forEach(item => {
+        const place = item.place;
+        if (place.geometry?.coordinates) {
+          batch2Destinations.push({
+            lat: place.geometry.coordinates[1],
+            lon: place.geometry.coordinates[0],
+            metadata: { type: 'hospital', place },
+          });
+          batch2Metadata.push({ type: 'hospital', place });
+        }
+      });
+
+      // Step 4: Combine airports, cities, and amenities for single Google Maps call
+      const allDestinations: ConsolidatedDestination[] = [];
+      const allMetadata: Array<{ type: string; place?: any; airport?: Airport; city?: City; category?: string }> = [];
+
+      // Add filtered airports
+      filteredAirports.forEach(result => {
+        allDestinations.push({
+          address: result.airport.address,
+          metadata: { type: 'airport', airport: result.airport },
+        });
+        allMetadata.push({ type: 'airport', airport: result.airport });
+      });
+
+      // Add filtered cities
+      filteredCities.forEach(result => {
+        allDestinations.push({
+          address: result.city.address,
+          metadata: { type: 'city', city: result.city },
+        });
+        allMetadata.push({ type: 'city', city: result.city });
+      });
+
+      // Add filtered amenities
+      batch2Destinations.forEach((dest, idx) => {
+        allDestinations.push(dest);
+        allMetadata.push(batch2Metadata[idx]);
+      });
+
+      console.log(`📊 [OPTIMIZED] Total destinations for Google Maps: ${allDestinations.length} (${filteredAirports.length} airports + ${filteredCities.length} cities + ${batch2Destinations.length} amenities)`);
+
+      // Step 5: Single Google Maps call for all destinations (up to 25)
+      if (allDestinations.length > 0) {
+        const allResults_gm = await getConsolidatedDistances(
+          addressForGoogleMaps,
+          lat,
+          lon,
+          allDestinations.slice(0, 25) // Limit to 25 for Google Maps
+        );
+
+        // Step 6: Process results by category (airports, cities, and amenities)
+        // Process results sequentially - metadata array is aligned with results array
+        const airportResults: Array<{ airport: Airport; distance: number; duration: number }> = [];
+        const cityResults: Array<{ city: City; distance: number; duration: number }> = [];
+        const trainStationResults: Array<{ place: any; distance: number; duration: number }> = [];
+        const busStopResults: Array<{ place: any; distance: number; duration: number }> = [];
+        const childcareResults: Array<{ place: any; distance: number; duration: number; type: string }> = [];
+        const schoolResults: Array<{ place: any; distance: number; duration: number }> = [];
+        const supermarketResults: Array<{ place: any; distance: number; duration: number }> = [];
+        const hospitalResults: Array<{ place: any; distance: number; duration: number }> = [];
+
+        // Process all results sequentially - metadata and results are aligned
+        for (let i = 0; i < allResults_gm.length && i < allMetadata.length; i++) {
+          const metadata = allMetadata[i];
+          const result = allResults_gm[i];
+          if (!metadata || !result || result.distance === 0) continue;
+
+          const distance = result.distance;
+          const duration = result.duration;
+          const type = metadata.type;
+
+          // Group by category for processing
+          switch (type) {
+            case 'airport':
+              if (metadata.airport) {
+                airportResults.push({ airport: metadata.airport, distance, duration });
+              }
+              break;
+            case 'city':
+              if (metadata.city) {
+                cityResults.push({ city: metadata.city, distance, duration });
+              }
+              break;
+            case 'train_station':
+              if (metadata.place) {
+                trainStationResults.push({ place: metadata.place, distance, duration });
+              }
+              break;
+            case 'bus_stop':
+              if (metadata.place) {
+                busStopResults.push({ place: metadata.place, distance, duration });
+              }
+              break;
+            case 'kindergarten':
+            case 'childcare':
+              if (metadata.place) {
+                childcareResults.push({ place: metadata.place, distance, duration, type });
+              }
+              break;
+            case 'school':
+              if (metadata.place) {
+                schoolResults.push({ place: metadata.place, distance, duration });
+              }
+              break;
+            case 'supermarket':
+              if (metadata.place) {
+                supermarketResults.push({ place: metadata.place, distance, duration });
+              }
+              break;
+            case 'hospital':
+              if (metadata.place) {
+                hospitalResults.push({ place: metadata.place, distance, duration });
+              }
+              break;
+          }
+        }
+
+        // Process airports
+        if (airportResults.length > 0) {
+          airportResults.sort((a, b) => a.distance - b.distance);
+          airportResults.forEach(result => {
+            const { distance: distStr, time: timeStr } = formatDistanceTime(result.distance, result.duration);
+            allResults.push({
+              name: `${result.airport.name} (${result.airport.code})`,
+              distance: result.distance,
+              category: 'airport',
+              formattedLine: `${distStr} (${timeStr}), ${result.airport.name} (${result.airport.code})`,
+            });
+          });
+        }
+
+        // Process cities
+        if (cityResults.length > 0) {
+          cityResults.sort((a, b) => a.distance - b.distance);
+          cityResults.forEach(result => {
+            const { distance: distStr, time: timeStr } = formatDistanceTime(result.distance, result.duration);
+            allResults.push({
+              name: `${result.city.name}, ${result.city.state}`,
+              distance: result.distance,
+              category: 'city',
+              formattedLine: `${distStr} (${timeStr}), ${result.city.name}, ${result.city.state}`,
+            });
+          });
+        }
+
+        // Process train stations (closest 1)
+        if (trainStationResults.length > 0) {
+          trainStationResults.sort((a, b) => a.distance - b.distance);
+          const closest = trainStationResults[0];
+          const { distance: distStr, time: timeStr } = formatDistanceTime(closest.distance, closest.duration);
+          let stationName = (closest.place.properties.name || '').trim();
+          if (!stationName) stationName = closest.place.properties.address_line1 || 'Train Station';
+          stationName = appendCategoryName(stationName, 'train_station');
+          allResults.push({
+            name: stationName,
+            distance: closest.distance,
+            category: 'train_station',
+            formattedLine: `${distStr} (${timeStr}), ${stationName}`,
+          });
+        }
+
+        // Process bus stops (closest 1)
+        if (busStopResults.length > 0) {
+          busStopResults.sort((a, b) => a.distance - b.distance);
+          const closest = busStopResults[0];
+          const { distance: distStr, time: timeStr } = formatDistanceTime(closest.distance, closest.duration);
+          let busName = (closest.place.properties.name || '').trim();
+          if (!busName) busName = closest.place.properties.address_line1 || 'Bus Stop';
+          busName = appendCategoryName(busName, 'bus_stop');
+          allResults.push({
+            name: busName,
+            distance: closest.distance,
+            category: 'bus_stop',
+            formattedLine: `${distStr} (${timeStr}), ${busName}`,
+          });
+        }
+
+        // Process kindergarten & childcare (top 4)
+        if (childcareResults.length > 0) {
+          childcareResults.sort((a, b) => a.distance - b.distance);
+          const top4 = childcareResults.slice(0, 4);
+          top4.forEach(item => {
+            const { distance: distStr, time: timeStr } = formatDistanceTime(item.distance, item.duration);
+            let placeName = (item.place.properties.name || '').trim();
+            if (!placeName) placeName = item.place.properties.address_line1 || (item.type === 'kindergarten' ? 'Kindergarten' : 'Childcare');
+            placeName = appendCategoryName(placeName, item.type);
             allResults.push({
               name: placeName,
-              distance: place.calculatedDistance,
-              category: place.type,
+              distance: item.distance,
+              category: item.type,
               formattedLine: `${distStr} (${timeStr}), ${placeName}`,
             });
           });
         }
-      }
-    } catch (error) {
-      console.error('Error getting kindergarten/childcare:', error);
-    }
 
-    // 6. SCHOOLS
-    try {
-      const schoolPlaces = await searchGeoapify(lon, lat, 'education.school', 50000, 100);
-      
-      if (schoolPlaces.length > 0 && GOOGLE_MAPS_API_KEY) {
-        const schoolsWithCoords = schoolPlaces
-          .filter(place => place.geometry?.coordinates)
-          .map(place => ({
-            place,
-            lat: place.geometry.coordinates[1],
-            lon: place.geometry.coordinates[0],
-          }));
-
-        if (schoolsWithCoords.length > 0) {
-          const distanceResults = await getDistancesFromGoogleMapsCoordinates(
-            lat,
-            lon,
-            schoolsWithCoords.map(s => ({ lat: s.lat, lon: s.lon }))
-          );
-
-          const schoolsWithDistance = schoolsWithCoords.map((school, idx) => ({
-            ...school.place,
-            calculatedDistance: distanceResults[idx]?.distance || 0,
-            calculatedDuration: distanceResults[idx]?.duration || 0,
-          })).filter(s => s.calculatedDistance > 0);
-
-          schoolsWithDistance.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-          const top3Schools = schoolsWithDistance.slice(0, 3);
-
-          top3Schools.forEach(school => {
-            const { distance: distStr, time: timeStr } = formatDistanceTime(
-              school.calculatedDistance,
-              school.calculatedDuration
-            );
-            let schoolName = (school.properties.name || '').trim();
-            if (!schoolName) {
-              schoolName = school.properties.address_line1 || 'School';
-            }
+        // Process schools (top 3)
+        if (schoolResults.length > 0) {
+          schoolResults.sort((a, b) => a.distance - b.distance);
+          const top3 = schoolResults.slice(0, 3);
+          top3.forEach(school => {
+            const { distance: distStr, time: timeStr } = formatDistanceTime(school.distance, school.duration);
+            let schoolName = (school.place.properties.name || '').trim();
+            if (!schoolName) schoolName = school.place.properties.address_line1 || 'School';
             schoolName = appendCategoryName(schoolName, 'school');
-            
             allResults.push({
               name: schoolName,
-              distance: school.calculatedDistance,
+              distance: school.distance,
               category: 'school',
               formattedLine: `${distStr} (${timeStr}), ${schoolName}`,
             });
           });
         }
-      }
-    } catch (error) {
-      console.error('Error getting schools:', error);
-    }
 
-    // 7. SUPERMARKETS - Closest + all 4 chains
-    try {
-      const supermarketPlaces = await searchGeoapify(lon, lat, 'commercial.supermarket', 50000, 100);
-      
-      if (supermarketPlaces.length > 0 && GOOGLE_MAPS_API_KEY) {
-        const supermarketsWithCoords = supermarketPlaces
-          .filter(place => place.geometry?.coordinates)
-          .map(place => ({
-            place,
-            lat: place.geometry.coordinates[1],
-            lon: place.geometry.coordinates[0],
-          }));
-
-        if (supermarketsWithCoords.length > 0) {
-          const distanceResults = await getDistancesFromGoogleMapsCoordinates(
-            lat,
-            lon,
-            supermarketsWithCoords.map(s => ({ lat: s.lat, lon: s.lon }))
-          );
-
-          const supermarketsWithDistance = supermarketsWithCoords.map((supermarket, idx) => ({
-            ...supermarket.place,
-            calculatedDistance: distanceResults[idx]?.distance || 0,
-            calculatedDuration: distanceResults[idx]?.duration || 0,
-          })).filter(s => s.calculatedDistance > 0);
-
-          supermarketsWithDistance.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-
-          const chains = [
-            { name: 'Woolworths', keywords: ['woolworths', 'woolies'] },
-            { name: 'Coles', keywords: ['coles'] },
-            { name: 'IGA', keywords: ['iga'] },
-            { name: 'Aldi', keywords: ['aldi'] },
-          ];
-
-          const foundChains: typeof supermarketsWithDistance = [];
-          const chainNames = new Set<string>();
-
-          // Find closest of each chain
-          for (const chain of chains) {
-            const chainStore = supermarketsWithDistance.find(store => {
-              const storeName = (store.properties.name || '').toLowerCase();
-              return chain.keywords.some(keyword => storeName.includes(keyword));
-            });
-            if (chainStore) {
-              foundChains.push(chainStore);
-              chainNames.add(chain.name.toLowerCase());
-            }
-          }
-
-          // Always include closest (even if not one of the big 4)
-          const closestOverall = supermarketsWithDistance[0];
-          if (closestOverall) {
-            const closestName = (closestOverall.properties.name || '').toLowerCase();
-            const isChain = chains.some(chain => 
-              chain.keywords.some(keyword => closestName.includes(keyword))
-            );
-            
-            if (!isChain || !foundChains.includes(closestOverall)) {
-              foundChains.unshift(closestOverall);
-            }
-          }
-
-          foundChains.forEach(store => {
-            const { distance: distStr, time: timeStr } = formatDistanceTime(
-              store.calculatedDistance,
-              store.calculatedDuration
-            );
-            let storeName = (store.properties.name || '').trim();
-            if (!storeName) {
-              storeName = store.properties.address_line1 || 'Supermarket';
-            }
-            // Append "Supermarket" if missing
+        // Process supermarkets (top 5, sorted by Google Maps distance)
+        if (supermarketResults.length > 0) {
+          supermarketResults.sort((a, b) => a.distance - b.distance);
+          const top5 = supermarketResults.slice(0, 5);
+          top5.forEach(store => {
+            const { distance: distStr, time: timeStr } = formatDistanceTime(store.distance, store.duration);
+            let storeName = (store.place.properties.name || '').trim();
+            if (!storeName) storeName = store.place.properties.address_line1 || 'Supermarket';
             storeName = appendCategoryName(storeName, 'supermarket');
-            
             allResults.push({
               name: storeName,
-              distance: store.calculatedDistance,
+              distance: store.distance,
               category: 'supermarket',
               formattedLine: `${distStr} (${timeStr}), ${storeName}`,
             });
           });
         }
-      }
-    } catch (error) {
-      console.error('Error getting supermarkets:', error);
-    }
 
-    // 8. HOSPITALS - Prioritize ED hospitals
-    try {
-      const hospitalPlaces = await searchGeoapify(lon, lat, 'healthcare.hospital', 50000, 50);
-      
-      if (hospitalPlaces.length > 0 && GOOGLE_MAPS_API_KEY) {
-        const hospitalsWithCoords = hospitalPlaces
-          .filter(place => place.geometry?.coordinates)
-          .map(place => ({
-            place,
-            lat: place.geometry.coordinates[1],
-            lon: place.geometry.coordinates[0],
-          }));
-
-        if (hospitalsWithCoords.length > 0) {
-          const distanceResults = await getDistancesFromGoogleMapsCoordinates(
-            lat,
-            lon,
-            hospitalsWithCoords.map(h => ({ lat: h.lat, lon: h.lon }))
-          );
-
-          const hospitalsWithDistance = hospitalsWithCoords.map((hospital, idx) => ({
-            ...hospital.place,
-            calculatedDistance: distanceResults[idx]?.distance || 0,
-            calculatedDuration: distanceResults[idx]?.duration || 0,
-          })).filter(h => h.calculatedDistance > 0);
-
-          // Identify ED hospitals
-          const emergencyKeywords = ['emergency', 'ed ', 'emergency department', 'a&e', 'accident', 'casualty'];
-          const publicHospitalKeywords = ['public hospital', 'general hospital', 'base hospital', 'district hospital'];
-          const majorHospitalIndicators = ['prince', 'royal', 'queen', 'king', 'university hospital'];
-
-          const hospitalsWithED = hospitalsWithDistance.filter(hospital => {
-            const name = (hospital.properties.name || '').toLowerCase();
-            const hasEDKeyword = emergencyKeywords.some(keyword => name.includes(keyword));
-            const isSpecialtyOnly = name.includes('rehab') || name.includes('rehabilitation') ||
-                                   name.includes('psychiatric') || name.includes('mental health') ||
-                                   name.includes('psychology') || (name.includes('private') && name.includes('rehab'));
-            
-            if (isSpecialtyOnly) return false;
-            
-            const isPublicHospital = publicHospitalKeywords.some(keyword => name.includes(keyword));
-            const isMajorHospital = majorHospitalIndicators.some(keyword => name.includes(keyword)) && 
-                                   !name.includes('private');
-            
-            return hasEDKeyword || isPublicHospital || isMajorHospital;
-          });
-
-          hospitalsWithED.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-          hospitalsWithDistance.sort((a, b) => a.calculatedDistance - b.calculatedDistance);
-
-          const selectedHospitals: typeof hospitalsWithDistance = [];
-          const selectedPlaceIds = new Set<string>();
-
-          // Always include closest ED hospital if available
-          if (hospitalsWithED.length > 0) {
-            selectedHospitals.push(hospitalsWithED[0]);
-            if (hospitalsWithED[0].properties.place_id) {
-              selectedPlaceIds.add(hospitalsWithED[0].properties.place_id);
-            }
-          }
-
-          // Fill remaining slots with closest hospitals
-          for (const hospital of hospitalsWithDistance) {
-            if (selectedHospitals.length >= 2) break;
-            const placeId = hospital.properties.place_id || '';
-            if (!selectedPlaceIds.has(placeId)) {
-              selectedHospitals.push(hospital);
-              if (placeId) selectedPlaceIds.add(placeId);
-            }
-          }
-
-          selectedHospitals.forEach(hospital => {
-            const { distance: distStr, time: timeStr } = formatDistanceTime(
-              hospital.calculatedDistance,
-              hospital.calculatedDuration
-            );
-            let hospitalName = (hospital.properties.name || '').trim();
-            if (!hospitalName) {
-              hospitalName = hospital.properties.address_line1 || 'Hospital';
-            }
-            
+        // Process hospitals (top 2, sorted by Google Maps distance)
+        if (hospitalResults.length > 0) {
+          hospitalResults.sort((a, b) => a.distance - b.distance);
+          const top2 = hospitalResults.slice(0, 2);
+          top2.forEach(hospital => {
+            const { distance: distStr, time: timeStr } = formatDistanceTime(hospital.distance, hospital.duration);
+            let hospitalName = (hospital.place.properties.name || '').trim();
+            if (!hospitalName) hospitalName = hospital.place.properties.address_line1 || 'Hospital';
             allResults.push({
               name: hospitalName,
-              distance: hospital.calculatedDistance,
+              distance: hospital.distance,
               category: 'hospital',
               formattedLine: `${distStr} (${timeStr}), ${hospitalName}`,
             });
           });
         }
+
+        console.log('✅ [OPTIMIZED] Complete: All destinations processed in single Google Maps call');
       }
     } catch (error) {
-      console.error('Error getting hospitals:', error);
+      console.error('Error in Batch 2 (amenities):', error);
     }
 
     // Sort all results by distance
@@ -1090,9 +1101,9 @@ export async function POST(request: Request) {
       duration,
     });
     
-    // Check cost threshold (rough estimate: ~26 Distance Matrix calls per proximity request)
+    // PHASE 2: Check cost threshold (reduced from ~26 to 2 Distance Matrix calls per proximity request)
     // $5 per 1000 Distance Matrix calls
-    const estimatedCost = (26 / 1000) * 5; // ~$0.13 per request
+    const estimatedCost = (2 / 1000) * 5; // ~$0.01 per request (85-92% cost reduction)
     const DAILY_COST_THRESHOLD = parseFloat(process.env.ALERT_DAILY_COST_THRESHOLD || '5');
     
     // Get today's request count from rate limit store
@@ -1105,6 +1116,10 @@ export async function POST(request: Request) {
       results: allResults,
       count: allResults.length,
       coordinates: { lat, lon },
+      debug: geoapifyDebug || {
+        geoapifyTotalResults: 0,
+        geoapifyCategoryBreakdown: {},
+      },
     });
     
     // Add CORS headers
