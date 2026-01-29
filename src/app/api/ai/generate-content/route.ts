@@ -243,28 +243,29 @@ ${rawText}`;
   }
   
   if (type === 'why-property') {
-    return `Generate 7 detailed investment-based reasons why this property would appeal to investors. Use a professional, confident tone suited for a real estate investment brief. Each reason should start with a bold heading, followed by 2–4 well-written sentences explaining the insight clearly.
+    return `Generate exactly 7 concise investment-based reasons why this property would appeal to investors. Use a professional, confident tone suited for a real estate investment brief.
 
-Focus on real investor themes like:
-- Capital growth trends
-- Rental yield strength
-- Vacancy rates
-- Infrastructure investment
-- Affordability advantage
-- Transport access
-- Tenant demand
+Format output like this (each reason on ONE line with heading and description separated by a dash):
 
-Use the specific suburb and LGA context when relevant.
+**Strong Capital Growth** - Parrearra has seen consistent annual capital growth, driven by its proximity to beaches, medical precincts, and infrastructure investment.
+**Tight Rental Market** - The Sunshine Coast region, including Parrearra, has rental vacancy rates below 1%, signalling strong tenant demand.
+**Infrastructure Investment** - Major transport and medical infrastructure projects are underway, enhancing the area's long-term appeal.
+**Affordability Advantage** - Parrearra offers entry-level pricing compared to premium coastal suburbs, providing better capital growth potential.
+**Strong Rental Yield** - Current rental yields exceed regional averages, supported by high tenant demand and low vacancy rates.
+**Transport Connectivity** - Excellent access to major highways and public transport links improves accessibility and tenant appeal.
+**Population Growth** - The region is experiencing above-average population growth, driving demand for rental properties.
+
+Rules:
+- Use exactly one sentence for each reason (concise, not detailed paragraphs).
+- Each reason must be on a single line: **Heading** - Description.
+- Start each reason with a bold-style markdown heading like **Heading** (markdown will be stripped later).
+- Do not use numbers, bullet points, asterisks (except for markdown bold **), or extra spacing between entries.
+- Do not include any summary list or one-line version at the end.
+- Do not use markdown tables or HTML formatting.
+- Focus on real investor themes: capital growth, rental yield, vacancy rates, infrastructure, affordability, transport, tenant demand.
 
 Suburb: ${suburb}
-LGA: ${lga}
-
-Important formatting instructions:
-- ✅ Include only the full detailed reasons
-- ❌ Do not include a short summary list or single-line versions at the end
-- ✅ Each heading should be plain text WITHOUT any markdown formatting (e.g., "Strong Capital Growth" NOT "**Strong Capital Growth**")
-- ✅ No bullet points, numbers, asterisks, or extra spacing between entries
-- ✅ Use plain text only - no markdown, no HTML, no special formatting`;
+LGA: ${lga}`;
   }
   
   return '';
