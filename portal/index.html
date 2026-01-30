@@ -421,7 +421,7 @@
     </div>
     <div class="filter-section">
       <div class="filter-row">
-        <label for="ba-filter-select">Filter by BA (Follower):</label>
+        <label for="ba-filter-select">Filter by BA:</label>
         <div class="filter-wrapper">
           <div class="filter-dropdown">
             <select id="ba-filter-select" class="filter-select"><option value="">Select BA(s)...</option></select>
@@ -509,6 +509,25 @@ const GENERIC_MESSAGES_TAB = 'Generic BA messages';
 const MODULE_1_WEBHOOK = 'https://hook.eu1.make.com/bkq23g13n4ae6spskdbwpru7hleol6sl';
 const NON_SUITABLE_WEBHOOK = 'https://hook.eu1.make.com/q85flukqhepku5rudd6bc1qbl9mqtlxk';
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+// Configuration functions for webhook and API URLs
+function getWebhookUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const urlParam = params.get('webhookUrl');
+  if (urlParam) return urlParam;
+  
+  // Fallback: check for config object or use default
+  return window.PORTAL_CONFIG?.webhookUrl || MODULE_1_WEBHOOK;
+}
+
+function getFormAppApiUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const urlParam = params.get('apiUrl');
+  if (urlParam) return urlParam;
+  
+  // Fallback: check for config object or use default
+  return window.PORTAL_CONFIG?.formAppApiUrl || 'https://property-review-form.vercel.app';
+}
 let allOpportunities = [];
 let filteredOpportunities = [];
 let propertyInfo = {};
@@ -517,6 +536,7 @@ let currentBAFilter = '';
 let selectedBAs = [];
 let selectedStages = [];
 let baEmailMap = {}; // Maps BA names to email addresses
+let baGhlUserIdMap = {}; // Maps BA names to GHL user IDs
 let selectedSendFromEmail = ''; // Selected "Send From" email address
 let sendFromChangeHandler = null; // Store reference to change handler to avoid duplicates
 function autoResizeTextarea(textarea) {
@@ -643,38 +663,52 @@ function parseGoogleSheetJSON(data) {
   return result;
 }
 async function loadOpportunities() {
-  showMessage("Loading opportunities from Google Sheet...", 'info');
+  showMessage("Loading opportunities from webhook...", 'info');
   try {
-    const data = await fetchGoogleSheetJSON(OPPORTUNITIES_TAB);
+    const webhookUrl = getWebhookUrl();
+    const response = await fetch(webhookUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Webhook error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
     if (!data || data.length === 0) {
-      showMessage("No opportunities found in Google Sheet. Please check the sheet has data.", 'error');
+      showMessage("No opportunities found.", 'error');
       allOpportunities = [];
       filteredOpportunities = [];
       renderOpportunities();
       updateFilterCount();
       return;
     }
-    allOpportunities = data.map(row => {
+    
+    allOpportunities = data.map(opp => {
       const emails = [];
-      if (row['Email'] && row['Email'].trim()) emails.push(row['Email'].trim());
-      if (row['Partner Email'] && row['Partner Email'].trim()) emails.push(row['Partner Email'].trim());
+      if (opp.emails) {
+        emails.push(...opp.emails.split('\n').filter(e => e.trim()));
+      }
+      
       return {
-        id: row['Opportunity ID'] || '',
-        name: row['Opportunity Name'] || '',
-        client: row['Contact Name'] || '',
-        partner: row['Partner Name'] || '',
+        id: opp.id || '',
+        name: opp.name || '',
+        client: opp.client || '',
+        partner: opp.partner || '',
         emails: emails.join('\n'),
-        follower: row['Followers'] || '',
-        stage: row['Pipeline Stage'] || ''
+        follower: opp.follower || '', // Keep for backward compatibility
+        assignedBA: opp.assignedBA || '', // NEW - primary field
+        stage: opp.stage || '',
       };
     }).filter(opp => opp.id && opp.id.length > 0);
+    
     if (allOpportunities.length === 0) {
-      showMessage("No valid opportunities found. Please check that 'Opportunity ID' column has values.", 'error');
+      showMessage("No valid opportunities found. Please check that opportunity IDs are present.", 'error');
       filteredOpportunities = [];
       renderOpportunities();
       updateFilterCount();
       return;
     }
+    
     filteredOpportunities = [...allOpportunities];
     populateBAFilter();
     populateStageFilter();
@@ -685,7 +719,7 @@ async function loadOpportunities() {
     showMessage(`Successfully loaded ${allOpportunities.length} opportunities.`, 'success');
   } catch (error) {
     console.error("Error loading opportunities:", error);
-    showMessage(`Error loading opportunities: ${error.message}. Please check: 1) Sheet is published, 2) Tab name matches exactly: "${OPPORTUNITIES_TAB}", 3) Internet connection.`, 'error');
+    showMessage(`Error loading opportunities: ${error.message}. Please check webhook URL and internet connection.`, 'error');
     allOpportunities = [];
     filteredOpportunities = [];
     renderOpportunities();
@@ -693,7 +727,10 @@ async function loadOpportunities() {
   }
 }
 function populateBAFilter() {
-  const uniqueBAs = [...new Set(allOpportunities.map(opp => opp.follower || ''))];
+  // Use assignedBA as primary, fallback to follower if assignedBA is empty
+  const uniqueBAs = [...new Set(allOpportunities.map(opp => {
+    return opp.assignedBA || opp.follower || '';
+  }))];
   const optionsContainer = document.getElementById('ba-filter-options');
   optionsContainer.innerHTML = '';
   const sortedBAs = uniqueBAs.sort((a, b) => {
@@ -794,18 +831,32 @@ function setupFilterDropdowns() {
   });
 }
 async function loadBAEmailMap() {
-  // Load BA name-to-email mapping from Generic BA messages sheet
+  // Load BA name-to-email mapping from form-app API (Admin Sheet)
   try {
-    const data = await fetchGoogleSheetJSON(GENERIC_MESSAGES_TAB);
+    const apiUrl = getFormAppApiUrl();
+    const response = await fetch(`${apiUrl}/api/bas`);
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
     baEmailMap = {};
-    data.forEach(row => {
-      const baName = row['BA_Name'] || row['BA_Email'] || '';
-      const baEmailAddr = row['BA_Email'] || '';
-      if (baName && baEmailAddr) {
-        baEmailMap[baName] = baEmailAddr;
-      }
-    });
+    baGhlUserIdMap = {};
+    
+    if (data.bas && Array.isArray(data.bas)) {
+      data.bas.forEach(ba => {
+        if (ba.name && ba.email) {
+          baEmailMap[ba.name] = ba.email;
+          if (ba.ghlUserId) {
+            baGhlUserIdMap[ba.name] = ba.ghlUserId;
+          }
+        }
+      });
+    }
+    
     console.log("BA Email Map loaded:", baEmailMap);
+    console.log("BA GHL User ID Map loaded:", baGhlUserIdMap);
   } catch (error) {
     console.error("Error loading BA email map:", error);
     // Fallback: use BA names as emails if mapping fails
@@ -822,8 +873,10 @@ function populateSendFromDropdown() {
     select.removeEventListener('change', sendFromChangeHandler);
   }
   
-  // Get unique BA names from opportunities
-  const uniqueBAs = [...new Set(allOpportunities.map(opp => opp.follower || '').filter(Boolean))];
+  // Get unique BA names from opportunities (use assignedBA as primary, fallback to follower)
+  const uniqueBAs = [...new Set(allOpportunities.map(opp => {
+    return (opp.assignedBA || opp.follower || '').trim();
+  }).filter(Boolean))];
   
   // Add each BA as an option
   uniqueBAs.sort().forEach(baName => {
@@ -881,6 +934,51 @@ async function loadGenericMessage() {
   document.getElementById("standard-message").value = '';
   const textarea = document.getElementById("standard-message");
   autoResizeTextarea(textarea);
+  
+  // Try to get friendly name and GHL user ID
+  let friendlyName = searchKey;
+  let ghlUserId = null;
+  
+  // If searchKey is an email, find the friendly name
+  if (searchKey.includes('@')) {
+    friendlyName = Object.keys(baEmailMap).find(name => baEmailMap[name] === searchKey) || searchKey;
+  }
+  
+  // Get GHL user ID if available
+  if (baGhlUserIdMap[friendlyName]) {
+    ghlUserId = baGhlUserIdMap[friendlyName];
+  }
+  
+  // Try API first
+  try {
+    const apiUrl = getFormAppApiUrl();
+    const params = new URLSearchParams();
+    if (friendlyName) params.append('friendlyName', friendlyName);
+    if (ghlUserId) params.append('ghlUserId', ghlUserId);
+    
+    const response = await fetch(`${apiUrl}/api/ba-messages?${params.toString()}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data.message) {
+        document.getElementById("standard-message").value = data.message;
+        autoResizeTextarea(textarea);
+        // Cache in localStorage
+        const key = `ba_message_${searchKey}`;
+        localStorage.setItem(key, JSON.stringify({ 
+          baEmail: searchKey, 
+          genericMessage: data.message, 
+          lastUpdated: new Date().toISOString(),
+          source: 'api'
+        }));
+        showSaveStatus('Loaded saved message', true);
+        return;
+      }
+    }
+  } catch (error) {
+    console.error("Error loading message from API:", error);
+  }
+  
+  // Fallback to localStorage
   const key = `ba_message_${searchKey}`;
   const saved = localStorage.getItem(key);
   if (saved) {
@@ -889,27 +987,17 @@ async function loadGenericMessage() {
       if (data.genericMessage) {
         document.getElementById("standard-message").value = data.genericMessage;
         autoResizeTextarea(textarea);
-        showSaveStatus('Loaded saved message', true);
+        showSaveStatus('Loaded saved message (cached)', true);
         return;
       }
     } catch(e) { console.error("Error parsing saved message:", e); }
   }
-  try {
-    const data = await fetchGoogleSheetJSON(GENERIC_MESSAGES_TAB);
-    if (searchKey) {
-      const baMessage = data.find(row => row['BA_Email'] && row['BA_Email'].toLowerCase() === searchKey.toLowerCase());
-      if (baMessage && baMessage['Generic_Message']) {
-        document.getElementById("standard-message").value = baMessage['Generic_Message'];
-        autoResizeTextarea(textarea);
-        showSaveStatus('Loaded from Google Sheet', true);
-      } else {
-        document.getElementById("standard-message").value = '';
-        autoResizeTextarea(textarea);
-        showSaveStatus('No saved message for this BA', false);
-        setTimeout(() => { showSaveStatus('', false); }, 2000);
-      }
-    }
-  } catch (error) { console.error("Error loading generic message from sheet:", error); }
+  
+  // No message found
+  document.getElementById("standard-message").value = '';
+  autoResizeTextarea(textarea);
+  showSaveStatus('No saved message for this BA', false);
+  setTimeout(() => { showSaveStatus('', false); }, 2000);
 }
 async function saveGenericMessage(showFeedback = true) {
   // Determine which BA to save for:
@@ -950,21 +1038,77 @@ async function saveGenericMessage(showFeedback = true) {
   }
   
   const message = document.getElementById("standard-message").value.trim();
+  
+  // Get friendly name and GHL user ID
+  let friendlyName = saveKey;
+  let ghlUserId = null;
+  
+  // If saveKey is an email, find the friendly name
+  if (saveKey.includes('@')) {
+    friendlyName = Object.keys(baEmailMap).find(name => baEmailMap[name] === saveKey) || saveKey;
+  }
+  
+  // Get GHL user ID if available
+  if (baGhlUserIdMap[friendlyName]) {
+    ghlUserId = baGhlUserIdMap[friendlyName];
+  }
+  
+  // Save to API
+  let apiSuccess = false;
+  if (friendlyName && ghlUserId) {
+    try {
+      const apiUrl = getFormAppApiUrl();
+      const response = await fetch(`${apiUrl}/api/ba-messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          friendlyName: friendlyName,
+          ghlUserId: ghlUserId,
+          message: message
+        })
+      });
+      
+      if (response.ok) {
+        apiSuccess = true;
+        console.log("Generic message saved to API:", { friendlyName, ghlUserId, message });
+      } else {
+        console.error("API save failed:", response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error("Error saving message to API:", error);
+    }
+  } else {
+    console.warn("Cannot save to API: missing friendlyName or ghlUserId", { friendlyName, ghlUserId });
+  }
+  
+  // Also save to localStorage as cache/fallback
   try {
     const key = `ba_message_${saveKey}`;
-    localStorage.setItem(key, JSON.stringify({ baEmail: saveKey, genericMessage: message, lastUpdated: new Date().toISOString() }));
+    localStorage.setItem(key, JSON.stringify({ 
+      baEmail: saveKey, 
+      genericMessage: message, 
+      lastUpdated: new Date().toISOString(),
+      source: apiSuccess ? 'api+localStorage' : 'localStorage'
+    }));
     console.log("Generic message saved (localStorage):", { baEmail: saveKey, message, sendOnBehalf: sendOnBehalfCheckbox && sendOnBehalfCheckbox.checked });
+    
     if(showFeedback) {
       if(message) {
         const baDisplayName = Object.keys(baEmailMap).find(name => baEmailMap[name] === saveKey) || saveKey;
-        showSaveStatus(`✓ Message saved for ${baDisplayName}!`, true);
+        if (apiSuccess) {
+          showSaveStatus(`✓ Message saved for ${baDisplayName}!`, true);
+        } else {
+          showSaveStatus(`✓ Message saved for ${baDisplayName} (cached locally)`, true);
+        }
       } else {
         showSaveStatus('Message cleared', true);
       }
     }
     return true;
   } catch(error) {
-    console.error("Error saving generic message:", error);
+    console.error("Error saving generic message to localStorage:", error);
     if(showFeedback) showSaveStatus('Error saving message', false, true);
     return false;
   }
@@ -977,11 +1121,12 @@ function formatEmailsForStorage(emails) {
   if (!emails) return '';
   return emails.split('\n').map(e => e.trim()).filter(e => e.length > 0).join('\n');
 }
+
 function renderOpportunities() {
   const tbody = document.getElementById("opportunities-tbody");
   tbody.innerHTML = "";
   if (filteredOpportunities.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #666;">No opportunities found. Try adjusting your filter or check the Google Sheet has data.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #666;">No opportunities found. Try adjusting your filter or check the webhook has data.</td></tr>';
     updateFilterCount();
     return;
   }
@@ -1043,7 +1188,9 @@ function updateSelectAllCheckbox() {
 }
 function applyFilter() {
   filteredOpportunities = allOpportunities.filter(opp => {
-    const baMatch = selectedBAs.length === 0 || selectedBAs.includes(opp.follower || '');
+    // Use assignedBA as primary, fallback to follower
+    const baValue = opp.assignedBA || opp.follower || '';
+    const baMatch = selectedBAs.length === 0 || selectedBAs.includes(baValue);
     const stageMatch = selectedStages.length === 0 || selectedStages.includes(opp.stage);
     return baMatch && stageMatch;
   });
