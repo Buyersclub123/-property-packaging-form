@@ -66,6 +66,16 @@ export async function POST(request: Request) {
     
     console.log('Created property folder:', propertyFolder.id);
     
+    // Step 2.5: Explicitly set folder permissions to ensure "Anyone with the link" = Viewer
+    // This is necessary because Shared Drive folders may not always inherit permissions correctly
+    try {
+      await setFolderPermissions(propertyFolder.id, 'reader', SHARED_DRIVE_ID);
+      console.log('✓ Set folder permissions to "Anyone with the link" = Viewer');
+    } catch (permError: any) {
+      // Don't fail folder creation if permission setting fails (might already be set)
+      console.warn('Warning: Could not set folder permissions (may already be set):', permError?.message);
+    }
+    
     // Step 2: Check if H&L + Split Contract condition applies
     // Log everything first to see what we're getting
     console.log('=== SHEET PROCESSING DEBUG ===');
