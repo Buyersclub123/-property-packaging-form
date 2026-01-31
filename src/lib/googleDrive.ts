@@ -343,24 +343,39 @@ export async function createFolder(
 
 /**
  * Set folder permissions (share with viewers)
+ * Sets "Anyone with the link" permission for Shared Drive folders
  */
 export async function setFolderPermissions(
   folderId: string,
-  role: 'reader' | 'writer' = 'reader'
+  role: 'reader' | 'writer' = 'reader',
+  driveId?: string
 ): Promise<void> {
   try {
     const drive = getDriveClient();
     
-    await drive.permissions.create({
+    const permissionOptions: any = {
       fileId: folderId,
       requestBody: {
         role: role,
         type: 'anyone', // Anyone with the link can access
       },
-    });
-  } catch (error) {
+      supportsAllDrives: true, // Required for Shared Drive compatibility
+    };
+
+    // If Shared Drive ID is provided, include it
+    if (driveId) {
+      permissionOptions.driveId = driveId;
+    }
+    
+    await drive.permissions.create(permissionOptions);
+    console.log(`✓ Set "Anyone with the link" permission (${role}) on folder ${folderId}`);
+  } catch (error: any) {
     console.error('Error setting folder permissions:', error);
-    throw error;
+    // Don't throw if permission already exists
+    if (!error.message?.includes('already exists') && !error.message?.includes('Permission already granted')) {
+      throw error;
+    }
+    console.log(`Permission may already exist for folder ${folderId}`);
   }
 }
 

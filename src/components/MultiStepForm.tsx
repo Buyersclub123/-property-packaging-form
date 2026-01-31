@@ -16,6 +16,7 @@ import { Step7CashflowReview } from './steps/Step7CashflowReview';
 import { Step8Submission } from './steps/Step8Submission';
 import { Step6FolderCreation } from './steps/Step6FolderCreation';
 import { Step4Review } from './steps/Step4Review';
+import { Step9PhotoDocuments } from './steps/Step9PhotoDocuments';
 import { getUserEmail } from '@/lib/userAuth';
 
 // Steps numbered starting from 1
@@ -28,7 +29,8 @@ const STEPS = [
   { number: 6, title: 'Insurance Calculator', component: Step6InsuranceCalculator },
   { number: 7, title: 'Washington Brown', component: Step6WashingtonBrown },
   { number: 8, title: 'Cashflow Review', component: Step7CashflowReview },
-  { number: 9, title: 'Submission', component: Step8Submission },
+  { number: 9, title: 'Photo & Document Upload', component: Step9PhotoDocuments },
+  { number: 10, title: 'Submission', component: Step8Submission },
 ];
 
 interface MultiStepFormProps {
@@ -821,9 +823,17 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         
         return true;
 
-      case 9: // Submission
-        // Step 9 handles its own validation (checklist must be complete)
-        // No validation needed here as user can't proceed past Step 9
+      case 9: // Photo & Document Upload
+        // Check if folder has been created (required for photo/document upload)
+        if (!formData.address?.folderLink) {
+          setValidationError('Please complete the previous steps first. The property folder must be created before you can upload photos and documents.');
+          return false;
+        }
+        return true;
+
+      case 10: // Submission
+        // Step 10 handles its own validation (checklist must be complete)
+        // No validation needed here as user can't proceed past Step 10
         return true;
 
       default:
@@ -855,7 +865,18 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       return;
     }
     
+    // Check if we have required data
+    if (!address?.propertyAddress) {
+      console.error('📍 [EARLY PROCESSING] No property address available, cannot process');
+      return;
+    }
     
+    if (!userEmail) {
+      console.error('📍 [EARLY PROCESSING] No user email available, cannot process');
+      return;
+    }
+    
+    console.log('📍 [EARLY PROCESSING] Setting status to processing...');
     updateFormData({
       earlyProcessing: {
         ...formData.earlyProcessing,
@@ -864,6 +885,13 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     });
 
     try {
+      console.log('📍 [EARLY PROCESSING] Calling proximity API with:', {
+        propertyAddress: address?.propertyAddress,
+        userEmail: userEmail,
+        hasAddress: !!address?.propertyAddress,
+        hasEmail: !!userEmail
+      });
+      
       const res = await fetch('/api/geoapify/proximity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -873,8 +901,11 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         }),
       });
 
+      console.log('📍 [EARLY PROCESSING] API response status:', res.status, res.statusText);
+
       if (res.ok) {
         const json = await res.json();
+        console.log('📍 [EARLY PROCESSING] API success, proximity data length:', json.proximity?.length || 0);
         updateFormData({
           earlyProcessing: {
             ...formData.earlyProcessing,
@@ -882,6 +913,8 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           },
         });
       } else {
+        const errorText = await res.text();
+        console.error('📍 [EARLY PROCESSING] API error:', res.status, errorText);
         updateFormData({
           earlyProcessing: {
             ...formData.earlyProcessing,
@@ -890,7 +923,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         });
       }
     } catch (error) {
-      console.error('Proximity processing error:', error);
+      console.error('📍 [EARLY PROCESSING] Proximity processing error:', error);
       updateFormData({
         earlyProcessing: {
           ...formData.earlyProcessing,
@@ -916,6 +949,30 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       return;
     }
     
+    // Check if we have required data
+    if (!address?.suburbName) {
+      console.error('💡 [WHY THIS PROPERTY] No suburb available, cannot process');
+      return;
+    }
+    
+    // Try to get LGA from Stash data if missing
+    let lgaToUse = address?.lga;
+    if (!lgaToUse) {
+      // Check if we can get LGA from Stash lookup
+      const stashData = useFormStore.getState().stashData;
+      if (stashData?.lga) {
+        console.log('💡 [WHY THIS PROPERTY] Using LGA from Stash data:', stashData.lga);
+        lgaToUse = stashData.lga;
+        // Update address with LGA for future use
+        updateFormData({
+          address: {
+            ...address,
+            lga: stashData.lga,
+          },
+        });
+      }
+    }
+    
     updateFormData({
       earlyProcessing: {
         ...formData.earlyProcessing,
@@ -924,18 +981,28 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     });
 
     try {
+      console.log('💡 [WHY THIS PROPERTY] Calling API with:', {
+        suburb: address?.suburbName,
+        lga: lgaToUse,
+        hasSuburb: !!address?.suburbName,
+        hasLga: !!lgaToUse,
+      });
+      
       const res = await fetch('/api/ai/generate-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'why-property',
           suburb: address?.suburbName,
-          lga: address?.lga,
+          lga: lgaToUse || '', // Use LGA if available, otherwise empty string
         }),
       });
 
+      console.log('💡 [WHY THIS PROPERTY] API response status:', res.status, res.statusText);
+
       if (res.ok) {
         const json = await res.json();
+        console.log('💡 [WHY THIS PROPERTY] API success, content length:', json.content?.length || 0);
         updateFormData({
           earlyProcessing: {
             ...formData.earlyProcessing,
@@ -943,6 +1010,8 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           },
         });
       } else {
+        const errorText = await res.text();
+        console.error('💡 [WHY THIS PROPERTY] API error:', res.status, errorText);
         updateFormData({
           earlyProcessing: {
             ...formData.earlyProcessing,
@@ -951,7 +1020,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         });
       }
     } catch (error) {
-      console.error('Why This Property processing error:', error);
+      console.error('💡 [WHY THIS PROPERTY] Processing error:', error);
       updateFormData({
         earlyProcessing: {
           ...formData.earlyProcessing,

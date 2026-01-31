@@ -219,11 +219,9 @@ export async function POST(request: Request) {
       console.log('formData exists:', !!formData);
     }
     
-    // Step 3: Permissions are inherited from Properties folder
-    // Properties folder already has:
-    // - "Anyone with the link" = Viewer
-    // - Specific @buyersclub.com.au users = Editor
-    // New property folders inherit these permissions automatically
+    // Note: Permissions are inherited from parent folder
+    // - "Anyone with the link" = Viewer (inherited from Properties folder)
+    // - Specific @buyersclub.com.au users = Content Manager (inherited from parent folder)
     
     // Step 4: Add PDF shortcut if hotspottingPdfFileId exists
     serverLog('[create-property-folder] Checking for PDF shortcut...');
