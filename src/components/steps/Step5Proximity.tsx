@@ -25,10 +25,11 @@ export function Step5Proximity() {
   // Use form store state instead of local state
   const contentReviewed = contentSections?.contentReviewed || false;
 
-  // Use early processing data if available
-  const proximityValue = contentSections?.proximity || 
-                         earlyProcessing?.proximity?.data || 
-                         proximityData || '';
+  // Use early processing data ONLY if user hasn't edited the field yet
+  // Once contentSections.proximity exists, it means user has edited it - don't overwrite!
+  const proximityValue = contentSections?.proximity !== undefined && contentSections?.proximity !== null
+    ? contentSections.proximity  // User has edited - use their value
+    : (earlyProcessing?.proximity?.data || proximityData || '');  // No user edits yet - use early processing
   
   const whyThisPropertyValue = contentSections?.whyThisProperty || 
                                earlyProcessing?.whyThisProperty?.data || 

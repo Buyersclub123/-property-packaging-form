@@ -3,15 +3,21 @@ import axios from 'axios';
 import { checkRateLimit, getClientIP } from '@/lib/rateLimit';
 import { logRequest } from '@/lib/requestLogger';
 import { sendRateLimitAlert, sendCostThresholdAlert, sendBurstActivityAlert } from '@/lib/emailAlerts';
+import { logDistanceMatrixUsage } from '@/lib/distanceMatrixLogger';
 
-const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY?.trim();
 const GEOAPIFY_API_BASE_URL = process.env.GEOAPIFY_API_BASE_URL || 'https://api.geoapify.com/v2/places';
 const PSMA_API_ENDPOINT = process.env.PSMA_API_ENDPOINT || 'https://api.psma.com.au/v2/addresses/geocoder';
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 const GOOGLE_MAPS_API_BASE_URL = process.env.GOOGLE_MAPS_API_BASE_URL || 'https://maps.googleapis.com/maps/api/distancematrix/json';
 
-if (!GEOAPIFY_API_KEY) {
-  throw new Error('GEOAPIFY_API_KEY environment variable is required');
+if (!GEOAPIFY_API_KEY || GEOAPIFY_API_KEY.length === 0) {
+  console.error('❌ [GEOAPIFY] API key validation failed:', {
+    exists: !!process.env.GEOAPIFY_API_KEY,
+    length: process.env.GEOAPIFY_API_KEY?.length || 0,
+    trimmedLength: GEOAPIFY_API_KEY?.length || 0,
+  });
+  throw new Error('GEOAPIFY_API_KEY environment variable is required and cannot be empty');
 }
 
 const GEOSCAPE_API_KEY = process.env.NEXT_PUBLIC_GEOSCAPE_API_KEY;
@@ -357,7 +363,7 @@ async function getConsolidatedDistances(
   originLat: number,
   originLon: number,
   destinations: ConsolidatedDestination[]
-): Promise<Array<{ distance: number; duration: number }>> {
+): Promise<{ results: Array<{ distance: number; duration: number }>; apiCallCount: number }> {
   if (!GOOGLE_MAPS_API_KEY) {
     throw new Error('GOOGLE_MAPS_API_KEY not configured');
   }
@@ -431,7 +437,7 @@ async function getConsolidatedDistances(
   }
 
   console.log(`📊 [PHASE 2] Total Google Maps API calls: ${apiCallCount}`);
-  return results;
+  return { results, apiCallCount };
 }
 
 /**
@@ -446,25 +452,59 @@ async function searchGeoapify(
 ): Promise<GeoapifyPlace[]> {
   const biasStr = `proximity:${lon},${lat}`;
   
+  // Check if API key is available
+  if (!GEOAPIFY_API_KEY || GEOAPIFY_API_KEY.length === 0) {
+    console.error('❌ [GEOAPIFY] API key is missing or empty!', {
+      keyExists: !!GEOAPIFY_API_KEY,
+      keyLength: GEOAPIFY_API_KEY?.length || 0,
+    });
+    throw new Error('GEOAPIFY_API_KEY is not configured or is empty');
+  }
+  
   const params = new URLSearchParams({
     categories,
     limit: String(limit),
-    apiKey: GEOAPIFY_API_KEY!,
+    apiKey: GEOAPIFY_API_KEY,
   });
   const url = `${GEOAPIFY_API_BASE_URL}?${params.toString()}&bias=${biasStr}`;
   
+  console.log(`🔍 [GEOAPIFY] Calling API for categories: ${categories}, limit: ${limit}`);
+  console.log(`🔍 [GEOAPIFY] URL: ${url.replace(GEOAPIFY_API_KEY, '***REDACTED***')}`);
+  
   try {
     const response = await axios.get(url, { timeout: 30000 });
-    return response.data.features || [];
-  } catch (error) {
-    console.error('Geoapify API error:', error);
-    return [];
+    const features = response.data.features || [];
+    console.log(`✅ [GEOAPIFY] Successfully retrieved ${features.length} places for categories: ${categories}`);
+    return features;
+  } catch (error: any) {
+    console.error('❌ [GEOAPIFY] API error:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: url.replace(GEOAPIFY_API_KEY, '***REDACTED***'),
+    });
+    // Re-throw the error so it can be handled upstream
+    throw new Error(`Geoapify API error: ${error.response?.status || 'Unknown'} - ${error.message}`);
   }
 }
 
 export async function POST(request: Request) {
   const startTime = Date.now();
   const clientIP = getClientIP(request);
+  
+  // Store request body for logging (read once)
+  let requestBody: {
+    propertyAddress: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    userEmail: string | null;
+  } = {
+    propertyAddress: null,
+    latitude: null,
+    longitude: null,
+    userEmail: null,
+  };
   
   // CORS configuration
   const allowedOrigins = [
@@ -523,6 +563,14 @@ export async function POST(request: Request) {
     // Email Authentication - Extract and validate user email
     const body = await request.json();
     const { propertyAddress, latitude, longitude, userEmail } = body;
+    
+    // Store for logging
+    requestBody = {
+      propertyAddress: propertyAddress || null,
+      latitude: latitude || null,
+      longitude: longitude || null,
+      userEmail: userEmail || null,
+    };
     
     console.log('🔐 Email validation - Received email:', userEmail);
     
@@ -586,6 +634,8 @@ export async function POST(request: Request) {
 
     const allResults: ProximityResult[] = [];
     let geoapifyDebug: { geoapifyTotalResults: number; geoapifyCategoryBreakdown: any } | null = null;
+    let distanceMatrixApiCallCount = 0;
+    let destinationsCount = 0;
 
     if (!GOOGLE_MAPS_API_KEY) {
       return NextResponse.json(
@@ -669,28 +719,66 @@ export async function POST(request: Request) {
 
     // OPTIMIZED: Get all Geoapify results, use Haversine to sort, apply logic, then combine with airports/cities for single Google Maps call
     console.log('🚀 [OPTIMIZED] Starting amenities processing with Haversine sorting');
+    console.log(`🔍 [GEOAPIFY] API Key configured: ${GEOAPIFY_API_KEY ? 'YES' : 'NO'}`);
+    console.log(`🔍 [GEOAPIFY] API Key length: ${GEOAPIFY_API_KEY?.length || 0} characters`);
+    console.log(`🔍 [GEOAPIFY] API Key starts with: ${GEOAPIFY_API_KEY ? GEOAPIFY_API_KEY.substring(0, 8) + '...' : 'N/A'}`);
+    console.log(`🔍 [GEOAPIFY] API Base URL: ${GEOAPIFY_API_BASE_URL}`);
+    
+    let allPlaces: GeoapifyPlace[] = [];
     try {
-      // Step 1: Get all Geoapify results in ONE call (all categories combined, limit 500)
-      const allCategories = 'public_transport.train,public_transport.tram,public_transport.bus,childcare.kindergarten,childcare,education.school,commercial.supermarket,healthcare.hospital';
-      const allPlaces = await searchGeoapify(lon, lat, allCategories, 500);
-      console.log(`📊 [OPTIMIZED] Combined Geoapify call returned ${allPlaces.length} total results`);
+      // Step 1: Split into multiple calls - Geoapify may not handle all categories in one request
+      // OPTIMIZED: Run all 5 calls in parallel for much faster performance
+      console.log(`🔍 [GEOAPIFY] Starting multiple category calls in parallel...`);
       
-      // Step 1b: Second call for hospitals only to ensure enough results
-      const hospitalPlacesAdditional = await searchGeoapify(lon, lat, 'healthcare.hospital', 500);
-      console.log(`📊 [OPTIMIZED] Hospital-only Geoapify call returned ${hospitalPlacesAdditional.length} total results`);
+      const startTime = Date.now();
+      const [transportPlaces, childcarePlaces, schoolPlaces, supermarketPlaces, hospitalPlaces] = await Promise.all([
+        searchGeoapify(lon, lat, 'public_transport.train,public_transport.tram,public_transport.bus', 500),
+        searchGeoapify(lon, lat, 'childcare.kindergarten,childcare', 500),
+        searchGeoapify(lon, lat, 'education.school', 500),
+        searchGeoapify(lon, lat, 'commercial.supermarket', 500),
+        searchGeoapify(lon, lat, 'healthcare.hospital', 500),
+      ]);
       
-      // Merge hospital results with main results (deduplicate by place_id)
-      const existingPlaceIds = new Set(allPlaces.map(p => p.properties?.place_id).filter(Boolean));
-      hospitalPlacesAdditional.forEach(place => {
-        if (!existingPlaceIds.has(place.properties?.place_id)) {
-          allPlaces.push(place);
-          existingPlaceIds.add(place.properties?.place_id);
+      const duration = Date.now() - startTime;
+      console.log(`📊 [GEOAPIFY] All 5 calls completed in ${duration}ms`);
+      console.log(`📊 [GEOAPIFY] Transport: ${transportPlaces.length}, Childcare: ${childcarePlaces.length}, School: ${schoolPlaces.length}, Supermarket: ${supermarketPlaces.length}, Hospital: ${hospitalPlaces.length}`);
+      
+      allPlaces.push(...transportPlaces, ...childcarePlaces, ...schoolPlaces, ...supermarketPlaces, ...hospitalPlaces);
+      
+      console.log(`📊 [OPTIMIZED] Total places from all calls: ${allPlaces.length}`);
+      
+      // Deduplicate by place_id
+      const existingPlaceIds = new Set<string>();
+      const deduplicatedPlaces: GeoapifyPlace[] = [];
+      allPlaces.forEach(place => {
+        const placeId = place.properties?.place_id;
+        if (placeId && !existingPlaceIds.has(placeId)) {
+          existingPlaceIds.add(placeId);
+          deduplicatedPlaces.push(place);
+        } else if (!placeId) {
+          // Include places without place_id (shouldn't happen but handle it)
+          deduplicatedPlaces.push(place);
         }
       });
-      console.log(`📊 [OPTIMIZED] Total places after merging: ${allPlaces.length}`);
-      
-      // Step 2: Separate results by category and calculate Haversine distances, then sort
-      const trainPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('public_transport.train')));
+      allPlaces = deduplicatedPlaces;
+      console.log(`📊 [OPTIMIZED] Total places after deduplication: ${allPlaces.length}`);
+    } catch (geoapifyError: any) {
+      console.error('❌ [GEOAPIFY] Critical error - Geoapify API calls failed:', {
+        error: geoapifyError.message,
+        stack: geoapifyError.stack,
+        coordinates: { lat, lon },
+      });
+      // Continue with empty results - will only process airports/cities
+      console.warn('⚠️ [GEOAPIFY] Continuing without amenities - only airports/cities will be processed');
+      allPlaces = [];
+    }
+    
+    // Step 2: Separate results by category and calculate Haversine distances, then sort
+    if (allPlaces.length === 0) {
+      console.warn('⚠️ [GEOAPIFY] No places returned from Geoapify - amenities will be empty');
+    }
+    
+    const trainPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('public_transport.train')));
       const tramPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('public_transport.tram')));
       const busPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('public_transport.bus')));
       const kindergartenPlaces = allPlaces.filter(p => p.properties.categories?.some(c => c.includes('childcare.kindergarten')));
@@ -872,13 +960,17 @@ export async function POST(request: Request) {
       console.log(`📊 [OPTIMIZED] Total destinations for Google Maps: ${allDestinations.length} (${filteredAirports.length} airports + ${filteredCities.length} cities + ${batch2Destinations.length} amenities)`);
 
       // Step 5: Single Google Maps call for all destinations (up to 25)
+      let allResults_gm: Array<{ distance: number; duration: number }> = [];
       if (allDestinations.length > 0) {
-        const allResults_gm = await getConsolidatedDistances(
+        const distanceResult = await getConsolidatedDistances(
           addressForGoogleMaps,
           lat,
           lon,
           allDestinations.slice(0, 25) // Limit to 25 for Google Maps
         );
+        allResults_gm = distanceResult.results;
+        distanceMatrixApiCallCount = distanceResult.apiCallCount;
+        destinationsCount = allDestinations.length;
 
         // Step 6: Process results by category (airports, cities, and amenities)
         // Process results sequentially - metadata array is aligned with results array
@@ -1079,10 +1171,9 @@ export async function POST(request: Request) {
         }
 
         console.log('✅ [OPTIMIZED] Complete: All destinations processed in single Google Maps call');
+      } else {
+        console.warn('⚠️ [GEOAPIFY] No destinations to process - allDestinations array is empty');
       }
-    } catch (error) {
-      console.error('Error in Batch 2 (amenities):', error);
-    }
 
     // Sort all results by distance
     allResults.sort((a, b) => a.distance - b.distance);
@@ -1130,6 +1221,22 @@ export async function POST(request: Request) {
       response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
     }
     
+    // Log Distance Matrix API usage (observational, non-blocking)
+    await logDistanceMatrixUsage(
+      request,
+      clientIP,
+      {
+        propertyAddress,
+        latitude: lat,
+        longitude: lon,
+        userEmail,
+      },
+      distanceMatrixApiCallCount,
+      destinationsCount,
+      duration,
+      true
+    );
+    
     return response;
   } catch (error) {
     console.error('Error in proximity API:', error);
@@ -1160,6 +1267,18 @@ export async function POST(request: Request) {
       response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
       response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
     }
+    
+    // Log Distance Matrix API usage error (observational, non-blocking)
+    await logDistanceMatrixUsage(
+      request,
+      clientIP,
+      requestBody,
+      0,
+      0,
+      Date.now() - startTime,
+      false,
+      error instanceof Error ? error.message : 'Unknown error'
+    );
     
     return response;
   }

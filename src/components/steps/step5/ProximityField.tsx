@@ -53,14 +53,32 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
   const hasAutoRunRef = useRef(false); // Use ref to prevent duplicate runs across re-renders
 
   /**
+   * CRITICAL FIX: Watch value changes and always clear loading when we have data
+   * This ensures the field is editable even if other logic tries to keep loading=true
+   */
+  useEffect(() => {
+    if (value && value.trim().length > 0) {
+      setLoading(false);
+    }
+  }, [value]);
+
+  /**
    * PHASE 1 FIX: Watch for earlyProcessing status changes (reactive subscription)
    * This replaces polling - component automatically reacts when status changes
    */
   useEffect(() => {
+    // CRITICAL FIX: If we have ANY value data, ALWAYS clear loading to allow editing
+    // This ensures the field is editable even if earlyProcessing is stuck in 'processing'
+    if (value && value.trim().length > 0) {
+      setLoading(false);
+    }
+    
     // If status is 'ready' and we have data, use it
+    // BUT: Only if the field is empty - don't overwrite user edits!
     if (earlyProcessingStatus === 'ready' && earlyProcessingData) {
-      // Only update if we don't already have this data
-      if (!value || value !== earlyProcessingData) {
+      // Only update if field is empty (no user edits yet)
+      // If value exists and differs from earlyProcessingData, user has edited - don't overwrite!
+      if (!value || value.trim().length === 0) {
         onChange(earlyProcessingData);
         setCalculatedFor(address || 'pre-loaded');
       }
@@ -70,6 +88,13 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
     } else if (earlyProcessingStatus === 'error') {
       // Clear loading on error too
       setLoading(false);
+    } else if (earlyProcessingStatus === 'processing') {
+      // Only show loading if we don't have value yet - if we have value, allow editing
+      if (!value || value.trim().length === 0) {
+        setLoading(true);
+      } else {
+        setLoading(false); // Allow editing even while processing
+      }
     }
   }, [earlyProcessingStatus, earlyProcessingData, value, address, onChange]);
 
@@ -83,11 +108,12 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
       return;
     }
     
-    // If we already have data, mark as calculated
-    if (value) {
+    // If we already have data, mark as calculated and ensure loading is false
+    if (value && value.trim().length > 0) {
       if (!calculatedFor) {
         setCalculatedFor(address || 'pre-loaded');
       }
+      setLoading(false); // Ensure loading is cleared when we have data
       hasAutoRunRef.current = true;
       return;
     }
@@ -97,7 +123,12 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
     
     if (proximityStatus === 'processing') {
       // Early processing is still running - wait for subscription to detect completion
-      setLoading(true);
+      // BUT: If we already have value data, don't block editing
+      if (!value || value.trim().length === 0) {
+        setLoading(true);
+      } else {
+        setLoading(false); // Allow editing even if processing
+      }
       hasAutoRunRef.current = true; // Mark as run so we don't make API call
       return;
     }
@@ -112,6 +143,8 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
         hasAutoRunRef.current = true;
         return;
       }
+      // If status is ready but no data, clear loading anyway
+      setLoading(false);
     }
     
     // If we have pre-fetched data but it's not in value yet, use it
@@ -124,7 +157,8 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
     
     // Otherwise, fetch as normal if we have address (ONLY ONCE)
     // This handles: earlyProcessing status is 'error', undefined, or no earlyProcessing
-    if (address && !calculatedFor && proximityStatus !== 'processing') {
+    // Note: proximityStatus !== 'processing' check removed - already handled by early return above (line 98-103)
+    if (address && !calculatedFor) {
       calculateProximity(address);
       hasAutoRunRef.current = true;
     }
@@ -276,23 +310,35 @@ export function ProximityField({ value, onChange, address, disabled = false, pre
         )}
       </div>
 
-      {/* Main Text Area - Auto-growing */}
+      {/* Main Text Area - Auto-growing and fully editable */}
       <textarea
         ref={textareaRef}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          console.log('ProximityField onChange triggered:', e.target.value.length, 'loading:', loading, 'disabled:', disabled);
+          onChange(e.target.value);
+        }}
         onPaste={handlePaste}
         disabled={disabled || loading}
+        readOnly={false}
         className="input-field font-mono text-sm"
         style={{
           overflow: 'hidden',
           resize: 'none',
-          minHeight: '100px'
+          minHeight: '100px',
+          cursor: (disabled || loading) ? 'not-allowed' : 'text'
         }}
         placeholder={`${address || 'Property Address'}&#10;• 0.5 km (5 mins), Local Kindergarten&#10;• 1.2 km (10 mins), Primary School&#10;• 2.0 km (15 mins), Shopping Centre...`}
         spellCheck={true}
         required
       />
+      
+      {/* Debug info - shows loading/disabled state */}
+      {process.env.NODE_ENV === 'development' && (
+        <p className="text-xs text-gray-400 mt-1">
+          Debug: loading={loading ? 'true' : 'false'}, disabled={disabled ? 'true' : 'false'}
+        </p>
+      )}
       
       <p className="text-xs text-gray-500">
         You can edit the list above. Add or remove items as needed.

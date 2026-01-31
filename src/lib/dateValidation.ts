@@ -193,7 +193,7 @@ function calculateStatus(startDate: Date, endDate: Date): DateValidationResult {
     status = 'expired';
     const daysExpired = Math.abs(daysUntilExpiry);
     displayText = `Expired ${daysExpired} day${daysExpired === 1 ? '' : 's'} ago`;
-  } else if (daysUntilExpiry <= 30) {
+  } else if (daysUntilExpiry <= 3) {
     status = 'expiring-soon';
     displayText = `Expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? '' : 's'}`;
   } else {
