@@ -161,23 +161,16 @@ export async function POST(request: Request) {
         currentPage = pdfDoc.addPage([595, 842]); // A4 in points (72 DPI)
         imagesOnCurrentPage = 0;
         
-        // Add property address header and logo on first page only
+        // Add logo and property address header on first page only
         if (i === 0) {
           const { width, height } = currentPage.getSize();
           
-          // Draw property address header (left side)
-          currentPage.drawText(`Property Photos: ${propertyAddress}`, {
-            x: 50,
-            y: height - 50 - 30, // 30px space below header
-            size: 16,
-            color: rgb(0, 0, 0),
-          });
-
-          // Draw Buyers Club logo (top right) - maintain aspect ratio
+          // Draw Buyers Club logo (top left) - maintain aspect ratio
+          let logoHeight = 0;
           if (logoImage) {
             const logoDims = logoImage.scale(1);
             const logoWidth = logoDims.width;
-            const logoHeight = logoDims.height;
+            logoHeight = logoDims.height;
             
             // Set maximum logo size (e.g., 180px width max, maintain aspect ratio)
             const maxLogoWidth = 180;
@@ -187,20 +180,29 @@ export async function POST(request: Request) {
             const logoScale = Math.min(widthRatio, heightRatio, 1); // Don't scale up
             
             const scaledLogoWidth = logoWidth * logoScale;
-            const scaledLogoHeight = logoHeight * logoScale;
+            logoHeight = logoHeight * logoScale;
             
-            // Position in top right with margin
+            // Position in top left with margin
             const logoMargin = 50;
-            const logoX = width - scaledLogoWidth - logoMargin;
-            const logoY = height - scaledLogoHeight - logoMargin;
+            const logoX = logoMargin;
+            const logoY = height - logoHeight - logoMargin;
             
             currentPage.drawImage(logoImage, {
               x: logoX,
               y: logoY,
               width: scaledLogoWidth,
-              height: scaledLogoHeight,
+              height: logoHeight,
             });
           }
+          
+          // Draw property address header below logo (left side)
+          const addressY = height - (logoHeight > 0 ? logoHeight + 70 : 50); // 20px space below logo, or 50px from top if no logo
+          currentPage.drawText(`Property Photos: ${propertyAddress}`, {
+            x: 50,
+            y: addressY,
+            size: 16,
+            color: rgb(0, 0, 0),
+          });
         }
       }
 
@@ -208,7 +210,8 @@ export async function POST(request: Request) {
       
       // Calculate margins and spacing
       const margin = 50;
-      const headerHeight = i === 0 ? 50 : 0; // Space for header on first page
+      // Header includes: logo (up to 60px) + spacing (20px) + address text (20px) + bottom spacing (30px)
+      const headerHeight = i === 0 ? 130 : 0; // Space for header (logo + address) on first page
       const headerBottomSpace = i === 0 ? 30 : 0; // Space below header on first page
       const spacingBetweenImages = 20; // Space between two images on same page
       
