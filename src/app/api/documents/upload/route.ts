@@ -9,11 +9,27 @@ function getDriveClient() {
     throw new Error('GOOGLE_SHEETS_CREDENTIALS environment variable is not set');
   }
 
+  // Remove single quotes if present at start/end (from .env file)
+  let cleanedJson = credentialsJson.trim();
+  if (cleanedJson.startsWith("'") && cleanedJson.endsWith("'")) {
+    cleanedJson = cleanedJson.slice(1, -1);
+  }
+  if (cleanedJson.startsWith('"') && cleanedJson.endsWith('"')) {
+    cleanedJson = cleanedJson.slice(1, -1);
+  }
+
+  // Parse JSON - handle multi-line format
   let credentials;
   try {
-    credentials = JSON.parse(credentialsJson);
+    credentials = JSON.parse(cleanedJson);
   } catch (error) {
-    throw new Error('Failed to parse GOOGLE_SHEETS_CREDENTIALS');
+    // If parsing fails, try to clean up newlines and parse again
+    try {
+      const cleanedJson2 = cleanedJson.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+      credentials = JSON.parse(cleanedJson2);
+    } catch (parseError) {
+      throw new Error(`Failed to parse GOOGLE_SHEETS_CREDENTIALS: ${parseError instanceof Error ? parseError.message : 'Invalid JSON format'}`);
+    }
   }
 
   // Fix private key newlines
