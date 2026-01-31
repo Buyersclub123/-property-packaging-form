@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { Readable } from 'stream';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     // Create PDF using pdf-lib
     const pdfDoc = await PDFDocument.create();
 
-    // Load and embed the Buyers Club logo (for first page only)
+    // Load and embed the Buyers Club logo (for all pages)
     let logoImage: any = null;
     try {
       const logoPath = join(process.cwd(), 'public', 'logo.jpg');
@@ -103,11 +103,15 @@ export async function POST(request: Request) {
       console.warn('Failed to load logo, continuing without it:', logoError);
       // Continue without logo if it fails to load
     }
+    
+    // Load nicer font for address (Helvetica-Bold)
+    const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // Process images - 2 per page
+    // Process images - detect portrait vs landscape to determine images per page
     let currentPage: any = null;
     let imagesOnCurrentPage = 0;
-    const imagesPerPage = 2;
+    let imagesPerPage = 2; // Default: 2 landscape images per page
+    let currentPageImagesPerPage = 2; // Track images per page for current page
     
     for (let i = 0; i < images.length; i++) {
       const imageData = images[i];
@@ -156,77 +160,125 @@ export async function POST(request: Request) {
         throw embedError;
       }
 
-      // Create a new page if needed (first image or every 2 images)
-      if (i % imagesPerPage === 0) {
+      // Detect if image is portrait (height > width) - check BEFORE creating page
+      const imageDims = embeddedImage.scale(1);
+      const isPortrait = imageDims.height > imageDims.width;
+      const imagesPerPageForThis = isPortrait ? 1 : 2;
+
+      // Create a new page if needed (first image, or when page is full)
+      const needsNewPage = i === 0 || imagesOnCurrentPage >= currentPageImagesPerPage;
+      
+      if (needsNewPage) {
         currentPage = pdfDoc.addPage([595, 842]); // A4 in points (72 DPI)
         imagesOnCurrentPage = 0;
+        currentPageImagesPerPage = imagesPerPageForThis; // Set images per page for this page
         
-        // Add logo and property address header on first page only
-        if (i === 0) {
-          const { width, height } = currentPage.getSize();
+        const { width, height } = currentPage.getSize();
+        
+        // Draw Buyers Club logo on top center of every page (larger, prominent branding)
+        let scaledLogoWidth = 0;
+        let logoHeight = 0;
+        if (logoImage) {
+          const logoDims = logoImage.scale(1);
+          const logoWidth = logoDims.width;
+          logoHeight = logoDims.height;
           
-          // Draw Buyers Club logo (top left) - maintain aspect ratio
-          let logoHeight = 0;
-          if (logoImage) {
-            const logoDims = logoImage.scale(1);
-            const logoWidth = logoDims.width;
-            logoHeight = logoDims.height;
+          // Larger logo (250px width max)
+          const maxLogoWidth = 250;
+          const maxLogoHeight = 90;
+          const widthRatio = maxLogoWidth / logoWidth;
+          const heightRatio = maxLogoHeight / logoHeight;
+          const logoScale = Math.min(widthRatio, heightRatio, 1);
+          
+          scaledLogoWidth = logoWidth * logoScale;
+          logoHeight = logoHeight * logoScale;
+          
+          // Position in top center
+          const logoMargin = 20;
+          const logoX = (width - scaledLogoWidth) / 2; // Center horizontally
+          const logoY = height - logoHeight - logoMargin;
+          
+          currentPage.drawImage(logoImage, {
+            x: logoX,
+            y: logoY,
+            width: scaledLogoWidth,
+            height: logoHeight,
+          });
+        }
+        
+        // Add property address on every page (bottom center, larger, nicer font) for symmetry
+        {
+          const addressMaxWidth = width - 80; // Full width minus side margins (40px each side)
+          
+          // Professional address formatting - split into logical lines
+          const addressLines = [];
+          const words = propertyAddress.split(' ');
+          let currentLine = '';
+          
+          for (const word of words) {
+            const testLine = currentLine ? `${currentLine} ${word}` : word;
+            // More accurate text width: 20pt font, roughly 0.6pt per character
+            const estimatedWidth = testLine.length * 20 * 0.6;
             
-            // Set maximum logo size (e.g., 180px width max, maintain aspect ratio)
-            const maxLogoWidth = 180;
-            const maxLogoHeight = 60;
-            const widthRatio = maxLogoWidth / logoWidth;
-            const heightRatio = maxLogoHeight / logoHeight;
-            const logoScale = Math.min(widthRatio, heightRatio, 1); // Don't scale up
-            
-            const scaledLogoWidth = logoWidth * logoScale;
-            logoHeight = logoHeight * logoScale;
-            
-            // Position in top left with margin
-            const logoMargin = 50;
-            const logoX = logoMargin;
-            const logoY = height - logoHeight - logoMargin;
-            
-            currentPage.drawImage(logoImage, {
-              x: logoX,
-              y: logoY,
-              width: scaledLogoWidth,
-              height: logoHeight,
-            });
+            if (estimatedWidth > addressMaxWidth && currentLine) {
+              addressLines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) {
+            addressLines.push(currentLine);
           }
           
-          // Draw property address header below logo (left side)
-          const addressY = height - (logoHeight > 0 ? logoHeight + 70 : 50); // 20px space below logo, or 50px from top if no logo
-          currentPage.drawText(`Property Photos: ${propertyAddress}`, {
-            x: 50,
-            y: addressY,
-            size: 16,
-            color: rgb(0, 0, 0),
+          // Draw address lines centered at bottom with nicer font
+          // Match logo spacing exactly: logo has 20px margin from top + 15px spacing below
+          // Address should have 20px margin from bottom + 15px spacing above
+          const lineHeight = 24; // Larger line height for better spacing
+          const fontSize = 20; // Larger font size
+          const totalAddressHeight = addressLines.length * lineHeight;
+          const addressBottomMargin = 20; // Match logo top margin (20px) for symmetry
+          const addressSpacingAbove = 15; // Match header bottom space (15px) for symmetry
+          const startY = addressBottomMargin + totalAddressHeight; // Y position from bottom of page
+          
+          addressLines.forEach((line, index) => {
+            // Calculate text width for centering
+            const textWidth = helveticaBoldFont.widthOfTextAtSize(line, fontSize);
+            const textX = (width - textWidth) / 2; // Center horizontally
+            
+            currentPage.drawText(line, {
+              x: textX,
+              y: startY - (index * lineHeight),
+              size: fontSize,
+              font: helveticaBoldFont,
+              color: rgb(0, 0, 0),
+            });
           });
         }
       }
 
       const { width, height } = currentPage.getSize();
       
-      // Calculate margins and spacing
-      const margin = 50;
-      // Header includes: logo (up to 60px) + spacing (20px) + address text (20px) + bottom spacing (30px)
-      const headerHeight = i === 0 ? 130 : 0; // Space for header (logo + address) on first page
-      const headerBottomSpace = i === 0 ? 30 : 0; // Space below header on first page
-      const spacingBetweenImages = 20; // Space between two images on same page
+      // Calculate margins and spacing - maximize photo size while maintaining symmetry
+      const sideMargin = 20; // Minimal side margins to maximize photo width
+      const logoTopMargin = 20; // Logo margin from top (matches address bottom margin)
+      const logoHeight = 90; // Logo height
+      const topMargin = logoHeight + logoTopMargin + 15; // Logo + margin + spacing below logo
+      const addressBottomMargin = 20; // Address margin from bottom (matches logo top margin for symmetry)
+      const addressHeight = 60; // Approximate address height (max 3 lines * 24px)
+      const bottomMargin = addressHeight + addressBottomMargin + 15; // Address + margin + spacing above address
+      const headerBottomSpace = 15; // Spacing below header (matches spacing above address)
+      const spacingBetweenImages = 25; // Space between two images on same page
       
       // Calculate available height for images
-      // For first page: account for header + space below header
-      // For other pages: just margins
-      const availableHeight = height - (margin * 2) - headerHeight - headerBottomSpace;
+      const availableHeight = height - topMargin - headerBottomSpace - bottomMargin;
       
       // If 2 images on page, need space between them
-      const totalSpacing = imagesOnCurrentPage > 0 ? spacingBetweenImages : 0;
-      const imageHeight = (availableHeight - totalSpacing) / imagesPerPage;
-      const maxWidth = width - (margin * 2);
+      const totalSpacing = (currentPageImagesPerPage > 1 && imagesOnCurrentPage > 0) ? spacingBetweenImages : 0;
+      const imageHeight = (availableHeight - totalSpacing) / currentPageImagesPerPage;
+      const maxWidth = width - (sideMargin * 2);
 
       // Calculate image dimensions to fit while maintaining aspect ratio
-      const imageDims = embeddedImage.scale(1);
       const imageWidth = imageDims.width;
       const imageHeightActual = imageDims.height;
       
@@ -241,16 +293,14 @@ export async function POST(request: Request) {
       // Center horizontally
       const x = (width - scaledWidth) / 2;
       
-      // Calculate Y position
-      // For first image on page: from top (accounting for header if first page)
-      // For second image on page: below first image with spacing
+      // Calculate Y position (from bottom of page) - equal spacing
       let y;
       if (imagesOnCurrentPage === 0) {
-        // First image on page
-        y = height - margin - headerHeight - headerBottomSpace - scaledHeight;
+        // First image on page - position from top with equal spacing
+        y = height - topMargin - headerBottomSpace - scaledHeight;
       } else {
-        // Second image on page - position below first image
-        y = height - margin - headerHeight - headerBottomSpace - imageHeight - spacingBetweenImages - scaledHeight;
+        // Second image on page - position below first image with equal spacing
+        y = height - topMargin - headerBottomSpace - imageHeight - spacingBetweenImages - scaledHeight;
       }
 
       // Draw the image
