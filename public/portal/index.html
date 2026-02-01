@@ -536,12 +536,8 @@ function getModule1Webhook() {
 }
 
 function getFormAppApiUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const urlParam = params.get('apiUrl');
-  if (urlParam) return urlParam;
-  
-  // Fallback: check for config object or use default
-  return window.PORTAL_CONFIG?.formAppApiUrl || 'https://property-review-form.vercel.app';
+  // Use same origin (same domain) as portal - API is on same Next.js app
+  return window.location.origin;
 }
 let allOpportunities = [];
 let filteredOpportunities = [];
