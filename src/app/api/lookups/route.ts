@@ -103,8 +103,10 @@ export async function GET() {
               stageLookup[id] = name;
             }
           });
+          console.log(`Loaded ${Object.keys(stageLookup).length} stage mappings from "${STAGE_LOOKUP_TAB_NAME}" tab`);
         } else {
           console.warn(`Stage columns not found in "${STAGE_LOOKUP_TAB_NAME}" tab. Available columns: ${headers.join(', ')}`);
+          console.warn(`Looking for: stageIdIndex=${stageIdIndex}, stageNameIndex=${stageNameIndex}`);
         }
       }
     } catch (error) {
@@ -156,6 +158,7 @@ export async function GET() {
       console.log(`Error reading "${BA_TAB_NAME}" tab for BA ID mappings:`, error);
     }
     
+    console.log(`Returning lookups: ${Object.keys(stageLookup).length} stages, ${Object.keys(baLookup).length} BAs`);
     return NextResponse.json({
       baLookup,
       stageLookup,
