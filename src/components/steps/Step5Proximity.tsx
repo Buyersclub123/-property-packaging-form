@@ -105,6 +105,7 @@ export function Step5Proximity() {
           suburb={address?.suburbName}
           lga={address?.lga}
           preFetchedData={earlyProcessing?.whyThisProperty?.data}
+          earlyProcessingError={earlyProcessing?.whyThisProperty?.error || null}
         />
 
         {/* Component 3: Proximity */}

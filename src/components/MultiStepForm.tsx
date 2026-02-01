@@ -300,6 +300,20 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           setValidationErrorWithRef('Selling Agent Mobile is required. Please enter a mobile number or "TBC".');
           return false;
         }
+        // LGA is required (needed for "Why This Property" API call on Page 5)
+        if (!address?.lga || address.lga.trim() === '') {
+          const googleSearchQuery = address.suburbName && address.state 
+            ? `LGA of ${address.suburbName} ${address.state}`
+            : 'Local Government Area';
+          const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(googleSearchQuery)}`;
+          setValidationErrorWithRef(
+            `LGA (Local Government Area) is required to proceed. It's needed for the "Why This Property" feature. ` +
+            `Please click "Edit Address Fields" to enter the LGA, or ${address.suburbName && address.state ? 
+              `search Google for "${googleSearchQuery}"` : 
+              'fill in Suburb and State first, then search for the LGA'}.`
+          );
+          return false;
+        }
         return true;
 
       case 2: // Decision Tree
@@ -965,25 +979,37 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     // Check if we have required data
     if (!address?.suburbName) {
       console.error('💡 [WHY THIS PROPERTY] No suburb available, cannot process');
+      updateFormData({
+        earlyProcessing: {
+          ...formData.earlyProcessing,
+          whyThisProperty: { 
+            status: 'error', 
+            data: undefined,
+            error: 'Suburb is required for "Why This Property" generation'
+          },
+        },
+      });
       return;
     }
     
-    // Try to get LGA from Stash data if missing
+    // Use LGA from address - don't auto-populate from Stash if user has explicitly cleared it
+    // Only use what's in formData.address.lga (respect user's choice to clear it)
     let lgaToUse = address?.lga;
-    if (!lgaToUse) {
-      // Check if we can get LGA from Stash lookup
-      const stashData = useFormStore.getState().stashData;
-      if (stashData?.lga) {
-        console.log('💡 [WHY THIS PROPERTY] Using LGA from Stash data:', stashData.lga);
-        lgaToUse = stashData.lga;
-        // Update address with LGA for future use
-        updateFormData({
-          address: {
-            ...address,
-            lga: stashData.lga,
+    
+    // If LGA is missing, set error status with helpful message
+    if (!lgaToUse || lgaToUse.trim() === '') {
+      console.warn('💡 [WHY THIS PROPERTY] LGA is missing, cannot generate content');
+      updateFormData({
+        earlyProcessing: {
+          ...formData.earlyProcessing,
+          whyThisProperty: { 
+            status: 'error', 
+            data: undefined,
+            error: 'LGA (Local Government Area) is required for "Why This Property" generation. Please enter the LGA on Page 1 (Address & Risk Check) or paste content manually.'
           },
-        });
-      }
+        },
+      });
+      return;
     }
     
     updateFormData({
@@ -1228,8 +1254,13 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
 
       {/* Validation Error Message */}
       {validationError && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-800 text-sm font-medium">{validationError}</p>
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start gap-2">
+            <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <p className="text-blue-800 text-sm font-medium">{validationError}</p>
+          </div>
         </div>
       )}
 
