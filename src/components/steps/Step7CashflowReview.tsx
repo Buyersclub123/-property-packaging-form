@@ -278,7 +278,7 @@ export function Step7CashflowReview() {
         <Field label="High Rent (Weekly)" value={formatCurrency(rentCalc.high)} />
 
         {/* 5. Costs & Reports (EDITABLE) */}
-        <div className="bg-yellow-100 px-4 py-2 border-b border-gray-300 mt-4">
+        <div className="bg-blue-100 px-4 py-2 border-b border-gray-300 mt-4">
           <h3 className="text-sm font-semibold text-gray-700">5. Costs & Reports (Editable *)</h3>
         </div>
 
@@ -290,7 +290,7 @@ export function Step7CashflowReview() {
               const value = e.target.value.replace(/[^0-9]/g, '');
               setCouncilWaterRates(value);
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="Enter annual council/water rates"
           />
         </Field>
@@ -339,7 +339,7 @@ export function Step7CashflowReview() {
         {/* 7. Split Contract Fields (EDITABLE) */}
         {isSplitContract && (
           <>
-            <div className="bg-yellow-100 px-4 py-2 border-b border-gray-300 mt-4">
+            <div className="bg-blue-100 px-4 py-2 border-b border-gray-300 mt-4">
               <h3 className="text-sm font-semibold text-gray-700">7. Split Contract Fields (Editable *)</h3>
             </div>
 
@@ -347,7 +347,7 @@ export function Step7CashflowReview() {
               <select
                 value={buildWindow}
                 onChange={(e) => setBuildWindow(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="w-full px-3 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="">Select build window</option>
                 <option value="09 mo">09 mo</option>
@@ -361,7 +361,7 @@ export function Step7CashflowReview() {
               <select
                 value={cashback1Month}
                 onChange={(e) => setCashback1Month(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="w-full px-3 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="">Select month</option>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map((month) => (
@@ -374,7 +374,7 @@ export function Step7CashflowReview() {
               <select
                 value={cashback2Month}
                 onChange={(e) => setCashback2Month(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                className="w-full px-3 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="">Select month</option>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map((month) => (
@@ -444,19 +444,6 @@ export function Step7CashflowReview() {
                 </svg>
                 View Folder in Google Drive
               </a>
-              
-              <button
-                onClick={() => {
-                  setFolderLink(null);
-                  setError(null);
-                }}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors inline-flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Create Another Folder
-              </button>
             </div>
           </div>
         )}

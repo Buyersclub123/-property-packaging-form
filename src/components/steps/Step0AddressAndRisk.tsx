@@ -43,6 +43,32 @@ function StashStatus() {
     );
   }
   
+  // Check for Make.com credits/quota issue (when response is "Accepted" plain text)
+  if (stashData?.error && stashData?.makeComCreditsIssue) {
+    return (
+      <div className="p-4 bg-red-50 border-2 border-red-300 rounded-lg mb-4">
+        <p className="text-red-800 font-bold text-base">⚠️ Make.com Credits/Quota Issue</p>
+        <p className="text-red-700 font-semibold mt-2">
+          Make.com scenario may not have executed. Please check your Make.com account status (credits/quota).
+        </p>
+        <p className="text-sm text-red-600 mt-2">
+          The webhook returned "Accepted" (plain text) instead of property data. This usually indicates:
+        </p>
+        <ul className="text-sm text-red-600 mt-2 list-disc list-inside space-y-1">
+          <li>Make.com account has run out of credits</li>
+          <li>Make.com scenario has exceeded its quota</li>
+          <li>Make.com scenario execution was blocked</li>
+        </ul>
+        <p className="text-sm text-red-600 mt-2">
+          <strong>Action:</strong> Check your Make.com account, add credits if needed, or wait for quota reset.
+        </p>
+        <p className="text-xs text-red-600 mt-2 italic">
+          You can continue manually - the form will work without Stash data.
+        </p>
+      </div>
+    );
+  }
+  
   if (stashData && !stashData.error) {
     // Check if we actually have data (not just empty fields)
     const hasData = stashData.zoning || stashData.lga || stashData.floodRisk || stashData.bushfireRisk || stashData.state;
@@ -107,21 +133,45 @@ function PropertyInfoFromStash() {
   );
 }
 
-function LGADisplay() {
+function LGADisplay({ isEditable: externalIsEditable }: { isEditable?: boolean }) {
   const { stashData, formData, updateAddress } = useFormStore();
   const { address } = formData;
   const [isLookingUpLGA, setIsLookingUpLGA] = useState(false);
   
-  // Store LGA in address data for later use
-  useEffect(() => {
-    if (stashData?.lga && !formData.address.lga) {
-      console.log('LGADisplay: Setting LGA from Stash:', stashData.lga);
-      updateAddress({ lga: stashData.lga });
-    }
-  }, [stashData?.lga, formData.address.lga]); // updateAddress is a stable Zustand action, doesn't need to be in deps
+  // Use external prop if provided, otherwise fall back to formData
+  const isEditable = externalIsEditable !== undefined 
+    ? externalIsEditable 
+    : (address.addressFieldsEditable || !address.addressVerified);
   
-  const lgaValue = formData.address.lga || stashData?.lga || '';
-  const isEditable = address.addressFieldsEditable || !address.addressVerified;
+  // Always show only what's in formData - never use Stash as display fallback
+  // This allows users to clear the field and have it stay cleared
+  const lgaValue = formData.address.lga || '';
+  
+  // Store LGA in address data for later use (only auto-populate when Stash data first arrives, not when locking fields)
+  // Use a ref to track if we've already processed this Stash data
+  const stashLgaProcessedRef = useRef<string | null>(null);
+  
+  useEffect(() => {
+    // Only auto-populate if:
+    // 1. Stash has LGA data
+    // 2. This is NEW Stash data (not already processed)
+    // 3. FormData LGA is empty/undefined
+    // 4. Fields are NOT editable (not being manually edited)
+    // 5. User has NOT manually cleared the LGA
+    // This prevents re-populating when user deletes the value or locks fields
+    if (stashData?.lga && 
+        stashData.lga !== stashLgaProcessedRef.current && 
+        !formData.address.lga && 
+        !isEditable &&
+        !address.lgaManuallyCleared) {
+      console.log('LGADisplay: Setting LGA from Stash (first time):', stashData.lga);
+      updateAddress({ lga: stashData.lga });
+      stashLgaProcessedRef.current = stashData.lga;
+    } else if (stashData?.lga && stashData.lga !== stashLgaProcessedRef.current) {
+      // Update ref even if we don't populate (so we don't process it again)
+      stashLgaProcessedRef.current = stashData.lga;
+    }
+  }, [stashData?.lga, formData.address.lga, isEditable, address.lgaManuallyCleared]); // updateAddress is a stable Zustand action, doesn't need to be in deps
   
   const handleLookupLGA = async () => {
     if (!address.suburbName || !address.state) {
@@ -265,18 +315,31 @@ function LGADisplay() {
     }
   };
   
-  // Always show LGA field (even if empty) so user can see it and enter manually if needed
+  const googleSearchQuery = address.suburbName && address.state 
+    ? `LGA of ${address.suburbName} ${address.state}`
+    : 'Local Government Area';
+  const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(googleSearchQuery)}`;
+  
   return (
     <div>
-      <label className="label-field">LGA (Local Government Area):</label>
+      <label className="label-field">LGA (Local Government Area) *</label>
       <div className="flex gap-2">
         <input
           type="text"
           value={lgaValue}
-          onChange={(e) => updateAddress({ lga: e.target.value })}
+          onChange={(e) => {
+            const newValue = e.target.value;
+            // If user clears the field, mark it as manually cleared
+            if (newValue === '' && formData.address.lga) {
+              updateAddress({ lga: '', lgaManuallyCleared: true });
+            } else {
+              updateAddress({ lga: newValue, lgaManuallyCleared: false });
+            }
+          }}
           className="input-field flex-1"
           placeholder={stashData?.lga ? "Auto-populated from Stash" : "Enter LGA manually"}
           readOnly={!isEditable}
+          required
         />
         {isEditable && address.suburbName && address.state && (
           <button
@@ -292,7 +355,7 @@ function LGADisplay() {
       {stashData?.lga && (
         <p className="text-xs text-green-600 mt-1">✓ LGA from Stash: {stashData.lga}</p>
       )}
-      <p className="text-xs text-gray-500 mt-1">This will be used for Investment Highlights lookup</p>
+      <p className="text-xs text-gray-500 mt-1">This will be used for Investment Highlights lookup and "Why This Property" feature</p>
     </div>
   );
 }
@@ -636,6 +699,7 @@ export function Step0AddressAndRisk() {
     console.log('=== Parsing complete ===');
   };
 
+
   const handleGeocode = async () => {
     console.log('handleGeocode called');
     console.log('address:', address?.propertyAddress);
@@ -875,7 +939,8 @@ export function Step0AddressAndRisk() {
         updateRiskOverlays({ zoning: stashResponse.zoning });
       }
       
-      if (stashResponse.lga) {
+      // Only auto-populate LGA if it's not already set AND user hasn't manually cleared it
+      if (stashResponse.lga && !formData.address.lga && !formData.address.lgaManuallyCleared) {
         updateAddress({ lga: stashResponse.lga });
       }
       
@@ -1197,7 +1262,9 @@ export function Step0AddressAndRisk() {
         <h3 className="text-lg font-semibold mb-4">Property Address</h3>
         <div className="space-y-4">
           <div>
-            <label className="label-field">Property Address (Street Number Only - No Unit Numbers) *</label>
+            <label className="label-field">
+              Property Address (Street Number Only - <span className="font-bold text-blue-600">No Unit Numbers) *</span>
+            </label>
             <p className="text-xs text-gray-500 mb-2">Enter street address only. Unit numbers will be captured in Property Details step.</p>
             <div className="flex gap-2">
               <input
@@ -1519,7 +1586,7 @@ export function Step0AddressAndRisk() {
             </div>
             {/* LGA - Show with address fields in same row as Post Code */}
             <div>
-              <LGADisplay />
+              <LGADisplay isEditable={addressFieldsEditable} />
             </div>
             </div>
             

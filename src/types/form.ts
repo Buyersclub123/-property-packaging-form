@@ -45,6 +45,7 @@ export interface AddressData {
   latitude?: number;
   longitude?: number;
   lga?: string; // LGA for Investment Highlights lookup (shared, not duplicated)
+  lgaManuallyCleared?: boolean; // Flag to track if user has explicitly cleared LGA (prevents re-population)
   
   // Property Address for GHL/Client Records (actual property address)
   // Note: Lot numbers are handled in Property Details step (Step 2) for multi-lot projects
@@ -283,6 +284,11 @@ export interface FormData {
   // Attachments
   attachmentsAdditionalDialogue?: string;
   
+  // Submission tracking
+  ghlRecordId?: string; // GHL record ID after successful submission (prevents duplicate submissions)
+  submittedAt?: string; // Timestamp of submission (ISO string)
+  submissionAttempted?: boolean; // Track if submission was attempted (even if no recordId returned)
+  
   // Cashflow Spreadsheets (Google Sheets Copy URLs)
   cashflowSheetLinkHL?: string; // House & Land cashflow spreadsheet copy URL
   cashflowSheetLinkGeneral?: string; // General/Single Contract cashflow spreadsheet copy URL
@@ -389,5 +395,6 @@ export interface StashResponse {
   // Error handling
   error?: boolean;
   errorMessage?: string;
+  makeComCreditsIssue?: boolean; // Flag for Make.com credit/quota issues
 }
 

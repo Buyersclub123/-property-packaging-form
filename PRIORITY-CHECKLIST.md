@@ -47,7 +47,7 @@ Items that have been prioritized and are ready for implementation:
   - **Problem:** Button no longer needed
   - **Impact:** Cleaner UI
   - **Effort:** 15 minutes
-JT UPDATE:
+JT UPDATE: FIXED
 
 - [ ] **Page 10 (Submission) - Update Checklist**
   - **Remove:** "Investment Highlights reviewed" checkbox
@@ -74,7 +74,7 @@ JT UPDATE:
   - **Impact:** Ensures proper alphabetical ordering in Investment Highlights dropdown (reports sorted by LGA name)
   - **Effort:** 1-2 hours
   - **Implementation:** Added instruction text to the existing warning message box in PDF verification UI. Message is displayed as a bullet point in the amber warning box, always visible when users are verifying extracted report name. Also increased warning message text size from `text-xs` to `text-base` with better styling for visibility.
-JT UPDATE:
+JT UPDATE:FIXED
 
 - [x] **Page 6 - Investment Highlights Reselection After Navigation** ✅ FIXED (2026-01-28)
   - **What:** Ensure "Change Selection or Enter Manually" button is always visible when a report has been selected
@@ -90,7 +90,7 @@ JT UPDATE:
   - **Impact:** Users can always change their selection, even after navigating away and back. Works for all three selection methods (auto-match, dropdown, PDF upload).
   - **Effort:** 1-2 hours
   - **Implementation:** Added new `useEffect` hook that runs on mount to restore UI state from `formData`. Checks for `hotspottingReportName` or `hotspottingPdfFileId` in formData, and if found (and no earlyProcessing data exists), restores `matchStatus` to `'found'` and restores `reportName` and `validPeriod`. This matches the pattern used by Proximity and Why This Property fields. Also increased size of important warning message from `text-xs` to `text-base` with better styling.
-JT UPDATE:
+JT UPDATE:FIXED
 
 - [ ] **Page 9 - Checklist Updates for Dual Occupancy Properties**
   - **What:** Update submission checklist on Page 9 for Dual Occupancy properties
@@ -146,13 +146,14 @@ JT UPDATE:
   - **Effort:** 1-2 hours
 JT UPDATE:
 
-- [ ] **Page 8 - Folder Creation Error Message**
+- [x] **Page 8 - Folder Creation Error Message** ✅ REVIEWED - NO CHANGES NEEDED
   - **What:** Update error message when folder creation is forgotten
   - **Problem:** Current error message only mentions missing fields, doesn't mention that folder hasn't been created
   - **Solution:** Include folder creation status in error message
   - **Impact:** Users will know if folder creation was missed, not just field validation
   - **Effort:** 1 hour
-JT UPDATE:
+  - **Status:** Reviewed - Current message is accurate. Folder cannot be created without mandatory fields (Council/Water Rates, Insurance Amount, etc.), so the error message correctly states "fill in all required fields before proceeding, or you have not created the folder". No changes needed.
+JT UPDATE:FIXED
 
 - [ ] **Page 5 (Market Performance) - Make Fields Read-Only**
   - **Problem:** Users can edit fields without clicking "Needs updating", then can't save
@@ -324,6 +325,7 @@ Items that are not page-specific (backend, email, GHL/Make.com, portal, etc.):
     - Update: `src/components/steps/Step0AddressAndRisk.tsx` (add onPaste handlers to all Selling Agent fields)
     - Update: `src/types/form.ts` (add `sellingAgentCompany?: string` field)
   - **Your Decision:** NICE TO HAVE
+  - **Note:** Create a standalone test rig to test the paste parsing logic before integrating into the main form
 
 
 ---

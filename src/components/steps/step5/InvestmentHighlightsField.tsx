@@ -751,8 +751,9 @@ export function InvestmentHighlightsField({
                 <div className="flex gap-3">
                   <button
                     onClick={() => {
-                      // Continue with existing report - just keep the current state
-                      // User can proceed with the existing report
+                      // User acknowledges report is out of date but wants to continue
+                      // Dismiss the warning by clearing dateStatus
+                      setDateStatus(null);
                     }}
                     className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
                   >
@@ -762,6 +763,7 @@ export function InvestmentHighlightsField({
                     onClick={() => {
                       setMatchStatus('not-found');
                       setShowVerification(false);
+                      setDateStatus(null); // Clear date status warning when uploading new report
                     }}
                     className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                   >
