@@ -1,32 +1,19 @@
 # Portal Deployment Process
 
-## Portal is in the Main Repository
+## ⚠️ PORTAL HAS MOVED TO VERCEL
 
-The portal code is deployed from the main repository using GitHub Pages.
+**This document is outdated. Portal is now deployed via Vercel.**
 
-**Repository:** `Buyersclub123/-property-packaging-form`  
-**Portal Location:** `docs/portal/index.html`  
-**Portal URL:** `https://buyersclub123.github.io/-property-packaging-form/portal/`
+**Current Portal Location:** `form-app/public/portal/index.html`  
+**Current Portal URL:** `https://property-packaging-form.vercel.app/portal/`
+
+**See:** `form-app/PORTAL-DEPLOYMENT.md` for current deployment instructions.
 
 ---
 
-## Deployment Steps
+## Old Information (No Longer Used)
 
-### When Portal Code Changes
-
-1. **Edit portal code** in: `property-review-system/docs/portal/index.html`
-
-2. **Commit and push to main branch:**
-   ```powershell
-   cd property-review-system
-   git add docs/portal/index.html
-   git commit -m "Update portal: [description of changes]"
-   git push origin main
-   ```
-
-3. **GitHub Pages will auto-deploy** (if configured to serve from `/docs` folder)
-
-**Note:** Ensure GitHub Pages is configured to serve from `/docs` folder in repository settings.
+The portal was previously deployed via GitHub Pages, but has been moved to Vercel for single-repository deployment.
 
 ---
 
