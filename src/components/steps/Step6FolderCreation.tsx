@@ -79,6 +79,11 @@ export function Step6FolderCreation() {
       console.log('FormData decisionTree:', formData.decisionTree);
       console.log('LotType:', formData.decisionTree?.lotType);
       console.log('ContractTypeSimplified:', formData.decisionTree?.contractTypeSimplified);
+      console.log('[Step6] PDF data in formData:', {
+        hotspottingPdfFileId: formData.hotspottingPdfFileId,
+        hotspottingPdfLink: formData.hotspottingPdfLink,
+        hotspottingReportName: formData.hotspottingReportName,
+      });
       
       const response = await fetch('/api/create-property-folder', {
         method: 'POST',
@@ -286,6 +291,7 @@ export function Step6FolderCreation() {
       }
 
       // Email status - assume sent if Make.com succeeds
+      // Note: Suburb addition to Investment Highlights sheet happens in Step 9 (Step8Submission)
       setEmailStatus('sent');
 
       // Show success screen

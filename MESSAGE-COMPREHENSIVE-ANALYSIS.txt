@@ -1,0 +1,113 @@
+CRITICAL: COMPREHENSIVE ANALYSIS REQUIRED - ALL ISSUES TOGETHER
+
+You admitted you did not look at working code. This is UNACCEPTABLE.
+
+You IGNORED requirements we gave you.
+You IGNORED the actual code that was being used before.
+
+ROOT CAUSE:
+When Page 2 was deleted, you likely used OLD code from Page 5 instead of NEW code from Page 6. This explains multiple issues.
+
+YOU MUST:
+1. Read the requirements we gave you
+2. Check the actual working code (production + old code)
+3. Compare what you did vs what was required
+4. Explain why you ignored requirements
+5. Explain why you ignored working code
+
+ISSUES TO INVESTIGATE TOGETHER:
+
+1. Proximity API (401/400 errors)
+   - Did you use old code that predates security changes?
+   - Did you check production code to see how it works?
+   - Why duplicate calls?
+
+2. Report Name Extraction - IGNORED REQUIREMENTS
+   - Extracting "TODAY Location Report" - COMPLETELY WRONG
+   - Should be "FRASER COAST" from front page (per requirements)
+   - You IGNORED the requirements we gave you
+   - Did you check how old code extracted report names?
+   - Did you read the requirements document?
+
+3. File Naming
+   - Saving as "null-null-Fraser Coast (12)-2026-01-25.pdf"
+   - Should be "Fraser Coast - January - April 2026.pdf"
+   - Did you check how old code handled file naming?
+
+4. Google Sheets 50000 Character Error - CRITICAL
+   - Same report worked with old code
+   - New code doing something different
+   - Did you check how old code handled Main Body content?
+   - This is a REGRESSION - you broke something that worked
+   - You MUST explain what old code did differently
+
+5. Missing Fallback UI
+   - No instructions when ChatGPT fails
+   - Did you check how old code handled failures?
+
+6. Field Validation
+   - Investment Highlights not mandatory
+   - Did you check old code validation?
+
+7. PDF Shortcut
+   - Not added to property folder
+   - Did you check how old code did this?
+
+WHAT YOU MUST DO:
+
+1. READ THE REQUIREMENTS:
+   - Read the plan document we gave you
+   - Read the requirements we discussed
+   - Explain why you ignored them
+
+2. Check PRODUCTION code:
+   - How does it work in production?
+   - What does the working code look like?
+   - Compare production vs your changes
+   - Why didn't you check this before?
+
+3. Check OLD code (before redesign):
+   - What was on Page 5 (old code)?
+   - What was on Page 6 (new code)?
+   - Did you use old Page 5 code instead of new Page 6 code?
+   - Why didn't you check working code?
+
+4. Review ALL issues together:
+   - Are they all caused by using old code?
+   - Are they all caused by ignoring requirements?
+   - What did old code do that worked?
+   - What did you change that broke it?
+   - What requirements did you ignore?
+
+5. Document findings:
+   - For EACH issue, explain:
+     * What requirements said to do
+     * What old code did (that worked)
+     * What you did (that broke it)
+     * Why you ignored requirements/working code
+     * How to fix
+
+6. Propose solutions:
+   - Show code changes needed
+   - Explain why it will work
+   - Show it matches requirements
+   - Show it matches working code pattern
+   - DO NOT FIX YET - wait for approval
+
+CRITICAL RULES:
+- NEVER use cached data - API must always be called
+- NEVER skip API calls - Security requirement
+- Learn from existing working code - don't assume
+
+DO NOT ASSUME. CHECK ACTUAL CODE. LEARN FROM WHAT WORKS.
+
+YOU IGNORED REQUIREMENTS. YOU IGNORED WORKING CODE. THIS IS UNACCEPTABLE.
+
+You must:
+- Read requirements
+- Check working code
+- Explain why you ignored them
+- Fix ALL issues together
+- Show you understand what went wrong
+
+Analysis document: property-review-system/form-app/analysis/PROXIMITY-ANALYSIS-REQUEST.md

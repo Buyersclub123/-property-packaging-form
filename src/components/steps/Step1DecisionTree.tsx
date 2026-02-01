@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useFormStore } from '@/store/formStore';
 import { PropertyType, ContractType, LotType, DualOccupancy, StatusType, LotDetails, ContractTypeSimplified } from '@/types/form';
 
@@ -51,8 +51,7 @@ export function Step1DecisionTree() {
     updateLots([]); // Clear project lots
   };
   
-  // Debug log
-  console.log('Step1DecisionTree - isHAndL:', isHAndL, 'propertyType:', decisionTree.propertyType, 'lotType:', decisionTree.lotType);
+  // Debug logging removed - was causing excessive logs
 
   // Sync lotNumber state with address
   useEffect(() => {
@@ -68,14 +67,16 @@ export function Step1DecisionTree() {
     }
   }, [address?.lotNumber, address?.lotNumberNotApplicable]);
 
-  // Sync unitNumber state with address
+  // Sync unitNumber and hasUnitNumbers state with address
+  // This ensures values are restored when navigating back to this page
   useEffect(() => {
     if (address?.unitNumber) {
       setUnitNumber(address.unitNumber);
     } else {
       setUnitNumber('');
     }
-    // Only sync if address has a value - don't default to false
+    // Sync hasUnitNumbers - preserve both true and false values from store
+    // Only set to undefined if it's actually undefined in the store
     if (address?.hasUnitNumbers !== undefined) {
       setHasUnitNumbers(address.hasUnitNumbers);
     } else {
@@ -83,9 +84,20 @@ export function Step1DecisionTree() {
     }
   }, [address?.unitNumber, address?.hasUnitNumbers]);
   
+  const prevDualOccupancy = useRef<DualOccupancy | null>(decisionTree.dualOccupancy);
+  const isInitialMount = useRef(true);
+
   // Auto-select "Yes" for hasUnitNumbers if Dual Occupancy is selected
   // Clear to undefined if Dual Occupancy is not "Yes" and was previously auto-set
+  // IMPORTANT: Don't interfere with user-set values (true or false)
   useEffect(() => {
+    // Skip on initial mount - let the sync effect handle restoration
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      prevDualOccupancy.current = decisionTree.dualOccupancy;
+      return;
+    }
+
     if (decisionTree.dualOccupancy === 'Yes') {
       // Dual Occupancy always requires unit numbers
       if (hasUnitNumbers !== true) {
@@ -93,15 +105,20 @@ export function Step1DecisionTree() {
         updateAddress({ hasUnitNumbers: true });
       }
     } else if (decisionTree.dualOccupancy === 'No' || decisionTree.dualOccupancy === null) {
-      // If Dual Occupancy changes away from Yes, reset to undefined (unless user explicitly set it)
-      // Only reset if it was true (could have been auto-set)
-      if (hasUnitNumbers === true && !address?.unitNumber) {
+      // Only clear if:
+      // 1. Dual Occupancy was previously "Yes" (user changed it)
+      // 2. hasUnitNumbers is currently true (was auto-set)
+      // 3. No unit number was entered (confirming it was auto-set, not user-set)
+      // 4. Don't clear if user explicitly set it to false
+      if (prevDualOccupancy.current === 'Yes' && hasUnitNumbers === true && !address?.unitNumber) {
         // Only auto-clear if no unit number was entered (meaning it was just auto-set)
         setHasUnitNumbers(undefined);
         updateAddress({ hasUnitNumbers: undefined });
       }
+      // If user explicitly set it to false, don't touch it
     }
-  }, [decisionTree.dualOccupancy]);
+    prevDualOccupancy.current = decisionTree.dualOccupancy;
+  }, [decisionTree.dualOccupancy, hasUnitNumbers, address?.unitNumber]);
 
   // Clear dependent fields when property type or lot type changes
   useEffect(() => {

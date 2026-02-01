@@ -416,6 +416,10 @@ export function Step3MarketPerformance() {
         }
         setError(errorMessage);
         setScenario('error');
+        // Enable manual entry when sheet is inaccessible
+        setShowDataCollection(true);
+        setShowSPIForm(true);
+        setShowREIForm(true);
       }
     };
 
@@ -523,77 +527,113 @@ export function Step3MarketPerformance() {
         dataToSave.vacancyRate = formData_REI.vacancyRate;
       }
 
-      const response = await fetch('/api/market-performance/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          suburbName: address.suburbName,
-          state: address.state,
-          data: dataToSave,
-          dataSource: dataSource,
-          changedBy: userEmail || 'Unknown',
-        }),
-      });
+      // Try to save to Google Sheet (even in error state, in case connection is restored)
+      let savedToSheet = false;
+      let saveError: Error | null = null;
+      
+      try {
+        const response = await fetch('/api/market-performance/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            suburbName: address.suburbName,
+            state: address.state,
+            data: dataToSave,
+            dataSource: dataSource,
+            changedBy: userEmail || 'Unknown',
+          }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Failed to save market performance data (${response.status})`);
+        if (response.ok) {
+          savedToSheet = true;
+        } else {
+          // If in error state, don't throw - just save to form
+          if (scenario === 'error') {
+            console.warn('Could not save to Google Sheet (connection error), saving to form only');
+            saveError = new Error('Google Sheet is inaccessible');
+          } else {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            saveError = new Error(errorData.error || `Failed to save market performance data (${response.status})`);
+            throw saveError;
+          }
+        }
+      } catch (fetchError: any) {
+        // If in error state, don't throw - just save to form
+        if (scenario === 'error') {
+          console.warn('Could not save to Google Sheet (connection error), saving to form only:', fetchError);
+          saveError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
+        } else {
+          // Not in error state - re-throw to show error to user
+          saveError = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
+          throw saveError;
+        }
+      } finally {
+        // ALWAYS update form data, regardless of whether save to sheet succeeded
+        // This ensures user can always progress even if Google Sheet is down
+        updateFormData({
+          marketPerformance: {
+            ...marketPerformance,
+            ...(hasSPIData && {
+              medianPriceChange3Year: formData_SPI.priceChange3Year,
+              medianPriceChange5Year: formData_SPI.priceChange5Year,
+            }),
+            ...(hasREIData && {
+              medianPriceChange3Months: formData_REI.priceChange3Months,
+              medianPriceChange1Year: formData_REI.priceChange1Year,
+              medianYield: formData_REI.medianYield,
+              medianRentChange1Year: formData_REI.rentChange1Year,
+              rentalPopulation: formData_REI.rentalPopulation,
+              vacancyRate: formData_REI.vacancyRate,
+            }),
+            isSaved: savedToSheet, // Only true if saved to sheet
+          },
+        });
+
+        setShowSPIForm(false);
+        setShowREIForm(false);
+        setShowDataCollection(false);
       }
 
-      // Update form data
-      updateFormData({
-        marketPerformance: {
-          ...marketPerformance,
-          ...(hasSPIData && {
-            medianPriceChange3Year: formData_SPI.priceChange3Year,
-            medianPriceChange5Year: formData_SPI.priceChange5Year,
-          }),
-          ...(hasREIData && {
-            medianPriceChange3Months: formData_REI.priceChange3Months,
-            medianPriceChange1Year: formData_REI.priceChange1Year,
-            medianYield: formData_REI.medianYield,
-            medianRentChange1Year: formData_REI.rentChange1Year,
-            rentalPopulation: formData_REI.rentalPopulation,
-            vacancyRate: formData_REI.vacancyRate,
-          }),
-          isSaved: true, // Mark as saved
-        },
-      });
-
-      setShowSPIForm(false);
-      setShowREIForm(false);
-      setShowDataCollection(false);
-      alert('Market performance data saved successfully!');
+      // Show appropriate message based on whether it was saved to sheet
+      if (savedToSheet) {
+        alert('Market performance data saved successfully to Google Sheet!');
+      } else if (scenario === 'error') {
+        alert('Data saved to form only (Google Sheet is inaccessible). You can proceed with the property review.');
+      } else {
+        alert('Market performance data saved successfully!');
+      }
       
-      // Re-fetch market performance data to update the form (without reloading page)
-      const currentFormData = useFormStore.getState().formData;
-      const refreshResponse = await fetch('/api/market-performance/lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          suburbName: address.suburbName,
-          state: address.state,
-        }),
-      });
-      
-      if (refreshResponse.ok) {
-        const refreshResult: MarketPerformanceLookupResult = await refreshResponse.json();
-        if (refreshResult.found && refreshResult.data) {
-          updateFormData({
-            marketPerformance: {
-              ...currentFormData.marketPerformance,
-              medianPriceChange3Months: refreshResult.data.medianPriceChange3Months,
-              medianPriceChange1Year: refreshResult.data.medianPriceChange1Year,
-              medianPriceChange3Year: refreshResult.data.medianPriceChange3Year,
-              medianPriceChange5Year: refreshResult.data.medianPriceChange5Year,
-              medianYield: refreshResult.data.medianYield,
-              medianRentChange1Year: refreshResult.data.medianRentChange1Year,
-              rentalPopulation: refreshResult.data.rentalPopulation,
-              vacancyRate: refreshResult.data.vacancyRate,
-              isSaved: true, // Keep saved flag after refresh
-            },
-          });
-          setScenario('fresh-data');
+      // Only re-fetch if we successfully saved to sheet
+      if (savedToSheet) {
+        const currentFormData = useFormStore.getState().formData;
+        const refreshResponse = await fetch('/api/market-performance/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            suburbName: address.suburbName,
+            state: address.state,
+          }),
+        });
+        
+        if (refreshResponse.ok) {
+          const refreshResult: MarketPerformanceLookupResult = await refreshResponse.json();
+          if (refreshResult.found && refreshResult.data) {
+            updateFormData({
+              marketPerformance: {
+                ...currentFormData.marketPerformance,
+                medianPriceChange3Months: refreshResult.data.medianPriceChange3Months,
+                medianPriceChange1Year: refreshResult.data.medianPriceChange1Year,
+                medianPriceChange3Year: refreshResult.data.medianPriceChange3Year,
+                medianPriceChange5Year: refreshResult.data.medianPriceChange5Year,
+                medianYield: refreshResult.data.medianYield,
+                medianRentChange1Year: refreshResult.data.medianRentChange1Year,
+                rentalPopulation: refreshResult.data.rentalPopulation,
+                vacancyRate: refreshResult.data.vacancyRate,
+                isSaved: true, // Keep saved flag after refresh
+              },
+            });
+            setScenario('fresh-data');
+          }
         }
       }
     } catch (err: any) {
@@ -905,16 +945,35 @@ export function Step3MarketPerformance() {
 
       {/* Google Sheet Info */}
       <div className="p-4 bg-blue-50 rounded-lg mb-6">
-        <p className="text-sm font-semibold text-blue-900 mb-2">Google Sheet:</p>
-        <p className="text-blue-700 text-sm">
-          <strong>Name:</strong> Property Review Static Data - Market Performance
-        </p>
-        <p className="text-blue-700 text-sm">
-          <strong>Tab:</strong> Market Performance
-        </p>
-        <p className="text-blue-700 text-sm">
-          <strong>Lookup:</strong> By Suburb ({address.suburbName || 'TBD'}) and State ({address.state || 'TBD'})
-        </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-semibold text-blue-900 mb-2">Google Sheet:</p>
+            <p className="text-blue-700 text-sm">
+              <strong>Name:</strong> Property Review Static Data - Market Performance
+            </p>
+            <p className="text-blue-700 text-sm">
+              <strong>Tab:</strong> Market Performance
+            </p>
+            <p className="text-blue-700 text-sm">
+              <strong>Lookup:</strong> By Suburb ({address.suburbName || 'TBD'}) and State ({address.state || 'TBD'})
+            </p>
+          </div>
+          {/* Test button - for testing error state */}
+          <button
+            onClick={() => {
+              // Simulate error for testing
+              setError('Test error: Simulated Google Sheet connection failure');
+              setScenario('error');
+              setShowDataCollection(true);
+              setShowSPIForm(true);
+              setShowREIForm(true);
+            }}
+            className="btn-secondary text-xs px-2 py-1 bg-yellow-100 border-yellow-300"
+            title="Test error state - simulates Google Sheet being inaccessible"
+          >
+            Test Error
+          </button>
+        </div>
       </div>
 
       {/* Loading State */}
@@ -926,11 +985,23 @@ export function Step3MarketPerformance() {
 
       {/* Error State */}
       {scenario === 'error' && (
-        <div className="p-4 bg-red-50 rounded-lg mb-6">
-          <p className="text-red-700 font-semibold">Error: {error}</p>
-          <p className="text-sm text-red-600 mt-2">
-            You can continue manually - enter market performance data below.
+        <div className="p-4 bg-red-50 rounded-lg mb-6 border border-red-200">
+          <p className="text-red-700 font-semibold mb-3">Error: {error}</p>
+          <p className="text-base text-red-800 mb-4">
+            Unable to access Google Sheet. You can still complete the form by manually entering data from the sources below.
           </p>
+          <div className="text-base text-red-900 mb-4">
+            <p className="mb-3 font-semibold">Check these sites:</p>
+            <div className="space-y-3">
+              <p className="text-lg">
+                Go to <a href={getSPIUrl()} target="_blank" rel="noopener noreferrer" className="underline text-blue-600 hover:text-blue-800 font-bold text-xl">smartpropertyinvestment.com.au</a> for Median price change - 3 year & 5 year
+              </p>
+              <p className="text-lg">
+                Go to <a href={getREIUrl()} target="_blank" rel="noopener noreferrer" className="underline text-blue-600 hover:text-blue-800 font-bold text-xl">info.realestateinvestar.com.au</a> for other metrics
+              </p>
+            </div>
+            <p className="mt-3 text-sm italic">(Links are pre-filled with {address.suburbName || 'suburb'} {address.state || 'state'})</p>
+          </div>
         </div>
       )}
 
@@ -966,13 +1037,35 @@ export function Step3MarketPerformance() {
             : 'bg-green-50 border-green-300'
         }`}>
           <div className="flex items-center justify-between">
-            <p className={`font-semibold ${
-              lookupResult.daysSinceLastCheck >= 30 
-                ? 'text-red-900' 
-                : 'text-green-900'
-            }`}>
-              This data is {lookupResult.daysSinceLastCheck} {lookupResult.daysSinceLastCheck === 1 ? 'day' : 'days'} old.
-            </p>
+            <div>
+              <p className={`font-semibold ${
+                lookupResult.daysSinceLastCheck >= 30 
+                  ? 'text-red-900' 
+                  : 'text-green-900'
+              }`}>
+                Data age:
+              </p>
+              <div className="mt-1 space-y-1">
+                {spiDaysSince !== null ? (
+                  <p className={`text-sm ${
+                    spiDaysSince >= 30 ? 'text-red-700' : spiDaysSince >= 7 ? 'text-yellow-700' : 'text-green-700'
+                  }`}>
+                    SPI data: {spiDaysSince} {spiDaysSince === 1 ? 'day' : 'days'} old
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">SPI data: Date not available</p>
+                )}
+                {reiDaysSince !== null ? (
+                  <p className={`text-sm ${
+                    reiDaysSince >= 30 ? 'text-red-700' : reiDaysSince >= 7 ? 'text-yellow-700' : 'text-green-700'
+                  }`}>
+                    REI data: {reiDaysSince} {reiDaysSince === 1 ? 'day' : 'days'} old
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">REI data: Date not available</p>
+                )}
+              </div>
+            </div>
             {!showStaleDataLinks && (
               <button
                 onClick={() => {
@@ -994,7 +1087,7 @@ export function Step3MarketPerformance() {
           {showStaleDataLinks && (
             <div className="mt-4">
               <div className="text-base text-green-800 mb-4">
-                <p className="mb-3"><strong>Check these sites:</strong></p>
+                <p className="mb-3 text-xl font-bold"><strong>Check these sites:</strong></p>
                 <div className="space-y-3">
                   <p className="text-lg">
                     Go to <a href={getSPIUrl()} target="_blank" rel="noopener noreferrer" className="underline text-blue-600 hover:text-blue-800 font-bold text-xl">smartpropertyinvestment.com.au</a> for Median price change - 3 year & 5 year
@@ -1005,7 +1098,44 @@ export function Step3MarketPerformance() {
                 </div>
                 <p className="mt-3 text-sm italic">(Links are pre-filled with {address.suburbName || 'suburb'} {address.state || 'state'})</p>
               </div>
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-2 mt-4 flex-wrap">
+                <button
+                  onClick={() => {
+                    // Clear both SPI and REI fields in marketPerformance
+                    updateFormData({
+                      marketPerformance: {
+                        ...marketPerformance,
+                        medianPriceChange3Year: '',
+                        medianPriceChange5Year: '',
+                        medianPriceChange3Months: '',
+                        medianPriceChange1Year: '',
+                        medianYield: '',
+                        medianRentChange1Year: '',
+                        rentalPopulation: '',
+                        vacancyRate: '',
+                        isSaved: false,
+                      },
+                    });
+                    // Clear form state variables
+                    setFormData_SPI({ confirmedFromSPI: false, priceChange3Year: '', priceChange5Year: '' });
+                    setFormData_REI({
+                      confirmedFromREI: false,
+                      priceChange3Months: '',
+                      priceChange1Year: '',
+                      medianYield: '',
+                      rentChange1Year: '',
+                      rentalPopulation: '',
+                      vacancyRate: '',
+                    });
+                    setShowDataCollection(true);
+                    setShowSPIForm(true);
+                    setShowREIForm(true);
+                    setShowStaleDataLinks(false);
+                  }}
+                  className="btn-secondary text-sm"
+                >
+                  Update both SPI & REI
+                </button>
                 <button
                   onClick={async () => {
                     // Navigate FIRST to prevent any re-renders from interfering
@@ -1036,38 +1166,9 @@ export function Step3MarketPerformance() {
                       console.error('Error updating timestamp:', error);
                     });
                   }}
-                  className="btn-secondary"
+                  className="btn-secondary text-sm"
                 >
                   Data is fine, progress to step 5
-                </button>
-                <button
-                  onClick={() => {
-                    // Mark as verified and clear all fields
-                    updateFormData({
-                      marketPerformance: {
-                        ...marketPerformance,
-                        isVerified: true,
-                        // Clear all data fields so user can enter fresh data
-                        medianPriceChange3Months: '',
-                        medianPriceChange1Year: '',
-                        medianPriceChange3Year: '',
-                        medianPriceChange5Year: '',
-                        medianYield: '',
-                        medianRentChange1Year: '',
-                        rentalPopulation: '',
-                        vacancyRate: '',
-                        isSaved: false, // Mark as unsaved since fields are cleared
-                      },
-                    });
-                    setDataVerified(true);
-                    setShowDataCollection(true);
-                    setShowSPIForm(true);
-                    setShowREIForm(true);
-                    setShowStaleDataLinks(false);
-                  }}
-                  className="btn-secondary"
-                >
-                  Needs updating
                 </button>
               </div>
             </div>
@@ -1078,8 +1179,8 @@ export function Step3MarketPerformance() {
       {/* Data Collection Forms */}
       {showDataCollection && (
         <div className="mb-6 space-y-6">
-          {/* Show links when forms are displayed after "Needs updating" */}
-          {(showSPIForm || showREIForm) && (
+          {/* Show links when forms are displayed after "Needs updating" - but NOT in error state (error state already shows links) */}
+          {(showSPIForm || showREIForm) && scenario !== 'error' && (
             <div className="p-4 bg-blue-50 rounded-lg mb-4 border border-blue-200">
               <div className="text-base text-blue-900 mb-4">
                 <p className="mb-3 font-semibold">Check these sites:</p>
@@ -1104,25 +1205,6 @@ export function Step3MarketPerformance() {
             <div className="p-4 bg-white border border-gray-300 rounded-lg">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">Smart Property Investment Data</h3>
-                <button
-                  onClick={() => {
-                    // Clear only SPI fields
-                    updateFormData({
-                      marketPerformance: {
-                        ...marketPerformance,
-                        medianPriceChange3Year: '',
-                        medianPriceChange5Year: '',
-                        isSaved: false, // Mark as unsaved since fields are cleared
-                      },
-                    });
-                    // Also clear the form state
-                    setFormData_SPI({ ...formData_SPI, priceChange3Year: '', priceChange5Year: '' });
-                  }}
-                  className="text-xs text-gray-600 hover:text-gray-800 underline"
-                  type="button"
-                >
-                  Remove existing from fields below
-                </button>
               </div>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -1195,7 +1277,7 @@ export function Step3MarketPerformance() {
                     onChange={(e) => setFormData_SPI({ ...formData_SPI, confirmedFromSPI: e.target.checked })}
                     className="mr-2 h-4 w-4"
                   />
-                  <label htmlFor="confirmSPI" className="label-field cursor-pointer">
+                  <label htmlFor="confirmSPI" className="label-field cursor-pointer text-lg font-semibold bg-green-50 px-3 py-2 rounded">
                     Did you get this data from smartpropertyinvestment.com.au?
                   </label>
                 </div>
@@ -1208,37 +1290,6 @@ export function Step3MarketPerformance() {
             <div className="p-4 bg-white border border-gray-300 rounded-lg">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">Real Estate Investar Data</h3>
-                <button
-                  onClick={() => {
-                    // Clear only REI fields
-                    updateFormData({
-                      marketPerformance: {
-                        ...marketPerformance,
-                        medianPriceChange3Months: '',
-                        medianPriceChange1Year: '',
-                        medianYield: '',
-                        medianRentChange1Year: '',
-                        rentalPopulation: '',
-                        vacancyRate: '',
-                        isSaved: false, // Mark as unsaved since fields are cleared
-                      },
-                    });
-                    // Also clear the form state
-                    setFormData_REI({
-                      ...formData_REI,
-                      priceChange3Months: '',
-                      priceChange1Year: '',
-                      medianYield: '',
-                      rentChange1Year: '',
-                      rentalPopulation: '',
-                      vacancyRate: '',
-                    });
-                  }}
-                  className="text-xs text-gray-600 hover:text-gray-800 underline"
-                  type="button"
-                >
-                  Remove existing from fields below
-                </button>
               </div>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -1449,7 +1500,7 @@ export function Step3MarketPerformance() {
                     onChange={(e) => setFormData_REI({ ...formData_REI, confirmedFromREI: e.target.checked })}
                     className="mr-2 h-4 w-4"
                   />
-                  <label htmlFor="confirmREI" className="label-field cursor-pointer">
+                  <label htmlFor="confirmREI" className="label-field cursor-pointer text-lg font-semibold bg-green-50 px-3 py-2 rounded">
                     Did you get this data from info.realestateinvestar.com.au?
                   </label>
                 </div>
@@ -1465,7 +1516,11 @@ export function Step3MarketPerformance() {
                 disabled={saving}
                 className="btn-primary text-lg px-8 py-3"
               >
-                {saving ? 'Saving...' : 'Save Market Performance Data'}
+                {saving 
+                  ? 'Saving...' 
+                  : scenario === 'error'
+                    ? 'Save for this review (will update Google Sheet if connection restored)'
+                    : 'Save Market Performance Data'}
               </button>
             </div>
           )}
@@ -1503,7 +1558,41 @@ export function Step3MarketPerformance() {
       <div className="space-y-4">
         {/* SPI Data Section - Highlighted at top */}
         <div className="p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
-          <p className="text-sm font-semibold text-blue-900 mb-3">Smart Property Investment Data (smartpropertyinvestment.com.au)</p>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-lg font-bold text-blue-700 mb-1">
+                Smart Property Investment Data <span className="text-sm font-normal text-gray-600">(smartpropertyinvestment.com.au)</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                {spiDaysSince !== null 
+                  ? `This data is ${spiDaysSince} ${spiDaysSince === 1 ? 'day' : 'days'} old.`
+                  : 'Date collected information not available.'}
+              </p>
+            </div>
+            {showStaleDataLinks && marketPerformance?.isSaved === true && (
+              <button
+                onClick={() => {
+                  // Clear only SPI fields in marketPerformance
+                  updateFormData({
+                    marketPerformance: {
+                      ...marketPerformance,
+                      medianPriceChange3Year: '',
+                      medianPriceChange5Year: '',
+                      isSaved: false,
+                    },
+                  });
+                  // Clear SPI form state variable
+                  setFormData_SPI({ confirmedFromSPI: false, priceChange3Year: '', priceChange5Year: '' });
+                  setShowDataCollection(true);
+                  setShowSPIForm(true);
+                  setShowStaleDataLinks(false);
+                }}
+                className="btn-secondary text-base px-4 py-2"
+              >
+                SPI needs updating
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label-field">Median price change - 3 year %</label>
@@ -1516,6 +1605,7 @@ export function Step3MarketPerformance() {
                     marketPerformance: { ...marketPerformance, medianPriceChange3Year: cleaned },
                   });
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field"
                 placeholder="e.g., 20.10 or N/A"
               />
@@ -1531,6 +1621,7 @@ export function Step3MarketPerformance() {
                     marketPerformance: { ...marketPerformance, medianPriceChange5Year: cleaned },
                   });
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field"
                 placeholder="e.g., 49.83 or N/A"
               />
@@ -1540,7 +1631,53 @@ export function Step3MarketPerformance() {
 
         {/* REI Data Section */}
         <div className="p-4 bg-gray-50 border border-gray-300 rounded-lg">
-          <p className="text-sm font-semibold text-gray-700 mb-3">Real Estate Investar Data (info.realestateinvestar.com.au)</p>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-lg font-bold text-blue-700 mb-1">
+                Real Estate Investar Data <span className="text-sm font-normal text-gray-600">(info.realestateinvestar.com.au)</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                {reiDaysSince !== null 
+                  ? `This data is ${reiDaysSince} ${reiDaysSince === 1 ? 'day' : 'days'} old.`
+                  : 'Date collected information not available.'}
+              </p>
+            </div>
+            {showStaleDataLinks && marketPerformance?.isSaved === true && (
+              <button
+                onClick={() => {
+                  // Clear only REI fields in marketPerformance
+                  updateFormData({
+                    marketPerformance: {
+                      ...marketPerformance,
+                      medianPriceChange3Months: '',
+                      medianPriceChange1Year: '',
+                      medianYield: '',
+                      medianRentChange1Year: '',
+                      rentalPopulation: '',
+                      vacancyRate: '',
+                      isSaved: false,
+                    },
+                  });
+                  // Clear REI form state variable
+                  setFormData_REI({
+                    confirmedFromREI: false,
+                    priceChange3Months: '',
+                    priceChange1Year: '',
+                    medianYield: '',
+                    rentChange1Year: '',
+                    rentalPopulation: '',
+                    vacancyRate: '',
+                  });
+                  setShowDataCollection(true);
+                  setShowREIForm(true);
+                  setShowStaleDataLinks(false);
+                }}
+                className="btn-secondary text-base px-4 py-2"
+              >
+                REI needs updating
+              </button>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label-field">Median price change - 3 months %</label>
@@ -1553,6 +1690,7 @@ export function Step3MarketPerformance() {
                     marketPerformance: { ...marketPerformance, medianPriceChange3Months: cleaned },
                   });
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field"
                 placeholder="e.g., 3.02 or N/A"
               />
@@ -1568,6 +1706,7 @@ export function Step3MarketPerformance() {
                     marketPerformance: { ...marketPerformance, medianPriceChange1Year: cleaned },
                   });
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field"
                 placeholder="e.g., 15.00 or N/A"
               />
@@ -1583,6 +1722,7 @@ export function Step3MarketPerformance() {
                     marketPerformance: { ...marketPerformance, medianYield: cleaned },
                   });
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field"
                 placeholder="e.g., 3.39 or N/A"
               />
@@ -1598,6 +1738,7 @@ export function Step3MarketPerformance() {
                     marketPerformance: { ...marketPerformance, medianRentChange1Year: cleaned },
                   });
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field"
                 placeholder="e.g., 7.14 or N/A"
               />
@@ -1613,6 +1754,7 @@ export function Step3MarketPerformance() {
                     marketPerformance: { ...marketPerformance, rentalPopulation: cleaned },
                   });
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field"
                 placeholder="e.g., 36.61 or N/A"
               />
@@ -1628,6 +1770,7 @@ export function Step3MarketPerformance() {
                     marketPerformance: { ...marketPerformance, vacancyRate: cleaned },
                   });
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field"
                 placeholder="e.g., 1.13 or N/A"
               />
@@ -1664,6 +1807,7 @@ export function Step3MarketPerformance() {
                   target.style.height = 'auto';
                   target.style.height = `${target.scrollHeight}px`;
                 }}
+                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field resize-none overflow-hidden"
                 rows={3}
                 placeholder="Any additional details about market performance"

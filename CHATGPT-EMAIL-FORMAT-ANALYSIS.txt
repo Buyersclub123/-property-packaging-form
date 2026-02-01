@@ -1,0 +1,135 @@
+I have an email formatting issue with Investment Highlights data.
+
+SITUATION:
+- I use ChatGPT Infrastructure Details Tool to create Investment Highlights text
+- I copy/paste that text into my property form
+- The form sends it to Make.com
+- Make.com formats it for email using JavaScript code
+- The email formatting is now BROKEN
+
+WHAT WORKED BEFORE:
+- I manually copied ChatGPT output
+- Pasted directly into old form
+- Make.com received it and formatted email perfectly
+
+WHAT'S BROKEN NOW:
+- New form sends the data to Make.com
+- Email formatting is wrong
+- The Make.com code hasn't changed
+- Something about how the form sends the data is different
+
+HERE'S THE MAKE.COM FORMATTING CODE:
+
+```javascript
+function formatInvestmentHighlightsHtml(rawText) {
+  const t = normaliseNewlines(rawText);
+  const lines = t.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return "";
+
+  const knownHeadings = new Set([
+    "population growth context", "residential", "industrial",
+    "commercial and civic", "commercial and civil",
+    "health and education", "health and community",
+    "transport", "infrastructure", "education", "job implications"
+  ].map((s) => s.toLowerCase()));
+
+  let html = "";
+  let inList = false;
+  let lineIndex = 0;
+  let lastType = null;
+  let lastHeadingType = null;
+
+  function openList() {
+    if (!inList) { html += "<ul>"; inList = true; }
+  }
+
+  function closeList() {
+    if (inList) { html += "</ul>"; inList = false; }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const line = rawLine;
+    const lower = line.toLowerCase();
+    const explicitBullet = /^[-•]/.test(line);
+    const bulletText = explicitBullet ? line.replace(/^[-•]\s*/, "").trim() : line;
+
+    if (lineIndex === 0) {
+      closeList();
+      html += `<p class="highlight-region"><strong>${bulletText}</strong></p>`;
+      lastType = "heading";
+      lastHeadingType = "region";
+      lineIndex++;
+      continue;
+    }
+
+    if (lineIndex === 1) {
+      closeList();
+      html += `<p class="highlight-heading"><strong>${bulletText}</strong></p>`;
+      lastType = "heading";
+      lastHeadingType = "sub";
+      lineIndex++;
+      continue;
+    }
+
+    if (explicitBullet) {
+      openList();
+      html += `<li>${bulletText}</li>`;
+      lastType = "bullet";
+      lastHeadingType = null;
+      lineIndex++;
+      continue;
+    }
+
+    const matchesKnownHeading = Array.from(knownHeadings).some(heading => lower.startsWith(heading));
+    if (matchesKnownHeading) {
+      closeList();
+      html += `<p class="highlight-heading"><strong>${bulletText}</strong></p>`;
+      lastType = "heading";
+      lastHeadingType = "section";
+      lineIndex++;
+      continue;
+    }
+
+    if (lastType === "heading") {
+      if (lastHeadingType === "section") {
+        openList();
+        html += `<li>${bulletText}</li>`;
+        lastType = "bullet";
+      } else {
+        closeList();
+        html += `<p>${bulletText}</p>`;
+        lastType = "body";
+      }
+      lastHeadingType = null;
+      lineIndex++;
+      continue;
+    }
+
+    openList();
+    html += `<li>${bulletText}</li>`;
+    lastType = "bullet";
+    lineIndex++;
+  }
+
+  closeList();
+  return html;
+}
+
+function normaliseNewlines(str) {
+  if (!str) return "";
+  return String(str).replace(/\\n/g, "\n").replace(/\\\\n/g, "\n").replace(/&#10;|&#13;/g, "\n");
+}
+```
+
+QUESTIONS:
+1. What is the form likely doing to the text that breaks the email formatting?
+2. Is it escaping characters? Converting line breaks? Adding extra formatting?
+3. How should the form send the data to Make.com to match what I was manually pasting?
+4. What format does Make.com expect to receive?
+
+I'm about to paste two examples:
+1. The WORKING format (what I manually copied from ChatGPT)
+2. The BROKEN format (what the form is sending)
+
+Please analyze the difference and tell me how to fix the form's output.

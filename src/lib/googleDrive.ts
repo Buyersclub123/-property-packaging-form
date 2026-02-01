@@ -343,24 +343,39 @@ export async function createFolder(
 
 /**
  * Set folder permissions (share with viewers)
+ * Sets "Anyone with the link" permission for Shared Drive folders
  */
 export async function setFolderPermissions(
   folderId: string,
-  role: 'reader' | 'writer' = 'reader'
+  role: 'reader' | 'writer' = 'reader',
+  driveId?: string
 ): Promise<void> {
   try {
     const drive = getDriveClient();
     
-    await drive.permissions.create({
+    const permissionOptions: any = {
       fileId: folderId,
       requestBody: {
         role: role,
         type: 'anyone', // Anyone with the link can access
       },
-    });
-  } catch (error) {
+      supportsAllDrives: true, // Required for Shared Drive compatibility
+    };
+
+    // If Shared Drive ID is provided, include it
+    if (driveId) {
+      permissionOptions.driveId = driveId;
+    }
+    
+    await drive.permissions.create(permissionOptions);
+    console.log(`✓ Set "Anyone with the link" permission (${role}) on folder ${folderId}`);
+  } catch (error: any) {
     console.error('Error setting folder permissions:', error);
-    throw error;
+    // Don't throw if permission already exists
+    if (!error.message?.includes('already exists') && !error.message?.includes('Permission already granted')) {
+      throw error;
+    }
+    console.log(`Permission may already exist for folder ${folderId}`);
   }
 }
 
@@ -519,7 +534,10 @@ export async function findGoogleSheetsInFolder(
     const items = await listFilesInFolder(folderId, driveId);
     return items
       .filter(item => item.mimeType === 'application/vnd.google-apps.spreadsheet')
-      .map(item => ({ id: item.id, name: item.name }));
+      .map(item => ({ 
+        id: item.id ? item.id.trim().replace(/\.+$/, '') : '', 
+        name: item.name || '' 
+      }));
   } catch (error) {
     console.error('Error finding Google Sheets in folder:', error);
     throw error;
@@ -537,20 +555,30 @@ export async function renameFile(
   try {
     const drive = getDriveClient();
     
+    // Clean file ID - remove any trailing periods or whitespace
+    const cleanFileId = fileId.trim().replace(/\.+$/, '');
+    
     const updateOptions: any = {
-      fileId,
+      fileId: cleanFileId,
       requestBody: {
         name: newName,
       },
+      supportsAllDrives: true, // Always set for Shared Drive compatibility
     };
     
     if (driveId) {
-      updateOptions.supportsAllDrives = true;
+      updateOptions.includeItemsFromAllDrives = true;
+      updateOptions.driveId = driveId;
+      updateOptions.corpora = 'drive';
     }
     
+    console.error(`[RENAME] Renaming file ${cleanFileId} to "${newName}"${driveId ? ` in drive ${driveId}` : ''}`);
     await drive.files.update(updateOptions);
-  } catch (error) {
-    console.error('Error renaming file:', error);
+    console.error(`[RENAME] ✓ Successfully renamed file to "${newName}"`);
+  } catch (error: any) {
+    console.error('[RENAME] ✗ Error renaming file:', error?.message || error);
+    console.error('[RENAME] File ID:', fileId);
+    console.error('[RENAME] New name:', newName);
     throw error;
   }
 }
@@ -565,18 +593,84 @@ export async function deleteFile(
   try {
     const drive = getDriveClient();
     
-    const deleteOptions: any = {
-      fileId,
+    // Clean file ID - remove any trailing periods or whitespace
+    const cleanFileId = fileId.trim().replace(/\.+$/, '');
+    
+    // First verify file exists and is accessible
+    const getOptions: any = {
+      fileId: cleanFileId,
+      fields: 'id,name',
+      supportsAllDrives: true,
     };
     
     if (driveId) {
-      deleteOptions.supportsAllDrives = true;
+      getOptions.includeItemsFromAllDrives = true;
+      getOptions.driveId = driveId;
+      getOptions.corpora = 'drive';
     }
     
-    await drive.files.delete(deleteOptions);
-  } catch (error) {
-    console.error('Error deleting file:', error);
-    throw error;
+    // Verify file exists before attempting delete
+    try {
+      const fileInfo = await drive.files.get(getOptions);
+      console.error(`[DELETION] File verified: ${fileInfo.data.name} (ID: ${fileInfo.data.id})`);
+    } catch (getError: any) {
+      console.error(`[DELETION] File verification failed: ${getError?.message || getError}`);
+      throw new Error(`Cannot access file ${cleanFileId}: ${getError?.message || 'File not found'}`);
+    }
+    
+    // Try trashing first (safer, works with Content Manager role)
+    const trashOptions: any = {
+      fileId: cleanFileId,
+      requestBody: { trashed: true },
+      supportsAllDrives: true,
+    };
+    
+    if (driveId) {
+      trashOptions.includeItemsFromAllDrives = true;
+      trashOptions.driveId = driveId;
+      trashOptions.corpora = 'drive';
+    }
+    
+    console.error(`[DELETION] Attempting to trash file ${cleanFileId}${driveId ? ` from drive ${driveId}` : ''}`);
+    
+    try {
+      // Try trashing first (works with Content Manager role)
+      await drive.files.update(trashOptions);
+      console.error(`[DELETION] ✓ Successfully trashed file ${cleanFileId}`);
+    } catch (trashError: any) {
+      // If trashing fails, try permanent delete (requires Manager/Organizer role)
+      console.error(`[DELETION] Trashing failed, trying permanent delete: ${trashError?.message || trashError}`);
+      
+      const deleteOptions: any = {
+        fileId: cleanFileId,
+        supportsAllDrives: true,
+      };
+      
+      if (driveId) {
+        deleteOptions.includeItemsFromAllDrives = true;
+        deleteOptions.driveId = driveId;
+        deleteOptions.corpora = 'drive';
+      }
+      
+      await drive.files.delete(deleteOptions);
+      console.error(`[DELETION] ✓ Successfully permanently deleted file ${cleanFileId}`);
+    }
+  } catch (error: any) {
+    const errorMessage = error?.message || String(error);
+    const errorCode = error?.code;
+    const errorResponse = error?.response?.data;
+    
+    console.error('[DELETION] ✗ Error deleting file');
+    console.error('[DELETION] Error message:', errorMessage);
+    console.error('[DELETION] Error code:', errorCode);
+    console.error('[DELETION] Error response:', JSON.stringify(errorResponse, null, 2));
+    console.error('[DELETION] File ID (original):', fileId);
+    console.error('[DELETION] File ID (cleaned):', fileId.trim().replace(/\.+$/, ''));
+    console.error('[DELETION] Drive ID:', driveId);
+    
+    // Re-throw with cleaned error message (remove period if it's from our error format)
+    const cleanedErrorMsg = errorMessage.replace(/\.$/, '');
+    throw new Error(cleanedErrorMsg);
   }
 }
 
@@ -672,24 +766,52 @@ export async function populateSpreadsheet(
         return convertStateToCode(state);
       }
       
-      // Land Cost mapping
+      // Land Cost mapping - ONLY populate if split contract
       if (fieldLower.includes('land cost')) {
-        return formData.purchasePrice?.landPrice || '';
-      }
-      
-      // Build Cost mapping
-      if (fieldLower.includes('build cost')) {
-        return formData.purchasePrice?.buildPrice || '';
-      }
-      
-      // Total Cost (calculated)
-      if (fieldLower.includes('total cost')) {
-        const land = parseFloat(formData.purchasePrice?.landPrice || '0');
-        const build = parseFloat(formData.purchasePrice?.buildPrice || '0');
-        if (land && build) {
-          return String(land + build);
+        const isSplitContract = formData.decisionTree?.contractTypeSimplified === 'Split Contract';
+        if (isSplitContract) {
+          return formData.purchasePrice?.landPrice || '';
         }
-        return formData.purchasePrice?.totalPrice || '';
+        return '';
+      }
+      
+      // Build Cost mapping - ONLY populate if split contract
+      if (fieldLower.includes('build cost')) {
+        const isSplitContract = formData.decisionTree?.contractTypeSimplified === 'Split Contract';
+        if (isSplitContract) {
+          return formData.purchasePrice?.buildPrice || '';
+        }
+        return '';
+      }
+      
+      // Total Cost mapping
+      if (fieldLower.includes('total cost')) {
+        const contractType = formData.decisionTree?.contractTypeSimplified;
+        const propertyType = formData.decisionTree?.propertyType;
+        
+        console.log('=== TOTAL COST MAPPING DEBUG ===');
+        console.log('contractType:', contractType);
+        console.log('propertyType:', propertyType);
+        console.log('purchasePrice:', formData.purchasePrice);
+        
+        if (contractType === 'Split Contract') {
+          // Calculate: landPrice + buildPrice (both mandatory for Split Contract)
+          const land = parseFloat(formData.purchasePrice?.landPrice || '0');
+          const build = parseFloat(formData.purchasePrice?.buildPrice || '0');
+          const total = land + build;
+          console.log('Split Contract - Land:', land, 'Build:', build, 'Total:', total);
+          return String(total);
+        } else if (propertyType === 'New') {
+          // New Single Contract - use totalPrice
+          const total = formData.purchasePrice?.totalPrice || '';
+          console.log('New Property - Total:', total);
+          return total;
+        } else {
+          // Established - use acceptableAcquisitionTo (NOT acceptedAcquisitionPriceTo)
+          const total = formData.purchasePrice?.acceptableAcquisitionTo || '';
+          console.log('Established Property - Total:', total);
+          return total;
+        }
       }
       
       // Cashback Value (only if type is cashback)
@@ -741,6 +863,120 @@ export async function populateSpreadsheet(
         return formData.rentalAssessment?.rentAppraisalPrimaryTo || '';
       }
       
+      // Depreciation Years 1-10 (B18-B27)
+      // Handle various field name patterns: "Depreciation Year 1", "Year 1 Depreciation", "Depreciation 1", etc.
+      if (fieldLower.includes('depreciation')) {
+        // Pattern 1: "Depreciation Year 1" or "Depreciation Year1"
+        let yearMatch = fieldLower.match(/depreciation\s+year\s*(\d+)/);
+        if (yearMatch) {
+          const year = parseInt(yearMatch[1]);
+          if (year >= 1 && year <= 10) {
+            return formData.depreciation?.[`year${year}`] || '';
+          }
+        }
+        
+        // Pattern 2: "Year 1 Depreciation" or "Year1 Depreciation"
+        yearMatch = fieldLower.match(/year\s*(\d+)\s+depreciation/);
+        if (yearMatch) {
+          const year = parseInt(yearMatch[1]);
+          if (year >= 1 && year <= 10) {
+            return formData.depreciation?.[`year${year}`] || '';
+          }
+        }
+        
+        // Pattern 3: "Depreciation 1" (just number after depreciation)
+        yearMatch = fieldLower.match(/depreciation\s*(\d+)/);
+        if (yearMatch) {
+          const year = parseInt(yearMatch[1]);
+          if (year >= 1 && year <= 10) {
+            return formData.depreciation?.[`year${year}`] || '';
+          }
+        }
+      }
+
+      // Council/Water Rates $ (B13)
+      if (fieldLower.includes('council') && fieldLower.includes('water') && fieldLower.includes('rates')) {
+        return formData.councilWaterRates || '';
+      }
+      
+      // Insurance or Insurance & Strata Field (B14) - Label only
+      if (fieldLower.includes('insurance') && fieldLower.includes('strata') && fieldLower.includes('field')) {
+        const title = formData.propertyDescription?.title?.toLowerCase() || '';
+        const strataTypes = ['strata', 'owners_corp_community', 'survey_strata', 'built_strata'];
+        const isStrata = strataTypes.some(type => title.includes(type));
+        return isStrata ? 'Insurance & Strata' : 'Insurance';
+      }
+      
+      // Insurance or Insurance & Strata $ (B15) - Value with calculation
+      if (fieldLower.includes('insurance') && fieldLower.includes('strata') && fieldLower.includes('$')) {
+        const title = formData.propertyDescription?.title?.toLowerCase() || '';
+        const strataTypes = ['strata', 'owners_corp_community', 'survey_strata', 'built_strata'];
+        const isStrata = strataTypes.some(type => title.includes(type));
+        
+        if (isStrata) {
+          // Mode 2: Calculate total (Annualised Body Corp + Insurance)
+          const bodyCorpPerQuarter = parseFloat(formData.propertyDescription?.bodyCorpPerQuarter || '0');
+          const annualisedBodyCorp = bodyCorpPerQuarter * 4;
+          const insurance = parseFloat(formData.insuranceAmount || '0');
+          return String(annualisedBodyCorp + insurance);
+        } else {
+          // Mode 1: Just insurance
+          return formData.insuranceAmount || '';
+        }
+      }
+      
+      // P&B / PCI (B16) - Report type label
+      if (fieldLower.includes('p&b') || fieldLower.includes('pci')) {
+        const propertyType = formData.decisionTree?.propertyType;
+        if (propertyType === 'New') {
+          return 'P&B + PCI Reports';
+        } else {
+          return 'Pest & Build (P&B) report';
+        }
+      }
+      
+      // Build Window (B27) - Split Contract only
+      if (fieldLower.includes('build window')) {
+        const isSplitContract = formData.decisionTree?.contractTypeSimplified === 'Split Contract';
+        if (isSplitContract) {
+          return formData.buildWindow || '';
+        }
+        return '';
+      }
+      
+      // Cashback 1 month (B28) - Split Contract only
+      if (fieldLower.includes('cashback 1 month')) {
+        const isSplitContract = formData.decisionTree?.contractTypeSimplified === 'Split Contract';
+        if (isSplitContract) {
+          return formData.cashback1Month || '';
+        }
+        return '';
+      }
+      
+      // Cashback 2 month (B29) - Split Contract only
+      if (fieldLower.includes('cashback 2 month')) {
+        const isSplitContract = formData.decisionTree?.contractTypeSimplified === 'Split Contract';
+        if (isSplitContract) {
+          return formData.cashback2Month || '';
+        }
+        return '';
+      }
+
+      // Proximity Data (Phase 4A)
+      if (fieldLower.includes('proximity') || fieldLower.includes('amenities')) {
+        return formData.contentSections?.proximity || '';
+      }
+      
+      // AI "Why This Property" Content (Phase 4B)
+      if (fieldLower.includes('why this property') || fieldLower.includes('why property')) {
+        return formData.contentSections?.whyThisProperty || '';
+      }
+      
+      // Investment Highlights (Phase 4C)
+      if (fieldLower.includes('investment highlights') || fieldLower.includes('hotspotting')) {
+        return formData.contentSections?.investmentHighlights || '';
+      }
+      
       // Skip fields marked as "Yes" in CSV (new fields needed)
       // Skip Average Rent (auto-calc in sheet)
       if (fieldLower.includes('average rent')) {
@@ -780,19 +1016,21 @@ export async function populateSpreadsheet(
     
     console.log('Updates to apply:', updates.map(u => `${u.range} = ${u.value}`));
     
-    // Step 5: Write values to column B
+    // Step 5: Write all values using keyword matching (no direct cell writes)
+    const allUpdates = updates.map(update => ({
+      range: update.range,
+      values: [[update.value]],
+    }));
+    
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
       requestBody: {
         valueInputOption: 'USER_ENTERED',
-        data: updates.map(update => ({
-          range: update.range,
-          values: [[update.value]],
-        })),
+        data: allUpdates,
       },
     });
     
-    console.log(`✓ Successfully populated ${updates.length} fields`);
+    console.log(`✓ Successfully populated ${allUpdates.length} fields via keyword matching`);
   } catch (error) {
     console.error('Error populating spreadsheet:', error);
     throw error;
@@ -811,3 +1049,204 @@ export async function populateHLSpreadsheet(
   return populateSpreadsheet(spreadsheetId, formData);
 }
 
+/**
+ * Set file permissions (anyone with link can view)
+ */
+export async function setFilePermissions(
+  fileId: string,
+  role: 'reader' | 'writer' = 'reader',
+  driveId?: string
+): Promise<void> {
+  try {
+    const drive = getDriveClient();
+    
+    await drive.permissions.create({
+      fileId: fileId,
+      requestBody: {
+        role: role,
+        type: 'anyone', // Anyone with the link can access
+      },
+      supportsAllDrives: true,
+    });
+  } catch (error: any) {
+    console.error('Error setting file permissions:', error);
+    // Don't throw - permissions might already be set or folder permissions might be sufficient
+    if (!error.message?.includes('already exists')) {
+      throw error;
+    }
+  }
+}
+
+/**
+ * Sync folder permissions - ensure all files in folder have "anyone with link can view"
+ * This is useful for manually-added files that might not inherit folder permissions correctly
+ */
+export async function syncFolderPermissions(
+  folderId: string,
+  role: 'reader' | 'writer' = 'reader',
+  driveId?: string
+): Promise<{ 
+  success: boolean; 
+  filesProcessed: number; 
+  filesUpdated: number; 
+  errors: Array<{ fileId: string; fileName: string; error: string }> 
+}> {
+  const drive = getDriveClient();
+  const results = {
+    success: true,
+    filesProcessed: 0,
+    filesUpdated: 0,
+    errors: [] as Array<{ fileId: string; fileName: string; error: string }>,
+  };
+  
+  try {
+    // List all files in folder (non-recursive for now)
+    const queryOptions: any = {
+      q: `'${folderId}' in parents and trashed=false`,
+      fields: 'files(id, name, mimeType)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    };
+    
+    if (driveId) {
+      queryOptions.driveId = driveId;
+      queryOptions.corpora = 'drive';
+    }
+    
+    const response = await drive.files.list(queryOptions);
+    const files = response.data.files || [];
+    
+    results.filesProcessed = files.length;
+    
+    // Set permissions on each file
+    for (const file of files) {
+      if (!file.id || !file.name) continue;
+      
+      // Skip folders (we only sync file permissions, not folder permissions)
+      if (file.mimeType === 'application/vnd.google-apps.folder') {
+        continue;
+      }
+      
+      try {
+        await setFilePermissions(file.id, role, driveId);
+        results.filesUpdated++;
+      } catch (error: any) {
+        results.errors.push({
+          fileId: file.id,
+          fileName: file.name,
+          error: error?.message || error?.toString() || 'Unknown error',
+        });
+        results.success = false;
+      }
+    }
+    
+    return results;
+  } catch (error: any) {
+    results.success = false;
+    results.errors.push({
+      fileId: folderId,
+      fileName: 'Folder',
+      error: error?.message || error?.toString() || 'Unknown error',
+    });
+    return results;
+  }
+}
+
+/**
+ * Create a shortcut to a file in Google Drive
+ * Shortcuts allow you to reference a file from multiple locations without duplicating it
+ * 
+ * @param targetFileId - The ID of the file to create a shortcut to
+ * @param parentFolderId - The ID of the folder where the shortcut will be created
+ * @param shortcutName - The name for the shortcut
+ * @param driveId - Optional Shared Drive ID if working with Shared Drives
+ * @returns The created shortcut file with id, name, and webViewLink
+ */
+export async function createShortcut(
+  targetFileId: string,
+  parentFolderId: string,
+  shortcutName: string,
+  driveId?: string
+): Promise<{ id: string; name: string; webViewLink: string }> {
+  try {
+    const drive = getDriveClient();
+    
+    const fileMetadata: any = {
+      name: shortcutName,
+      mimeType: 'application/vnd.google-apps.shortcut',
+      parents: [parentFolderId],
+      shortcutDetails: {
+        targetId: targetFileId,
+      },
+    };
+
+    const requestOptions: any = {
+      requestBody: fileMetadata,
+      fields: 'id, name, webViewLink',
+      supportsAllDrives: true, // Required for Shared Drive compatibility
+    };
+
+    // If driveId is provided, include it in the request for Shared Drives
+    if (driveId) {
+      requestOptions.driveId = driveId;
+      requestOptions.includeItemsFromAllDrives = true;
+      requestOptions.corpora = 'drive';
+    }
+
+    const response = await drive.files.create(requestOptions);
+
+    if (!response.data.id) {
+      throw new Error('Failed to create shortcut: No ID returned');
+    }
+
+    return {
+      id: response.data.id,
+      name: response.data.name || shortcutName,
+      webViewLink: response.data.webViewLink || '',
+    };
+  } catch (error: any) {
+    console.error('[createShortcut] Error creating shortcut:', error);
+    // Log more details about the error for debugging
+    if (error.response) {
+      console.error('[createShortcut] Error response status:', error.response.status);
+      console.error('[createShortcut] Error response data:', JSON.stringify(error.response.data, null, 2));
+    }
+    if (error.message) {
+      console.error('[createShortcut] Error message:', error.message);
+    }
+    if (error.code) {
+      console.error('[createShortcut] Error code:', error.code);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get file name from Google Drive file ID
+ */
+export async function getFileName(
+  fileId: string,
+  driveId?: string
+): Promise<string | null> {
+  try {
+    const drive = getDriveClient();
+    
+    const getOptions: any = {
+      fileId: fileId,
+      fields: 'name',
+      supportsAllDrives: true,
+    };
+    
+    if (driveId) {
+      getOptions.driveId = driveId;
+      getOptions.includeItemsFromAllDrives = true;
+      getOptions.corpora = 'drive';
+    }
+    
+    const response = await drive.files.get(getOptions);
+    return response.data.name || null;
+  } catch (error) {
+    console.error('Error getting file name:', error);
+    return null;
+  }
+}

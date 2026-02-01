@@ -1,0 +1,90 @@
+I have a Next.js 14 form with multiple steps. Two critical issues:
+
+ISSUE 1: Proximity field is clearing "Why This Property" data
+- When Proximity field calculates (Step 6), it clears the "Why This Property" field
+- Both fields are on the same page (Step 6: Proximity & Content)
+- They should be independent - Proximity should NOT affect Why This Property
+
+ISSUE 2: Need to start processing Proximity & Why This Property earlier
+- Currently both process when user reaches Step 6
+- Want them to start processing in background after Step 1 (like Investment Highlights does)
+- By the time user reaches Step 6, both should be ready
+
+CURRENT WORKFLOW:
+Step 0: Address & Risk
+Step 1: Property Details
+Step 2: Investment Highlights Check (uploads PDF, processes in background)
+Step 3-5: Other fields
+Step 6: Proximity & Content (currently processes here - TOO LATE!)
+
+DESIRED WORKFLOW:
+Step 0: Address & Risk
+Step 1: Property Details → TRIGGER background processing for Proximity & Why This Property
+Step 2: Investment Highlights Check
+Step 3-5: Other fields (while Proximity & Why This Property process in background)
+Step 6: Proximity & Content → Data already ready!
+
+RELEVANT CODE STRUCTURE:
+
+Form State (types/form.ts):
+```typescript
+export interface EarlyProcessingState {
+  investmentHighlights: {
+    status: 'idle' | 'checking' | 'processing' | 'ready' | 'error';
+    data: { ... } | null;
+  };
+  proximity: {
+    status: 'idle' | 'processing' | 'ready' | 'error';
+    data: string | null;
+  };
+  whyThisProperty: {
+    status: 'idle' | 'processing' | 'ready' | 'error';
+    data: string | null;
+  };
+}
+```
+
+Proximity Field Component (ProximityField.tsx):
+- Calculates proximity to amenities using Geoapify API
+- Takes address from form state
+- Currently runs useEffect when component mounts (Step 6)
+
+Why This Property Field Component (WhyThisPropertyField.tsx):
+- Generates 7 investment reasons using ChatGPT API
+- Takes suburb and LGA from form state
+- Currently runs useEffect when component mounts (Step 6)
+
+QUESTIONS FOR PLANNING:
+
+1. Why is Proximity clearing Why This Property data?
+   - Is there a shared state issue?
+   - Is one field's onChange affecting the other?
+   - Is the form state being reset incorrectly?
+
+2. Where should we trigger early processing?
+   - In Step1 (Property Details) component when user clicks "Next"?
+   - In MultiStepForm when transitioning from Step 1 to Step 2?
+   - Create a new Step1B component (like Step1A for Investment Highlights)?
+
+3. How to handle the async processing?
+   - Call API endpoints directly from Step1?
+   - Use the existing earlyProcessing state pattern?
+   - How to handle errors if processing fails?
+
+4. What data do we need to start processing?
+   - Proximity needs: full address (street, suburb, state, postcode)
+   - Why This Property needs: suburb, LGA
+   - Both available after Step 1 (Property Details)
+
+5. Should we show progress indicators?
+   - Like Investment Highlights shows "Processing..." on Step 2?
+   - Or silent background processing?
+
+PLEASE PROVIDE:
+1. Root cause analysis for Issue 1 (data clearing)
+2. Step-by-step implementation plan for Issue 2 (early processing)
+3. Code changes needed (which files, which functions)
+4. Any potential pitfalls or edge cases
+5. Testing strategy
+
+PRIORITY: Function over formatting - need this working ASAP!

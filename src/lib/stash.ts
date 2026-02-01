@@ -107,6 +107,19 @@ function parseStashResponse(data: any): StashResponse {
   
   // Handle string responses that might be JSON
   if (typeof data === 'string') {
+    // Check for "Accepted" (plain text) - indicates Make.com credit/quota issue
+    if (data.trim() === 'Accepted') {
+      console.warn('Make.com returned "Accepted" (plain text) - likely credit/quota issue');
+      return {
+        error: true,
+        errorMessage: 'Make.com scenario may not have executed. Please check your Make.com account status (credits/quota).',
+        floodRisk: '' as YesNo,
+        bushfireRisk: '' as YesNo,
+        rawStashData: data,
+        makeComCreditsIssue: true, // Flag to show specific error message
+      };
+    }
+    
     // Try to parse as JSON
     try {
       responseData = JSON.parse(data);

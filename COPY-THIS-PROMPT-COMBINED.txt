@@ -1,0 +1,154 @@
+========================================
+COPY THIS PROMPT INTO NEW AI CHAT
+TWO FEATURES TO ANALYZE
+========================================
+
+You are analyzing two features for a Next.js property review system.
+
+---
+
+## FEATURE 1: PDF EXTRACTION TIMING ISSUE
+
+### THE PROBLEM
+
+When users upload a PDF to Google Drive and immediately try to extract metadata, we get this error:
+```
+Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+```
+
+**What's happening:**
+1. User uploads PDF to Google Drive ✅
+2. Upload succeeds, we get a fileId ✅
+3. Frontend immediately calls extract-metadata API ✅
+4. API tries to download PDF using drive.files.get() ❌
+5. Google Drive returns HTML error page (404) instead of PDF ❌
+6. We try to parse HTML as JSON → Error ❌
+
+**Why:** Google Drive needs time to process/index the uploaded file before it can be downloaded again.
+
+**Workaround that works:** Upload → Wait 10-15 seconds → Refresh → Try extraction → Works! ✅
+
+### SOLUTION OPTIONS
+
+**Option A: Retry Logic with Exponential Backoff**
+- Try download, if fails wait and retry
+- Backoff: 1s, 2s, 4s, 8s, 16s
+- Max retries: 5-7 attempts
+
+**Option B: Longer Fixed Delay**
+- Increase wait from 3s to 15-20s
+
+**Option C: Polling/Status Check**
+- Poll Google Drive to check if file is ready
+- Use drive.files.get() with metadata only
+
+**Option D: Deferred Processing**
+- Upload PDF, save fileId
+- Background job processes later
+
+**Option E: Early Upload (User's Idea)**
+- Upload PDF on Step 2 or 3 (earlier in form)
+- User fills other fields (takes 2-5 minutes)
+- By Step 5, file is ready
+
+### YOUR TASK FOR FEATURE 1
+
+1. **Root Cause:** Why does Google Drive need processing time?
+2. **Best Solution:** Which option (A, B, C, D, E, or hybrid)?
+3. **Implementation:** How to detect errors vs valid PDF? Retry strategy?
+4. **Recommendation:** Clear approach with pros/cons
+
+**Context:**
+- Upload works 100% of the time
+- Extraction fails 100% on fresh uploads
+- Extraction works 100% after 10-15 second wait
+- Tech: Next.js 14, Google Drive API v3, pdf-parse library
+
+---
+
+## FEATURE 2: PHOTO DOCUMENT GENERATOR
+
+### THE REQUIREMENT
+
+Generate a professional PDF document with property photos.
+
+**User Workflow:**
+1. User drags & drops photos from realestate.com.au (or other sources)
+2. System collects photos
+3. System generates a PDF with:
+   - Property address as header (e.g., "5 Acacia St Point Vernon QLD 4655")
+   - All photos laid out professionally
+   - Saved to property's Google Drive folder
+
+**Current Manual Process (to be automated):**
+- User downloads photos → Pastes into Word → Adds header → Saves as PDF → Uploads to Drive
+
+### YOUR TASK FOR FEATURE 2
+
+Analyze and recommend:
+
+**1. PDF Generation Library**
+- Which library is best for Next.js?
+- PDFKit, jsPDF, Puppeteer, pdf-lib, React-PDF, or others?
+- Why? (Ease of use, image handling, performance, server-side compatibility)
+
+**2. Image Processing**
+- How to handle various formats and sizes?
+- Resize strategy (optimize file size, maintain aspect ratio)
+- Library: Sharp, Jimp, Canvas API, or browser-side?
+
+**3. Layout Design**
+- How to layout photos professionally?
+- Photos per page? (Grid 2x2, 3x3, or single per page?)
+- Page size (A4, Letter)
+- Margins, spacing, header format
+
+**4. Implementation Workflow**
+- Step-by-step process from upload to PDF generation
+- API endpoints needed
+- Client-side vs server-side processing
+
+**5. Edge Cases**
+- Very large images
+- Unsupported formats
+- Too many photos
+- PDF generation fails
+- How to handle errors?
+
+**Context:**
+- Next.js 14 (App Router), React 18, TypeScript
+- Server-side API routes available
+- Google Drive API for storage
+- Photos: Various sizes/formats (JPG, PNG, WebP), typically 2-5 MB each
+- Typical: 5-10 photos, Max: 20-30 photos
+
+---
+
+## DELIVERABLES
+
+Please provide analysis for BOTH features:
+
+### Feature 1 (PDF Extraction):
+1. Root cause explanation
+2. Recommended solution (which option?)
+3. Implementation guidance
+4. Pros/cons
+
+### Feature 2 (Photo Document):
+1. Library recommendations (PDF + Image processing)
+2. Implementation plan (Workflow, API endpoints)
+3. Layout design (Photos per page, page size, header)
+4. Edge case handling
+5. Pseudocode examples
+
+---
+
+## CRITICAL RULES
+
+❌ DO NOT WRITE FULL CODE
+✅ Provide pseudocode and conceptual examples
+✅ Focus on architecture and approach
+✅ Recommend specific libraries with clear reasoning
+✅ Address BOTH features in your response
+
+========================================

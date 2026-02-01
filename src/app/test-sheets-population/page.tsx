@@ -47,6 +47,11 @@ export default function TestSheetsPopulation() {
   const [loading, setLoading] = useState(false);
   const [depreciation, setDepreciation] = useState<{[key: string]: string}>({});
   const [wbMessage, setWbMessage] = useState<string>('Waiting for Washington Brown data...');
+  const [pbPciReport, setPbPciReport] = useState<string>('Pest & Build (P&B) report');
+  const [insuranceType, setInsuranceType] = useState<string>('Insurance');
+  const [insuranceAmount, setInsuranceAmount] = useState<string>('');
+  const [rates, setRates] = useState<string>('');
+  const [contractTypeSimplified, setContractTypeSimplified] = useState<string>('Single Contract');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastIframeUrlRef = useRef<string>('');
   
@@ -196,10 +201,15 @@ export default function TestSheetsPopulation() {
     try {
       console.log('Starting test...', { sourceFolderId, destinationParentFolderId, newFolderName });
       
-      // Include depreciation values in formData if they exist
+      // Include depreciation values and new fields in formData
       const formDataWithDepreciation = {
         ...formData,
         depreciation: Object.keys(depreciation).length > 0 ? depreciation : undefined,
+        pbPciReport,
+        insuranceType,
+        insuranceAmount,
+        rates,
+        contractTypeSimplified,
       };
       
       const response = await fetch('/api/test-populate-sheets', {
@@ -342,13 +352,103 @@ export default function TestSheetsPopulation() {
         </div>
 
 
+        {/* New Fields Section */}
+        <div className="p-4 bg-gray-50 rounded border border-gray-200">
+          <h3 className="text-lg font-semibold mb-4">Additional Fields</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* P&B / PCI Report */}
+            <div>
+              <label className="block mb-2 font-semibold text-sm">P&B / PCI Report (B17):</label>
+              <select
+                value={pbPciReport}
+                onChange={(e) => setPbPciReport(e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="Pest & Build (P&B) report">Pest & Build (P&B) report</option>
+                <option value="P&B + PCI Reports">P&B + PCI Reports</option>
+              </select>
+            </div>
+
+            {/* Insurance or Insurance & Strata */}
+            <div>
+              <label className="block mb-2 font-semibold text-sm">Insurance Type (B15):</label>
+              <select
+                value={insuranceType}
+                onChange={(e) => setInsuranceType(e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="Insurance">Insurance</option>
+                <option value="Insurance & Strata">Insurance & Strata</option>
+              </select>
+            </div>
+
+            {/* Insurance Amount */}
+            <div>
+              <label className="block mb-2 font-semibold text-sm">Insurance Amount $ (B16):</label>
+              <input
+                type="number"
+                value={insuranceAmount}
+                onChange={(e) => setInsuranceAmount(e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="Enter insurance amount"
+              />
+            </div>
+
+            {/* Rates */}
+            <div>
+              <label className="block mb-2 font-semibold text-sm">Rates $ (B14):</label>
+              <input
+                type="number"
+                value={rates}
+                onChange={(e) => setRates(e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="Enter rates amount"
+              />
+            </div>
+
+            {/* Contract Type Simplified */}
+            <div>
+              <label className="block mb-2 font-semibold text-sm">Contract Type (UI only):</label>
+              <select
+                value={contractTypeSimplified}
+                onChange={(e) => setContractTypeSimplified(e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="Single Contract">Single Contract</option>
+                <option value="Split Contract">Split Contract</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Depreciation Info */}
+          <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-200">
+            <p className="text-sm text-gray-700">
+              <strong>Depreciation Values:</strong> Captured from Washington Brown calculator tab (Years 1-10 → B18-B27)
+            </p>
+            {Object.keys(depreciation).length > 0 && (
+              <div className="mt-2 text-xs text-gray-600">
+                {Object.keys(depreciation).length} year(s) captured: {Object.keys(depreciation).join(', ')}
+              </div>
+            )}
+          </div>
+        </div>
+
         <div>
           <label className="block mb-2 font-semibold">Form Data (JSON - edit as needed):</label>
           <p className="text-sm text-gray-500 mb-2">
             Depreciation values captured from Washington Brown will be automatically added to formData.depreciation
           </p>
           <textarea
-            value={JSON.stringify({ ...formData, depreciation }, null, 2)}
+            value={JSON.stringify({ 
+              ...formData, 
+              depreciation: Object.keys(depreciation).length > 0 ? depreciation : undefined,
+              pbPciReport,
+              insuranceType,
+              insuranceAmount,
+              rates,
+              contractTypeSimplified,
+            }, null, 2)}
             onChange={(e) => {
               try {
                 const parsed = JSON.parse(e.target.value);
@@ -356,6 +456,11 @@ export default function TestSheetsPopulation() {
                 if (parsed.depreciation) {
                   setDepreciation(parsed.depreciation);
                 }
+                if (parsed.pbPciReport) setPbPciReport(parsed.pbPciReport);
+                if (parsed.insuranceType) setInsuranceType(parsed.insuranceType);
+                if (parsed.insuranceAmount) setInsuranceAmount(parsed.insuranceAmount);
+                if (parsed.rates) setRates(parsed.rates);
+                if (parsed.contractTypeSimplified) setContractTypeSimplified(parsed.contractTypeSimplified);
               } catch {
                 // Invalid JSON, ignore
               }

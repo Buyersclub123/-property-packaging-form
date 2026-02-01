@@ -1,0 +1,26 @@
+========================================
+COPY THIS PROMPT INTO NEW SONNET 4.5 CHAT
+========================================
+
+You are debugging a React state issue in a Next.js form.
+
+READ THIS FILE:
+property-review-system/form-app/PROMPT-STEP5-FIELD-CLEARING.md
+
+YOUR TASK:
+Identify why Investment Highlights and Why This Property fields clear when Proximity loads.
+
+CRITICAL RULES:
+❌ DO NOT WRITE ANY CODE
+❌ DO NOT CREATE HELPER SCRIPTS
+✅ Root cause analysis ONLY
+✅ Save your analysis as: property-review-system/form-app/STEP5-FIELD-CLEARING-ANALYSIS.md
+
+DELIVERABLES:
+1. Root cause identification
+2. Why it happens (React lifecycle, state management, useEffect)
+3. Proposed solution (conceptual, no code)
+4. Files that need changes
+5. Testing strategy
+
+========================================

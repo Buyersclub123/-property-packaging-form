@@ -593,25 +593,46 @@ export async function logMarketPerformanceUpdate(
 // ============================================================================
 
 export interface InvestmentHighlightsData {
-  lga: string;
-  state: string;
-  investmentHighlights: string;
-  dataSource?: string;
-  dateCollected?: string;
-  sourceDocument?: string;
+  // NEW STRUCTURE (matches Google Sheet columns A-O)
+  suburbs: string; // Column A: Comma-separated list of suburbs
+  state: string; // Column B: State code (e.g., "NSW", "QLD")
+  reportName: string; // Column C: Report name
+  validPeriod: string; // Column D: Valid period (e.g., "October 2025 - January 2026")
+  mainBody: string; // Column E: Main investment highlights content
+  extraInfo: string; // Column F: Extra information (optional)
+  
+  // Individual sections (Columns G-M)
+  populationGrowthContext?: string; // Column G
+  residential?: string; // Column H
+  industrial?: string; // Column I
+  commercialAndCivic?: string; // Column J
+  healthAndEducation?: string; // Column K
+  transport?: string; // Column L
+  jobImplications?: string; // Column M
+  
+  // PDF information (Columns N-O)
+  pdfDriveLink?: string; // Column N
+  pdfFileId?: string; // Column O
+  
+  // LEGACY FIELDS (kept for backward compatibility, no longer used)
+  lga?: string;
+  validFrom?: string;
+  validTo?: string;
+  investmentHighlights?: string;
+  extras?: string[];
 }
 
 export interface InvestmentHighlightsLookupResult {
   found: boolean;
   data?: InvestmentHighlightsData;
-  daysSinceLastCheck?: number;
 }
 
 /**
- * Lookup investment highlights data by LGA and state
+ * Lookup investment highlights data by LGA and Suburb
  */
 export async function lookupInvestmentHighlights(
   lga: string,
+  suburb: string,
   state: string
 ): Promise<InvestmentHighlightsLookupResult> {
   try {
@@ -622,61 +643,83 @@ export async function lookupInvestmentHighlights(
     const sheets = getSheetsClient();
     
     // Read all data from the Investment Highlights tab
-    // Expected columns: LGA, State, Investment Highlights Content, Data Source, Date Collected/Checked, Source Document
+    // NEW STRUCTURE: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:PDFLink, G:FileID
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`, // Skip header row, read columns A-F
+      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:G`,
     });
 
     const rows = response.data.values || [];
     
-    // Normalize LGA and state for comparison (case-insensitive, trimmed)
     const normalizedLGA = lga.trim().toLowerCase();
+    const normalizedSuburb = suburb ? suburb.trim().toLowerCase() : '';
     const normalizedState = state.trim().toUpperCase();
 
-    // Find matching row
-    const matchingRow = rows.find((row) => {
-      const rowLGA = (row[0] || '').trim().toLowerCase();
-      const rowState = (row[1] || '').trim().toUpperCase();
-      return rowLGA === normalizedLGA && rowState === normalizedState;
+    // Try to find by Suburb match in Column A (Index 0) or LGA match
+    let matchingRow = undefined;
+    
+    matchingRow = rows.find((row) => {
+        const rowSuburbs = (row[0] || '').toLowerCase();
+        const rowState = (row[1] || '').trim().toUpperCase();
+        
+        // Check if state matches first
+        if (rowState !== normalizedState) return false;
+        
+        // Check if suburb appears in the comma-separated list
+        const suburbList = rowSuburbs.split(',').map((s: string) => s.trim());
+        
+        // Match if suburb is in the list OR if LGA matches any suburb in the list
+        if (normalizedSuburb && suburbList.includes(normalizedSuburb)) {
+            return true;
+        }
+        
+        if (normalizedLGA && suburbList.includes(normalizedLGA)) {
+            return true;
+        }
+        
+        return false;
     });
 
     if (!matchingRow) {
       return { found: false };
     }
 
-    // Extract data
-    const investmentHighlights = matchingRow[2] || ''; // Column C
-    const dataSource = matchingRow[3] || ''; // Column D
-    const dateCollected = matchingRow[4] || ''; // Column E
-    const sourceDocument = matchingRow[5] || ''; // Column F
-
-    // Calculate days since last check
-    let daysSinceLastCheck: number | undefined;
-    if (dateCollected) {
-      try {
-        const collectedDate = new Date(dateCollected);
-        if (!isNaN(collectedDate.getTime())) {
-          const now = new Date();
-          const diffTime = Math.abs(now.getTime() - collectedDate.getTime());
-          daysSinceLastCheck = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        }
-      } catch (e) {
-        // Ignore date parsing errors
-      }
-    }
+    // Extract data (7 columns A-G)
+    // NOTE: Google Sheets API may return shorter arrays if trailing cells are empty
+    console.log('[googleSheets] matchingRow length:', matchingRow.length);
+    console.log('[googleSheets] matchingRow[4] (Main Body):', matchingRow[4]);
+    console.log('[googleSheets] matchingRow[4] type:', typeof matchingRow[4]);
+    console.log('[googleSheets] matchingRow[4] length:', (matchingRow[4] || '').length);
+    
+    const data: InvestmentHighlightsData = {
+        suburbs: matchingRow[0] || '',
+        state: matchingRow[1] || '',
+        reportName: matchingRow[2] || '',
+        validPeriod: matchingRow[3] || '',
+        mainBody: matchingRow[4] || '',
+        // Legacy fields (no longer used but kept for compatibility)
+        extraInfo: '',
+        populationGrowthContext: '',
+        residential: '',
+        industrial: '',
+        commercialAndCivic: '',
+        healthAndEducation: '',
+        transport: '',
+        jobImplications: '',
+        pdfDriveLink: matchingRow[5] || '', // Column F
+        pdfFileId: matchingRow[6] || '', // Column G
+        lga: '',
+        validFrom: '',
+        validTo: '',
+        investmentHighlights: '',
+        extras: [],
+    };
+    
+    console.log('[googleSheets] Extracted mainBody length:', data.mainBody.length);
 
     return {
       found: true,
-      data: {
-        lga: matchingRow[0] || '',
-        state: matchingRow[1] || '',
-        investmentHighlights,
-        dataSource,
-        dateCollected,
-        sourceDocument,
-      },
-      daysSinceLastCheck,
+      data,
     };
   } catch (error) {
     console.error('Error looking up investment highlights:', error);
@@ -689,102 +732,135 @@ export async function lookupInvestmentHighlights(
  */
 export async function saveInvestmentHighlightsData(
   lga: string,
+  suburb: string,
   state: string,
   data: Partial<InvestmentHighlightsData>
 ): Promise<void> {
   try {
     const sheets = getSheetsClient();
     
-    // First, check if row exists
-    const lookupResult = await lookupInvestmentHighlights(lga, state);
-    
-    const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-    
-    if (lookupResult.found) {
-      // Update existing row
-      const response = await sheets.spreadsheets.values.get({
+    // Check if row exists (logic same as lookup)
+    // NEW STRUCTURE: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:ExtraInfo, G-M:Sections, N-O:PDF
+    const response = await sheets.spreadsheets.values.get({
         spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`,
-      });
+        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:O`,
+    });
 
-      const rows = response.data.values || [];
-      const normalizedLGA = lga.trim().toLowerCase();
-      const normalizedState = state.trim().toUpperCase();
-      
-      const rowIndex = rows.findIndex((row) => {
-        const rowLGA = (row[0] || '').trim().toLowerCase();
+    const rows = response.data.values || [];
+    const normalizedLGA = lga.trim().toLowerCase();
+    const normalizedSuburb = suburb.trim().toLowerCase();
+    const normalizedState = state.trim().toUpperCase();
+
+    let rowIndex = -1;
+
+    // Try to find matching row by suburb or LGA in Column A
+    rowIndex = rows.findIndex((row) => {
+        const rowSuburbs = (row[0] || '').toLowerCase();
         const rowState = (row[1] || '').trim().toUpperCase();
-        return rowLGA === normalizedLGA && rowState === normalizedState;
-      });
+        
+        if (rowState !== normalizedState) return false;
+        
+        const suburbList = rowSuburbs.split(',').map((s: string) => s.trim());
+        
+        // Match if suburb or LGA is in the list
+        if (normalizedSuburb && suburbList.includes(normalizedSuburb)) {
+            return true;
+        }
+        
+        if (normalizedLGA && suburbList.includes(normalizedLGA)) {
+            return true;
+        }
+        
+        return false;
+    });
 
-      if (rowIndex === -1) {
-        throw new Error('Row not found for update');
-      }
+    // Prepare row data (all 15 columns)
+    const suburbs = data.suburbs || suburb || lga || '';
+    const reportName = data.reportName || '';
+    const validPeriod = data.validPeriod || '';
+    const mainBody = data.mainBody || '';
+    const extraInfo = data.extraInfo || '';
+    const populationGrowthContext = data.populationGrowthContext || '';
+    const residential = data.residential || '';
+    const industrial = data.industrial || '';
+    const commercialAndCivic = data.commercialAndCivic || '';
+    const healthAndEducation = data.healthAndEducation || '';
+    const transport = data.transport || '';
+    const jobImplications = data.jobImplications || '';
+    const pdfDriveLink = data.pdfDriveLink || '';
+    const pdfFileId = data.pdfFileId || '';
 
-      const actualRowNumber = rowIndex + 2; // +2 because we skipped header and 0-indexed
+    if (rowIndex !== -1) {
+        // Update existing
+        const actualRowNumber = rowIndex + 2;
+        const existingRow = rows[rowIndex];
+        
+        // Merge Suburbs
+        let currentSuburbs = existingRow[0] || '';
+        const suburbList = currentSuburbs.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+        let suburbUpdated = false;
+        
+        // Add current suburb if not present (case insensitive check)
+        if (suburb && !suburbList.some((s: string) => s.toLowerCase() === normalizedSuburb)) {
+            suburbList.push(suburb.trim()); // Use original case
+            currentSuburbs = suburbList.join(', ');
+            suburbUpdated = true;
+        }
 
-      // Build update values
-      const updates: { range: string; values: any[][] }[] = [];
-      
-      // Update Investment Highlights Content (Column C)
-      if (data.investmentHighlights !== undefined) {
-        updates.push({
-          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!C${actualRowNumber}`,
-          values: [[data.investmentHighlights]],
-        });
-      }
+        const updates: { range: string; values: any[][] }[] = [];
 
-      // Update Data Source (Column D) - append if exists, otherwise set
-      if (data.dataSource !== undefined) {
-        updates.push({
-          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!D${actualRowNumber}`,
-          values: [[data.dataSource]],
-        });
-      }
+        // Update fields if provided (all 15 columns)
+        if (suburbUpdated) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A${actualRowNumber}`, values: [[currentSuburbs]] });
+        if (data.reportName !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!C${actualRowNumber}`, values: [[reportName]] });
+        if (data.validPeriod !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!D${actualRowNumber}`, values: [[validPeriod]] });
+        if (data.mainBody !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!E${actualRowNumber}`, values: [[mainBody]] });
+        if (data.extraInfo !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!F${actualRowNumber}`, values: [[extraInfo]] });
+        if (data.populationGrowthContext !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!G${actualRowNumber}`, values: [[populationGrowthContext]] });
+        if (data.residential !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!H${actualRowNumber}`, values: [[residential]] });
+        if (data.industrial !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!I${actualRowNumber}`, values: [[industrial]] });
+        if (data.commercialAndCivic !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!J${actualRowNumber}`, values: [[commercialAndCivic]] });
+        if (data.healthAndEducation !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!K${actualRowNumber}`, values: [[healthAndEducation]] });
+        if (data.transport !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!L${actualRowNumber}`, values: [[transport]] });
+        if (data.jobImplications !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!M${actualRowNumber}`, values: [[jobImplications]] });
+        if (data.pdfDriveLink !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!N${actualRowNumber}`, values: [[pdfDriveLink]] });
+        if (data.pdfFileId !== undefined) updates.push({ range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!O${actualRowNumber}`, values: [[pdfFileId]] });
 
-      // Update Date Collected/Checked (Column E)
-      updates.push({
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!E${actualRowNumber}`,
-        values: [[now]],
-      });
+        if (updates.length > 0) {
+            await sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
+                requestBody: { valueInputOption: 'RAW', data: updates },
+            });
+        }
 
-      // Update Source Document (Column F)
-      if (data.sourceDocument !== undefined) {
-        updates.push({
-          range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!F${actualRowNumber}`,
-          values: [[data.sourceDocument]],
-        });
-      }
-
-      // Execute updates
-      if (updates.length > 0) {
-        await sheets.spreadsheets.values.batchUpdate({
-          spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-          requestBody: {
-            valueInputOption: 'RAW',
-            data: updates,
-          },
-        });
-      }
     } else {
-      // Add new row
-      const newRow = [
-        lga, // Column A: LGA
-        state, // Column B: State
-        data.investmentHighlights || '', // Column C: Investment Highlights Content
-        data.dataSource || 'Manual Entry', // Column D: Data Source
-        now, // Column E: Date Collected/Checked
-        data.sourceDocument || '', // Column F: Source Document
-      ];      await sheets.spreadsheets.values.append({
-        spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:F`,
-        valueInputOption: 'RAW',
-        insertDataOption: 'INSERT_ROWS',
-        requestBody: {
-          values: [newRow],
-        },
-      });
+        // Create new
+        const newRow = [
+            suburbs, // Column A: Suburbs (comma-separated)
+            state, // Column B: State
+            reportName, // Column C: Report Name
+            validPeriod, // Column D: Valid Period
+            mainBody, // Column E: Main Body
+            extraInfo, // Column F: Extra Info
+            populationGrowthContext, // Column G: Population Growth Context
+            residential, // Column H: Residential
+            industrial, // Column I: Industrial
+            commercialAndCivic, // Column J: Commercial and Civic
+            healthAndEducation, // Column K: Health and Education
+            transport, // Column L: Transport
+            jobImplications, // Column M: Job Implications
+            pdfDriveLink, // Column N: PDF Drive Link
+            pdfFileId, // Column O: PDF File ID
+        ];
+
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
+            range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:O`,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: [newRow] },
+        });
     }
+
   } catch (error) {
     console.error('Error saving investment highlights data:', error);
     throw error;

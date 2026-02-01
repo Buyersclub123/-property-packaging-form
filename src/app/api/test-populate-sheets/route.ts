@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { copyFolderStructure, findGoogleSheetsInFolder, populateSpreadsheet } from '@/lib/googleDrive';
+import { copyFolderStructure, findGoogleSheetsInFolder, populateSpreadsheet, deleteFile, renameFile, listFilesInFolder } from '@/lib/googleDrive';
 
 /**
  * Test API route to copy a folder and populate Google Sheets in it
@@ -42,6 +42,8 @@ export async function POST(request: Request) {
     console.log('Created property folder:', newFolder.id);
 
     // Step 2: Find all Google Sheets in the new folder
+    // Add small delay to ensure files are fully propagated after copy
+    await new Promise(resolve => setTimeout(resolve, 1000));
     const sheets = await findGoogleSheetsInFolder(newFolder.id, SHARED_DRIVE_ID);
     console.log(`Found ${sheets.length} Google Sheets in new folder`);
     
@@ -55,6 +57,110 @@ export async function POST(request: Request) {
         results: [],
         message: 'No Google Sheets found in folder',
       });
+    }
+    
+    // Step 2a: Delete opposite contract type sheet based on Contract Type field
+    // Check both top-level and decisionTree locations
+    const contractType = formData?.decisionTree?.contractTypeSimplified || formData?.contractTypeSimplified || '';
+    const contractTypeLower = contractType.toLowerCase().trim();
+    
+    console.log('=== CONTRACT TYPE DELETION DEBUG ===');
+    console.log('contractType from decisionTree:', formData?.decisionTree?.contractTypeSimplified);
+    console.log('contractType from top level:', formData?.contractTypeSimplified);
+    console.log('contractType final:', contractType);
+    console.log('contractTypeLower:', contractTypeLower);
+    
+    const splitContractSheet = sheets.find(s => 
+      s.name.toLowerCase().includes('split contract')
+    );
+    const singleContractSheet = sheets.find(s => 
+      s.name.toLowerCase().includes('single contract')
+    );
+    
+    console.log('Contract Type:', contractType);
+    console.log('Split contract sheet found:', splitContractSheet ? `${splitContractSheet.name} (ID: "${splitContractSheet.id}")` : 'NOT FOUND');
+    console.log('Single contract sheet found:', singleContractSheet ? `${singleContractSheet.name} (ID: "${singleContractSheet.id}")` : 'NOT FOUND');
+    
+    // Log all sheet IDs to see if they have periods
+    console.error('[DEBUG] All sheet IDs:', sheets.map(s => ({ name: s.name, id: s.id, idLength: s.id.length })));
+    
+    // Delete opposite sheet based on contract type
+    let deletionAttempted = false;
+    let deletionResult = null;
+    
+    if (contractTypeLower === 'single contract' && splitContractSheet) {
+      deletionAttempted = true;
+      try {
+        console.error(`[DELETION] Attempting to delete: ${splitContractSheet.name} (ID: ${splitContractSheet.id})`);
+        await deleteFile(splitContractSheet.id, SHARED_DRIVE_ID);
+        console.error(`[DELETION] ✓ Successfully deleted: ${splitContractSheet.name}`);
+        deletionResult = `Deleted: ${splitContractSheet.name}`;
+        // Remove from sheets array so it doesn't get populated
+        sheets.splice(sheets.indexOf(splitContractSheet), 1);
+      } catch (deleteError) {
+        const errorMsg = deleteError instanceof Error ? deleteError.message : String(deleteError);
+        console.error('[DELETION] ✗ Error deleting split contract sheet:', errorMsg);
+        deletionResult = `Error: ${errorMsg}`;
+      }
+    } else if (contractTypeLower === 'split contract' && singleContractSheet) {
+      deletionAttempted = true;
+      try {
+        console.error(`[DELETION] Attempting to delete: ${singleContractSheet.name} (ID: ${singleContractSheet.id})`);
+        await deleteFile(singleContractSheet.id, SHARED_DRIVE_ID);
+        console.error(`[DELETION] ✓ Successfully deleted: ${singleContractSheet.name}`);
+        deletionResult = `Deleted: ${singleContractSheet.name}`;
+        // Remove from sheets array so it doesn't get populated
+        sheets.splice(sheets.indexOf(singleContractSheet), 1);
+      } catch (deleteError) {
+        const errorMsg = deleteError instanceof Error ? deleteError.message : String(deleteError);
+        console.error('[DELETION] ✗ Error deleting single contract sheet:', errorMsg);
+        deletionResult = `Error: ${errorMsg}`;
+      }
+    } else {
+      console.error('[DELETION] No deletion attempted. Reasons:');
+      console.error(`  - contractTypeLower: "${contractTypeLower}"`);
+      console.error(`  - Should be "single contract" or "split contract"`);
+      console.error(`  - splitContractSheet found: ${splitContractSheet ? 'YES' : 'NO'}`);
+      console.error(`  - singleContractSheet found: ${singleContractSheet ? 'YES' : 'NO'}`);
+    }
+
+    // Step 2b: Rename remaining sheet and Photos.docx
+    // Format address: streetNumber + streetName + suburbName
+    const addressParts = [
+      formData.address?.streetNumber,
+      formData.address?.streetName,
+      formData.address?.suburbName
+    ].filter(Boolean);
+    const addressString = addressParts.join(' ');
+    
+    console.error(`[RENAME] Address string: "${addressString}"`);
+    
+    // Rename remaining spreadsheet to "CF spreadsheet [ADDRESS]"
+    if (sheets.length > 0) {
+      const remainingSheet = sheets[0]; // After deletion, only one sheet remains
+      const newSheetName = `CF spreadsheet ${addressString}`;
+      try {
+        await renameFile(remainingSheet.id, newSheetName, SHARED_DRIVE_ID);
+        console.error(`[RENAME] ✓ Renamed sheet to: ${newSheetName}`);
+        remainingSheet.name = newSheetName; // Update name in array for results
+      } catch (renameError) {
+        console.error(`[RENAME] ✗ Error renaming sheet: ${renameError instanceof Error ? renameError.message : renameError}`);
+      }
+    }
+    
+    // Find and rename Photos.docx to "Photos [ADDRESS].docx"
+    try {
+      const allFiles = await listFilesInFolder(newFolder.id, SHARED_DRIVE_ID);
+      const photosFile = allFiles.find(f => f.name.toLowerCase() === 'photos.docx');
+      if (photosFile) {
+        const newPhotosName = `Photos ${addressString}.docx`;
+        await renameFile(photosFile.id, newPhotosName, SHARED_DRIVE_ID);
+        console.error(`[RENAME] ✓ Renamed Photos.docx to: ${newPhotosName}`);
+      } else {
+        console.error(`[RENAME] Photos.docx not found in folder`);
+      }
+    } catch (renameError) {
+      console.error(`[RENAME] ✗ Error renaming Photos.docx: ${renameError instanceof Error ? renameError.message : renameError}`);
     }
 
     const results = [];
@@ -95,6 +201,14 @@ export async function POST(request: Request) {
       successCount,
       failCount,
       results,
+      debug: {
+        contractType,
+        contractTypeLower,
+        splitContractSheetFound: splitContractSheet ? splitContractSheet.name : null,
+        singleContractSheetFound: singleContractSheet ? singleContractSheet.name : null,
+        deletionAttempted,
+        deletionResult,
+      },
     });
   } catch (error) {
     console.error('=== ERROR CAUGHT IN ROUTE ===');

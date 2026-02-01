@@ -5,12 +5,18 @@ import { useFormStore } from '@/store/formStore';
 import { StepIndicator } from './StepIndicator';
 import { exportFormDataToExcel } from '@/lib/excelExport';
 import { Step0AddressAndRisk } from './steps/Step0AddressAndRisk';
+// import { Step1AInvestmentHighlightsCheck } from './steps/Step1AInvestmentHighlightsCheck'; // Removed - functionality moved to Page 6 (InvestmentHighlightsField)
 import { Step1DecisionTree } from './steps/Step1DecisionTree';
 import { Step2PropertyDetails } from './steps/Step2PropertyDetails';
 import { Step3MarketPerformance } from './steps/Step3MarketPerformance';
 import { Step5Proximity } from './steps/Step5Proximity';
+import { Step6InsuranceCalculator } from './steps/Step6InsuranceCalculator';
+import { Step6WashingtonBrown } from './steps/Step6WashingtonBrown';
+import { Step7CashflowReview } from './steps/Step7CashflowReview';
+import { Step8Submission } from './steps/Step8Submission';
 import { Step6FolderCreation } from './steps/Step6FolderCreation';
 import { Step4Review } from './steps/Step4Review';
+import { Step9PhotoDocuments } from './steps/Step9PhotoDocuments';
 import { getUserEmail } from '@/lib/userAuth';
 
 // Steps numbered starting from 1
@@ -20,7 +26,11 @@ const STEPS = [
   { number: 3, title: 'Property Details', component: Step2PropertyDetails },
   { number: 4, title: 'Market Performance', component: Step3MarketPerformance },
   { number: 5, title: 'Proximity & Content', component: Step5Proximity },
-  { number: 6, title: 'Folder Creation', component: Step6FolderCreation },
+  { number: 6, title: 'Insurance Calculator', component: Step6InsuranceCalculator },
+  { number: 7, title: 'Washington Brown', component: Step6WashingtonBrown },
+  { number: 8, title: 'Cashflow Review', component: Step7CashflowReview },
+  { number: 9, title: 'Photo & Document Upload', component: Step9PhotoDocuments },
+  { number: 10, title: 'Submission', component: Step8Submission },
 ];
 
 interface MultiStepFormProps {
@@ -275,6 +285,33 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         // Sourcer is required (must click "Continue with Packaging" first)
         if (!formData.sourcer || formData.sourcer.trim() === '') {
           setValidationErrorWithRef('Please click "Continue with Packaging" and fill in the Sourcer field before proceeding.');
+          return false;
+        }
+        // Selling Agent fields are required (Name, Email, Mobile)
+        if (!formData.sellingAgentName || formData.sellingAgentName.trim() === '') {
+          setValidationErrorWithRef('Selling Agent Name is required. Please enter a name or "TBC".');
+          return false;
+        }
+        if (!formData.sellingAgentEmail || formData.sellingAgentEmail.trim() === '') {
+          setValidationErrorWithRef('Selling Agent Email is required. Please enter an email address or "TBC".');
+          return false;
+        }
+        if (!formData.sellingAgentMobile || formData.sellingAgentMobile.trim() === '') {
+          setValidationErrorWithRef('Selling Agent Mobile is required. Please enter a mobile number or "TBC".');
+          return false;
+        }
+        // LGA is required (needed for "Why This Property" API call on Page 5)
+        if (!address?.lga || address.lga.trim() === '') {
+          const googleSearchQuery = address.suburbName && address.state 
+            ? `LGA of ${address.suburbName} ${address.state}`
+            : 'Local Government Area';
+          const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(googleSearchQuery)}`;
+          setValidationErrorWithRef(
+            `LGA (Local Government Area) is required to proceed. It's needed for the "Why This Property" feature. ` +
+            `Please click "Edit Address Fields" to enter the LGA, or ${address.suburbName && address.state ? 
+              `search Google for "${googleSearchQuery}"` : 
+              'fill in Suburb and State first, then search for the LGA'}.`
+          );
           return false;
         }
         return true;
@@ -740,8 +777,91 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           return false;
         }
         
+        // ONE EXIT RULE: Checkbox must be checked (applies to all scenarios)
+        if (!contentSections.contentReviewed) {
+          setValidationError('Please confirm you have reviewed all content by checking the checkbox.');
+          return false;
+        }
+        
         return true;
 
+      case 6: // Insurance Calculator
+        const { insurance } = formData;
+        
+        if (!insurance || insurance.trim() === '') {
+          setValidationError('Please enter the annual insurance cost from the Terri Scheer calculator.');
+          return false;
+        }
+        
+        // Validate that it's a valid number
+        const insuranceValue = parseFloat(insurance.replace(/,/g, ''));
+        if (isNaN(insuranceValue) || insuranceValue < 0) {
+          setValidationError('Insurance value must be a valid positive number.');
+          return false;
+        }
+        
+        return true;
+
+      case 7: // Washington Brown
+        const { depreciation } = formData;
+        
+        if (!depreciation) {
+          setValidationError('Please parse the Washington Brown report or manually enter all 10 years of depreciation values.');
+          return false;
+        }
+        
+        // Check all 10 years
+        const missingYears: number[] = [];
+        const invalidYears: number[] = [];
+        
+        for (let i = 1; i <= 10; i++) {
+          const yearKey = `year${i}` as keyof typeof depreciation;
+          const value = depreciation[yearKey];
+          
+          if (!value || value.trim() === '') {
+            missingYears.push(i);
+          } else {
+            // Validate that it's a valid number
+            const numValue = parseFloat(value.replace(/,/g, ''));
+            if (isNaN(numValue) || numValue < 0) {
+              invalidYears.push(i);
+            }
+          }
+        }
+        
+        if (missingYears.length > 0) {
+          setValidationError(`Missing depreciation value for Year ${missingYears.join(', ')}. All 10 years are required.`);
+          return false;
+        }
+        
+        if (invalidYears.length > 0) {
+          setValidationError(`Invalid depreciation value for Year ${invalidYears.join(', ')}. Values must be valid positive numbers.`);
+          return false;
+        }
+        
+        return true;
+
+      case 8: // Cashflow Review
+        // Check if folder has been created
+        if (!formData.address?.folderLink) {
+          setValidationError('Please fill in all required fields before proceeding, or you have not created the folder for the property. Check the form for highlighted fields.');
+          return false;
+        }
+        
+        return true;
+
+      case 9: // Photo & Document Upload
+        // Check if folder has been created (required for photo/document upload)
+        if (!formData.address?.folderLink) {
+          setValidationError('Please complete the previous steps first. The property folder must be created before you can upload photos and documents.');
+          return false;
+        }
+        return true;
+
+      case 10: // Submission
+        // Step 10 handles its own validation (checklist must be complete)
+        // No validation needed here as user can't proceed past Step 10
+        return true;
 
       default:
         return true;
@@ -754,6 +874,199 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
 
   const canGoPrevious = () => {
     return currentStep > 1;
+  };
+
+  // Early processing functions for Proximity & Why This Property
+  const startProximityProcessing = async () => {
+    const { address, earlyProcessing } = formData;
+    
+    console.log('📍 Starting Proximity processing...', { 
+      address: address?.propertyAddress, 
+      status: earlyProcessing?.proximity?.status 
+    });
+    
+    // Don't re-run if already processing or ready
+    if (earlyProcessing?.proximity?.status === 'processing' || 
+        earlyProcessing?.proximity?.status === 'ready') {
+      console.log('⏭️ [EARLY PROCESSING] Proximity already processing or ready, skipping');
+      return;
+    }
+    
+    // Check if we have required data
+    if (!address?.propertyAddress) {
+      console.error('📍 [EARLY PROCESSING] No property address available, cannot process');
+      return;
+    }
+    
+    if (!userEmail) {
+      console.error('📍 [EARLY PROCESSING] No user email available, cannot process');
+      return;
+    }
+    
+    console.log('📍 [EARLY PROCESSING] Setting status to processing...');
+    updateFormData({
+      earlyProcessing: {
+        ...formData.earlyProcessing,
+        proximity: { status: 'processing', data: undefined },
+      },
+    });
+
+    try {
+      console.log('📍 [EARLY PROCESSING] Calling proximity API with:', {
+        propertyAddress: address?.propertyAddress,
+        userEmail: userEmail,
+        hasAddress: !!address?.propertyAddress,
+        hasEmail: !!userEmail
+      });
+      
+      const res = await fetch('/api/geoapify/proximity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          propertyAddress: address?.propertyAddress,
+          userEmail: userEmail 
+        }),
+      });
+
+      console.log('📍 [EARLY PROCESSING] API response status:', res.status, res.statusText);
+
+      if (res.ok) {
+        const json = await res.json();
+        console.log('📍 [EARLY PROCESSING] API success, proximity data length:', json.proximity?.length || 0);
+        updateFormData({
+          earlyProcessing: {
+            ...formData.earlyProcessing,
+            proximity: { status: 'ready', data: json.proximity },
+          },
+        });
+      } else {
+        const errorText = await res.text();
+        console.error('📍 [EARLY PROCESSING] API error:', res.status, errorText);
+        updateFormData({
+          earlyProcessing: {
+            ...formData.earlyProcessing,
+            proximity: { status: 'error', data: undefined },
+          },
+        });
+      }
+    } catch (error) {
+      console.error('📍 [EARLY PROCESSING] Proximity processing error:', error);
+      updateFormData({
+        earlyProcessing: {
+          ...formData.earlyProcessing,
+          proximity: { status: 'error', data: undefined },
+        },
+      });
+    }
+  };
+
+  const startWhyThisPropertyProcessing = async () => {
+    const { address, earlyProcessing } = formData;
+    
+    console.log('💡 Starting Why This Property processing...', { 
+      suburb: address?.suburbName, 
+      lga: address?.lga,
+      status: earlyProcessing?.whyThisProperty?.status 
+    });
+    
+    // Don't re-run if already processing or ready
+    if (earlyProcessing?.whyThisProperty?.status === 'processing' || 
+        earlyProcessing?.whyThisProperty?.status === 'ready') {
+      console.log('⏭️ Why This Property already processing or ready, skipping');
+      return;
+    }
+    
+    // Check if we have required data
+    if (!address?.suburbName) {
+      console.error('💡 [WHY THIS PROPERTY] No suburb available, cannot process');
+      updateFormData({
+        earlyProcessing: {
+          ...formData.earlyProcessing,
+          whyThisProperty: { 
+            status: 'error', 
+            data: undefined,
+            error: 'Suburb is required for "Why This Property" generation'
+          },
+        },
+      });
+      return;
+    }
+    
+    // Use LGA from address - don't auto-populate from Stash if user has explicitly cleared it
+    // Only use what's in formData.address.lga (respect user's choice to clear it)
+    let lgaToUse = address?.lga;
+    
+    // If LGA is missing, set error status with helpful message
+    if (!lgaToUse || lgaToUse.trim() === '') {
+      console.warn('💡 [WHY THIS PROPERTY] LGA is missing, cannot generate content');
+      updateFormData({
+        earlyProcessing: {
+          ...formData.earlyProcessing,
+          whyThisProperty: { 
+            status: 'error', 
+            data: undefined,
+            error: 'LGA (Local Government Area) is required for "Why This Property" generation. Please enter the LGA on Page 1 (Address & Risk Check) or paste content manually.'
+          },
+        },
+      });
+      return;
+    }
+    
+    updateFormData({
+      earlyProcessing: {
+        ...formData.earlyProcessing,
+        whyThisProperty: { status: 'processing', data: undefined },
+      },
+    });
+
+    try {
+      console.log('💡 [WHY THIS PROPERTY] Calling API with:', {
+        suburb: address?.suburbName,
+        lga: lgaToUse,
+        hasSuburb: !!address?.suburbName,
+        hasLga: !!lgaToUse,
+      });
+      
+      const res = await fetch('/api/ai/generate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'why-property',
+          suburb: address?.suburbName,
+          lga: lgaToUse || '', // Use LGA if available, otherwise empty string
+        }),
+      });
+
+      console.log('💡 [WHY THIS PROPERTY] API response status:', res.status, res.statusText);
+
+      if (res.ok) {
+        const json = await res.json();
+        console.log('💡 [WHY THIS PROPERTY] API success, content length:', json.content?.length || 0);
+        updateFormData({
+          earlyProcessing: {
+            ...formData.earlyProcessing,
+            whyThisProperty: { status: 'ready', data: json.content },
+          },
+        });
+      } else {
+        const errorText = await res.text();
+        console.error('💡 [WHY THIS PROPERTY] API error:', res.status, errorText);
+        updateFormData({
+          earlyProcessing: {
+            ...formData.earlyProcessing,
+            whyThisProperty: { status: 'error', data: undefined },
+          },
+        });
+      }
+    } catch (error) {
+      console.error('💡 [WHY THIS PROPERTY] Processing error:', error);
+      updateFormData({
+        earlyProcessing: {
+          ...formData.earlyProcessing,
+          whyThisProperty: { status: 'error', data: undefined },
+        },
+      });
+    }
   };
 
   const handleNext = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -783,7 +1096,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     }
     
     // Log if user proceeds with data > 30 days old without checking
-    if (currentStep === 4) {
+    if (currentStep === 4) { // Market Performance step
       const { marketPerformance, address } = formData;
       if (marketPerformance?.isSaved && 
           marketPerformance.isVerified === undefined && 
@@ -809,14 +1122,14 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       }
     }
     
-    // If on last step (Step 6), the form submission is handled in Step6FolderCreation component
+    // If on last step (Step 9), the form submission is handled in Step8Submission component
     // Step 5 (Proximity & Content) is no longer the last step
     if (currentStep === STEPS.length) {
-      // This should not happen now - Step 6 handles submission
+      // This should not happen now - Step 9 (Submission) handles submission
       return;
     }
     
-    // Legacy submission code (kept for reference, but Step 6 handles submission now)
+    // Legacy submission code (kept for reference, but Step 9 handles submission now)
     if (false && currentStep === 5) {
       // Combine selling agent fields before export
       const sellingAgentParts: string[] = [
@@ -853,6 +1166,13 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       return;
     }
     
+    // Trigger early processing for Proximity & Why This Property after Step 3 (Property Details)
+    if (currentStep === 3) {
+      console.log('🚀 Triggering early processing for Proximity & Why This Property...');
+      startProximityProcessing();
+      startWhyThisPropertyProcessing();
+    }
+    
     if (currentStep < STEPS.length && setCurrentStep) {
       setCurrentStep(currentStep + 1);
       // Scroll to top when moving to next step
@@ -865,7 +1185,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       // Clear validation errors when going back
       setValidationErrorWithRef(null);
       
-      // If leaving Step 4, reset isVerified to undefined if it's false
+      // If leaving Step 4 (Market Performance), reset isVerified to undefined if it's false
       // This allows users to proceed without clicking "Check data" again when they return
       if (currentStep === 4) {
         const { marketPerformance } = formData;
@@ -934,8 +1254,13 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
 
       {/* Validation Error Message */}
       {validationError && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-800 text-sm font-medium">{validationError}</p>
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start gap-2">
+            <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <p className="text-blue-800 text-sm font-medium">{validationError}</p>
+          </div>
         </div>
       )}
 

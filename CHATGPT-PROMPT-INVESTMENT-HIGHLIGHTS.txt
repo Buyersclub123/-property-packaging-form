@@ -1,0 +1,114 @@
+I have a property investment form that formats Investment Highlights text for emails. The heading shows "Fraser Coast Regional" but should just show "Fraser Coast". 
+
+Here's the JavaScript code that formats the text:
+
+```javascript
+function formatInvestmentHighlightsHtml(rawText) {
+  const t = normaliseNewlines(rawText);
+  const lines = t.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return "";
+
+  const knownHeadings = new Set([
+    "population growth context", "residential", "industrial",
+    "commercial and civic", "commercial and civil",
+    "health and education", "health and community",
+    "transport", "infrastructure", "education", "job implications"
+  ].map((s) => s.toLowerCase()));
+
+  let html = "";
+  let inList = false;
+  let lineIndex = 0;
+  let lastType = null;
+  let lastHeadingType = null;
+
+  function openList() {
+    if (!inList) { html += "<ul>"; inList = true; }
+  }
+
+  function closeList() {
+    if (inList) { html += "</ul>"; inList = false; }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const line = rawLine;
+    const lower = line.toLowerCase();
+    const explicitBullet = /^[-•]/.test(line);
+    const bulletText = explicitBullet ? line.replace(/^[-•]\s*/, "").trim() : line;
+
+    if (lineIndex === 0) {
+      closeList();
+      html += `<p class="highlight-region"><strong>${bulletText}</strong></p>`;
+      lastType = "heading";
+      lastHeadingType = "region";
+      lineIndex++;
+      continue;
+    }
+
+    if (lineIndex === 1) {
+      closeList();
+      html += `<p class="highlight-heading"><strong>${bulletText}</strong></p>`;
+      lastType = "heading";
+      lastHeadingType = "sub";
+      lineIndex++;
+      continue;
+    }
+
+    if (explicitBullet) {
+      openList();
+      html += `<li>${bulletText}</li>`;
+      lastType = "bullet";
+      lastHeadingType = null;
+      lineIndex++;
+      continue;
+    }
+
+    const matchesKnownHeading = Array.from(knownHeadings).some(heading => lower.startsWith(heading));
+    if (matchesKnownHeading) {
+      closeList();
+      html += `<p class="highlight-heading"><strong>${bulletText}</strong></p>`;
+      lastType = "heading";
+      lastHeadingType = "section";
+      lineIndex++;
+      continue;
+    }
+
+    if (lastType === "heading") {
+      if (lastHeadingType === "section") {
+        openList();
+        html += `<li>${bulletText}</li>`;
+        lastType = "bullet";
+      } else {
+        closeList();
+        html += `<p>${bulletText}</p>`;
+        lastType = "body";
+      }
+      lastHeadingType = null;
+      lineIndex++;
+      continue;
+    }
+
+    openList();
+    html += `<li>${bulletText}</li>`;
+    lastType = "bullet";
+    lineIndex++;
+  }
+
+  closeList();
+  return html;
+}
+
+function normaliseNewlines(str) {
+  if (!str) return "";
+  return String(str).replace(/\\n/g, "\n").replace(/\\\\n/g, "\n").replace(/&#10;|&#13;/g, "\n");
+}
+```
+
+The problem: Line 0 (first line) of the text becomes the heading. The text starts with "Fraser Coast Regional" so that's what shows. I want it to just show "Fraser Coast".
+
+Please analyze this code and tell me:
+1. Why is "Regional" appearing?
+2. How do I fix it to show just "Fraser Coast"?
+3. Should I strip "Regional" from the first line, or use a different approach?
+
+After you answer, I'll paste the actual Investment Highlights output so you can see the exact text being processed.

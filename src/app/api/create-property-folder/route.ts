@@ -6,8 +6,13 @@ import {
   findGoogleSheetsInFolder,
   renameFile,
   deleteFile,
-  populateHLSpreadsheet
+  populateHLSpreadsheet,
+  createShortcut,
+  setFilePermissions,
+  getFileName
 } from '@/lib/googleDrive';
+import { constructAndSanitizeFolderName } from '@/lib/addressFormatter';
+import { serverLog } from '@/lib/serverLogger';
 
 /**
  * API route to create a property folder by copying the Master Folder Template
@@ -43,15 +48,33 @@ export async function POST(request: Request) {
       );
     }
     
-    // Step 1: Copy template folder to Properties folder (creates new property folder in Shared Drive)
+    // Step 1: Construct folder name using NEW naming convention from addressFormatter.ts
+    // This ensures proper formatting with Lot/Unit numbers
+    const folderName = formData?.address 
+      ? constructAndSanitizeFolderName(formData.address)
+      : propertyAddress; // Fallback to old naming if address data not available
+    
+    console.log('Creating folder with name:', folderName);
+    
+    // Step 2: Copy template folder to Properties folder (creates new property folder in Shared Drive)
     const propertyFolder = await copyFolderStructure(
       TEMPLATE_FOLDER_ID,
       PROPERTIES_FOLDER_ID,
-      propertyAddress,
+      folderName,
       SHARED_DRIVE_ID
     );
     
     console.log('Created property folder:', propertyFolder.id);
+    
+    // Step 2.5: Explicitly set folder permissions to ensure "Anyone with the link" = Viewer
+    // This is necessary because Shared Drive folders may not always inherit permissions correctly
+    try {
+      await setFolderPermissions(propertyFolder.id, 'reader', SHARED_DRIVE_ID);
+      console.log('✓ Set folder permissions to "Anyone with the link" = Viewer');
+    } catch (permError: any) {
+      // Don't fail folder creation if permission setting fails (might already be set)
+      console.warn('Warning: Could not set folder permissions (may already be set):', permError?.message);
+    }
     
     // Step 2: Check if H&L + Split Contract condition applies
     // Log everything first to see what we're getting
@@ -96,46 +119,85 @@ export async function POST(request: Request) {
             success: true,
             folderId: propertyFolder.id,
             folderLink: propertyFolder.webViewLink,
-            folderName: propertyAddress,
+            folderName: folderName,
           });
         }
         
-        // Find HL sheet (has "HL" in title) and non-HL sheet
-        const hlSheet = sheets.find(s => s.name.toLowerCase().includes('hl'));
-        const nonHLSheet = sheets.find(s => !s.name.toLowerCase().includes('hl'));
+        // Get contract type from form data
+        const contractType = formData?.decisionTree?.contractTypeSimplified || '';
         
-        console.log('HL sheet found:', hlSheet ? hlSheet.name : 'NOT FOUND');
-        console.log('Non-HL sheet found:', nonHLSheet ? nonHLSheet.name : 'NOT FOUND');
+        // Find sheets by contract type in name
+        const splitContractSheet = sheets.find(s => 
+          s.name.toLowerCase().includes('split contract')
+        );
+        const singleContractSheet = sheets.find(s => 
+          s.name.toLowerCase().includes('single contract')
+        );
         
-        // Delete non-HL sheet if it exists
-        if (nonHLSheet) {
+        console.log('Contract Type:', contractType);
+        console.log('Split contract sheet found:', splitContractSheet ? splitContractSheet.name : 'NOT FOUND');
+        console.log('Single contract sheet found:', singleContractSheet ? singleContractSheet.name : 'NOT FOUND');
+        
+        // Delete opposite sheet based on contract type
+        const contractTypeLower = contractType.toLowerCase().trim();
+        if (contractTypeLower === 'single contract' && splitContractSheet) {
           try {
-            await deleteFile(nonHLSheet.id, SHARED_DRIVE_ID);
-            console.log(`✓ Deleted non-HL sheet: ${nonHLSheet.name}`);
+            await deleteFile(splitContractSheet.id, SHARED_DRIVE_ID);
+            console.log(`✓ Deleted split contract sheet: ${splitContractSheet.name}`);
           } catch (deleteError) {
-            console.error('Error deleting non-HL sheet:', deleteError);
+            console.error('Error deleting split contract sheet:', deleteError);
           }
-        } else {
-          console.log('No non-HL sheet to delete');
         }
         
-        // Rename HL sheet if it exists
-        if (hlSheet) {
+        if (contractTypeLower === 'split contract' && singleContractSheet) {
           try {
-            // Format address: streetNumber + streetName + suburbName
-            const addressParts = [
-              formData.address?.streetNumber,
-              formData.address?.streetName,
-              formData.address?.suburbName
-            ].filter(Boolean);
-            const addressString = addressParts.join(' ');
-            
-            console.log('Address parts:', addressParts);
-            console.log('Formatted address:', addressString);
-            
-            const newName = `CF HL spreadsheet (${addressString})`;
-            await renameFile(hlSheet.id, newName, SHARED_DRIVE_ID);
-            console.log(`✓ Renamed HL sheet to: ${newName}`);
+            await deleteFile(singleContractSheet.id, SHARED_DRIVE_ID);
+            console.log(`✓ Deleted single contract sheet: ${singleContractSheet.name}`);
+          } catch (deleteError) {
+            console.error('Error deleting single contract sheet:', deleteError);
+          }
+        }
+        
+        // Format address for file naming: streetNumber + streetName + suburbName
+        const addressParts = [
+          formData.address?.streetNumber,
+          formData.address?.streetName,
+          formData.address?.suburbName
+        ].filter(Boolean);
+        const addressString = addressParts.join(' ');
+        
+        console.log('Address parts:', addressParts);
+        console.log('Formatted address:', addressString);
+        
+        // Find and rename Photos.docx
+        const { listFilesInFolder } = await import('@/lib/googleDrive');
+        const allFiles = await listFilesInFolder(propertyFolder.id, SHARED_DRIVE_ID);
+        const photosDoc = allFiles.find(f => 
+          f.name.toLowerCase().includes('photos') && 
+          f.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        );
+        
+        if (photosDoc) {
+          try {
+            const newPhotosName = `Photos ${addressString}.docx`;
+            await renameFile(photosDoc.id, newPhotosName, SHARED_DRIVE_ID);
+            console.log(`✓ Renamed Photos document to: ${newPhotosName}`);
+          } catch (renameError) {
+            console.error('Error renaming Photos document:', renameError);
+          }
+        } else {
+          console.warn('Photos.docx not found in folder');
+        }
+        
+        // Find the kept spreadsheet (either Split Contract or Single Contract)
+        const keptSheet = contractTypeLower === 'split contract' ? splitContractSheet : singleContractSheet;
+        
+        // Rename kept spreadsheet
+        if (keptSheet) {
+          try {
+            const newName = `CF spreadsheet ${addressString}`;
+            await renameFile(keptSheet.id, newName, SHARED_DRIVE_ID);
+            console.log(`✓ Renamed CF spreadsheet to: ${newName}`);
             
             // Populate the sheet with form data
             console.log('Populating sheet with form data...');
@@ -143,14 +205,14 @@ export async function POST(request: Request) {
             console.log('Purchase price:', formData.purchasePrice);
             console.log('Address:', formData.address);
             
-            await populateHLSpreadsheet(hlSheet.id, formData);
-            console.log(`✓ Populated HL spreadsheet with form data`);
+            await populateHLSpreadsheet(keptSheet.id, formData);
+            console.log(`✓ Populated CF spreadsheet with form data`);
           } catch (populateError) {
             console.error('Error populating sheet:', populateError);
             throw populateError; // Re-throw so we can see it in logs
           }
         } else {
-          console.warn('HL sheet not found in folder - cannot rename or populate');
+          console.warn('No spreadsheet found in folder - cannot rename or populate');
         }
       } catch (error) {
         console.error('=== ERROR PROCESSING SHEETS ===');
@@ -167,17 +229,75 @@ export async function POST(request: Request) {
       console.log('formData exists:', !!formData);
     }
     
-    // Step 3: Permissions are inherited from Properties folder
-    // Properties folder already has:
-    // - "Anyone with the link" = Viewer
-    // - Specific @buyersclub.com.au users = Editor
-    // New property folders inherit these permissions automatically
+    // Note: Permissions are inherited from parent folder
+    // - "Anyone with the link" = Viewer (inherited from Properties folder)
+    // - Specific @buyersclub.com.au users = Content Manager (inherited from parent folder)
+    
+    // Step 4: Add PDF shortcut if hotspottingPdfFileId exists
+    serverLog('[create-property-folder] Checking for PDF shortcut...');
+    serverLog('[create-property-folder] formData?.hotspottingPdfFileId:', formData?.hotspottingPdfFileId);
+    serverLog('[create-property-folder] formData?.hotspottingPdfLink:', formData?.hotspottingPdfLink);
+    serverLog('[create-property-folder] formData?.hotspottingReportName:', formData?.hotspottingReportName);
+    
+    if (formData?.hotspottingPdfFileId) {
+      try {
+        serverLog('[create-property-folder] Adding PDF shortcut to property folder...');
+        serverLog('[create-property-folder] File ID:', formData.hotspottingPdfFileId);
+        serverLog('[create-property-folder] Folder ID:', propertyFolder.id);
+        
+        // Fetch original PDF file name to use for shortcut
+        let shortcutName = 'Hotspotting Report.pdf'; // Fallback name
+        const originalFileName = await getFileName(formData.hotspottingPdfFileId, SHARED_DRIVE_ID);
+        if (originalFileName) {
+          shortcutName = originalFileName;
+          serverLog('[create-property-folder] Using original PDF name for shortcut:', shortcutName);
+        } else {
+          serverLog('[create-property-folder] Warning: Could not fetch original PDF name, using fallback:', shortcutName);
+        }
+        
+        const pdfShortcut = await createShortcut(
+          formData.hotspottingPdfFileId,
+          propertyFolder.id,
+          shortcutName,
+          SHARED_DRIVE_ID
+        );
+        serverLog('[create-property-folder] PDF shortcut created successfully:', pdfShortcut.id);
+        
+        // Set permissions on the ORIGINAL PDF file (not the shortcut)
+        // Google Drive API v3 does not support setting permissions directly on shortcuts
+        // Shortcuts inherit access from the original file they point to
+        try {
+          await setFilePermissions(formData.hotspottingPdfFileId, 'reader', SHARED_DRIVE_ID);
+          serverLog('[create-property-folder] Original PDF permissions set to "Anyone with the link"');
+        } catch (permError: any) {
+          serverLog('[create-property-folder] Warning: Failed to set permissions on original PDF (non-blocking):', {
+            message: permError?.message,
+            code: permError?.code,
+          });
+          // Don't fail - shortcut is created, permissions might already be set
+          // Note: If this is a "Master" PDF file used for all shortcuts, permissions may already be set
+        }
+      } catch (error: any) {
+        // Log detailed error information
+        serverLog('[create-property-folder] Error creating PDF shortcut:', {
+          message: error?.message || 'Unknown error',
+          code: error?.code,
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          responseData: error?.response?.data,
+          stack: error?.stack,
+        });
+        // Don't fail folder creation if shortcut creation fails
+      }
+    } else {
+      serverLog('[create-property-folder] No PDF fileId found - skipping shortcut creation');
+    }
     
     return NextResponse.json({
       success: true,
       folderId: propertyFolder.id,
       folderLink: propertyFolder.webViewLink,
-      folderName: propertyAddress,
+      folderName: folderName,
     });
   } catch (error) {
     console.error('Error creating property folder:', error);

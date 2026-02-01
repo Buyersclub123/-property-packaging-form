@@ -45,6 +45,7 @@ export interface AddressData {
   latitude?: number;
   longitude?: number;
   lga?: string; // LGA for Investment Highlights lookup (shared, not duplicated)
+  lgaManuallyCleared?: boolean; // Flag to track if user has explicitly cleared LGA (prevents re-population)
   
   // Property Address for GHL/Client Records (actual property address)
   // Note: Lot numbers are handled in Property Details step (Step 2) for multi-lot projects
@@ -172,7 +173,32 @@ export interface MarketPerformance {
 export interface ContentSections {
   whyThisProperty?: string;
   proximity?: string;
-  investmentHighlights?: string;
+  investmentHighlights?: string; // Main Body (ChatGPT output)
+  investmentHighlightsReportName?: string;
+  investmentHighlightsValidFrom?: string;
+  investmentHighlightsValidTo?: string;
+  investmentHighlightsExtra1?: string;
+  investmentHighlightsExtra2?: string;
+  investmentHighlightsExtra3?: string;
+  investmentHighlightsExtra4?: string;
+  investmentHighlightsExtra5?: string;
+  investmentHighlightsExtra6?: string;
+  investmentHighlightsExtra7?: string;
+  
+  // Content review confirmation
+  contentReviewed?: boolean;
+  
+  // Base main body (without custom dialogue merged in)
+  investmentHighlightsBase?: string;
+  
+  // 7 Custom Dialogue Fields (for human additions)
+  customDialogue1PopulationGrowth?: string;
+  customDialogue2Residential?: string;
+  customDialogue3Industrial?: string;
+  customDialogue4CommercialCivic?: string;
+  customDialogue5HealthEducation?: string;
+  customDialogue6Transport?: string;
+  customDialogue7JobImplications?: string;
 }
 
 // Agent Information
@@ -194,6 +220,33 @@ export interface FormData {
   status?: StatusType;
   dealType?: DealType;
   reviewDate?: string;
+  
+  // Pre-fetched data (loaded early for better UX)
+  proximityData?: string; // Pre-fetched proximity results from Step 2
+  
+  // Early processing state (Step 1A)
+  earlyProcessing?: {
+    investmentHighlights?: {
+      status: 'pending' | 'processing' | 'ready' | 'error';
+      data?: any;
+      dateStatus?: any;
+      selectedFromDropdown?: boolean;
+      uploadedPdfFileId?: string;
+      uploadedPdfTimestamp?: number;
+      uploadedPdfFileName?: string;
+      error?: string;
+    };
+    proximity?: {
+      status: 'pending' | 'processing' | 'ready' | 'error';
+      data?: string;
+      error?: string;
+    };
+    whyThisProperty?: {
+      status: 'pending' | 'processing' | 'ready' | 'error';
+      data?: string;
+      error?: string;
+    };
+  };
   
   // Step 0
   decisionTree: DecisionTree;
@@ -225,16 +278,54 @@ export interface FormData {
   // Agent Info
   agentInfo: AgentInfo;
   
+  // Insurance (Step 6)
+  insurance?: string; // Annual insurance cost from Terri Scheer calculator
+  
   // Attachments
   attachmentsAdditionalDialogue?: string;
+  
+  // Submission tracking
+  ghlRecordId?: string; // GHL record ID after successful submission (prevents duplicate submissions)
+  submittedAt?: string; // Timestamp of submission (ISO string)
+  submissionAttempted?: boolean; // Track if submission was attempted (even if no recordId returned)
   
   // Cashflow Spreadsheets (Google Sheets Copy URLs)
   cashflowSheetLinkHL?: string; // House & Land cashflow spreadsheet copy URL
   cashflowSheetLinkGeneral?: string; // General/Single Contract cashflow spreadsheet copy URL
   
+  // Cashflow Spreadsheet Fields (rows 13-29 in Autofill data tab)
+  councilWaterRates?: string; // Council/Water Rates $ (B13) - editable on Step 7
+  rates?: string; // Quarterly council rates (B14)
+  insuranceType?: 'Insurance' | 'Insurance + Strata'; // Insurance type dropdown (B15)
+  insuranceAmount?: string; // Annual insurance amount (B16)
+  pbPciReport?: 'P&B' | 'PCI'; // Report type: P&B for established, PCI for new builds (B17)
+  buildWindow?: string; // Build Window dropdown: 09 mo, 12 mo, 15 mo, 18 mo (B27) - editable on Step 7, Split Contract only
+  cashback1Month?: string; // Cashback 1 month dropdown: 1-18 (B28) - editable on Step 7, Split Contract only
+  cashback2Month?: string; // Cashback 2 month dropdown: 1-18 (B29) - editable on Step 7, Split Contract only
+  
+  // Depreciation (Years 1-10) - Diminishing Value amounts (B18-B27)
+  depreciation?: {
+    year1?: string;
+    year2?: string;
+    year3?: string;
+    year4?: string;
+    year5?: string;
+    year6?: string;
+    year7?: string;
+    year8?: string;
+    year9?: string;
+    year10?: string;
+  };
+  
   // Workflow
   messageForBA?: string;
   pushRecordToDealSheet?: YesNo;
+  
+  // Investment Highlights (hotspotting report)
+  hotspottingPdfLink?: string; // PDF link from dropdown selection or upload
+  hotspottingPdfFileId?: string; // PDF file ID from dropdown selection or upload
+  hotspottingReportName?: string; // Report name (for adding suburb on submission)
+  hotspottingValidPeriod?: string; // Valid period (for adding suburb on submission)
 }
 
 // Form State
@@ -304,5 +395,6 @@ export interface StashResponse {
   // Error handling
   error?: boolean;
   errorMessage?: string;
+  makeComCreditsIssue?: boolean; // Flag for Make.com credit/quota issues
 }
 
