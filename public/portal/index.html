@@ -1278,6 +1278,7 @@ function renderOpportunities() {
     // Convert stage ID to stage name using lookup (trim whitespace)
     const stageId = (opp.stage || '').trim();
     const stageDisplay = stageLookup[stageId] || stageId || '';
+    if (i === 0) console.log('First opportunity stage lookup:', { stageId, found: stageLookup[stageId], stageDisplay, lookupKeys: Object.keys(stageLookup).slice(0, 3) });
     tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox"></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(stageDisplay)}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
     const sel = tr.querySelector(".message-type-select");
     const msgCell = tr.querySelector(".msg-cell");
