@@ -79,6 +79,28 @@ export function InvestmentHighlightsField({
   // Track if we've already done a lookup (prevent multiple calls)
   const hasLookedUpRef = useRef(false);
   
+  // Restore UI state when returning to page after navigation
+  // This ensures "Change Selection" button remains visible when data exists
+  // This matches the pattern used by Proximity and Why This Property fields
+  useEffect(() => {
+    const formData = useFormStore.getState().formData;
+    const earlyProcessing = formData.earlyProcessing?.investmentHighlights;
+    
+    // Only restore if:
+    // 1. We have saved report data in formData (user previously selected a report)
+    // 2. We don't have earlyProcessing data (that will be handled by the next useEffect)
+    // 3. matchStatus is null (not already set)
+    if ((formData.hotspottingReportName || formData.hotspottingPdfFileId) && 
+        !earlyProcessing && 
+        matchStatus === null) {
+      console.log('[InvestmentHighlights] Restoring UI state from formData after navigation');
+      setMatchStatus('found');
+      setReportName(formData.hotspottingReportName || '');
+      setValidPeriod(formData.hotspottingValidPeriod || '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+  
   // Check for pre-loaded data from Step 1A
   useEffect(() => {
     // First, check if we have pre-loaded data from Step 1A
@@ -955,10 +977,14 @@ export function InvestmentHighlightsField({
               )}
             </div>
             
-            <div className="mt-3 p-2 bg-amber-50 border border-amber-200 rounded">
-              <p className="text-xs text-gray-700">
-                <strong>⚠️ Important:</strong> Please check both fields carefully. If the extracted values are incorrect, copy the correct information from the front page of the PDF, then check both verification boxes before confirming.
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded">
+              <p className="text-base text-gray-800 font-medium mb-2">
+                <strong>⚠️ Important:</strong>
               </p>
+              <ul className="text-base text-gray-800 font-medium list-disc list-inside space-y-1">
+                <li>Please check both fields carefully. If the extracted values are incorrect, copy the correct information from the front page of the PDF, then check both verification boxes before confirming.</li>
+                <li><strong>Remove the words "Location Report" from the beginning of the name. The list is presented in alphabetical order so the report needs to start with the LGA name.</strong></li>
+              </ul>
             </div>
             
             <div className="flex space-x-2 mt-3">
