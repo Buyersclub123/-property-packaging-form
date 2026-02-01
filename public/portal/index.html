@@ -629,9 +629,12 @@ function renderSelectedTags(containerId, selectedItems, type) {
     const tag = document.createElement('div');
     tag.className = 'selected-tag';
     let displayValue = item === '' || item === null ? '(blank)' : item;
-    // Use stage name lookup if available
-    if (type === 'stage' && stageLookup[item]) {
-      displayValue = stageLookup[item];
+    // Use stage name lookup if available (trim whitespace)
+    if (type === 'stage') {
+      const stageId = (item || '').trim();
+      if (stageLookup[stageId]) {
+        displayValue = stageLookup[stageId];
+      }
     }
     tag.innerHTML = `<span>${escapeHtml(displayValue)}</span><span class="remove" data-type="${type}" data-value="${escapeHtml(item)}">×</span>`;
     container.appendChild(tag);
@@ -893,8 +896,9 @@ function populateStageFilter() {
     });
     const label = document.createElement('label');
     label.htmlFor = `stage-${stage}`;
-    // Display stage name if lookup available, otherwise show ID
-    const stageDisplay = stageLookup[stage] || stage;
+    // Display stage name if lookup available, otherwise show ID (trim whitespace)
+    const stageId = (stage || '').trim();
+    const stageDisplay = stageLookup[stageId] || stageId;
     const count = stageCounts[stage] || 0;
     label.textContent = `${stageDisplay} (${count})`;
     optionDiv.appendChild(checkbox);
@@ -1275,8 +1279,9 @@ function renderOpportunities() {
     const partnerInput = `<input type="text" value="${escapeHtml(partnerName)}" class="partner-name-input">`;
     const emailsDisplay = formatEmailsForDisplay(opp.emails || '');
     const emailInput = `<textarea class="email-input" rows="3" placeholder="Enter email addresses, one per line">${escapeHtml(emailsDisplay)}</textarea>`;
-    // Convert stage ID to stage name using lookup
-    const stageDisplay = stageLookup[opp.stage] || opp.stage || '';
+    // Convert stage ID to stage name using lookup (trim whitespace)
+    const stageId = (opp.stage || '').trim();
+    const stageDisplay = stageLookup[stageId] || stageId || '';
     tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox"></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(stageDisplay)}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
     const sel = tr.querySelector(".message-type-select");
     const msgCell = tr.querySelector(".msg-cell");
