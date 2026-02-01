@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Sent Confirmation</title>
+</head>
+<body>
+  <script>
+    // This page is called by Module 14 after emails are sent
+    // It stores the callback status in localStorage so the portal can detect it
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const batchId = urlParams.get('batchId');
+    const status = urlParams.get('status') || 'success';
+    const emailCount = urlParams.get('emailCount') || '0';
+    const error = urlParams.get('error');
+    
+    if (batchId) {
+      // Store callback status in localStorage
+      const callbackData = {
+        batchId: batchId,
+        status: status,
+        emailCount: parseInt(emailCount),
+        error: error,
+        timestamp: Date.now()
+      };
+      
+      localStorage.setItem(`callback_${batchId}`, JSON.stringify(callbackData));
+      
+      // Close this window immediately (it's just a callback handler)
+      window.close();
+      
+      // If window.close() doesn't work, redirect to a blank page
+      setTimeout(() => {
+        document.body.innerHTML = '<p style="padding: 20px; font-family: Arial;">Callback received. You can close this window.</p>';
+      }, 100);
+    } else {
+      document.body.innerHTML = '<p style="padding: 20px; font-family: Arial;">Error: Missing batchId parameter.</p>';
+    }
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
