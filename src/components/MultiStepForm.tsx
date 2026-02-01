@@ -287,6 +287,19 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           setValidationErrorWithRef('Please click "Continue with Packaging" and fill in the Sourcer field before proceeding.');
           return false;
         }
+        // Selling Agent fields are required (Name, Email, Mobile)
+        if (!formData.sellingAgentName || formData.sellingAgentName.trim() === '') {
+          setValidationErrorWithRef('Selling Agent Name is required. Please enter a name or "TBC".');
+          return false;
+        }
+        if (!formData.sellingAgentEmail || formData.sellingAgentEmail.trim() === '') {
+          setValidationErrorWithRef('Selling Agent Email is required. Please enter an email address or "TBC".');
+          return false;
+        }
+        if (!formData.sellingAgentMobile || formData.sellingAgentMobile.trim() === '') {
+          setValidationErrorWithRef('Selling Agent Mobile is required. Please enter a mobile number or "TBC".');
+          return false;
+        }
         return true;
 
       case 2: // Decision Tree
