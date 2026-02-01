@@ -1,538 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Buyers Agent Property Review Portal</title>
-  <style>
-    body { 
-      font-family: Arial, sans-serif; 
-      margin: 40px; 
-      background: #f7f7f7; 
-    }
-    .container { 
-      background: #fff; 
-      border-radius: 12px; 
-      box-shadow: 0 0 10px #ccc; 
-      padding: 32px; 
-      max-width: 1400px; 
-      margin: auto; 
-    }
-    .logo { 
-      width: 180px; 
-      margin-bottom: 20px; 
-    }
-    .property-summary { 
-      font-weight: bold; 
-      font-size: 1.2em; 
-      margin-bottom: 24px; 
-    }
-    .standard-message-section { 
-      margin-bottom: 24px; 
-      padding: 16px;
-      background: #f9f9f9;
-      border-radius: 8px;
-      border-left: 4px solid #fbd721;
-    }
-    .standard-message-section label { 
-      display: block; 
-      margin-bottom: 8px; 
-      font-weight: bold; 
-    }
-    .standard-message-section textarea { 
-      width: 100%; 
-      min-height: 70px; 
-      font-size: 1em; 
-      margin-top: 8px; 
-      border-radius: 8px; 
-      padding: 8px; 
-      border: 1px solid #ddd;
-      font-family: Arial, sans-serif;
-      resize: vertical;
-      overflow-y: hidden;
-    }
-    .message-actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: 8px;
-    }
-    .save-message-btn {
-      padding: 6px 16px;
-      background: #2aaa7e;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9em;
-      font-weight: 500;
-    }
-    .save-message-btn:hover {
-      background: #228a66;
-    }
-    .save-message-btn:disabled {
-      background: #ccc;
-      cursor: not-allowed;
-    }
-    .save-status {
-      font-size: 0.85em;
-      color: #666;
-      font-style: italic;
-    }
-    .save-status.saved {
-      color: #3c3;
-      font-weight: 500;
-    }
-    .save-status.warning {
-      color: #c33;
-    }
-    .helper-text {
-      font-size: 0.85em;
-      color: #666;
-      margin-top: 6px;
-      font-style: italic;
-    }
-    .filter-section {
-      margin-bottom: 20px;
-      padding: 16px;
-      background: #f0f0f0;
-      border-radius: 6px;
-    }
-    .filter-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    .filter-row:last-child {
-      margin-bottom: 0;
-    }
-    .filter-row label {
-      font-weight: bold;
-      margin-right: 8px;
-      min-width: 150px;
-      padding-top: 6px;
-    }
-    .filter-wrapper {
-      flex: 1;
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-    }
-    .filter-dropdown {
-      position: relative;
-      min-width: 200px;
-    }
-    .filter-select {
-      width: 100%;
-      padding: 6px 30px 6px 10px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      font-size: 0.95em;
-      background: white;
-      cursor: pointer;
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 8px center;
-    }
-    .filter-options {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      background: white;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      margin-top: 4px;
-      max-height: 200px;
-      overflow-y: auto;
-      z-index: 1000;
-      display: none;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    .filter-options.show {
-      display: block;
-    }
-    .filter-option {
-      padding: 8px 12px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .filter-option:hover {
-      background: #f0f0f0;
-    }
-    .filter-option input[type="checkbox"] {
-      margin: 0;
-      cursor: pointer;
-    }
-    .filter-option label {
-      cursor: pointer;
-      margin: 0;
-      font-weight: normal;
-      min-width: auto;
-      padding: 0;
-      flex: 1;
-    }
-    .selected-tags {
-      flex: 1;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: center;
-      min-height: 32px;
-    }
-    .selected-tag {
-      background: #2aaa7e;
-      color: white;
-      padding: 4px 10px;
-      border-radius: 4px;
-      font-size: 0.85em;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .selected-tag .remove {
-      cursor: pointer;
-      font-weight: bold;
-      font-size: 1.1em;
-      line-height: 1;
-    }
-    .selected-tag .remove:hover {
-      opacity: 0.8;
-    }
-    .filter-reset-btn {
-      padding: 6px 12px;
-      background: #999;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.85em;
-      white-space: nowrap;
-    }
-    .filter-reset-btn:hover {
-      background: #777;
-    }
-    .filter-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 12px;
-      align-items: center;
-    }
-    .filter-section button.reset-all {
-      padding: 6px 16px;
-      background: #666;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9em;
-    }
-    .filter-section button.reset-all:hover {
-      background: #555;
-    }
-    .filter-count {
-      margin-left: auto;
-      font-weight: bold;
-      color: #333;
-    }
-    table { 
-      width: 100%; 
-      border-collapse: collapse; 
-      background: #f9f9f9; 
-      margin-bottom: 20px; 
-    }
-    th, td { 
-      padding: 10px 7px; 
-      text-align: left; 
-      border-bottom: 1px solid #ddd; 
-    }
-    th { 
-      background: #f1f1f1; 
-      font-weight: 600;
-    }
-    .client-name-col, .partner-name-col {
-      width: 15%;
-      min-width: 150px;
-    }
-    .stage-col {
-      width: 12%;
-      min-width: 120px;
-    }
-    .client-name-input, .partner-name-input {
-      width: 100%;
-      padding: 3px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      position: relative;
-    }
-    .name-cell {
-      position: relative;
-    }
-    .name-cell:hover::after {
-      content: attr(data-full-name);
-      position: absolute;
-      left: 0;
-      top: 100%;
-      background: #333;
-      color: #fff;
-      padding: 6px 10px;
-      border-radius: 4px;
-      white-space: nowrap;
-      z-index: 1000;
-      font-size: 0.9em;
-      margin-top: 5px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-    .email-col {
-      width: 25%;
-    }
-    .email-input {
-      width: 100%;
-      padding: 3px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
-      font-family: monospace;
-      font-size: 0.9em;
-      line-height: 1.6;
-    }
-    .actions { 
-      margin-top: 30px; 
-      display: flex;
-      justify-content: space-between;
-      gap: 14px;
-    }
-    .actions button { 
-      padding: 10px 22px; 
-      border: none; 
-      border-radius: 8px; 
-      font-size: 1em; 
-      cursor: pointer; 
-      box-shadow: 0 2px 4px #eee; 
-      font-weight: 500;
-    }
-    .actions button:first-child { 
-      background: #2aaa7e; 
-      color: #fff; 
-      width: 50%;
-    }
-    .actions button:first-child:hover {
-      background: #228a66;
-    }
-    .actions button:nth-child(2) { 
-      background: #0a5599; 
-      color: #fff; 
-      width: 25%;
-      margin-left: auto;
-    }
-    .actions button:nth-child(2):hover {
-      background: #084080;
-    }
-    textarea.small { 
-      width: 98%; 
-      min-height: 40px; 
-      font-size: .97em; 
-      border-radius: 6px; 
-      padding: 4px;
-      border: 1px solid #ccc;
-      font-family: Arial, sans-serif;
-      resize: vertical;
-      overflow-y: hidden;
-    }
-    select { 
-      padding: 2px 5px; 
-      border-radius: 4px; 
-      border: 1px solid #ccc;
-    }
-    .grey { 
-      color: #aaa; 
-      font-style: italic;
-    }
-    .wider-column { 
-      width: 25%; 
-    }
-    .personal-message { 
-      width: 100%; 
-    }
-    .loading {
-      text-align: center;
-      padding: 30px;
-      color: #155724;
-      background-color: #d4edda;
-      border: 1px solid #c3e6cb;
-      border-radius: 4px;
-      font-size: 18px;
-      font-weight: 500;
-    }
-    .error-message {
-      background: #fee;
-      color: #c33;
-      padding: 12px;
-      border-radius: 6px;
-      margin-bottom: 20px;
-      border-left: 4px solid #c33;
-    }
-    .success-message {
-      background: #d4edda;
-      color: #155724;
-      padding: 20px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      border-left: 5px solid #28a745;
-      font-size: 16px;
-      font-weight: 500;
-      text-align: center;
-    }
-    .success-message-large {
-      background: #d4edda;
-      color: #155724;
-      padding: 30px;
-      border-radius: 12px;
-      margin: 20px 0;
-      border: 2px solid #28a745;
-      font-size: 18px;
-      font-weight: 600;
-      text-align: center;
-      box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
-    }
-    .countdown-message {
-      font-size: 14px;
-      color: #666;
-      margin-top: 10px;
-      font-weight: normal;
-      font-style: italic;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <img class="logo" src="https://storage.googleapis.com/msgsndr/UJWYn4mrgGodB7KZUcHt/media/6938361650387f705884d8de.jpg" alt="BuyersClub Logo">
-    <h1>Buyers Agent Property Review Portal</h1>
-    <div class="property-summary" id="property-summary">Property Name: [Loading...]</div>
-    <div class="standard-message-section">
-      <label for="standard-message"><strong>Your Standard Client Message:</strong></label>
-      <textarea id="standard-message" rows="4" placeholder="💡 Tip: Your message formatting will be preserved exactly as you type it. Use line breaks (Enter) to create paragraphs or spacing in your email."></textarea>
-      <div class="message-actions">
-        <button id="save-message-btn" class="save-message-btn">Save Message</button>
-        <span id="save-status" class="save-status"></span>
-      </div>
-      <div class="helper-text">💡 Tip: Your message formatting will be preserved exactly as you type it. Use line breaks (Enter) to create paragraphs or spacing in your email.</div>
-    </div>
-    <div class="filter-section">
-      <div class="filter-row">
-        <label for="ba-filter-select">Filter by BA:</label>
-        <div class="filter-wrapper">
-          <div class="filter-dropdown">
-            <select id="ba-filter-select" class="filter-select"><option value="">Select BA(s)...</option></select>
-            <div id="ba-filter-options" class="filter-options"></div>
-          </div>
-          <div class="selected-tags" id="ba-selected-tags"></div>
-          <button class="filter-reset-btn" id="reset-ba-filter">Reset BA</button>
-        </div>
-      </div>
-      <div class="filter-row">
-        <label for="stage-filter-select">Filter by Pipeline Stage:</label>
-        <div class="filter-wrapper">
-          <div class="filter-dropdown">
-            <select id="stage-filter-select" class="filter-select"><option value="">Select Stage(s)...</option></select>
-            <div id="stage-filter-options" class="filter-options"></div>
-          </div>
-          <div class="selected-tags" id="stage-selected-tags"></div>
-          <button class="filter-reset-btn" id="reset-stage-filter">Reset Stage</button>
-        </div>
-      </div>
-      <div class="filter-actions">
-        <button class="reset-all" id="reset-filter">Reset All Filters</button>
-        <div class="filter-count" id="filter-count">Showing 0 of 0 opportunities</div>
-      </div>
-    </div>
-    <div id="message-area"></div>
-    <table>
-      <thead>
-        <tr>
-          <th><input type="checkbox" id="select-all"></th>
-          <th>Opportunity Name</th>
-          <th class="stage-col">Pipeline Stage</th>
-          <th class="client-name-col">Client Name</th>
-          <th class="partner-name-col">Partner Name</th>
-          <th class="email-col">Main Contact and Partner Emails</th>
-          <th>Message Type</th>
-          <th class="personal-message">Personalized Message</th>
-        </tr>
-      </thead>
-      <tbody id="opportunities-tbody">
-        <tr><td colspan="8" class="loading">Loading opportunities...</td></tr>
-      </tbody>
-    </table>
-    <div style="margin-top: 20px; margin-bottom: 20px;">
-      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.95em;">
-        <input type="checkbox" id="send-on-behalf-checkbox" style="width: 16px; height: 16px; cursor: pointer;">
-        <span>Send on behalf of someone else</span>
-      </label>
-      <div id="send-from-section" style="display: none; margin-top: 16px; padding: 16px; background: #f9f9f9; border-radius: 6px; border-left: 3px solid #4caf50;">
-        <div class="filter-row" style="margin-bottom: 12px;">
-          <label for="send-from-select" style="display: block; margin-bottom: 6px; font-weight: 600;">Send From (Email Address):</label>
-          <div style="display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;">
-            <select id="send-from-select" class="filter-select" style="flex: 1; min-width: 250px; max-width: 400px; padding: 8px;">
-              <option value="">Select BA from list...</option>
-            </select>
-            <div style="display: flex; align-items: center; gap: 4px; flex: 1; min-width: 200px;">
-              <span style="white-space: nowrap;">or enter manually:</span>
-              <input type="email" id="send-from-manual" placeholder="email@example.com" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95em;">
-            </div>
-          </div>
-          <div class="helper-text" style="margin-top: 6px;">Select which BA's email address to send from, or enter an email address manually. All selected opportunities will be sent from this address. Changing this will automatically load that BA's saved generic message (if available).</div>
-        </div>
-        <div style="margin-top: 16px; padding: 12px; background: #f0f0f0; border-radius: 4px;">
-          <strong style="font-size: 0.9em;">How "Send From" Works:</strong>
-          <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 0.85em; line-height: 1.6;">
-            <li><strong>Checkbox to Enable:</strong> Check "Send on behalf of someone else" to show the "Send From" dropdown</li>
-            <li><strong>Single Selection:</strong> One "Send From" selection applies to ALL opportunities selected by tick box</li>
-            <li><strong>Auto-Load Message:</strong> When you change "Send From", it automatically loads that BA's saved generic message</li>
-            <li><strong>Create/Save Messages:</strong> If the BA doesn't have a saved message, you can create one and save it for them</li>
-            <li><strong>Email Setup:</strong> Only email addresses that have been set up to send via this system can be used</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-    <div class="actions">
-      <button id="action-above">Action the Above</button>
-    </div>
-  </div>
-  <script>
+﻿
 const GOOGLE_SHEET_ID = '1nR0upQ4eV4iiw-dY1FCVMP0cNzc3GElZUVZU4WcTf3Q';
 const OPPORTUNITIES_TAB = 'Opportunities';
 const GENERIC_MESSAGES_TAB = 'Generic BA messages';
-// Webhook URLs must be provided via URL parameters - no hardcoded values
-// See docs/make-com-scenarios/WEBHOOK-SECURITY.md for security and setup details
+const MODULE_1_WEBHOOK = 'https://hook.eu1.make.com/bkq23g13n4ae6spskdbwpru7hleol6sl'; // For sending emails
+const OPPORTUNITIES_WEBHOOK = 'https://hook.eu1.make.com/g9pcjs2imabfea3viiy6213ejgrdprn1'; // Scenario 5 - Load opportunities
+const NON_SUITABLE_WEBHOOK = 'https://hook.eu1.make.com/q85flukqhepku5rudd6bc1qbl9mqtlxk';
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
 // Configuration functions for webhook and API URLs
-// All webhook URLs must be provided via URL parameters - no hardcoded fallbacks
 function getWebhookUrl() {
   const params = new URLSearchParams(window.location.search);
   const urlParam = params.get('webhookUrl');
   if (urlParam) return urlParam;
   
-  // Fallback: check for config object (for development/testing only)
-  if (window.PORTAL_CONFIG?.webhookUrl) return window.PORTAL_CONFIG.webhookUrl;
-  
-  // No default - URL parameter is required
-  throw new Error('webhookUrl parameter is required. Add ?webhookUrl=... to the URL.');
-}
-
-function getModule1Webhook() {
-  const params = new URLSearchParams(window.location.search);
-  const urlParam = params.get('module1Webhook');
-  if (urlParam) return urlParam;
-  
-  // Fallback: check for config object (for development/testing only)
-  if (window.PORTAL_CONFIG?.module1Webhook) return window.PORTAL_CONFIG.module1Webhook;
-  
-  // No default - URL parameter is required
-  throw new Error('module1Webhook parameter is required. Add ?module1Webhook=... to the URL.');
+  // Fallback: check for config object or use default
+  return window.PORTAL_CONFIG?.webhookUrl || OPPORTUNITIES_WEBHOOK;
 }
 
 function getFormAppApiUrl() {
@@ -554,9 +36,6 @@ let baEmailMap = {}; // Maps BA names to email addresses
 let baGhlUserIdMap = {}; // Maps BA names to GHL user IDs
 let selectedSendFromEmail = ''; // Selected "Send From" email address
 let sendFromChangeHandler = null; // Store reference to change handler to avoid duplicates
-let stageLookup = {}; // Maps stage IDs to stage names (from Admin Sheet)
-let baIdLookup = {}; // Maps GHL user IDs to friendly names (from Admin Sheet)
-let isLoadingOpportunities = false; // Track loading state
 function autoResizeTextarea(textarea) {
   textarea.style.height = 'auto';
   textarea.style.height = textarea.scrollHeight + 'px';
@@ -628,12 +107,8 @@ function renderSelectedTags(containerId, selectedItems, type) {
   selectedItems.forEach(item => {
     const tag = document.createElement('div');
     tag.className = 'selected-tag';
-    let displayValue = item === '' || item === null ? '(blank)' : item;
-    // Use stage name lookup if available
-    if (type === 'stage' && stageLookup[item]) {
-      displayValue = stageLookup[item];
-    }
-    tag.innerHTML = `<span>${escapeHtml(displayValue)}</span><span class="remove" data-type="${type}" data-value="${escapeHtml(item)}">×</span>`;
+    const displayValue = item === '' || item === null ? '(blank)' : item;
+    tag.innerHTML = `<span>${escapeHtml(displayValue)}</span><span class="remove" data-type="${type}" data-value="${escapeHtml(item)}">Ã—</span>`;
     container.appendChild(tag);
   });
   container.querySelectorAll('.remove').forEach(btn => {
@@ -688,11 +163,10 @@ async function loadOpportunities() {
   // Clear any existing data immediately
   allOpportunities = [];
   filteredOpportunities = [];
-  isLoadingOpportunities = true;
   renderOpportunities();
   updateFilterCount();
   
-  showMessage("We are just retrieving the Opportunities from GHL, thank you for your patience", 'info');
+  showMessage("Loading opportunities from webhook...", 'info');
   try {
     const webhookUrl = getWebhookUrl();
     console.log('Calling webhook:', webhookUrl);
@@ -725,7 +199,6 @@ async function loadOpportunities() {
     }
     
     if (!data || data.length === 0) {
-      isLoadingOpportunities = false;
       showMessage("No opportunities found in webhook response.", 'error');
       allOpportunities = [];
       filteredOpportunities = [];
@@ -753,7 +226,6 @@ async function loadOpportunities() {
     }).filter(opp => opp.id && opp.id.length > 0);
     
     if (allOpportunities.length === 0) {
-      isLoadingOpportunities = false;
       showMessage("No valid opportunities found. Please check that opportunity IDs are present.", 'error');
       filteredOpportunities = [];
       renderOpportunities();
@@ -762,12 +234,10 @@ async function loadOpportunities() {
     }
     
     filteredOpportunities = [...allOpportunities];
-    await loadLookups(); // Load stage and BA ID lookups from Admin Sheet
     populateBAFilter();
     populateStageFilter();
     await loadBAEmailMap(); // Load BA name-to-email mapping
     populateSendFromDropdown();
-    isLoadingOpportunities = false;
     renderOpportunities();
     updateFilterCount();
     showMessage(`Successfully loaded ${allOpportunities.length} opportunities.`, 'success');
@@ -776,7 +246,6 @@ async function loadOpportunities() {
     // Clear all data on error
     allOpportunities = [];
     filteredOpportunities = [];
-    isLoadingOpportunities = false;
     renderOpportunities();
     updateFilterCount();
     
@@ -796,14 +265,6 @@ function populateBAFilter() {
     if (b === '') return 1;
     return a.localeCompare(b);
   });
-  
-  // Count opportunities for each BA
-  const baCounts = {};
-  allOpportunities.forEach(opp => {
-    const ba = opp.assignedBA || '';
-    baCounts[ba] = (baCounts[ba] || 0) + 1;
-  });
-  
   sortedBAs.forEach(ba => {
     const optionDiv = document.createElement('div');
     optionDiv.className = 'filter-option';
@@ -824,25 +285,11 @@ function populateBAFilter() {
     });
     const label = document.createElement('label');
     label.htmlFor = `ba-${ba === '' ? 'blank' : ba}`;
-    const count = baCounts[ba] || 0;
-    label.textContent = `${displayName} (${count})`;
+    label.textContent = displayName;
     optionDiv.appendChild(checkbox);
     optionDiv.appendChild(label);
     optionsContainer.appendChild(optionDiv);
   });
-  
-  // Add Done button
-  const doneButton = document.createElement('button');
-  doneButton.type = 'button';
-  doneButton.textContent = 'Done';
-  doneButton.className = 'filter-done-button';
-  doneButton.style.cssText = 'width: 100%; margin-top: 8px; padding: 8px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;';
-  doneButton.addEventListener('click', (e) => {
-    e.stopPropagation();
-    document.getElementById('ba-filter-options').classList.remove('show');
-  });
-  optionsContainer.appendChild(doneButton);
-  
   renderSelectedTags('ba-selected-tags', selectedBAs, 'ba');
   if (baEmail) {
     const matchingBA = sortedBAs.find(ba => ba && (ba.toLowerCase().includes(baEmail.toLowerCase()) || baEmail.toLowerCase().includes(ba.toLowerCase())));
@@ -865,15 +312,6 @@ function populateStageFilter() {
   const uniqueStages = [...new Set(allOpportunities.map(opp => opp.stage).filter(Boolean))];
   const optionsContainer = document.getElementById('stage-filter-options');
   optionsContainer.innerHTML = '';
-  
-  // Count opportunities for each stage
-  const stageCounts = {};
-  allOpportunities.forEach(opp => {
-    if (opp.stage) {
-      stageCounts[opp.stage] = (stageCounts[opp.stage] || 0) + 1;
-    }
-  });
-  
   uniqueStages.sort().forEach(stage => {
     const optionDiv = document.createElement('div');
     optionDiv.className = 'filter-option';
@@ -893,27 +331,11 @@ function populateStageFilter() {
     });
     const label = document.createElement('label');
     label.htmlFor = `stage-${stage}`;
-    // Display stage name if lookup available, otherwise show ID
-    const stageDisplay = stageLookup[stage] || stage;
-    const count = stageCounts[stage] || 0;
-    label.textContent = `${stageDisplay} (${count})`;
+    label.textContent = stage;
     optionDiv.appendChild(checkbox);
     optionDiv.appendChild(label);
     optionsContainer.appendChild(optionDiv);
   });
-  
-  // Add Done button
-  const doneButton = document.createElement('button');
-  doneButton.type = 'button';
-  doneButton.textContent = 'Done';
-  doneButton.className = 'filter-done-button';
-  doneButton.style.cssText = 'width: 100%; margin-top: 8px; padding: 8px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;';
-  doneButton.addEventListener('click', (e) => {
-    e.stopPropagation();
-    document.getElementById('stage-filter-options').classList.remove('show');
-  });
-  optionsContainer.appendChild(doneButton);
-  
   renderSelectedTags('stage-selected-tags', selectedStages, 'stage');
 }
 function updateStageFilterOptions() {
@@ -935,29 +357,6 @@ function setupFilterDropdowns() {
       document.querySelectorAll('.filter-options').forEach(opt => opt.classList.remove('show'));
     }
   });
-}
-async function loadLookups() {
-  // Load stage ID to name and BA ID to name mappings from Admin Sheet
-  try {
-    const apiUrl = getFormAppApiUrl();
-    const response = await fetch(`${apiUrl}/api/lookups`);
-    
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    stageLookup = data.stageLookup || {};
-    baIdLookup = data.baLookup || {};
-    
-    console.log("Stage Lookup loaded:", stageLookup);
-    console.log("BA ID Lookup loaded:", baIdLookup);
-  } catch (error) {
-    console.error("Error loading lookups:", error);
-    // Fallback: empty lookups if API fails
-    stageLookup = {};
-    baIdLookup = {};
-  }
 }
 async function loadBAEmailMap() {
   // Load BA name-to-email mapping from form-app API (Admin Sheet)
@@ -1227,9 +626,9 @@ async function saveGenericMessage(showFeedback = true) {
       if(message) {
         const baDisplayName = Object.keys(baEmailMap).find(name => baEmailMap[name] === saveKey) || saveKey;
         if (apiSuccess) {
-          showSaveStatus(`✓ Message saved for ${baDisplayName}!`, true);
+          showSaveStatus(`âœ“ Message saved for ${baDisplayName}!`, true);
         } else {
-          showSaveStatus(`✓ Message saved for ${baDisplayName} (cached locally)`, true);
+          showSaveStatus(`âœ“ Message saved for ${baDisplayName} (cached locally)`, true);
         }
       } else {
         showSaveStatus('Message cleared', true);
@@ -1254,15 +653,9 @@ function formatEmailsForStorage(emails) {
 function renderOpportunities() {
   const tbody = document.getElementById("opportunities-tbody");
   tbody.innerHTML = "";
-  // Don't show "No opportunities found" while loading
-  if (filteredOpportunities.length === 0 && !isLoadingOpportunities) {
+  if (filteredOpportunities.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #666;">No opportunities found. Try adjusting your filter or check the webhook has data.</td></tr>';
     updateFilterCount();
-    return;
-  }
-  // Show loading state in table if still loading
-  if (isLoadingOpportunities) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 30px; color: #155724; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; font-size: 18px; font-weight: 500;">We are just retrieving the Opportunities from GHL, thank you for your patience</td></tr>';
     return;
   }
   filteredOpportunities.forEach((opp, i) => {
@@ -1275,9 +668,7 @@ function renderOpportunities() {
     const partnerInput = `<input type="text" value="${escapeHtml(partnerName)}" class="partner-name-input">`;
     const emailsDisplay = formatEmailsForDisplay(opp.emails || '');
     const emailInput = `<textarea class="email-input" rows="3" placeholder="Enter email addresses, one per line">${escapeHtml(emailsDisplay)}</textarea>`;
-    // Convert stage ID to stage name using lookup
-    const stageDisplay = stageLookup[opp.stage] || opp.stage || '';
-    tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox"></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(stageDisplay)}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
+    tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox" checked></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(opp.stage || '')}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
     const sel = tr.querySelector(".message-type-select");
     const msgCell = tr.querySelector(".msg-cell");
     sel.addEventListener("change", () => {
@@ -1425,7 +816,7 @@ async function sendEmailsToClients(selectedClients, action) {
       action: action,
       timestamp: new Date().toISOString()
     };
-    const response = await fetch(getModule1Webhook(), {
+    const response = await fetch(MODULE_1_WEBHOOK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -1440,7 +831,7 @@ async function sendEmailsToClients(selectedClients, action) {
       // Show "Processing..." message immediately
       messageArea.innerHTML = `
         <div class="success-message-large" style="background: #e7f3ff; border-color: #007bff; color: #004085;">
-          <div style="font-size: 24px; margin-bottom: 10px;">⏳ Processing...</div>
+          <div style="font-size: 24px; margin-bottom: 10px;">â³ Processing...</div>
           <span style="font-size: 16px; font-weight: normal; margin-top: 10px; display: block;">
             Sending ${selectedClients.length} email(s) to selected clients...
           </span>
@@ -1453,7 +844,7 @@ async function sendEmailsToClients(selectedClients, action) {
         const updateMessage = () => {
           messageArea.innerHTML = `
             <div class="success-message-large" style="background: #fff3cd; border-color: #ffc107; color: #856404;">
-              ✓ Emails are being sent<br>
+              âœ“ Emails are being sent<br>
               <span style="font-size: 16px; font-weight: normal; margin-top: 10px; display: block;">
                 The request has been processed. ${selectedClients.length} email(s) should be sent shortly.<br><br>
                 <strong>Please verify by checking your Gmail Sent Items folder.</strong>
@@ -1490,7 +881,7 @@ async function sendEmailsToClients(selectedClients, action) {
     const messageArea = document.getElementById('message-area');
     messageArea.innerHTML = `
       <div class="error-message" style="padding: 20px; font-size: 16px;">
-        <strong>❌ Error: Failed to send emails</strong><br><br>
+        <strong>âŒ Error: Failed to send emails</strong><br><br>
         <strong>Error Details:</strong><br>
         ${escapeHtml(error.message)}<br><br>
         <strong>What to do:</strong><br>
@@ -1527,7 +918,7 @@ function trackSends(propertyAddress, baName, selectedClients, batchId) {
         batchId: batchId || generateBatchId()
     }));
     
-    fetch(getModule1Webhook(), {
+    fetch(MODULE_1_WEBHOOK, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1565,7 +956,7 @@ function retryFailedTracking() {
     const pending = JSON.parse(localStorage.getItem('pendingTracking') || '[]');
     if (pending.length === 0) return;
     
-    fetch(getModule1Webhook(), {
+    fetch(MODULE_1_WEBHOOK, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1714,6 +1105,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentBAFilter = '';
     applyFilter();
   });
+  document.getElementById("send-standard").addEventListener("click", () => handleAction("send_standard"));
   document.getElementById("action-above").addEventListener("click", () => handleAction("action_selected"));
   let saveTimeout;
   standardMessageTextarea.addEventListener("input", () => {
@@ -1728,6 +1120,4 @@ document.addEventListener("DOMContentLoaded", () => {
     if(e.target.classList.contains("opp-checkbox")) updateSelectAllCheckbox();
   });
 });
-  </script>
-</body>
-</html>
+  
