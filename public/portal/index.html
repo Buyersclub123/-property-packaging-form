@@ -128,6 +128,8 @@
       border-radius: 4px;
       border: 1px solid #ccc;
       font-size: 0.95em;
+      position: relative;
+      z-index: 1;
       background: white;
       cursor: pointer;
       appearance: none;
@@ -152,6 +154,12 @@
     }
     .filter-options.show {
       display: block;
+    }
+    .filter-dropdown:has(.filter-options.show) .filter-select {
+      color: transparent;
+    }
+    .filter-dropdown:has(.filter-options.show) .filter-select option {
+      color: #333;
     }
     .filter-option {
       padding: 8px 12px;
@@ -455,6 +463,7 @@
           <th><input type="checkbox" id="select-all"></th>
           <th>Opportunity Name</th>
           <th class="stage-col">Pipeline Stage</th>
+          <th class="status-col">Status</th>
           <th class="client-name-col">Client Name</th>
           <th class="partner-name-col">Partner Name</th>
           <th class="email-col">Main Contact and Partner Emails</th>
@@ -748,8 +757,10 @@ async function loadOpportunities() {
         follower: opp.follower || '', // Keep for backward compatibility
         assignedBA: opp.assignedBA || '', // NEW - primary field
         stage: opp.stage || '',
+        status: opp.status || '', // NEW - opportunity status
       };
-    }).filter(opp => opp.id && opp.id.length > 0);
+    }).filter(opp => opp.id && opp.id.length > 0)
+      .filter(opp => (opp.status || '').toLowerCase() === 'open'); // Filter to only show "open" status
     
     if (allOpportunities.length === 0) {
       isLoadingOpportunities = false;
@@ -766,6 +777,7 @@ async function loadOpportunities() {
     populateStageFilter();
     await loadBAEmailMap(); // Load BA name-to-email mapping
     populateSendFromDropdown();
+    await logPortalAccess(); // Log which BA is accessing the portal
     isLoadingOpportunities = false;
     renderOpportunities();
     updateFilterCount();
@@ -990,6 +1002,43 @@ async function loadBAEmailMap() {
     console.error("Error loading BA email map:", error);
     // Fallback: use BA names as emails if mapping fails
     baEmailMap = {};
+  }
+}
+async function logPortalAccess() {
+  // Log which BA is accessing the portal
+  try {
+    // Try to identify BA from URL params or current filter
+    let friendlyName = '';
+    let ghlUserId = '';
+    let baEmail = '';
+    
+    // Get BA from current filter or URL
+    if (currentBAFilter) {
+      friendlyName = currentBAFilter;
+      baEmail = baEmailMap[currentBAFilter] || '';
+      ghlUserId = baGhlUserIdMap[currentBAFilter] || '';
+    }
+    
+    // If we have BA info, log the access
+    if (friendlyName || ghlUserId) {
+      const apiUrl = getFormAppApiUrl();
+      await fetch(`${apiUrl}/api/portal-access`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          friendlyName,
+          ghlUserId,
+          baEmail,
+          timestamp: new Date().toISOString()
+        })
+      });
+      console.log("Portal access logged for:", friendlyName || ghlUserId);
+    }
+  } catch (error) {
+    console.error("Error logging portal access:", error);
+    // Don't block portal loading if logging fails
   }
 }
 
@@ -1278,8 +1327,9 @@ function renderOpportunities() {
     // Convert stage ID to stage name using lookup (trim whitespace)
     const stageId = (opp.stage || '').trim();
     const stageDisplay = stageLookup[stageId] || stageId || '';
+    const statusDisplay = (opp.status || '').toLowerCase();
     if (i === 0) console.log('First opportunity stage lookup:', { stageId, found: stageLookup[stageId], stageDisplay, lookupSize: Object.keys(stageLookup).length, hasLookup: !!stageLookup[stageId] });
-    tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox"></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(stageDisplay)}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
+    tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox"></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(stageDisplay)}</td><td class="status-col">${escapeHtml(statusDisplay)}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
     const sel = tr.querySelector(".message-type-select");
     const msgCell = tr.querySelector(".msg-cell");
     sel.addEventListener("change", () => {

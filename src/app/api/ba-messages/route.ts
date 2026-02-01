@@ -193,11 +193,14 @@ export async function POST(request: Request) {
     );
     
     if (friendlyNameIndex === -1 || ghlUserIdIndex === -1 || messageIndex === -1) {
+      console.error(`Column matching failed. Headers: ${headers.join(', ')}, Indices: friendlyName=${friendlyNameIndex}, ghlUserId=${ghlUserIdIndex}, message=${messageIndex}`);
       return NextResponse.json(
-        { error: 'Required columns not found in sheet' },
+        { error: 'Required columns not found in sheet', headers: headers, indices: { friendlyNameIndex, ghlUserIdIndex, messageIndex } },
         { status: 500 }
       );
     }
+    
+    console.log(`Saving message for BA: ${friendlyName} (GHL ID: ${ghlUserId})`);
     
     // Find existing row
     let rowIndex = -1;
@@ -222,6 +225,7 @@ export async function POST(request: Request) {
           values: [[friendlyName, ghlUserId, messageValue]]
         }
       });
+      console.log(`Updated row ${rowIndex} for BA: ${friendlyName}`);
     } else {
       // Append new row
       await sheets.spreadsheets.values.append({
@@ -233,11 +237,14 @@ export async function POST(request: Request) {
           values: [[friendlyName, ghlUserId, messageValue]]
         }
       });
+      console.log(`Appended new row for BA: ${friendlyName}`);
     }
     
     return NextResponse.json({ 
       success: true,
-      message: 'Message saved successfully'
+      message: 'Message saved successfully',
+      friendlyName,
+      ghlUserId
     });
   } catch (error) {
     console.error('Error saving BA message to Google Sheet:', error);
