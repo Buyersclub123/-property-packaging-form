@@ -8,12 +8,13 @@
  * To revert: Check git history or restore from backup
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useFormStore } from '@/store/formStore';
 import { getStashData } from '@/lib/stash';
 import { geocodeAddress } from '@/lib/geocoder';
 import { YesNo, RiskOverlays } from '@/types/form';
 import { getSourcerNames } from '@/lib/sourcerList';
+import { handleMobileInput, formatAustralianMobile, normalizeMobileForStorage, isValidMobileInput } from '@/lib/phoneFormatter';
 // TODO: Address validation with suggestions - to be implemented later
 
 function StashStatus() {
@@ -404,7 +405,34 @@ export function Step0AddressAndRisk() {
   const [addressFieldsEditable, setAddressFieldsEditable] = useState(address.addressFieldsEditable || false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [sourcerOptions, setSourcerOptions] = useState<string[]>([]);
+  const [mobileDisplayValue, setMobileDisplayValue] = useState(sellingAgentMobile || '');
+  const isMobileEditingRef = useRef(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   
+  // Sync mobile display value when formData changes (only when not actively editing)
+  useEffect(() => {
+    if (!isMobileEditingRef.current && sellingAgentMobile) {
+      // If it's already in +61 format, show it in readable format for editing
+      if (sellingAgentMobile.startsWith('+61')) {
+        // Convert +61 450 581 822 back to 0450 581 822 for editing
+        const digits = sellingAgentMobile.replace(/\D/g, '');
+        if (digits.startsWith('61') && digits.length === 11) {
+          const mobileDigits = '0' + digits.substring(2);
+          setMobileDisplayValue(handleMobileInput(mobileDigits));
+        } else {
+          setMobileDisplayValue(sellingAgentMobile);
+        }
+      } else if (sellingAgentMobile.toUpperCase() === 'TBC') {
+        setMobileDisplayValue('TBC');
+      } else {
+        // Show in input format (with spaces)
+        setMobileDisplayValue(handleMobileInput(sellingAgentMobile));
+      }
+    } else if (!isMobileEditingRef.current && !sellingAgentMobile) {
+      setMobileDisplayValue('');
+    }
+  }, [sellingAgentMobile]);
+
   useEffect(() => {
     // Sync state from address data
     if (address.addressFieldsEditable !== undefined) {
@@ -976,15 +1004,17 @@ export function Step0AddressAndRisk() {
   };
 
   const handleProceedToStep2 = () => {
+    setValidationError(null); // Clear any previous errors
+    
     // Validate that Address is filled (required)
     if (!address?.propertyAddress || address.propertyAddress.trim() === '') {
-      alert('Please enter a property address before proceeding.');
+      setValidationError('Please enter a property address before proceeding.');
       return;
     }
     
     // Validate that all risk overlay fields are filled (required)
     if (!riskOverlays?.zoning || riskOverlays.zoning.trim() === '') {
-      alert('Please enter the Zoning field before proceeding.');
+      setValidationError('Please enter the Zoning field before proceeding.');
       // Focus on zoning input
       const zoningInput = document.getElementById('zoning-input') as HTMLInputElement;
       if (zoningInput) {
@@ -997,13 +1027,46 @@ export function Step0AddressAndRisk() {
     if (!riskOverlays?.flood || !riskOverlays?.bushfire || !riskOverlays?.mining || 
         !riskOverlays?.otherOverlay || !riskOverlays?.specialInfrastructure || 
         !riskOverlays?.dueDiligenceAcceptance) {
-      alert('Please fill in all Risk Overlay fields (Flood, Bushfire, Mining, Other Overlay, Special Infrastructure, and Due Diligence Acceptance) before proceeding.');
+      setValidationError('Please fill in all Risk Overlay fields (Flood, Bushfire, Mining, Other Overlay, Special Infrastructure, and Due Diligence Acceptance) before proceeding.');
       return;
     }
     
     // Validate that Sourcer is filled (required)
     if (!sourcer || sourcer.trim() === '') {
-      alert('Please enter the Sourcer name before proceeding.');
+      setValidationError('Please enter the Sourcer name before proceeding.');
+      return;
+    }
+    
+    // Validate Selling Agent fields (all required)
+    if (!sellingAgentName || sellingAgentName.trim() === '') {
+      setValidationError('Selling Agent Name is required. Please enter a name or "TBC".');
+      // Scroll to selling agent section
+      setTimeout(() => {
+        const fieldsSection = document.querySelector('[data-fields-section]');
+        if (fieldsSection) {
+          fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+      return;
+    }
+    if (!sellingAgentEmail || sellingAgentEmail.trim() === '') {
+      setValidationError('Selling Agent Email is required. Please enter an email address or "TBC".');
+      setTimeout(() => {
+        const fieldsSection = document.querySelector('[data-fields-section]');
+        if (fieldsSection) {
+          fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+      return;
+    }
+    if (!sellingAgentMobile || sellingAgentMobile.trim() === '') {
+      setValidationError('Selling Agent Mobile is required. Please enter a mobile number or "TBC".');
+      setTimeout(() => {
+        const fieldsSection = document.querySelector('[data-fields-section]');
+        if (fieldsSection) {
+          fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
       return;
     }
     
@@ -1720,22 +1783,26 @@ export function Step0AddressAndRisk() {
 
           {/* Due Diligence Acceptance */}
           <div className="pt-4 border-t">
-            <label className="label-field">Due Diligence Acceptance *</label>
-            <select
-              value={riskOverlays.dueDiligenceAcceptance}
-              onChange={(e) => handleOverlayChange('dueDiligenceAcceptance', e.target.value as YesNo)}
-              className="input-field"
-              required
-            >
-              <option value="">-- Select --</option>
-              <option value="No">No</option>
-              <option value="Yes">Yes</option>
-            </select>
-            {riskOverlays.dueDiligenceAcceptance === 'No' && (
-              <p className="text-red-600 text-sm mt-2 font-semibold">
-                ⚠️ Submission will be blocked if Due Diligence Acceptance is No
-              </p>
-            )}
+            <div className="p-4 bg-green-50 border-2 border-green-400 rounded-lg">
+              <label className="label-field text-green-800 font-semibold">
+                Due Diligence Acceptance *
+              </label>
+              <select
+                value={riskOverlays.dueDiligenceAcceptance}
+                onChange={(e) => handleOverlayChange('dueDiligenceAcceptance', e.target.value as YesNo)}
+                className="input-field border-green-400 focus:ring-green-500 focus:border-green-500"
+                required
+              >
+                <option value="">-- Select --</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+              {riskOverlays.dueDiligenceAcceptance === 'No' && (
+                <p className="text-red-600 text-sm mt-2 font-semibold">
+                  ⚠️ Submission will be blocked if Due Diligence Acceptance is No
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1782,40 +1849,127 @@ export function Step0AddressAndRisk() {
 
             {/* Selling Agent Fields */}
             <div>
-              <label className="label-field">Selling Agent</label>
+              <label className="label-field">Selling Agent *</label>
               <p className="text-xs text-gray-500 mb-2">
-                Enter agent details (all fields optional - people are often unable to get this information)
+                Enter agent details (all fields required - use "TBC" if information is not available)
               </p>
               <div className="space-y-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Name</label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Name <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     value={sellingAgentName || ''}
-                    onChange={(e) => updateFormData({ sellingAgentName: e.target.value })}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      updateFormData({ sellingAgentName: inputValue });
+                    }}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim();
+                      // Normalize: if "TBC" (case insensitive), store as "TBC", otherwise keep as-is
+                      if (trimmed.toUpperCase() === 'TBC') {
+                        updateFormData({ sellingAgentName: 'TBC' });
+                      } else if (trimmed) {
+                        // Keep name as-is (preserve capitalization)
+                        updateFormData({ sellingAgentName: trimmed });
+                      }
+                    }}
                     className="input-field"
-                    placeholder="John Smith"
+                    placeholder="John Smith or TBC"
+                    required
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Email <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="email"
                     value={sellingAgentEmail || ''}
-                    onChange={(e) => updateFormData({ sellingAgentEmail: e.target.value })}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      updateFormData({ sellingAgentEmail: inputValue });
+                    }}
+                    onBlur={(e) => {
+                      const trimmed = e.target.value.trim();
+                      // Normalize: if "TBC" (case insensitive), store as "TBC", otherwise keep as-is
+                      if (trimmed.toUpperCase() === 'TBC') {
+                        updateFormData({ sellingAgentEmail: 'TBC' });
+                      } else if (trimmed) {
+                        // Lowercase email addresses (but not TBC)
+                        updateFormData({ sellingAgentEmail: trimmed.toLowerCase() });
+                      }
+                    }}
                     className="input-field"
-                    placeholder="john.smith@email.com"
+                    placeholder="john.smith@email.com or TBC"
+                    required
                   />
+                  {sellingAgentEmail && 
+                   sellingAgentEmail.toUpperCase() !== 'TBC' && 
+                   !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sellingAgentEmail) && (
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Please enter a valid email address (e.g., john.smith@email.com) or "TBC"
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Mobile</label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Mobile <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="tel"
-                    value={sellingAgentMobile || ''}
-                    onChange={(e) => updateFormData({ sellingAgentMobile: e.target.value })}
+                    value={mobileDisplayValue}
+                    onFocus={() => {
+                      isMobileEditingRef.current = true;
+                    }}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      
+                      // Format as user types (handleMobileInput will handle validation)
+                      const formatted = handleMobileInput(inputValue);
+                      setMobileDisplayValue(formatted);
+                      
+                      // Store the formatted value (will be normalized on blur)
+                      updateFormData({ sellingAgentMobile: formatted });
+                    }}
+                    onBlur={(e) => {
+                      isMobileEditingRef.current = false;
+                      // On blur, convert to final format (+61 format or TBC)
+                      const finalValue = normalizeMobileForStorage(e.target.value);
+                      setMobileDisplayValue(finalValue);
+                      updateFormData({ sellingAgentMobile: finalValue });
+                    }}
+                    onKeyDown={(e) => {
+                      // Allow backspace, delete, tab, escape, enter, and arrow keys
+                      if ([8, 9, 27, 13, 46, 37, 38, 39, 40].indexOf(e.keyCode) !== -1 ||
+                          // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                          (e.keyCode === 65 && e.ctrlKey === true) ||
+                          (e.keyCode === 67 && e.ctrlKey === true) ||
+                          (e.keyCode === 86 && e.ctrlKey === true) ||
+                          (e.keyCode === 88 && e.ctrlKey === true)) {
+                        return;
+                      }
+                      // Allow numbers
+                      if ((e.keyCode >= 48 && e.keyCode <= 57) || (e.keyCode >= 96 && e.keyCode <= 105)) {
+                        return;
+                      }
+                      // Allow T, B, C for "TBC"
+                      if (e.keyCode === 84 || e.keyCode === 66 || e.keyCode === 67) {
+                        return;
+                      }
+                      // Block everything else
+                      e.preventDefault();
+                    }}
                     className="input-field"
-                    placeholder="0412 345 678"
+                    placeholder="0450 581 822 or TBC"
+                    required
                   />
+                  {mobileDisplayValue && mobileDisplayValue.toUpperCase() !== 'TBC' && !isValidMobileInput(mobileDisplayValue) && (
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Please enter a valid Australian mobile number (e.g., 0450 581 822) or "TBC"
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1825,30 +1979,43 @@ export function Step0AddressAndRisk() {
 
       {/* Reset Form and Proceed Buttons - Show below fields when packaging enabled */}
       {packagingEnabled && (
-        <div className="pt-6 border-t flex gap-4">
-          <button
-            onClick={() => {
-              if (confirm('Are you sure you want to reset the form? All data will be lost.')) {
-                const store = useFormStore.getState();
-                store.resetForm();
-                // Also clear Step 2 data
-                store.clearStep2Data();
-                setPackagingEnabled(false);
-                if (typeof window !== 'undefined') {
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+        <div className="pt-6 border-t">
+          {validationError && (
+            <div className="mb-4 p-4 bg-red-50 border-2 border-red-400 rounded-lg">
+              <div className="flex items-start space-x-2">
+                <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm font-medium text-red-800">{validationError}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                if (confirm('Are you sure you want to reset the form? All data will be lost.')) {
+                  const store = useFormStore.getState();
+                  store.resetForm();
+                  // Also clear Step 2 data
+                  store.clearStep2Data();
+                  setPackagingEnabled(false);
+                  setValidationError(null);
+                  if (typeof window !== 'undefined') {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
                 }
-              }
-            }}
-            className="btn-secondary flex-1"
-          >
-            Reset Form
-          </button>
-          <button
-            onClick={handleProceedToStep2}
-            className="btn-primary flex-1 text-lg py-3"
-          >
-            Proceed to Step 2
-          </button>
+              }}
+              className="btn-secondary flex-1"
+            >
+              Reset Form
+            </button>
+            <button
+              onClick={handleProceedToStep2}
+              className="btn-primary flex-1 text-lg py-3"
+            >
+              Proceed to Step 2
+            </button>
+          </div>
         </div>
       )}
     </div>
