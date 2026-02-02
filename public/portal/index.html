@@ -712,6 +712,7 @@ async function loadOpportunities() {
     }
     
     const text = await response.text();
+    console.log('Webhook raw response:', text.substring(0, 500)); // Log first 500 chars
     let data;
     try {
       data = JSON.parse(text);
@@ -732,6 +733,9 @@ async function loadOpportunities() {
       data = [data];
     }
     
+    console.log('Parsed webhook data:', data);
+    console.log('Number of opportunities received:', data ? data.length : 0);
+    
     if (!data || data.length === 0) {
       isLoadingOpportunities = false;
       showMessage("No opportunities found in webhook response.", 'error');
@@ -740,6 +744,13 @@ async function loadOpportunities() {
       renderOpportunities();
       updateFilterCount();
       return;
+    }
+    
+    // Log first opportunity to see its structure
+    if (data.length > 0) {
+      console.log('First opportunity structure:', JSON.stringify(data[0], null, 2));
+      console.log('First opportunity ID:', data[0].id, 'Type:', typeof data[0].id);
+      console.log('First opportunity status:', data[0].status);
     }
     
     allOpportunities = data.map(opp => {
@@ -759,12 +770,32 @@ async function loadOpportunities() {
         stage: opp.stage || '',
         status: opp.status || '', // NEW - opportunity status
       };
-    }).filter(opp => opp.id && opp.id.length > 0)
-      .filter(opp => (opp.status || '').toLowerCase() === 'open'); // Filter to only show "open" status
+    });
+    
+    console.log('Opportunities after mapping:', allOpportunities.length);
+    console.log('Opportunities with IDs:', allOpportunities.filter(opp => opp.id && opp.id.length > 0).length);
+    console.log('Opportunities with open status:', allOpportunities.filter(opp => (opp.status || '').toLowerCase() === 'open').length);
+    
+    const beforeIdFilter = allOpportunities.length;
+    allOpportunities = allOpportunities.filter(opp => opp.id && opp.id.length > 0);
+    const afterIdFilter = allOpportunities.length;
+    const beforeStatusFilter = allOpportunities.length;
+    allOpportunities = allOpportunities.filter(opp => (opp.status || '').toLowerCase() === 'open');
+    const afterStatusFilter = allOpportunities.length;
+    
+    console.log(`Filtering: ${beforeIdFilter} -> ${afterIdFilter} (ID filter) -> ${afterStatusFilter} (status filter)`);
     
     if (allOpportunities.length === 0) {
       isLoadingOpportunities = false;
-      showMessage("No valid opportunities found. Please check that opportunity IDs are present.", 'error');
+      let errorMsg = "No valid opportunities found. ";
+      if (afterIdFilter === 0 && beforeIdFilter > 0) {
+        errorMsg += "All opportunities are missing IDs. ";
+      }
+      if (afterStatusFilter === 0 && beforeStatusFilter > 0) {
+        errorMsg += "All opportunities have non-open status. ";
+      }
+      errorMsg += "Please check the browser console for details.";
+      showMessage(errorMsg, 'error');
       filteredOpportunities = [];
       renderOpportunities();
       updateFilterCount();
@@ -1429,6 +1460,12 @@ function validateSelections(action) {
     showMessage("Please select at least one opportunity.", 'error');
     return null;
   }
+  // Check for missing opportunity IDs
+  const missingIds = selected.filter(opp => !opp.id || opp.id.trim() === '');
+  if(missingIds.length > 0) {
+    showMessage(`Error: Some selected opportunities are missing IDs. This usually means Make.com Scenario 5 is using Contact IDs instead of Opportunity IDs. Please check the field mapping in Make.com Scenario 5, Module 59 - the 'id' field should be {{10.id}}, not {{11.id}}.`, 'error');
+    return null;
+  }
   const invalidEmails = selected.filter(opp => !opp.emails || opp.emails.length === 0);
   if(invalidEmails.length > 0) {
     showMessage(`Please ensure all selected opportunities have valid email addresses.`, 'error');
@@ -1465,9 +1502,12 @@ async function sendEmailsToClients(selectedClients, action) {
       }
     }
     
+    // Use the first selected opportunity's ID (Make.com expects opportunity ID, not property record ID)
+    const firstOpportunityId = selectedClients.length > 0 && selectedClients[0].id ? selectedClients[0].id : propertyInfo.recordId;
+    
     const payload = {
       source: "portal",
-      id: propertyInfo.recordId,
+      id: firstOpportunityId, // Opportunity ID (not property record ID)
       propertyId: propertyInfo.propertyId,
       propertyAddress: propertyInfo.propertyAddress,
       baEmail: baIdentifier,
