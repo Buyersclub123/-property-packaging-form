@@ -1702,6 +1702,7 @@ function trackSends(propertyAddress, baName, selectedClients, batchId) {
         },
         body: JSON.stringify({
             action: 'track_sends',
+            source: 'portal',
             records: trackingRecords
         })
     })
