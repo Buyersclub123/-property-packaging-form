@@ -1536,10 +1536,30 @@ async function sendEmailsToClients(selectedClients, action) {
       showMessage("Unable to identify BA. Please ensure you're accessing via email link or have selected a BA filter.", 'error');
       return;
     }
-    // Determine "Send From" email - use manual input, dropdown, or fallback to BA identifier
+    
+    // Look up BA email from baEmailMap if baEmail is not provided or is a name (not an email)
+    // First check if selectedSendFromEmail already has an email (it's already validated)
+    let baEmailAddress = selectedSendFromEmail && selectedSendFromEmail.includes('@') 
+      ? selectedSendFromEmail 
+      : baEmail;
+    
+    // If still not an email, look it up from baEmailMap
+    if (!baEmailAddress || !baEmailAddress.includes('@')) {
+      // If baEmail is empty or doesn't look like an email, try to look it up from baEmailMap
+      if (currentBAFilter && baEmailMap[currentBAFilter]) {
+        baEmailAddress = baEmailMap[currentBAFilter];
+      } else if (baEmailMap[baIdentifier]) {
+        baEmailAddress = baEmailMap[baIdentifier];
+      } else {
+        // Fallback: use baIdentifier (might be a name, but we'll send it)
+        baEmailAddress = baIdentifier;
+      }
+    }
+    
+    // Determine "Send From" email - use manual input, dropdown, or fallback to BA email
     const sendOnBehalfCheckbox = document.getElementById('send-on-behalf-checkbox');
     const sendFromManualInput = document.getElementById('send-from-manual');
-    let sendFromEmail = baIdentifier || baEmail;
+    let sendFromEmail = baEmailAddress;
     
     if (sendOnBehalfCheckbox && sendOnBehalfCheckbox.checked) {
       // Check manual input first, then dropdown, then fallback
@@ -1555,7 +1575,7 @@ async function sendEmailsToClients(selectedClients, action) {
       id: propertyInfo.recordId, // Property record ID (as Module 2a expects)
       propertyId: propertyInfo.propertyId,
       propertyAddress: propertyInfo.propertyAddress,
-      baEmail: baIdentifier,
+      baEmail: baEmailAddress, // Use looked-up email address, not name
       baName: currentBAFilter || baIdentifier,
       sendFromEmail: sendFromEmail, // New field for "Send From" email
       selectedClients: selectedClients,
@@ -1670,6 +1690,7 @@ function trackSends(propertyAddress, baName, selectedClients, batchId) {
         baName: baName || '',
         clientName: client.clientName || '',
         opportunityName: client.name || '',
+        emails: client.emails || [],
         timestamp: timestamp,
         batchId: batchId || generateBatchId()
     }));
