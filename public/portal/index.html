@@ -715,18 +715,53 @@ async function loadOpportunities() {
     console.log('Webhook raw response:', text.substring(0, 500)); // Log first 500 chars
     let data;
     try {
+      // First try parsing as JSON array or single object
       data = JSON.parse(text);
     } catch (e) {
-      const parts = text.split('}{');
-      if (parts.length > 1) {
-        parts[0] = parts[0] + '}';
-        for (let i = 1; i < parts.length - 1; i++) {
-          parts[i] = '{' + parts[i] + '}';
+      // If that fails, try to handle concatenated JSON objects
+      console.log('Initial parse failed, trying to split concatenated JSON objects');
+      try {
+        // Remove any leading/trailing whitespace
+        const cleaned = text.trim();
+        
+        // Check if it's multiple objects concatenated (starts with { and has }{ in the middle)
+        if (cleaned.startsWith('{') && cleaned.includes('}{')) {
+          const parts = cleaned.split('}{');
+          // Fix the first part (add closing brace if needed)
+          if (!parts[0].endsWith('}')) {
+            parts[0] = parts[0] + '}';
+          }
+          // Fix middle parts (add both braces)
+          for (let i = 1; i < parts.length - 1; i++) {
+            parts[i] = '{' + parts[i] + '}';
+          }
+          // Fix last part (add opening brace if needed)
+          if (parts.length > 1) {
+            if (!parts[parts.length - 1].startsWith('{')) {
+              parts[parts.length - 1] = '{' + parts[parts.length - 1];
+            }
+            if (!parts[parts.length - 1].endsWith('}')) {
+              parts[parts.length - 1] = parts[parts.length - 1] + '}';
+            }
+          }
+          
+          // Parse each part
+          data = parts.map(function(obj) {
+            try {
+              return JSON.parse(obj);
+            } catch (parseErr) {
+              console.error('Failed to parse JSON part:', obj.substring(0, 100), parseErr);
+              return null;
+            }
+          }).filter(obj => obj !== null); // Remove any failed parses
+          
+          console.log('Successfully parsed', data.length, 'concatenated JSON objects');
+        } else {
+          throw new Error('Invalid JSON format - not a valid JSON object or array, and not concatenated objects');
         }
-        parts[parts.length - 1] = '{' + parts[parts.length - 1];
-        data = parts.map(function(obj) { return JSON.parse(obj); });
-      } else {
-        throw new Error('Invalid JSON format');
+      } catch (splitErr) {
+        console.error('Failed to parse webhook response:', splitErr);
+        throw new Error('Invalid JSON format: ' + splitErr.message);
       }
     }
     if (data && !Array.isArray(data)) {
