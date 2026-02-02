@@ -1522,6 +1522,15 @@ function validateSelections(action) {
 async function sendEmailsToClients(selectedClients, action) {
   showMessage(`Sending emails to ${selectedClients.length} client(s)...`, 'info');
   try {
+    // Validate recordId is present
+    if (!propertyInfo.recordId || propertyInfo.recordId.trim() === '') {
+      console.error('ERROR: propertyInfo.recordId is missing or empty!');
+      console.error('propertyInfo:', propertyInfo);
+      console.error('URL params:', getURLParams());
+      showMessage("Error: Property record ID is missing from the URL. Please ensure you're accessing the portal via the correct link.", 'error');
+      return;
+    }
+    
     const baIdentifier = baEmail || currentBAFilter;
     if (!baIdentifier) {
       showMessage("Unable to identify BA. Please ensure you're accessing via email link or have selected a BA filter.", 'error');
@@ -1541,12 +1550,9 @@ async function sendEmailsToClients(selectedClients, action) {
       }
     }
     
-    // Use the first selected opportunity's ID (Make.com expects opportunity ID, not property record ID)
-    const firstOpportunityId = selectedClients.length > 0 && selectedClients[0].id ? selectedClients[0].id : propertyInfo.recordId;
-    
     const payload = {
       source: "portal",
-      id: firstOpportunityId, // Opportunity ID (not property record ID)
+      id: propertyInfo.recordId, // Property record ID (as Module 2a expects)
       propertyId: propertyInfo.propertyId,
       propertyAddress: propertyInfo.propertyAddress,
       baEmail: baIdentifier,
@@ -1556,6 +1562,16 @@ async function sendEmailsToClients(selectedClients, action) {
       action: action,
       timestamp: new Date().toISOString()
     };
+    
+    console.log('=== SENDING TO MODULE 1 WEBHOOK ===');
+    console.log('Webhook URL:', getModule1Webhook());
+    console.log('Property Info (from URL):', propertyInfo);
+    console.log('Payload id field (value):', payload.id);
+    console.log('Payload id field (type):', typeof payload.id);
+    console.log('Payload id field (length):', payload.id ? payload.id.length : 0);
+    console.log('Full Payload:', JSON.stringify(payload, null, 2));
+    console.log('===================================');
+    
     const response = await fetch(getModule1Webhook(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
