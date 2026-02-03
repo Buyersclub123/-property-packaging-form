@@ -128,8 +128,6 @@
       border-radius: 4px;
       border: 1px solid #ccc;
       font-size: 0.95em;
-      position: relative;
-      z-index: 1;
       background: white;
       cursor: pointer;
       appearance: none;
@@ -154,12 +152,6 @@
     }
     .filter-options.show {
       display: block;
-    }
-    .filter-dropdown:has(.filter-options.show) .filter-select {
-      color: transparent;
-    }
-    .filter-dropdown:has(.filter-options.show) .filter-select option {
-      color: #333;
     }
     .filter-option {
       padding: 8px 12px;
@@ -463,7 +455,6 @@
           <th><input type="checkbox" id="select-all"></th>
           <th>Opportunity Name</th>
           <th class="stage-col">Pipeline Stage</th>
-          <th class="status-col">Status</th>
           <th class="client-name-col">Client Name</th>
           <th class="partner-name-col">Partner Name</th>
           <th class="email-col">Main Contact and Partner Emails</th>
@@ -545,8 +536,12 @@ function getModule1Webhook() {
 }
 
 function getFormAppApiUrl() {
-  // Use same origin (same domain) as portal - API is on same Next.js app
-  return window.location.origin;
+  const params = new URLSearchParams(window.location.search);
+  const urlParam = params.get('apiUrl');
+  if (urlParam) return urlParam;
+  
+  // Fallback: check for config object or use default
+  return window.PORTAL_CONFIG?.formAppApiUrl || 'https://property-review-form.vercel.app';
 }
 let allOpportunities = [];
 let filteredOpportunities = [];
@@ -634,12 +629,9 @@ function renderSelectedTags(containerId, selectedItems, type) {
     const tag = document.createElement('div');
     tag.className = 'selected-tag';
     let displayValue = item === '' || item === null ? '(blank)' : item;
-    // Use stage name lookup if available (trim whitespace)
-    if (type === 'stage') {
-      const stageId = (item || '').trim();
-      if (stageLookup[stageId]) {
-        displayValue = stageLookup[stageId];
-      }
+    // Use stage name lookup if available
+    if (type === 'stage' && stageLookup[item]) {
+      displayValue = stageLookup[item];
     }
     tag.innerHTML = `<span>${escapeHtml(displayValue)}</span><span class="remove" data-type="${type}" data-value="${escapeHtml(item)}">×</span>`;
     container.appendChild(tag);
@@ -712,68 +704,25 @@ async function loadOpportunities() {
     }
     
     const text = await response.text();
-    console.log('Webhook raw response:', text.substring(0, 500)); // Log first 500 chars
     let data;
     try {
-      // First try parsing as JSON array or single object
       data = JSON.parse(text);
     } catch (e) {
-      // If that fails, try to handle concatenated JSON objects
-      console.log('Initial parse failed, trying to split concatenated JSON objects');
-      try {
-        // Remove any leading/trailing whitespace
-        const cleaned = text.trim();
-        
-        // Check if it's multiple objects concatenated (starts with { and has closing/opening braces)
-        // Match: } followed by optional whitespace/newlines followed by {
-        if (cleaned.startsWith('{') && /}\s*{/.test(cleaned)) {
-          // Split on } followed by optional whitespace and {
-          const parts = cleaned.split(/}\s*{/);
-          console.log('Split into', parts.length, 'parts');
-          
-          // Fix the first part (add closing brace if needed)
-          if (!parts[0].endsWith('}')) {
-            parts[0] = parts[0] + '}';
-          }
-          // Fix middle parts (add both braces)
-          for (let i = 1; i < parts.length - 1; i++) {
-            parts[i] = '{' + parts[i] + '}';
-          }
-          // Fix last part (add opening brace if needed)
-          if (parts.length > 1) {
-            if (!parts[parts.length - 1].startsWith('{')) {
-              parts[parts.length - 1] = '{' + parts[parts.length - 1];
-            }
-            if (!parts[parts.length - 1].endsWith('}')) {
-              parts[parts.length - 1] = parts[parts.length - 1] + '}';
-            }
-          }
-          
-          // Parse each part
-          data = parts.map(function(obj, index) {
-            try {
-              return JSON.parse(obj);
-            } catch (parseErr) {
-              console.error('Failed to parse JSON part', index + ':', obj.substring(0, 100), parseErr);
-              return null;
-            }
-          }).filter(obj => obj !== null); // Remove any failed parses
-          
-          console.log('Successfully parsed', data.length, 'concatenated JSON objects');
-        } else {
-          throw new Error('Invalid JSON format - not a valid JSON object or array, and not concatenated objects');
+      const parts = text.split('}{');
+      if (parts.length > 1) {
+        parts[0] = parts[0] + '}';
+        for (let i = 1; i < parts.length - 1; i++) {
+          parts[i] = '{' + parts[i] + '}';
         }
-      } catch (splitErr) {
-        console.error('Failed to parse webhook response:', splitErr);
-        throw new Error('Invalid JSON format: ' + splitErr.message);
+        parts[parts.length - 1] = '{' + parts[parts.length - 1];
+        data = parts.map(function(obj) { return JSON.parse(obj); });
+      } else {
+        throw new Error('Invalid JSON format');
       }
     }
     if (data && !Array.isArray(data)) {
       data = [data];
     }
-    
-    console.log('Parsed webhook data:', data);
-    console.log('Number of opportunities received:', data ? data.length : 0);
     
     if (!data || data.length === 0) {
       isLoadingOpportunities = false;
@@ -783,13 +732,6 @@ async function loadOpportunities() {
       renderOpportunities();
       updateFilterCount();
       return;
-    }
-    
-    // Log first opportunity to see its structure
-    if (data.length > 0) {
-      console.log('First opportunity structure:', JSON.stringify(data[0], null, 2));
-      console.log('First opportunity ID:', data[0].id, 'Type:', typeof data[0].id);
-      console.log('First opportunity status:', data[0].status);
     }
     
     allOpportunities = data.map(opp => {
@@ -807,34 +749,12 @@ async function loadOpportunities() {
         follower: opp.follower || '', // Keep for backward compatibility
         assignedBA: opp.assignedBA || '', // NEW - primary field
         stage: opp.stage || '',
-        status: opp.status || '', // NEW - opportunity status
       };
-    });
-    
-    console.log('Opportunities after mapping:', allOpportunities.length);
-    console.log('Opportunities with IDs:', allOpportunities.filter(opp => opp.id && opp.id.length > 0).length);
-    console.log('Opportunities with open status:', allOpportunities.filter(opp => (opp.status || '').toLowerCase() === 'open').length);
-    
-    const beforeIdFilter = allOpportunities.length;
-    allOpportunities = allOpportunities.filter(opp => opp.id && opp.id.length > 0);
-    const afterIdFilter = allOpportunities.length;
-    const beforeStatusFilter = allOpportunities.length;
-    allOpportunities = allOpportunities.filter(opp => (opp.status || '').toLowerCase() === 'open');
-    const afterStatusFilter = allOpportunities.length;
-    
-    console.log(`Filtering: ${beforeIdFilter} -> ${afterIdFilter} (ID filter) -> ${afterStatusFilter} (status filter)`);
+    }).filter(opp => opp.id && opp.id.length > 0);
     
     if (allOpportunities.length === 0) {
       isLoadingOpportunities = false;
-      let errorMsg = "No valid opportunities found. ";
-      if (afterIdFilter === 0 && beforeIdFilter > 0) {
-        errorMsg += "All opportunities are missing IDs. ";
-      }
-      if (afterStatusFilter === 0 && beforeStatusFilter > 0) {
-        errorMsg += "All opportunities have non-open status. ";
-      }
-      errorMsg += "Please check the browser console for details.";
-      showMessage(errorMsg, 'error');
+      showMessage("No valid opportunities found. Please check that opportunity IDs are present.", 'error');
       filteredOpportunities = [];
       renderOpportunities();
       updateFilterCount();
@@ -847,7 +767,6 @@ async function loadOpportunities() {
     populateStageFilter();
     await loadBAEmailMap(); // Load BA name-to-email mapping
     populateSendFromDropdown();
-    await logPortalAccess(); // Log which BA is accessing the portal
     isLoadingOpportunities = false;
     renderOpportunities();
     updateFilterCount();
@@ -974,9 +893,8 @@ function populateStageFilter() {
     });
     const label = document.createElement('label');
     label.htmlFor = `stage-${stage}`;
-    // Display stage name if lookup available, otherwise show ID (trim whitespace)
-    const stageId = (stage || '').trim();
-    const stageDisplay = stageLookup[stageId] || stageId;
+    // Display stage name if lookup available, otherwise show ID
+    const stageDisplay = stageLookup[stage] || stage;
     const count = stageCounts[stage] || 0;
     label.textContent = `${stageDisplay} (${count})`;
     optionDiv.appendChild(checkbox);
@@ -1072,43 +990,6 @@ async function loadBAEmailMap() {
     console.error("Error loading BA email map:", error);
     // Fallback: use BA names as emails if mapping fails
     baEmailMap = {};
-  }
-}
-async function logPortalAccess() {
-  // Log which BA is accessing the portal
-  try {
-    // Try to identify BA from URL params or current filter
-    let friendlyName = '';
-    let ghlUserId = '';
-    let baEmail = '';
-    
-    // Get BA from current filter or URL
-    if (currentBAFilter) {
-      friendlyName = currentBAFilter;
-      baEmail = baEmailMap[currentBAFilter] || '';
-      ghlUserId = baGhlUserIdMap[currentBAFilter] || '';
-    }
-    
-    // If we have BA info, log the access
-    if (friendlyName || ghlUserId) {
-      const apiUrl = getFormAppApiUrl();
-      await fetch(`${apiUrl}/api/portal-access`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          friendlyName,
-          ghlUserId,
-          baEmail,
-          timestamp: new Date().toISOString()
-        })
-      });
-      console.log("Portal access logged for:", friendlyName || ghlUserId);
-    }
-  } catch (error) {
-    console.error("Error logging portal access:", error);
-    // Don't block portal loading if logging fails
   }
 }
 
@@ -1301,6 +1182,18 @@ async function saveGenericMessage(showFeedback = true) {
     ghlUserId = baGhlUserIdMap[friendlyName];
   }
   
+  // If no GHL user ID found, try case-insensitive lookup
+  if (!ghlUserId) {
+    const lowerFriendlyName = friendlyName.toLowerCase();
+    for (const [name, id] of Object.entries(baGhlUserIdMap)) {
+      if (name.toLowerCase() === lowerFriendlyName) {
+        friendlyName = name; // Use the correct case
+        ghlUserId = id;
+        break;
+      }
+    }
+  }
+  
   // Save to API
   let apiSuccess = false;
   if (friendlyName && ghlUserId) {
@@ -1328,7 +1221,10 @@ async function saveGenericMessage(showFeedback = true) {
       console.error("Error saving message to API:", error);
     }
   } else {
-    console.warn("Cannot save to API: missing friendlyName or ghlUserId", { friendlyName, ghlUserId });
+    console.warn("Cannot save to API: missing friendlyName or ghlUserId", { friendlyName, ghlUserId, saveKey });
+    if (showFeedback) {
+      showSaveStatus(`Warning: Could not save to Admin Sheet (missing GHL user ID for "${friendlyName}"). Saved locally only.`, false, true);
+    }
   }
   
   // Also save to localStorage as cache/fallback
@@ -1394,12 +1290,9 @@ function renderOpportunities() {
     const partnerInput = `<input type="text" value="${escapeHtml(partnerName)}" class="partner-name-input">`;
     const emailsDisplay = formatEmailsForDisplay(opp.emails || '');
     const emailInput = `<textarea class="email-input" rows="3" placeholder="Enter email addresses, one per line">${escapeHtml(emailsDisplay)}</textarea>`;
-    // Convert stage ID to stage name using lookup (trim whitespace)
-    const stageId = (opp.stage || '').trim();
-    const stageDisplay = stageLookup[stageId] || stageId || '';
-    const statusDisplay = (opp.status || '').toLowerCase();
-    if (i === 0) console.log('First opportunity stage lookup:', { stageId, found: stageLookup[stageId], stageDisplay, lookupSize: Object.keys(stageLookup).length, hasLookup: !!stageLookup[stageId] });
-    tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox"></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(stageDisplay)}</td><td class="status-col">${escapeHtml(statusDisplay)}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
+    // Convert stage ID to stage name using lookup
+    const stageDisplay = stageLookup[opp.stage] || opp.stage || '';
+    tr.innerHTML = `<td><input type="checkbox" class="opp-checkbox"></td><td>${escapeHtml(opp.name || '')}</td><td class="stage-col">${escapeHtml(stageDisplay)}</td><td class="name-cell" data-full-name="${escapeHtml(clientName)}">${clientInput}</td><td class="name-cell" data-full-name="${escapeHtml(partnerName)}">${partnerInput}</td><td class="email-col">${emailInput}</td><td><select class="message-type-select"><option value="standard" selected>Standard</option><option value="personalised">Personalised</option></select></td><td class="msg-cell"><span class="grey">[Uses standard message]</span></td>`;
     const sel = tr.querySelector(".message-type-select");
     const msgCell = tr.querySelector(".msg-cell");
     sel.addEventListener("change", () => {
@@ -1464,6 +1357,42 @@ function applyFilter() {
   updateSaveButtonState();
   renderOpportunities();
 }
+function convertBAIdentifierToEmail(baIdentifier) {
+  // Helper function to convert BA identifier (name, short name, or email) to email address
+  if (!baIdentifier) return null;
+  
+  // Check if already an email address
+  if (baIdentifier.includes('@')) {
+    return baIdentifier;
+  }
+  
+  // Try direct lookup in baEmailMap (handles short names like "john.t")
+  if (baEmailMap[baIdentifier]) {
+    return baEmailMap[baIdentifier];
+  }
+  
+  // Try case-insensitive lookup
+  const lowerIdentifier = baIdentifier.toLowerCase();
+  for (const [name, email] of Object.entries(baEmailMap)) {
+    if (name.toLowerCase() === lowerIdentifier) {
+      return email;
+    }
+  }
+  
+  // If identifier looks like a short name (no spaces), try adding @buyersclub.com.au
+  if (!baIdentifier.includes(' ') && baIdentifier.length > 0) {
+    const potentialEmail = `${baIdentifier}@buyersclub.com.au`;
+    // Verify this email exists in our map
+    for (const email of Object.values(baEmailMap)) {
+      if (email.toLowerCase() === potentialEmail.toLowerCase()) {
+        return email;
+      }
+    }
+  }
+  
+  // No match found
+  return null;
+}
 function collectSelections() {
   const rows = [...document.querySelectorAll("#opportunities-tbody tr")];
   const selected = [];
@@ -1499,12 +1428,6 @@ function validateSelections(action) {
     showMessage("Please select at least one opportunity.", 'error');
     return null;
   }
-  // Check for missing opportunity IDs
-  const missingIds = selected.filter(opp => !opp.id || opp.id.trim() === '');
-  if(missingIds.length > 0) {
-    showMessage(`Error: Some selected opportunities are missing IDs. This usually means Make.com Scenario 5 is using Contact IDs instead of Opportunity IDs. Please check the field mapping in Make.com Scenario 5, Module 59 - the 'id' field should be {{10.id}}, not {{11.id}}.`, 'error');
-    return null;
-  }
   const invalidEmails = selected.filter(opp => !opp.emails || opp.emails.length === 0);
   if(invalidEmails.length > 0) {
     showMessage(`Please ensure all selected opportunities have valid email addresses.`, 'error');
@@ -1522,44 +1445,19 @@ function validateSelections(action) {
 async function sendEmailsToClients(selectedClients, action) {
   showMessage(`Sending emails to ${selectedClients.length} client(s)...`, 'info');
   try {
-    // Validate recordId is present
-    if (!propertyInfo.recordId || propertyInfo.recordId.trim() === '') {
-      console.error('ERROR: propertyInfo.recordId is missing or empty!');
-      console.error('propertyInfo:', propertyInfo);
-      console.error('URL params:', getURLParams());
-      showMessage("Error: Property record ID is missing from the URL. Please ensure you're accessing the portal via the correct link.", 'error');
-      return;
-    }
-    
     const baIdentifier = baEmail || currentBAFilter;
     if (!baIdentifier) {
       showMessage("Unable to identify BA. Please ensure you're accessing via email link or have selected a BA filter.", 'error');
       return;
     }
     
-    // Look up BA email from baEmailMap if baEmail is not provided or is a name (not an email)
-    // First check if selectedSendFromEmail already has an email (it's already validated)
-    let baEmailAddress = selectedSendFromEmail && selectedSendFromEmail.includes('@') 
-      ? selectedSendFromEmail 
-      : baEmail;
-    
-    // If still not an email, look it up from baEmailMap
-    if (!baEmailAddress || !baEmailAddress.includes('@')) {
-      // If baEmail is empty or doesn't look like an email, try to look it up from baEmailMap
-      if (currentBAFilter && baEmailMap[currentBAFilter]) {
-        baEmailAddress = baEmailMap[currentBAFilter];
-      } else if (baEmailMap[baIdentifier]) {
-        baEmailAddress = baEmailMap[baIdentifier];
-      } else {
-        // Fallback: use baIdentifier (might be a name, but we'll send it)
-        baEmailAddress = baIdentifier;
-      }
-    }
+    // Convert BA identifier to email address
+    let baEmailAddress = convertBAIdentifierToEmail(baIdentifier);
     
     // Determine "Send From" email - use manual input, dropdown, or fallback to BA email
     const sendOnBehalfCheckbox = document.getElementById('send-on-behalf-checkbox');
     const sendFromManualInput = document.getElementById('send-from-manual');
-    let sendFromEmail = baEmailAddress;
+    let sendFromEmail = baEmailAddress; // Default to BA's email
     
     if (sendOnBehalfCheckbox && sendOnBehalfCheckbox.checked) {
       // Check manual input first, then dropdown, then fallback
@@ -1570,28 +1468,29 @@ async function sendEmailsToClients(selectedClients, action) {
       }
     }
     
+    // Validate that we have valid email addresses
+    if (!baEmailAddress) {
+      showMessage(`Your name "${baIdentifier}" is not matched to an email address to allow you to send emails to clients from this portal. Please contact support before attempting to send email from here.`, 'error');
+      return;
+    }
+    
+    if (!sendFromEmail || !sendFromEmail.includes('@')) {
+      showMessage("Invalid 'Send From' email address. Please select a valid BA from the dropdown or enter a valid email address.", 'error');
+      return;
+    }
+    
     const payload = {
       source: "portal",
-      id: propertyInfo.recordId, // Property record ID (as Module 2a expects)
+      id: propertyInfo.recordId,
       propertyId: propertyInfo.propertyId,
       propertyAddress: propertyInfo.propertyAddress,
-      baEmail: baEmailAddress, // Use looked-up email address, not name
+      baEmail: baEmailAddress, // Now always an email address
       baName: currentBAFilter || baIdentifier,
-      sendFromEmail: sendFromEmail, // New field for "Send From" email
+      sendFromEmail: sendFromEmail, // Always an email address
       selectedClients: selectedClients,
       action: action,
       timestamp: new Date().toISOString()
     };
-    
-    console.log('=== SENDING TO MODULE 1 WEBHOOK ===');
-    console.log('Webhook URL:', getModule1Webhook());
-    console.log('Property Info (from URL):', propertyInfo);
-    console.log('Payload id field (value):', payload.id);
-    console.log('Payload id field (type):', typeof payload.id);
-    console.log('Payload id field (length):', payload.id ? payload.id.length : 0);
-    console.log('Full Payload:', JSON.stringify(payload, null, 2));
-    console.log('===================================');
-    
     const response = await fetch(getModule1Webhook(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1690,7 +1589,6 @@ function trackSends(propertyAddress, baName, selectedClients, batchId) {
         baName: baName || '',
         clientName: client.clientName || '',
         opportunityName: client.name || '',
-        emails: client.emails || [],
         timestamp: timestamp,
         batchId: batchId || generateBatchId()
     }));
@@ -1702,7 +1600,6 @@ function trackSends(propertyAddress, baName, selectedClients, batchId) {
         },
         body: JSON.stringify({
             action: 'track_sends',
-            source: 'portal',
             records: trackingRecords
         })
     })
