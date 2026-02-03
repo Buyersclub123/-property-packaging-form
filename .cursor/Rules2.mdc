@@ -31,3 +31,17 @@ alwaysApply: true
 - Check your own code implementation before suggesting external API or system issues.
 - If the user says "STOP", cease all operations immediately.
 </ERROR_HANDLING>
+
+<PORTAL_DEPLOYMENT_ROUTE>
+**Route to Prod for Portal Changes:**
+
+- Edit ONLY: `property-review-system/form-app/public/portal/index.html`
+- **DO NOT edit `property-review-system/portal/index.html` - OLD REPO - WRONG FILE**
+- Check git status: `cd form-app; git status` - verify ONLY portal file changed
+- **DO NOT commit unrelated files (Step5Proximity.tsx, upload routes, etc.)**
+- If other files show as modified: `git restore <filename>` to discard them
+- Commit portal only: `cd form-app; git add public/portal/index.html; git commit -m "message"; git push origin main`
+- **Request permission from user to trigger Vercel deployment**
+- After approval, deploy: `cd form-app; $env:VERCEL_TOKEN="RVE0quS0k8s5yNzlLzcmHIyz"; vercel deploy --prod --yes`
+- Verify: `https://property-packaging-form.vercel.app/portal/`
+</PORTAL_DEPLOYMENT_ROUTE>
