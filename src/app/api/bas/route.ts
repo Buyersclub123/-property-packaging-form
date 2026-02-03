@@ -76,15 +76,22 @@ export async function GET() {
       return NextResponse.json({ bas: [] });
     }
 
-    // First row is headers - find Friendly Name, Email, and GHL user ID columns
+    // First row is headers - find Full Name (must match GHL Assigned BA), Email, and GHL user ID columns
     const headers = rows[0];
-    const nameIndex = headers.findIndex(h => 
-      h && (h.toString().toLowerCase() === 'friendly name' || 
-           h.toString().toLowerCase() === 'friendly_name' ||
-           h.toString().toLowerCase() === 'ba_name' || 
-           h.toString().toLowerCase() === 'name' ||
-           h.toString().toLowerCase() === 'ba name')
-    );
+    const nameIndex = headers.findIndex(h => {
+      if (!h) return false;
+      const lower = h.toString().toLowerCase();
+      // Prioritize "Full Name" column (new format - matches GHL Assigned BA)
+      return lower === 'full name (must match ghl assigned ba)' ||
+             lower === 'full name' ||
+             lower === 'full_name' ||
+             // Fallback to old format for backward compatibility
+             lower === 'friendly name' || 
+             lower === 'friendly_name' ||
+             lower === 'ba_name' || 
+             lower === 'name' ||
+             lower === 'ba name';
+    });
     const emailIndex = headers.findIndex(h => 
       h && (h.toString().toLowerCase() === 'enter bc email below' ||
            h.toString().toLowerCase() === 'ba_email' || 
@@ -95,6 +102,10 @@ export async function GET() {
       h && (h.toString().toLowerCase() === 'ghl user id' || 
            h.toString().toLowerCase() === 'ghl_user_id' ||
            h.toString().toLowerCase() === 'ghl userid')
+    );
+    const friendlyNameIndex = headers.findIndex(h => 
+      h && (h.toString().toLowerCase() === 'friendly name' || 
+           h.toString().toLowerCase() === 'friendly_name')
     );
 
     if (nameIndex === -1 || emailIndex === -1) {
@@ -109,6 +120,7 @@ export async function GET() {
         name: (row[nameIndex] || '').toString().trim(),
         email: (row[emailIndex] || '').toString().trim(),
         ghlUserId: ghlUserIdIndex !== -1 ? (row[ghlUserIdIndex] || '').toString().trim() : '',
+        shortName: friendlyNameIndex !== -1 ? (row[friendlyNameIndex] || '').toString().trim() : '',
       }))
       .filter(ba => ba.name && ba.email) // Only include rows with both name and email
       .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically by name
