@@ -32,8 +32,16 @@ export function Step9PhotoDocuments() {
   const [dragOverImageId, setDragOverImageId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
   const [isDraggingDocs, setIsDraggingDocs] = useState(false);
+  const [documentNumber, setDocumentNumber] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
+
+  // Calculate estimated PDF size
+  const MAX_SIZE = 4.5 * 1024 * 1024; // 4.5MB
+  const estimatedPdfSize = images.reduce((total, img) => total + img.file.size, 0) * 0.6; // 60% of original size
+  const estimatedSizeMB = estimatedPdfSize / 1024 / 1024;
+  const isNearLimit = estimatedPdfSize > MAX_SIZE * 0.8; // 80% of limit (3.6MB)
+  const exceedsLimit = estimatedPdfSize > MAX_SIZE;
 
   // Get property address and folder link from form data
   const propertyAddress = formData.address?.propertyAddress || '';
@@ -285,7 +293,7 @@ export function Step9PhotoDocuments() {
     return await mergedPdf.save();
   };
 
-  const handleGeneratePDF = async () => {
+  const handleGeneratePDF = async (clearAfterCreate: boolean = false) => {
     if (images.length === 0) {
       setError('Please add at least one image');
       return;
@@ -1128,7 +1136,9 @@ export function Step9PhotoDocuments() {
             if (combineResponse.ok) {
               const combineResult = await combineResponse.json();
               setUploadStatus('PDFs combined successfully!');
-              setPdfCreated(true);
+              if (!clearAfterCreate) {
+                setPdfCreated(true);
+              }
               setExistingPdfFileName(combineResult.fileName);
             } else {
               const errorData = await combineResponse.json();
@@ -1136,7 +1146,9 @@ export function Step9PhotoDocuments() {
               // If combine fails, just keep the split versions
               const totalUploaded = uploadedFiles.length;
               setUploadStatus(`Created ${totalUploaded} PDF file(s) (combine failed)`);
-              setPdfCreated(true);
+              if (!clearAfterCreate) {
+                setPdfCreated(true);
+              }
               setExistingPdfFileName(totalUploaded > 0 ? uploadedFiles.join(', ') : null);
             }
           } catch (combineError) {
@@ -1144,15 +1156,33 @@ export function Step9PhotoDocuments() {
             // If combine fails, just keep the split versions
             const totalUploaded = uploadedFiles.length;
             setUploadStatus(`Created ${totalUploaded} PDF file(s)`);
-            setPdfCreated(true);
+            if (!clearAfterCreate) {
+              setPdfCreated(true);
+            }
             setExistingPdfFileName(totalUploaded > 0 ? uploadedFiles.join(', ') : null);
           }
         } else {
           // Only one PDF was created
           const totalUploaded = uploadedFiles.length;
           setUploadStatus(`Successfully created ${totalUploaded} PDF file(s)`);
-          setPdfCreated(true);
+          if (!clearAfterCreate) {
+            setPdfCreated(true);
+          }
           setExistingPdfFileName(totalUploaded > 0 ? uploadedFiles.join(', ') : null);
+        }
+        
+        // Clear images after success (or immediately if clearAfterCreate is true)
+        if (clearAfterCreate) {
+          images.forEach(img => URL.revokeObjectURL(img.preview));
+          setImages([]);
+          setUploadStatus('');
+          setPdfCreated(false); // Allow adding more photos for next document
+        } else {
+          setTimeout(() => {
+            images.forEach(img => URL.revokeObjectURL(img.preview));
+            setImages([]);
+            setUploadStatus('');
+          }, 5000);
         }
       } else {
         // Step 6: Upload single PDF
@@ -1165,15 +1195,25 @@ export function Step9PhotoDocuments() {
           setUploadStatus('PDF generated successfully!');
         }
         
-        setPdfCreated(true);
+        if (!clearAfterCreate) {
+          setPdfCreated(true);
+        }
         setExistingPdfFileName(result.fileName || null);
       }
       
-      setTimeout(() => {
+      // Clear images after success (or immediately if clearAfterCreate is true)
+      if (clearAfterCreate) {
         images.forEach(img => URL.revokeObjectURL(img.preview));
         setImages([]);
         setUploadStatus('');
-      }, 5000);
+        setPdfCreated(false); // Allow adding more photos for next document
+      } else {
+        setTimeout(() => {
+          images.forEach(img => URL.revokeObjectURL(img.preview));
+          setImages([]);
+          setUploadStatus('');
+        }, 5000);
+      }
     } catch (err) {
       // Specific error handling
       if (err instanceof Error) {
@@ -1518,9 +1558,22 @@ export function Step9PhotoDocuments() {
         {images.length > 0 && !pdfCreated && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-md font-semibold">
-                Images ({images.length} selected)
-              </h4>
+              <div>
+                <h4 className="text-md font-semibold">
+                  Images ({images.length} selected)
+                </h4>
+                <div className="text-sm text-gray-600 mt-1">
+                  <span className={exceedsLimit ? 'text-red-600 font-semibold' : isNearLimit ? 'text-orange-600 font-semibold' : 'text-gray-600'}>
+                    Estimated PDF size: {estimatedSizeMB.toFixed(2)} MB
+                  </span>
+                  {exceedsLimit && (
+                    <span className="ml-2 text-red-600">⚠️ Exceeds 4.5MB limit - will be split automatically</span>
+                  )}
+                  {isNearLimit && !exceedsLimit && (
+                    <span className="ml-2 text-orange-600">⚠️ Approaching limit - consider creating document now</span>
+                  )}
+                </div>
+              </div>
               <button
                 onClick={handleClear}
                 className="text-sm text-red-600 hover:text-red-700"
@@ -1591,16 +1644,35 @@ export function Step9PhotoDocuments() {
           </div>
         )}
 
-        {/* Generate PDF Button */}
+        {/* Generate PDF Buttons */}
         {!pdfCreated && (
-          <div className="flex gap-4">
-            <button
-              onClick={handleGeneratePDF}
-              disabled={isGenerating || images.length === 0 || !propertyAddress.trim() || !folderId}
-              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-            >
-              {isGenerating ? 'Generating PDF...' : 'Generate PDF & Upload to Drive'}
-            </button>
+          <div className="space-y-3">
+            <div className="flex gap-4">
+              <button
+                onClick={() => handleGeneratePDF(false)}
+                disabled={isGenerating || images.length === 0 || !propertyAddress.trim() || !folderId}
+                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {isGenerating ? 'Generating PDF...' : `Generate PDF ${documentNumber} & Upload to Drive`}
+              </button>
+            </div>
+            {images.length > 0 && (
+              <div className="flex gap-4">
+                <button
+                  onClick={async () => {
+                    await handleGeneratePDF(true);
+                    setDocumentNumber(prev => prev + 1);
+                  }}
+                  disabled={isGenerating || images.length === 0 || !propertyAddress.trim() || !folderId}
+                  className="flex-1 px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {isGenerating ? 'Generating PDF...' : `Create PDF ${documentNumber} & Start PDF ${documentNumber + 1}`}
+                </button>
+              </div>
+            )}
+            <p className="text-xs text-gray-500">
+              Use the green button to create this PDF and automatically clear photos for the next document.
+            </p>
           </div>
         )}
       </div>
