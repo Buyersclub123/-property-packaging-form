@@ -37,6 +37,43 @@ export async function POST(request: Request) {
       );
     }
 
+    // Helper function to parse currency string to number
+    const parseCurrencyToNumber = (value: string | undefined): number | null => {
+      if (!value) return null;
+      const cleaned = String(value).replace(/[$,]/g, '').trim();
+      if (cleaned.toUpperCase() === 'TBC' || cleaned === '') return null;
+      const num = parseFloat(cleaned);
+      return isNaN(num) ? null : num;
+    };
+
+    // Calculate total_price for Split Contract (landPrice + buildPrice)
+    const contractType = formData.decisionTree?.contractTypeSimplified;
+    const propertyType = formData.decisionTree?.propertyType;
+    let calculatedTotalPrice = formData.purchasePrice?.totalPrice || '';
+    
+    // For Split Contract, calculate total from land + build if totalPrice is empty or invalid
+    if (contractType === 'Split Contract') {
+      const existingTotal = parseCurrencyToNumber(calculatedTotalPrice);
+      // If totalPrice is empty or invalid, calculate from land + build
+      if (existingTotal === null) {
+        const landPrice = parseCurrencyToNumber(formData.purchasePrice?.landPrice);
+        const buildPrice = parseCurrencyToNumber(formData.purchasePrice?.buildPrice);
+        if (landPrice !== null && buildPrice !== null) {
+          calculatedTotalPrice = String(landPrice + buildPrice);
+        }
+      }
+    }
+
+    // Calculate net_price (only for cashback type)
+    let netPrice: number | null = null;
+    if (formData.purchasePrice?.cashbackRebateType === 'cashback') {
+      const totalPriceNum = parseCurrencyToNumber(calculatedTotalPrice);
+      const cashbackNum = parseCurrencyToNumber(formData.purchasePrice?.cashbackRebateValue);
+      if (totalPriceNum !== null && cashbackNum !== null) {
+        netPrice = totalPriceNum - cashbackNum;
+      }
+    }
+
     // Map form data to GHL custom object fields
     // This is a simplified mapping - you may need to adjust based on actual field names
     const ghlRecord: any = {
@@ -96,7 +133,8 @@ export async function POST(request: Request) {
       comparable_sales: formData.purchasePrice?.comparableSales || '',
       land_price: formData.purchasePrice?.landPrice || '',
       build_price: formData.purchasePrice?.buildPrice || '',
-      total_price: formData.purchasePrice?.totalPrice || '',
+      total_price: calculatedTotalPrice || '',
+      net_price: netPrice !== null ? netPrice : undefined,
       cashback_rebate_value: formData.purchasePrice?.cashbackRebateValue || '',
       cashback_rebate_type: formData.purchasePrice?.cashbackRebateType || '',
       occupancy: formData.rentalAssessment?.occupancy || '',
