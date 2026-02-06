@@ -87,7 +87,12 @@ export async function POST(request: Request) {
       packager: formData.packager || '',
       deal_type: formData.dealType || '',
       contract_type: formData.decisionTree?.contractTypeSimplified || '',
-      review_date: formData.reviewDate || new Date().toISOString().split('T')[0],
+      review_date: formData.reviewDate || new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Australia/Sydney',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date()),
       street_number: formData.address?.streetNumber || '',
       street_name: formData.address?.streetName || '',
       suburb_name: formData.address?.suburbName || '',
