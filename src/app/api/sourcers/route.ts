@@ -64,23 +64,19 @@ export async function GET() {
     
     const sheets = getSheetsClient();
     
-    // Read from "Packagers & Sourcers" tab, Column A (emails)
+    // Read from "Packagers & Sourcers" tab, Column C (Friendly Name)
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: ADMIN_SHEET_ID,
-      range: `${TAB_NAME}!A2:A`, // Skip header row
+      range: `${TAB_NAME}!C2:C`, // Skip header row
     });
 
     const rows = response.data.values || [];
     
-    // Extract part before @ from each email
+    // Extract friendly names (short names like "john.t")
     const sourcerNames = rows
       .map((row) => {
-        const email = row[0]?.trim();
-        if (!email) return null;
-        // Extract part before @
-        const atIndex = email.indexOf('@');
-        if (atIndex === -1) return email; // No @ found, return as-is
-        return email.substring(0, atIndex);
+        const name = row[0]?.trim();
+        return name || null;
       })
       .filter((name): name is string => name !== null && name !== '')
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })); // Alphabetical order
