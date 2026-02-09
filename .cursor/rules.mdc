@@ -1,13 +1,78 @@
 ---
-description: Constraints for communication and response formatting
+description: Communication, security, and deployment constraints
 globs: "**/*"
 alwaysApply: true
 ---
+
+# CRITICAL FILE ACCESS RULES - NEVER VIOLATE
+- **ONLY READ AUTHORIZED FILES:** Only read files explicitly authorized by user
+- **AUTHORIZED FILES:**
+  - Blueprints: `.json` files in `make-com-scenarios/` (when explicitly told to read)
+  - Code: `.ts`, `.tsx`, `.js` files in `form-app/` (when explicitly told to read)
+  - Files explicitly mentioned by user with @ symbol or direct path
+- **NEVER READ:**
+  - Documentation files (`.md` files) unless explicitly told to
+  - Handover documents, planning docs, analysis docs
+  - README files, setup guides, field mapping docs
+  - Any file in `docs/`, `project-orchestration/`, `planning_docs/` unless explicitly authorized
+- **IF YOU NEED INFORMATION:**
+  - ASK the user first - never search documentation
+  - Never assume based on documentation you've seen
+  - Always verify in authorized sources (blueprints/code) only
+  - If unsure if a file is authorized, ASK before reading
+
 # INTERACTION PROTOCOL
 - **Y/N Questions:** Respond with ONLY "Yes" or "No". No commentary.
 - **Brevity:** Use single, short sentences. No essays, no unsolicited bullet points.
 - **Incrementalism:** Present exactly ONE item or step at a time. Wait for user confirmation before proceeding.
 - **No Assumptions:** Never add "next steps" or "additional solutions" unless explicitly requested.
+- **No Unauthorized Changes:** Only change exactly what is requested. Do not "fix" related code, update documentation, or make improvements unless explicitly asked.
 - **Tone:** Natural human conversation. No "I'm an AI" fluff.
 - **Technical Level:** User is non-technical. Provide copy-paste ready code blocks or explicit step-by-step UI actions.
 - **Missing Data:** If user mentions a copy-paste that is missing, halt immediately and ask for it.
+- **Don't Ask "Ready?":** Never ask "Ready to commit?" or "Proceed?" - user will tell you when ready.
+- **Focus on Approved Files Only:** When committing, only commit files explicitly approved. Ignore other modified files in git status. Do not mention or analyze unapproved files.
+- **Git Commit Workflow:** If you created code, it's been tested in dev, and user confirmed it works, ask "May I commit this to git?" before committing. Only commit files you created that have been tested and confirmed working.
+- **No Documentation Analysis:** Do not read or analyze documentation files (PRIORITY-CHECKLIST.md, README.md, etc.) unless explicitly asked. Focus on code analysis only.
+
+# CRITICAL SECURITY
+- **ZERO HARDCODING:** Never hardcode API keys, secrets, or credentials.
+- **ENV MANAGEMENT:** Use `.env.local` for local development and Vercel Environment Variables for production.
+- **SYNC:** Ensure .env.local keys exist in the Vercel dashboard before deployment.
+
+# STRICT WORKFLOW
+1. **FIX CREATED:** Code is written locally but UNTESTED (after explicit approval).
+2. **FIX TESTED:** Code is verified working in local Dev environment (after explicit approval).
+3. **GIT COMMIT:** Commit after each completed item.
+4. **PERMISSION:** Ask "May I deploy to Vercel?" after Fix is Tested. 
+5. **DEPLOY:** Only execute `git push` or Vercel deploy after explicit "Yes".
+
+# ERROR HANDLING
+- If a task fails, state "I made a mistake" directly.
+- Check your own code implementation before suggesting external API or system issues.
+- If the user says "STOP", cease all operations immediately.
+
+# PORTAL STATUS
+- **NEW Portal:** `https://property-packaging-form.vercel.app/portal` - COMPLETE, do not modify unless explicitly requested
+- **OLD Portal:** `buyersclub123.github.io/property-portal` - DEPRECATED, ignore all references to it
+- If documentation says portal is incomplete, ignore it. Portal is complete and working.
+- Do not "fix" or "complete" portal functionality. Only change portal code when explicitly asked.
+
+# REPOSITORY STRUCTURE
+- **Two Git Repositories Exist:**
+  1. Root repo: `property-review-system\.git` - NOT deployed to Vercel, contains documentation only
+  2. Form-app repo: `property-review-system\form-app\.git` - THIS deploys to Vercel Main
+- **All active code and fixes are in form-app repo**
+- **When committing:** Always commit from `form-app` directory, not root directory
+- **When analyzing:** Focus on form-app repo only unless explicitly asked about root repo
+
+# PORTAL DEPLOYMENT ROUTE
+- Edit ONLY: `property-review-system/form-app/public/portal/index.html`
+- **DO NOT edit `property-review-system/portal/index.html` - OLD REPO - WRONG FILE**
+- Check git status: `cd form-app; git status` - verify ONLY portal file changed
+- **DO NOT commit unrelated files (Step5Proximity.tsx, upload routes, etc.)**
+- If other files show as modified: `git restore <filename>` to discard them
+- Commit portal only: `cd form-app; git add public/portal/index.html; git commit -m "message"; git push origin main`
+- **Request permission from user to trigger Vercel deployment**
+- After approval, deploy: `cd form-app; $env:VERCEL_TOKEN="RVE0quS0k8s5yNzlLzcmHIyz"; vercel deploy --prod --yes`
+- Verify: `https://property-packaging-form.vercel.app/portal/`

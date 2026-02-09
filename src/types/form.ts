@@ -289,6 +289,11 @@ export interface FormData {
   submittedAt?: string; // Timestamp of submission (ISO string)
   submissionAttempted?: boolean; // Track if submission was attempted (even if no recordId returned)
   
+  // Edit mode tracking
+  editMode?: boolean; // True when editing an existing record
+  editor?: string | null; // Editor type: packager|qa|ba
+  returnTo?: string | null; // Return URL parameter (e.g., 'dealSheet')
+  
   // Cashflow Spreadsheets (Google Sheets Copy URLs)
   cashflowSheetLinkHL?: string; // House & Land cashflow spreadsheet copy URL
   cashflowSheetLinkGeneral?: string; // General/Single Contract cashflow spreadsheet copy URL

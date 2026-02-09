@@ -108,7 +108,7 @@ export async function POST(request: Request) {
       bushfire: formData.riskOverlays?.bushfire || '',
       bushfire_dialogue: formData.riskOverlays?.bushfireDialogue || '',
       mining: formData.riskOverlays?.mining || '',
-      mining_dialogue: formData.riskOverlays?.miningDialogue || '',
+      mining_dialogie: formData.riskOverlays?.miningDialogue || '', // Note: GHL field has typo "mining_dialogie"
       other_overlay: formData.riskOverlays?.otherOverlay || '',
       other_overlay_dialogue: formData.riskOverlays?.otherOverlayDialogue || '',
       special_infrastructure: formData.riskOverlays?.specialInfrastructure || '',
@@ -131,6 +131,7 @@ export async function POST(request: Request) {
       body_corp__per_quarter: formData.propertyDescription?.bodyCorpPerQuarter || '',
       body_corp_description: formData.propertyDescription?.bodyCorpDescription || '',
       does_this_property_have_2_dwellings: formData.propertyDescription?.doesThisPropertyHave2Dwellings || '',
+      property_description_additional_dialogue: formData.propertyDescription?.propertyDescriptionAdditionalDialogue || '',
       asking: formData.purchasePrice?.asking || '',
       asking_text: formData.purchasePrice?.askingText || '',
       acceptable_acquisition__from: formData.purchasePrice?.acceptableAcquisitionFrom || '',
@@ -142,6 +143,7 @@ export async function POST(request: Request) {
       net_price: netPrice !== null ? netPrice : undefined,
       cashback_rebate_value: formData.purchasePrice?.cashbackRebateValue || '',
       cashback_rebate_type: formData.purchasePrice?.cashbackRebateType || '',
+      purchase_price_additional_dialogue: formData.purchasePrice?.purchasePriceAdditionalDialogue || '',
       occupancy: formData.rentalAssessment?.occupancy || '',
       current_rent_primary__per_week: formData.rentalAssessment?.currentRentPrimary || '',
       current_rent_secondary__per_week: formData.rentalAssessment?.currentRentSecondary || '',
@@ -151,12 +153,42 @@ export async function POST(request: Request) {
       rent_appraisal_secondary: formData.rentalAssessment?.rentAppraisalSecondaryFrom || '',
       yield: formData.rentalAssessment?.yield || '',
       appraised_yield: formData.rentalAssessment?.appraisedYield || '',
+      rental_assessment_additional_dialogue: formData.rentalAssessment?.rentalAssessmentAdditionalDialogue || '',
       agent_name: formData.agentInfo?.agentName || '',
       agent_mobile: formData.agentInfo?.agentMobile || '',
       agent_email: formData.agentInfo?.agentEmail || '',
       status: formData.status || '',
+      message_for_ba: formData.messageForBA || '',
+      attachments_additional_dialogue: formData.attachmentsAdditionalDialogue || '',
       // Add folder link if available
       folder_link: formData.folderLink || '',
+      // Insurance, Depreciation, and Council/Water Rates (optional - only send if provided)
+      // GHL custom fields
+      cf_insurance_value_: formData.insurance || formData.insuranceAmount || '',
+      cf_councilwater_rates_: formData.councilWaterRates || '',
+      // Depreciation - store as comma-separated values (year1,year2,...,year10)
+      cf_depreciation_: (() => {
+        if (formData.depreciation && typeof formData.depreciation === 'object') {
+          const depObj = formData.depreciation;
+          const hasValues = Object.values(depObj).some(val => val != null && val !== '');
+          if (hasValues) {
+            // Store as comma-separated values
+            const values: string[] = [];
+            for (let year = 1; year <= 10; year++) {
+              const yearValue = depObj[`year${year}`];
+              values.push(yearValue != null && yearValue !== '' ? String(yearValue) : '');
+            }
+            // Trim trailing empty values
+            while (values.length > 0 && values[values.length - 1] === '') {
+              values.pop();
+            }
+            if (values.length > 0) {
+              return values.join(',');
+            }
+          }
+        }
+        return '';
+      })(),
     };
 
     // Call GHL API to create custom object record

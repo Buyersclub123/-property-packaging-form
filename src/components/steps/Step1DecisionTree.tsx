@@ -6,7 +6,8 @@ import { PropertyType, ContractType, LotType, DualOccupancy, StatusType, LotDeta
 
 export function Step1DecisionTree() {
   const { formData, updateDecisionTree, updateLots, clearStep2Data, setCurrentStep, updateAddress } = useFormStore();
-  const { decisionTree, address } = formData;
+  const { decisionTree, address, editMode, ghlRecordId } = formData;
+  const isEditMode = editMode === true || !!ghlRecordId; // In edit mode if editMode is true or if we have a record ID
   const [numberOfLots, setNumberOfLots] = useState<string>('');
   const [lots, setLots] = useState<LotDetails[]>(formData.lots || []);
   const [lotNumber, setLotNumber] = useState<string>(address?.lotNumber || '');
@@ -17,6 +18,16 @@ export function Step1DecisionTree() {
   const isProject = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple';
   const isHAndL = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual';
   const hasPropertyType = decisionTree.propertyType !== null; // Show unit number for all property types
+  
+  // Debug: Log decisionTree values
+  useEffect(() => {
+    console.log('[Step1DecisionTree] decisionTree from store:', decisionTree);
+    console.log('[Step1DecisionTree] propertyType:', decisionTree.propertyType);
+    console.log('[Step1DecisionTree] contractType:', decisionTree.contractType);
+    console.log('[Step1DecisionTree] status:', decisionTree.status);
+    console.log('[Step1DecisionTree] lotType:', decisionTree.lotType);
+    console.log('[Step1DecisionTree] dualOccupancy:', decisionTree.dualOccupancy);
+  }, [decisionTree]);
   
   // Helper function to clear dependent address fields (lot/unit numbers) and rebuild address
   const clearDependentAddressFields = () => {
@@ -396,7 +407,7 @@ export function Step1DecisionTree() {
               clearDependentAddressFields(); // Clear lot/unit numbers from address
             }}
             className="input-field"
-            required
+            required={!isEditMode}
           >
             <option value="">Select...</option>
             <option value="New">New</option>
@@ -420,7 +431,7 @@ export function Step1DecisionTree() {
                 clearDependentAddressFields(); // Clear lot/unit numbers from address
               }}
               className="input-field"
-              required
+              required={!isEditMode}
             >
               <option value="">Select...</option>
               <option value="Individual">H&L</option>
@@ -440,7 +451,7 @@ export function Step1DecisionTree() {
                 updateDecisionTree({ dualOccupancy: e.target.value as DualOccupancy })
               }
               className="input-field"
-              required
+              required={!isEditMode}
             >
               <option value="">Select...</option>
               <option value="No">Single Occupancy</option>
@@ -458,7 +469,7 @@ export function Step1DecisionTree() {
               updateDecisionTree({ contractType: e.target.value as ContractType })
             }
             className="input-field"
-            required
+            required={!isEditMode}
           >
             <option value="">Select...</option>
             {decisionTree.propertyType === 'New' && (
@@ -486,7 +497,7 @@ export function Step1DecisionTree() {
               updateDecisionTree({ status: e.target.value as StatusType })
             }
             className="input-field"
-            required
+            required={!isEditMode}
           >
             <option value="">Select...</option>
             <option value="01_available">01 Available</option>
@@ -685,75 +696,77 @@ export function Step1DecisionTree() {
               Enter unit number(s) if this property has units. Can be a single unit, range, or comma-separated list.
             </p>
 
-            {/* Does this property have unit numbers? */}
-            <div className="mb-4">
-              <label className="label-field">Does this property have unit numbers? *</label>
-              <div className="flex gap-4 mt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="hasUnitNumbers"
-                    checked={hasUnitNumbers === true}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setHasUnitNumbers(true);
-                        updateAddress({ hasUnitNumbers: true });
-                      }
-                    }}
-                    className="w-4 h-4"
-                    required
-                  />
-                  <span className="text-sm font-medium text-gray-700">Yes</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="hasUnitNumbers"
-                    checked={hasUnitNumbers === false}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setHasUnitNumbers(false);
-                        setUnitNumber('');
-                        // Remove unit prefix from address
-                        const baseAddressParts: string[] = [];
-                        if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
-                        if (address?.streetName) baseAddressParts.push(address.streetName);
-                        if (address?.suburbName) baseAddressParts.push(address.suburbName);
-                        if (address?.state) baseAddressParts.push(address.state);
-                        if (address?.postCode) baseAddressParts.push(address.postCode);
-                        
-                        let finalAddress = baseAddressParts.length > 0 
-                          ? baseAddressParts.join(' ')
-                          : (address?.propertyAddress || '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
-                        
-                        // Preserve lot number if it exists
-                        if (address?.lotNumber && !address.lotNumberNotApplicable) {
-                          const addressWithoutLot = finalAddress.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
-                          finalAddress = `Lot ${address.lotNumber}, ${addressWithoutLot}`;
+            {/* Does this property have unit numbers? - Hide in edit mode */}
+            {!isEditMode && (
+              <div className="mb-4">
+                <label className="label-field">Does this property have unit numbers? *</label>
+                <div className="flex gap-4 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="hasUnitNumbers"
+                      checked={hasUnitNumbers === true}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setHasUnitNumbers(true);
+                          updateAddress({ hasUnitNumbers: true });
                         }
-                        
-                        updateAddress({ 
-                          hasUnitNumbers: false,
-                          unitNumber: '',
-                          propertyAddress: finalAddress || address?.propertyAddress || ''
-                        });
-                      }
-                    }}
-                    className="w-4 h-4"
-                    required
-                  />
-                  <span className="text-sm font-medium text-gray-700">No</span>
-                </label>
+                      }}
+                      className="w-4 h-4"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-700">Yes</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="hasUnitNumbers"
+                      checked={hasUnitNumbers === false}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setHasUnitNumbers(false);
+                          setUnitNumber('');
+                          // Remove unit prefix from address
+                          const baseAddressParts: string[] = [];
+                          if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+                          if (address?.streetName) baseAddressParts.push(address.streetName);
+                          if (address?.suburbName) baseAddressParts.push(address.suburbName);
+                          if (address?.state) baseAddressParts.push(address.state);
+                          if (address?.postCode) baseAddressParts.push(address.postCode);
+                          
+                          let finalAddress = baseAddressParts.length > 0 
+                            ? baseAddressParts.join(' ')
+                            : (address?.propertyAddress || '').replace(/^(Units?)\s+[^,]+(?:,\s*[^,]+)*,\s*/i, '').trim();
+                          
+                          // Preserve lot number if it exists
+                          if (address?.lotNumber && !address.lotNumberNotApplicable) {
+                            const addressWithoutLot = finalAddress.replace(/^Lot\s+[\d\w]+,\s*/i, '').trim();
+                            finalAddress = `Lot ${address.lotNumber}, ${addressWithoutLot}`;
+                          }
+                          
+                          updateAddress({ 
+                            hasUnitNumbers: false,
+                            unitNumber: '',
+                            propertyAddress: finalAddress || address?.propertyAddress || ''
+                          });
+                        }
+                      }}
+                      className="w-4 h-4"
+                      required
+                    />
+                    <span className="text-sm font-medium text-gray-700">No</span>
+                  </label>
+                </div>
+                {hasUnitNumbers === undefined && (
+                  <p className="text-xs text-gray-500 mt-1">Please select Yes or No</p>
+                )}
               </div>
-              {hasUnitNumbers === undefined && (
-                <p className="text-xs text-gray-500 mt-1">Please select Yes or No</p>
-              )}
-            </div>
+            )}
 
-            {/* Which unit(s) are we buying? */}
-            {hasUnitNumbers && (
+            {/* Which unit(s) are we buying? - Always show in edit mode, conditional in create mode */}
+            {(!isEditMode ? hasUnitNumbers : true) && (
               <div>
-                <label className="label-field">Which unit(s) are we buying? *</label>
+                <label className="label-field">Which unit(s) are we buying?{!isEditMode && ' *'}</label>
                 <input
                   type="text"
                   value={unitNumber}
@@ -834,7 +847,7 @@ export function Step1DecisionTree() {
                   }}
                   className="input-field"
                   placeholder="e.g., 2, 1-8, A,B,C, or A-C"
-                  required={true}
+                  required={!isEditMode}
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Enter single unit (e.g., "2" or "A"), range (e.g., "1-8" or "A-C"), or comma-separated list (e.g., "1,2,3" or "A,B,C")

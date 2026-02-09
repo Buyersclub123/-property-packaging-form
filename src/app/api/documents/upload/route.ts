@@ -1,3 +1,22 @@
+/**
+ * AI_GENERATED_TAG: DOCUMENT_UPLOAD_ROUTE
+ * Last Modified: 2026-02-03
+ * 
+ * This route handles uploading documents (PDFs, etc.) to Google Drive.
+ * 
+ * CURRENT BEHAVIOR:
+ * - Uses client-provided fileName from FormData
+ * - Checks for duplicates and adds timestamp if duplicate found
+ * - Timestamp only added AFTER duplicate is detected (race condition possible)
+ * 
+ * KNOWN ISSUE:
+ * - If multiple documents are uploaded simultaneously with same name, they may overwrite each other
+ *   because duplicate check happens before upload completes
+ * 
+ * FUTURE AI SESSIONS: If modifying this file, consider adding timestamp to ALL uploads
+ * (not just duplicates) to prevent race conditions with simultaneous uploads.
+ */
+
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
@@ -99,7 +118,11 @@ export async function POST(request: Request) {
     const drive = getDriveClient();
     const sanitizedFileName = sanitizeFileName(fileName);
 
+    // AI_GENERATED_TAG: DUPLICATE_CHECK_WITH_RACE_CONDITION
     // Check if file with same name already exists
+    // WARNING: This has a race condition - if two uploads happen simultaneously,
+    // both may pass this check before either completes, causing one to overwrite the other
+    // TODO: Consider adding timestamp to ALL uploads, not just detected duplicates
     let finalFileName = sanitizedFileName;
     try {
       // Escape single quotes in filename for query

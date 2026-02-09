@@ -23,9 +23,13 @@ export function Step9PhotoDocuments() {
   const [oversizedFileNotification, setOversizedFileNotification] = useState<string | null>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
 
+  // Check if in edit mode
+  const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
+
   // Get property address and folder link from form data
+  // folderLink can be at top level (from GHL) or in address object
   const propertyAddress = formData.address?.propertyAddress || '';
-  const folderLink = formData.address?.folderLink || '';
+  const folderLink = formData.folderLink || formData.address?.folderLink || '';
 
   // Extract folder ID from folder link
   const extractFolderIdFromLink = (link: string): string | null => {
@@ -40,16 +44,21 @@ export function Step9PhotoDocuments() {
 
   const folderId = extractFolderIdFromLink(folderLink);
 
-  // Validate folder exists
+  // Validate folder exists (only show error in create mode, allow in edit mode)
   useEffect(() => {
-    if (!folderLink) {
-      setError('Property folder has not been created yet. Please complete the previous steps first.');
-    } else if (!folderId) {
-      setError('Invalid folder link. Please ensure the folder was created correctly.');
+    if (!isEditMode) {
+      if (!folderLink) {
+        setError('Property folder has not been created yet. Please complete the previous steps first.');
+      } else if (!folderId) {
+        setError('Invalid folder link. Please ensure the folder was created correctly.');
+      } else {
+        setError(null);
+      }
     } else {
+      // In edit mode, clear error even if folderLink is missing
       setError(null);
     }
-  }, [folderLink, folderId]);
+  }, [folderLink, folderId, isEditMode]);
 
   // Photo PDF generation removed - feature deferred to post-launch
 
@@ -208,7 +217,9 @@ export function Step9PhotoDocuments() {
 
   // Photo PDF generation removed - feature deferred to post-launch
 
-  if (!folderLink || !folderId) {
+  // In edit mode, allow page to render even without folderLink (show warning but allow proceeding)
+  // In create mode, require folderLink
+  if (!isEditMode && (!folderLink || !folderId)) {
     return (
       <div>
         <h2 className="text-2xl font-bold mb-6">Document Upload</h2>
@@ -234,23 +245,45 @@ export function Step9PhotoDocuments() {
       </div>
 
       {/* Google Drive Folder Link */}
-      {folderLink && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-blue-900 mb-1">Google Drive Folder</p>
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-blue-900 mb-1">Google Drive Folder</p>
+            {folderLink ? (
               <a
                 href={folderLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-blue-600 hover:underline font-medium"
+                className="text-sm text-blue-600 hover:underline font-medium inline-flex items-center gap-1"
               >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
                 Open folder in Google Drive →
               </a>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-blue-800">
+                  Folder link not found in record. You can search for the folder in Google Drive using the property address.
+                </p>
+                {propertyAddress && (
+                  <a
+                    href={`https://drive.google.com/drive/search?q=${encodeURIComponent(propertyAddress)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline font-medium inline-flex items-center gap-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    Search for folder in Google Drive →
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Document Upload Section */}
       <div className="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">

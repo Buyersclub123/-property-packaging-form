@@ -58,9 +58,17 @@ export function Step3MarketPerformance() {
   };
 
   // Helper function to clean and validate numeric input (removes %, spaces, validates 2 decimals, allows N/A)
-  const cleanNumericInput = (value: string, formatDecimals: boolean = true): string => {
+  const cleanNumericInput = (value: string | number | null | undefined, formatDecimals: boolean = true): string => {
+    // Handle non-string values (from Google Sheets, could be number, null, undefined)
+    if (value === null || value === undefined) {
+      return '';
+    }
+    
+    // Convert to string if it's a number
+    const stringValue = typeof value === 'number' ? String(value) : value;
+    
     // If value is empty or just whitespace, return empty string (don't auto-fill .00)
-    const trimmed = value.trim();
+    const trimmed = stringValue.trim();
     if (trimmed === '' || trimmed === '.') {
       return '';
     }
@@ -343,7 +351,12 @@ export function Step3MarketPerformance() {
             
             // Helper to check if a value is actually user-entered (not empty/undefined/null)
             const hasUserValue = (value: any) => {
-              return value !== undefined && value !== null && value !== '' && value.trim() !== '';
+              if (value === undefined || value === null || value === '') {
+                return false;
+              }
+              // Convert to string and check if it has content after trimming
+              const stringValue = typeof value === 'string' ? value : String(value);
+              return stringValue.trim() !== '';
             };
             
             // CRITICAL: Preserve user-entered data, but populate empty/undefined fields with fetched data
@@ -358,34 +371,40 @@ export function Step3MarketPerformance() {
                                       hasUserValue(currentMP.rentalPopulation) ||
                                       hasUserValue(currentMP.vacancyRate);
             
+            // Helper to safely convert API data to string (handles numbers, null, undefined)
+            const safeString = (value: any): string => {
+              if (value === null || value === undefined) return '';
+              return String(value);
+            };
+
             updateFormData({
               marketPerformance: {
                 ...currentMP, // Preserve ALL existing data first
                 // Use fetched value if current value is empty/undefined/null, otherwise preserve user-entered value
                 medianPriceChange3Months: hasUserValue(currentMP.medianPriceChange3Months)
                   ? currentMP.medianPriceChange3Months 
-                  : (result.data.medianPriceChange3Months || ''),
+                  : safeString(result.data.medianPriceChange3Months),
                 medianPriceChange1Year: hasUserValue(currentMP.medianPriceChange1Year)
                   ? currentMP.medianPriceChange1Year
-                  : (result.data.medianPriceChange1Year || ''),
+                  : safeString(result.data.medianPriceChange1Year),
                 medianPriceChange3Year: hasUserValue(currentMP.medianPriceChange3Year)
                   ? currentMP.medianPriceChange3Year
-                  : (result.data.medianPriceChange3Year || ''),
+                  : safeString(result.data.medianPriceChange3Year),
                 medianPriceChange5Year: hasUserValue(currentMP.medianPriceChange5Year)
                   ? currentMP.medianPriceChange5Year
-                  : (result.data.medianPriceChange5Year || ''),
+                  : safeString(result.data.medianPriceChange5Year),
                 medianYield: hasUserValue(currentMP.medianYield)
                   ? currentMP.medianYield
-                  : (result.data.medianYield || ''),
+                  : safeString(result.data.medianYield),
                 medianRentChange1Year: hasUserValue(currentMP.medianRentChange1Year)
                   ? currentMP.medianRentChange1Year
-                  : (result.data.medianRentChange1Year || ''),
+                  : safeString(result.data.medianRentChange1Year),
                 rentalPopulation: hasUserValue(currentMP.rentalPopulation)
                   ? currentMP.rentalPopulation
-                  : (result.data.rentalPopulation || ''),
+                  : safeString(result.data.rentalPopulation),
                 vacancyRate: hasUserValue(currentMP.vacancyRate)
                   ? currentMP.vacancyRate
-                  : (result.data.vacancyRate || ''),
+                  : safeString(result.data.vacancyRate),
                 // When data is loaded from API, it's already saved in the Google Sheet
                 // ALWAYS set isSaved to true when loading from API (data exists in sheet)
                 // Only exception: if user has manually entered data AND explicitly set isSaved=false
@@ -941,6 +960,24 @@ export function Step3MarketPerformance() {
 
   return (
     <div>
+      {/* Important Note for Edit Mode */}
+      {formData.editMode && (
+        <div className="mb-6 p-4 bg-red-600 border-l-4 border-red-700 rounded">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-white">
+                <strong>Important:</strong> When editing Market Performance: follow the standard process below, providing updated values from the relevant sources, then save.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <h2 className="text-2xl font-bold mb-6">Market Performance</h2>
 
       {/* Google Sheet Info */}

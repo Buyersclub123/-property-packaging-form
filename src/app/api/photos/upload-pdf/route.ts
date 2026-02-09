@@ -1,6 +1,29 @@
+/**
+ * AI_GENERATED_TAG: PHOTO_PDF_UPLOAD_ROUTE
+ * Last Modified: 2026-02-03
+ * 
+ * This route handles uploading photo PDFs to Google Drive.
+ * 
+ * CURRENT BEHAVIOR:
+ * - Generates filename from propertyAddress: "Photos {address}.pdf"
+ * - Checks for duplicates and adds timestamp if duplicate found
+ * - Does NOT use client-provided filename (client may send fileName in FormData but it's ignored)
+ * 
+ * KNOWN ISSUE:
+ * - If multiple PDFs are uploaded simultaneously with same address, they may overwrite each other
+ *   because duplicate check happens before upload completes
+ * 
+ * FUTURE AI SESSIONS: If modifying this file, ensure you understand the duplicate checking logic
+ * and consider race conditions with simultaneous uploads.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
+
+// Configure route to allow larger body sizes (up to 50MB to match other uploads)
+export const runtime = 'nodejs';
+export const maxDuration = 60; // 60 seconds for large uploads
 
 // Helper function to initialize Google Drive client (reuse from generate-pdf route)
 function getDriveClient() {
@@ -55,12 +78,22 @@ function sanitizeFileName(name: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  console.log('[API] /api/photos/upload-pdf - Request received');
   try {
     // Parse FormData
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const propertyAddress = formData.get('propertyAddress') as string;
     const folderId = formData.get('folderId') as string;
+    
+    console.log('[API] /api/photos/upload-pdf - FormData parsed', {
+      hasFile: !!file,
+      fileSize: file?.size,
+      fileType: file?.type,
+      fileName: file?.name?.substring(0, 50),
+      propertyAddress: propertyAddress?.substring(0, 50),
+      folderId: folderId?.substring(0, 20)
+    });
 
     // Validation
     if (!file) {
@@ -91,24 +124,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check file size (should already be under 4.5MB, but validate)
-    const MAX_SIZE = 4.5 * 1024 * 1024;
+    // Check file size - Vercel has a 4.5MB body limit for serverless functions
+    // However, we've seen document uploads work with 5.8MB files, so this may be a soft limit
+    // We'll let Vercel enforce the actual limit and handle errors gracefully
+    // If file is too large, Vercel will return a 413 error which we'll catch
+    const MAX_SIZE = 50 * 1024 * 1024; // 50MB theoretical max (matching other upload routes)
     if (file.size > MAX_SIZE) {
       return NextResponse.json(
-        { success: false, error: 'PDF file exceeds 4.5MB limit' },
+        { success: false, error: 'PDF file exceeds 50MB limit' },
         { status: 413 }
       );
     }
+    
+    // Note: Files between 4.5MB and 50MB may fail at Vercel level with 413 error
+    // The client-side split logic should handle this by splitting large PDFs before upload
 
     // Initialize Google Drive client
     const drive = getDriveClient();
     const SHARED_DRIVE_ID = process.env.GOOGLE_DRIVE_SHARED_DRIVE_ID || '';
 
-    // Sanitize filename - use property address to generate filename
-    const sanitizedAddress = sanitizeFileName(propertyAddress);
-    const fileName = `Photos ${sanitizedAddress}.pdf`;
+    // AI_GENERATED_TAG: FILENAME_GENERATION
+    // Use client-provided filename from FormData (includes PDF number for split PDFs)
+    // Fall back to generating from propertyAddress if filename not provided
+    let fileName: string;
+    if (file.name && file.name.trim()) {
+      // Client provided filename (e.g., "Photos {address} 1.pdf" or "Photos {address}.pdf")
+      fileName = sanitizeFileName(file.name);
+    } else {
+      // Fallback: generate from property address
+      const sanitizedAddress = sanitizeFileName(propertyAddress);
+      fileName = `Photos ${sanitizedAddress}.pdf`;
+    }
 
+    // AI_GENERATED_TAG: DUPLICATE_CHECK
     // Check for duplicates (reuse logic from generate-pdf route)
+    // NOTE: For split PDFs with numbers (#1, #2, etc.), duplicate check should rarely trigger
+    // since filenames are already unique. This check is mainly for single PDFs.
     let finalFileName = fileName;
     try {
       // Escape single quotes in filename for query

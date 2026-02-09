@@ -35,6 +35,11 @@ const STEPS = [
 
 interface MultiStepFormProps {
   userEmail: string;
+  mode?: 'create' | 'edit';
+  initialData?: any;
+  recordId?: string;
+  returnTo?: string | null;
+  editor?: string | null;
 }
 
 function EditableEmail() {
@@ -175,13 +180,14 @@ function EditableEmail() {
   );
 }
 
-export function MultiStepForm({ userEmail }: MultiStepFormProps) {
+export function MultiStepForm({ userEmail, mode = 'create', initialData, recordId, returnTo, editor }: MultiStepFormProps) {
   const { currentStep, setCurrentStep, formData, setUserEmail, updateFormData } = useFormStore();
   
   // Store user email in form store for logging purposes
   useEffect(() => {
     setUserEmail(userEmail);
   }, [userEmail, setUserEmail]);
+
   const [isHydrated, setIsHydrated] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const validationErrorRef = useRef<string | null>(null);
@@ -194,6 +200,7 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
 
   useEffect(() => {
     // Manually hydrate persisted store on client mount (SSR-safe)
+    // IMPORTANT: This must run BEFORE loading initial data in edit mode
     if (typeof window !== 'undefined') {
       try {
         // Check if persist middleware is available
@@ -232,6 +239,49 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
       }
     }
   }, [isHydrated]);
+
+  // Load initial data when in edit mode - MUST run AFTER hydration
+  useEffect(() => {
+    // Only load initial data after hydration is complete to prevent persist from overwriting it
+    if (mode === 'edit' && initialData && isHydrated) {
+      console.log('[MultiStepForm] Loading initial data for edit mode (after hydration):', initialData);
+      console.log('[MultiStepForm] decisionTree from initialData:', initialData.decisionTree);
+      console.log('[MultiStepForm] dealType from initialData:', initialData.dealType);
+      console.log('[MultiStepForm] status from initialData:', initialData.status);
+      // Store recordId, returnTo, and editor in formData for use in Step8Submission
+      // Also ensure status is in decisionTree if it's at top level
+      const dataToUpdate: any = {
+        ...initialData,
+        ghlRecordId: recordId,
+        editMode: true,
+        returnTo: returnTo || null,
+        editor: editor || null,
+      };
+      
+      // If status is at top level but not in decisionTree, move it
+      if (initialData.status && !initialData.decisionTree?.status) {
+        dataToUpdate.decisionTree = {
+          ...initialData.decisionTree,
+          status: initialData.status,
+        };
+      }
+      
+      console.log('[MultiStepForm] Data being sent to updateFormData:', JSON.stringify(dataToUpdate, null, 2));
+      console.log('[MultiStepForm] decisionTree in dataToUpdate:', JSON.stringify(dataToUpdate.decisionTree, null, 2));
+      updateFormData(dataToUpdate);
+      
+      // Verify it was set
+      setTimeout(() => {
+        const currentState = useFormStore.getState();
+        console.log('[MultiStepForm] Form store state AFTER updateFormData:', {
+          decisionTree: JSON.stringify(currentState.formData.decisionTree, null, 2),
+          propertyType: currentState.formData.decisionTree?.propertyType,
+          contractType: currentState.formData.decisionTree?.contractType,
+          status: currentState.formData.decisionTree?.status,
+        });
+      }, 100);
+    }
+  }, [mode, initialData, recordId, returnTo, editor, updateFormData, isHydrated]);
 
   // Clear validation errors when step changes
   useEffect(() => {
@@ -353,7 +403,9 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         }
         
         // Unit numbers validation - applies to all property types except Projects
-        if (decisionTree?.propertyType !== null && 
+        // Skip validation in edit mode since checkbox is hidden
+        if (!formData.editMode && 
+            decisionTree?.propertyType !== null && 
             !(decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple')) {
           // hasUnitNumbers must be selected (true or false, not undefined)
           if (address?.hasUnitNumbers === undefined) {
@@ -370,11 +422,16 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           }
           
           // For dual occupancy: hasUnitNumbers must be true (it's auto-selected, but validate anyway)
+          // In edit mode, just check if unitNumber exists (hasUnitNumbers checkbox is hidden)
           if (decisionTree?.dualOccupancy === 'Yes') {
-            if (address?.hasUnitNumbers !== true) {
-              setValidationErrorWithRef('Dual occupancy properties must have unit numbers. Please select "Yes" for unit numbers.');
-              return false;
+            if (!formData.editMode) {
+              // In create mode, validate hasUnitNumbers checkbox
+              if (address?.hasUnitNumbers !== true) {
+                setValidationErrorWithRef('Dual occupancy properties must have unit numbers. Please select "Yes" for unit numbers.');
+                return false;
+              }
             }
+            // In both modes, unitNumber is required for dual occupancy
             if (!address?.unitNumber || address.unitNumber.trim() === '') {
               setValidationErrorWithRef('Please enter which unit(s) you are buying for this dual occupancy property.');
               return false;
@@ -734,7 +791,9 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         const missingMarketFields = requiredFieldsMap
           .filter(field => {
             if (!field.value) return true;
-            const trimmed = field.value.trim();
+            // Safely convert to string (handles numbers, null, undefined from Google Sheets)
+            const stringValue = typeof field.value === 'string' ? field.value : String(field.value || '');
+            const trimmed = stringValue.trim();
             return trimmed === '' || trimmed === '.';
           })
           .map(field => field.name);
@@ -778,7 +837,8 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         }
         
         // ONE EXIT RULE: Checkbox must be checked (applies to all scenarios)
-        if (!contentSections.contentReviewed) {
+        // Skip checkbox requirement in edit mode
+        if (!formData.editMode && !contentSections.contentReviewed) {
           setValidationError('Please confirm you have reviewed all content by checking the checkbox.');
           return false;
         }
@@ -842,17 +902,20 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
         return true;
 
       case 8: // Cashflow Review
-        // Check if folder has been created
-        if (!formData.address?.folderLink) {
+        // Check if folder has been created (required in create mode, optional in edit mode)
+        const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
+        if (!isEditMode && !formData.address?.folderLink) {
           setValidationError('Please fill in all required fields before proceeding, or you have not created the folder for the property. Check the form for highlighted fields.');
           return false;
         }
-        
+        // In edit mode, allow proceeding even if folderLink is missing
         return true;
 
       case 9: // Photo & Document Upload
         // Check if folder has been created (required for photo/document upload)
-        if (!formData.address?.folderLink) {
+        // In edit mode, allow proceeding even if folderLink is missing (folder might exist but link not stored)
+        const isEditModeStep9 = formData.editMode === true || !!formData.ghlRecordId;
+        if (!isEditModeStep9 && !formData.address?.folderLink) {
           setValidationError('Please complete the previous steps first. The property folder must be created before you can upload photos and documents.');
           return false;
         }
@@ -1205,6 +1268,111 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
     }
   };
 
+  // Reusable submit function for edit mode (can be called from any step)
+  const handleSubmitChange = async () => {
+    // Only available in edit mode
+    if (mode !== 'edit' || !formData.editMode || !formData.ghlRecordId) {
+      return;
+    }
+
+    // Validate current step before submitting
+    if (!validateStep(currentStep)) {
+      if (!validationErrorRef.current) {
+        setValidationErrorWithRef('Please fill in all required fields before submitting.');
+      }
+      const firstInvalid = document.querySelector('input:invalid, select:invalid, textarea:invalid') as HTMLElement;
+      if (firstInvalid) {
+        firstInvalid.focus();
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
+    try {
+      // Fields that are internal/UI state and should NOT be sent to GHL
+      const INTERNAL_FIELDS = {
+        address: ['addressVerified', 'addressFieldsEditable', 'stashPropertyAddress', 'latitude', 'longitude', 'addressSource', 'lotNumberNotApplicable', 'usePropertyAddressForProject', 'hasUnitNumbers'],
+        marketPerformance: ['isSaved', 'isVerified', 'daysSinceLastCheck'],
+      };
+
+      // Function to remove internal fields from an object
+      const removeInternalFields = (obj: any, fieldList: string[]): any => {
+        if (!obj || typeof obj !== 'object') return obj;
+        const result: any = {};
+        for (const key in obj) {
+          if (obj.hasOwnProperty(key) && !fieldList.includes(key)) {
+            result[key] = obj[key];
+          }
+        }
+        return result;
+      };
+
+      // Remove internal/UI state fields before processing
+      const cleanedFormData = {
+        ...formData,
+        address: formData.address ? removeInternalFields(formData.address, INTERNAL_FIELDS.address) : formData.address,
+        marketPerformance: formData.marketPerformance ? removeInternalFields(formData.marketPerformance, INTERNAL_FIELDS.marketPerformance) : formData.marketPerformance,
+      };
+
+      // Convert empty strings to null (GHL API handles null better than empty strings for partial updates)
+      const convertEmptyStringsToNull = (obj: any): any => {
+        if (Array.isArray(obj)) {
+          return obj.map(item => convertEmptyStringsToNull(item));
+        }
+        if (typeof obj === 'object' && obj !== null) {
+          const result: any = {};
+          for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              result[key] = convertEmptyStringsToNull(obj[key]);
+            }
+          }
+          return result;
+        }
+        if (obj === '') {
+          return null;
+        }
+        return obj;
+      };
+
+      const processedData = convertEmptyStringsToNull(cleanedFormData);
+
+      // Update via PUT API endpoint
+      const updateResponse = await fetch(`/api/properties/${formData.ghlRecordId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(processedData),
+      });
+
+      if (!updateResponse.ok) {
+        const errorData = await updateResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || `Update failed: ${updateResponse.status}`);
+      }
+
+      // Call Make.com webhook for update (non-blocking)
+      const webhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_RESEND_EMAIL;
+      if (webhookUrl) {
+        const payload = {
+          recordId: formData.ghlRecordId,
+          source: 'form_app_edit',
+          editor: formData.editor || userEmail || 'unknown',
+        };
+        fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch((err) => console.log('Webhook call failed:', err));
+      }
+
+      // Show success message
+      alert('✅ Changes saved successfully! The GHL record has been updated.');
+    } catch (error) {
+      console.error('Error submitting changes:', error);
+      alert(`❌ Error saving changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6">
       {/* Step Indicators */}
@@ -1229,6 +1397,16 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
           ))}
         </div>
       </div>
+
+      {/* RECORD EDIT banner - Prominent banner across top in edit mode */}
+      {mode === 'edit' && (
+        <div className="mb-6 bg-red-600 text-white py-4 px-6 rounded-lg shadow-lg">
+          <div className="text-center">
+            <h2 className="text-3xl font-bold tracking-wide mb-2">⚠️ RECORD EDIT MODE ⚠️</h2>
+            <p className="text-base font-semibold opacity-95">You are editing an existing record. All changes will update the GHL record.</p>
+          </div>
+        </div>
+      )}
 
       {/* Property Address - Display at top of each step */}
       {formData?.address?.propertyAddress && (
@@ -1276,8 +1454,20 @@ export function MultiStepForm({ userEmail }: MultiStepFormProps) {
             Previous
           </button>
 
-          <div className="text-sm text-gray-500">
-            Step {currentStep} of {STEPS.length}
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-500">
+              Step {currentStep} of {STEPS.length}
+            </div>
+
+            {/* Submit Change button - only in edit mode */}
+            {mode === 'edit' && (
+              <button
+                onClick={handleSubmitChange}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 font-medium"
+              >
+                Submit Change
+              </button>
+            )}
           </div>
 
           {/* Submit button removed - submission only happens in Step6FolderCreation after folder is created */}

@@ -21,6 +21,152 @@ After you've marked items, the list will be automatically reorganized:
 - Items marked "REMOVE FROM LIST" → Removed entirely
 - All other items → Remain in their current priority sections
 
+## 📋 REFERENCE - Make.com Router Filter Issues
+
+**Issue:** Module 10 (BA Path) and Module 20 (QA Path) are reading approval fields from the webhook (Module 1) instead of from the GHL record data (Module 16), so `qa_approved` may be missing or incorrect, causing the QA path to be skipped.
+
+**Why it might suddenly stop working after working for days:**
+
+1. **GHL webhook payload changed** - The webhook (Module 1) previously included `qa_approved`, so `{{1.qa_approved}}` worked. GHL may have stopped sending it in the webhook, or this property has a different value/empty field, so the filter now fails.
+
+2. **Module 13's GHL API response structure changed** - Module 13's GHL API response structure changed, so Module 16 can't extract `qa_approved` anymore, or the property's `qa_approved` value changed (e.g., empty/null vs "Approved"), exposing the malformed filter.
+
+3. **Property data changed** - The property's `qa_approved` value changed (e.g., empty/null vs "Approved"), exposing the malformed filter.
+
+**Quick check:** In Make.com execution logs, verify what `{{1.qa_approved}}` and `{{16.result.qa_approved}}` contain for the failing run.
+
+**Analysis from Failed Run (Module 1 Output):**
+
+**Property:** Lot 345, Units A&B, 3 Croydon St Petersham NSW 2049
+
+**Findings:**
+- ✅ `qa_approved` **IS present** in webhook: `"qa_approved": "null"` (string "null", not missing)
+- ✅ `packager_approved`: `"Approved"` ✓
+- ✅ `ba_approved`: `"null"` (string)
+- ✅ `packager`: `"john.t"` (short name format)
+
+**Key Observations:**
+1. The webhook includes `qa_approved`, but it's `"null"` (string), not `"Approved"`
+2. The malformed filter in Module 20 (`"\"a\": \"{{1.qa_approved}}\"."`) is likely breaking the comparison
+3. Even if the filter worked, `"null" != "Approved"` should make the QA path trigger, but the malformed condition may prevent that
+4. **Note:** Recent properties have full names in packager field instead of short names - this one shows `"john.t"` (short), indicating possible inconsistency in GHL webhook data format
+
+**Comparison: Failed Run vs Working Run (Module 1 Output):**
+
+| Field | Failed Run (Earlier) | Working Run (2:27 PM) | Match? |
+|-------|---------------------|----------------------|--------|
+| `qa_approved` | `"null"` | `"null"` | ✅ **IDENTICAL** |
+| `packager_approved` | `"Approved"` | `"Approved"` | ✅ **IDENTICAL** |
+| `ba_approved` | `"null"` | `"null"` | ✅ **IDENTICAL** |
+| `packager` | `"john.t"` | `"john.t"` | ✅ **IDENTICAL** |
+
+**CRITICAL FINDING:** Both runs have **identical approval field values** in the webhook payload. This means:
+- ❌ The issue is **NOT** with the webhook payload (Module 1)
+- ✅ The problem is likely:
+  1. **Malformed filter in Module 20** causing unpredictable behavior (`"\"a\": \"{{1.qa_approved}}\"."`)
+  2. **Module 16 extraction** - Module 16 may be extracting different values from Module 13 (GHL record) than what's in the webhook
+  3. **Filter evaluation inconsistency** - The malformed filter may work sometimes and fail other times due to Make.com's filter evaluation logic
+
+**CHANGES MADE TODAY (Same Time Period Issue Started):**
+
+**1. Module 3 - Added QA Logic (Today):**
+- **Local file (old):** Does NOT read `qa_approved`, subject logic: `if (packagerApproved === "approved") { subjectPrefix = "BA AUTO SEND – "; }`
+- **Blueprint (new, today):** Reads `qa_approved`, subject logic: `if (qaApproved === "approved") { subjectPrefix = "BA AUTO SEND – "; } else if (packagerApproved === "approved") { subjectPrefix = "QA TO VERIFY – "; }`
+- **Impact:** Module 3 now generates "QA TO VERIFY" subject when `packager_approved === "approved"` AND `qa_approved !== "approved"`
+
+**2. Module 16 - Updated to Extract qa_approved (Today):**
+- **Local file (old):** Only returns `packager_approved`
+- **Blueprint (new, today):** Returns both `packager_approved` AND `qa_approved` from Module 13's GHL record
+
+**ANALYSIS: Why Module 16 Change Was Made**
+
+**Context from Documentation (Scenario 02a/ISSUES-TRACKER.md):**
+- **Portal requests:** Portal payload to Module 1 contains `source: "portal"`, `id`, but **NO** `qa_approved`, `packager_approved`, or `ba_approved`
+- **For Portal requests:** Approval fields must come from Module 13 (GHL record) → Module 16 extracts them
+- **Change was made for Portal requests, NOT for GHL webhook requests**
+
+**For GHL Webhook Requests:**
+- GHL webhook (Module 1) **DOES** include all approval fields (`packager_approved`, `qa_approved`, `ba_approved`)
+- GHL workflow triggers fire when approval status changes (Property Review Changed when "Packager Approved" = 'Approved', etc.)
+- **If webhook fires on approval changes, Module 1 should have current data - no need for Module 16**
+
+**EVIDENCE FOUND:**
+- **File:** `make-com-scenarios/QA-STEP-ANALYSIS.md`
+- **Date:** 2026-01-29
+- **Status:** "✅ Implementation Complete - Ready for Testing (2026-01-29)"
+- **Line 414:** "Module 16: Add qa_approved extraction"
+- **Line 331-332:** "Phase 7: Module 16 Updates - [x] ✅ Add `qa_approved` extraction"
+
+**FACT:** Documentation shows Module 16 was changed to extract `qa_approved` on January 29, 2026 as part of QA step implementation.
+
+**USER CONFIRMATION NEEDED:** You don't remember agreeing to this change. Either:
+1. Documentation is incorrect about when/why it was implemented
+2. Change was made without your knowledge/agreement
+3. Change was reverted and re-added today without discussion
+
+**WHAT BREAKS IF WE REVERT MODULE 16 (remove qa_approved extraction):**
+
+**✅ Portal requests:** WILL BREAK
+- Module 14 filter uses `{{16.result.qa_approved}}` for Portal requests
+- Portal webhook doesn't include `qa_approved` in Module 1
+- Without Module 16 extracting it from Module 13, Portal client emails won't send
+
+**✅ GHL webhook requests:** WON'T BREAK
+- Router filters (Module 20, Module 10) use `{{1.qa_approved}}` (from webhook)
+- GHL webhook includes `qa_approved` in Module 1
+- Module 16's `qa_approved` extraction is NOT used for GHL webhook router filters
+
+**RECOMMENDATION:**
+- **Keep Module 16 extracting qa_approved** (needed for Portal)
+- **Fix router filters for GHL webhook requests** to use `{{1.qa_approved}}` correctly (not malformed)
+- **The issue today is the malformed filter, not Module 16**
+
+**Benefit 2: QA Workflow Step (Module 3 QA logic)**
+- **Why:** Adds quality control layer between Packager and BA
+- **Business value:** Prevents poorly packaged properties from reaching BA, reducing BA time wasted on unsuitable properties
+- **Workflow:** Packager → QA Review → BA Review → Client
+- **Benefit:** QA can catch errors, formatting issues, or missing information before BA sees the property
+
+**THE MISMATCH:**
+- Module 3 and Module 16 were updated to support QA workflow using GHL as source of truth
+- **BUT** router filters (Module 20, Module 10) still use `{{1.*}}` (webhook) instead of `{{16.result.*}}` (GHL record)
+- This creates inconsistency: Module 3 generates emails based on one data source, but router filters decide paths based on a different (potentially stale) data source
+
+**DECISION NEEDED:**
+- **Option A:** Keep Module 3/16 changes, fix router filters to use `{{16.result.*}}` (recommended if QA workflow is needed)
+- **Option B:** Revert Module 3/16 changes, fix router filters to properly use `{{1.*}}` (if QA workflow isn't needed or can be handled differently)
+
+**Module 20 Filter (QA Path) in Blueprint:**
+```json
+{
+    "a": "\"a\": \"{{1.qa_approved}}\".",
+    "b": "Approved",
+    "o": "text:notequal"
+}
+```
+- ❌ **Malformed** AND using wrong source (`{{1.*}}` instead of `{{16.result.*}}`)
+- Should be: `"a": "{{16.result.qa_approved}}"` to match today's changes
+
+**FIX APPLIED (2026-02-03):**
+- ✅ **Module 3 Updated:** Reinstated QA logic to match blueprint
+  - Added `qaApproved` variable reading
+  - Updated subject prefix logic: `if (qaApproved === "approved") { "BA AUTO SEND" } else if (packagerApproved === "approved") { "QA TO VERIFY" }`
+  - Added `isQAEmail` flag: `packagerApproved === "approved" && qaApproved !== "approved"`
+  - Updated `isBAEmail` flag: `packagerApproved === "approved" && qaApproved === "approved" && baApproved !== "approved"`
+  - Added QA email message preview handling
+  - Added QA approval section HTML with "QA TO VERIFY" text
+  - Added QA text body handling
+  - Added QA recipient email: `packaging@buyersclub.com.au`
+  - Added `isQAEmail` to console logs
+  - **File:** `code/MODULE-3-COMPLETE-FOR-MAKE.js`
+  - **Status:** ✅ Code updated, awaiting user testing
+
+**Next Steps:**
+- ⏳ **TESTING:** User testing property submission to verify QA path works
+- 🔍 **VERIFY:** After testing, check Make.com execution logs to confirm QA email is generated and sent correctly
+
+---
+
 ## 🧪 TESTING INCIDENTS
 
 Issues discovered during testing that need investigation and resolution:
@@ -36,6 +182,18 @@ Issues discovered during testing that need investigation and resolution:
 ## ✅ ACTION LIST - Items Ready to Work On
 
 Items that have been prioritized and are ready for implementation:
+
+- [ ] **Email Tempate - N/A bieng used instead of Vacant**
+  - **Problem:** N/A shown for currebt rent and expiry 
+  - **Impact:** Poor UI Experience?
+  - **Effort:** 1-2 hours
+  JT UPDATE: 
+
+- [ ] **Email Tempate - Asking using backend wording for Pre Launch Opportunity**
+  - **Problem:** BAck end field name being used not friendly field name
+  - **Impact:** Poor UI Experience
+  - **Effort:** 1-2 hours
+  JT UPDATE: 
 
 - [ ] **Page 8 - Fix Cashflow Spreadsheet Dropdown Calc**
   - **Problem:** Drawdown sheet not fully working working

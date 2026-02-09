@@ -20,7 +20,8 @@ import { InvestmentHighlightsField } from './step5/InvestmentHighlightsField';
 
 export function Step5Proximity() {
   const { formData, updateFormData } = useFormStore();
-  const { contentSections, address, proximityData, earlyProcessing } = formData;
+  const { contentSections, address, proximityData, earlyProcessing, editMode, ghlRecordId } = formData;
+  const isEditMode = editMode === true || !!ghlRecordId;
   
   // Use form store state instead of local state
   const contentReviewed = contentSections?.contentReviewed || false;
@@ -138,10 +139,10 @@ export function Step5Proximity() {
                 });
               }}
               className="mt-1 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              required
+              required={!isEditMode}
             />
             <span className="text-sm font-medium text-gray-900">
-              I have reviewed all content sections above (Proximity & Amenities, Why This Property, and Investment Highlights) and confirm they are accurate and complete. *
+              I have reviewed all content sections above (Proximity & Amenities, Why This Property, and Investment Highlights) and confirm they are accurate and complete.{!isEditMode && ' *'}
             </span>
           </label>
         </div>

@@ -2058,24 +2058,99 @@ export function Step0AddressAndRisk() {
             </div>
           )}
           <div className="flex gap-4">
-            <button
-              onClick={() => {
-                if (confirm('Are you sure you want to reset the form? All data will be lost.')) {
-                  const store = useFormStore.getState();
-                  store.resetForm();
-                  // Also clear Step 2 data
-                  store.clearStep2Data();
-                  setPackagingEnabled(false);
-                  setValidationError(null);
-                  if (typeof window !== 'undefined') {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+            {/* Submit Change button - only in edit mode */}
+            {formData.editMode && formData.ghlRecordId && (
+              <button
+                onClick={async () => {
+                  // Validate step first
+                  if (!address?.propertyAddress) {
+                    setValidationError('Property address is required');
+                    return;
                   }
-                }
-              }}
-              className="btn-secondary flex-1"
-            >
-              Reset Form
-            </button>
+                  
+                  try {
+                    // Use the same submit logic as MultiStepForm
+                    const INTERNAL_FIELDS = {
+                      address: ['addressVerified', 'addressFieldsEditable', 'stashPropertyAddress', 'latitude', 'longitude', 'addressSource', 'lotNumberNotApplicable', 'usePropertyAddressForProject', 'hasUnitNumbers'],
+                      marketPerformance: ['isSaved', 'isVerified', 'daysSinceLastCheck'],
+                    };
+
+                    const removeInternalFields = (obj: any, fieldList: string[]): any => {
+                      if (!obj || typeof obj !== 'object') return obj;
+                      const result: any = {};
+                      for (const key in obj) {
+                        if (obj.hasOwnProperty(key) && !fieldList.includes(key)) {
+                          result[key] = obj[key];
+                        }
+                      }
+                      return result;
+                    };
+
+                    const convertEmptyStringsToNull = (obj: any): any => {
+                      if (Array.isArray(obj)) {
+                        return obj.map(item => convertEmptyStringsToNull(item));
+                      }
+                      if (typeof obj === 'object' && obj !== null) {
+                        const result: any = {};
+                        for (const key in obj) {
+                          if (obj.hasOwnProperty(key)) {
+                            result[key] = convertEmptyStringsToNull(obj[key]);
+                          }
+                        }
+                        return result;
+                      }
+                      if (obj === '') {
+                        return null;
+                      }
+                      return obj;
+                    };
+
+                    const cleanedFormData = {
+                      ...formData,
+                      address: formData.address ? removeInternalFields(formData.address, INTERNAL_FIELDS.address) : formData.address,
+                      marketPerformance: formData.marketPerformance ? removeInternalFields(formData.marketPerformance, INTERNAL_FIELDS.marketPerformance) : formData.marketPerformance,
+                    };
+
+                    const processedData = convertEmptyStringsToNull(cleanedFormData);
+
+                    const updateResponse = await fetch(`/api/properties/${formData.ghlRecordId}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(processedData),
+                    });
+
+                    if (!updateResponse.ok) {
+                      const errorData = await updateResponse.json().catch(() => ({}));
+                      throw new Error(errorData.error || `Update failed: ${updateResponse.status}`);
+                    }
+
+                    // Call Make.com webhook
+                    const webhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_RESEND_EMAIL;
+                    if (webhookUrl) {
+                      const payload = {
+                        recordId: formData.ghlRecordId,
+                        source: 'form_app_edit',
+                        editor: formData.editor || 'unknown',
+                      };
+                      fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                      }).catch((err) => console.log('Webhook call failed:', err));
+                    }
+
+                    alert('✅ Changes saved successfully! The GHL record has been updated.');
+                  } catch (error) {
+                    console.error('Error submitting changes:', error);
+                    alert(`❌ Error saving changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                  }
+                }}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 font-medium"
+              >
+                Submit Change
+              </button>
+            )}
+            
             <button
               onClick={handleProceedToStep2}
               className="btn-primary flex-1 text-lg py-3"

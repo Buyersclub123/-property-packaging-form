@@ -99,26 +99,48 @@ export const useFormStore = create<FormStore>()(
       setCurrentStep: (step) => set({ currentStep: step }),
       setUserEmail: (email) => set({ userEmail: email }),
       
-      updateFormData: (data) =>
-        set((state) => ({
-          formData: {
+      updateFormData: (data) => {
+        console.log('[formStore] updateFormData called with:', data);
+        console.log('[formStore] data.decisionTree:', data.decisionTree);
+        set((state) => {
+          const newFormData = {
             ...state.formData,
-            ...data,
+            // Exclude nested objects from top-level spread - we'll merge them separately
+            ...(Object.keys(data).reduce((acc, key) => {
+              if (!['decisionTree', 'address', 'riskOverlays', 'contentSections', 'earlyProcessing'].includes(key)) {
+                acc[key] = data[key];
+              }
+              return acc;
+            }, {} as any)),
             // Deep merge for nested objects to prevent data loss
-            ...(data.contentSections && {
-              contentSections: {
-                ...state.formData.contentSections,
-                ...data.contentSections,
-              },
-            }),
-            ...(data.earlyProcessing && {
-              earlyProcessing: {
-                ...state.formData.earlyProcessing,
-                ...data.earlyProcessing,
-              },
-            }),
-          },
-        })),
+            // ALWAYS preserve existing decisionTree if new data doesn't include it
+            decisionTree: data.decisionTree ? {
+              ...(state.formData.decisionTree || {}),
+              ...data.decisionTree,
+            } : (state.formData.decisionTree || {}),
+            // ALWAYS preserve existing nested objects if new data doesn't include them
+            address: data.address ? {
+              ...(state.formData.address || {}),
+              ...data.address,
+            } : (state.formData.address || {}),
+            riskOverlays: data.riskOverlays ? {
+              ...(state.formData.riskOverlays || {}),
+              ...data.riskOverlays,
+            } : (state.formData.riskOverlays || {}),
+            contentSections: data.contentSections ? {
+              ...(state.formData.contentSections || {}),
+              ...data.contentSections,
+            } : (state.formData.contentSections || {}),
+            earlyProcessing: data.earlyProcessing ? {
+              ...(state.formData.earlyProcessing || {}),
+              ...data.earlyProcessing,
+            } : (state.formData.earlyProcessing || {}),
+          };
+          console.log('[formStore] New formData after merge:', newFormData);
+          console.log('[formStore] decisionTree after merge:', newFormData.decisionTree);
+          return { formData: newFormData };
+        });
+      },
       
       updateDecisionTree: (tree) =>
         set((state) => ({
@@ -398,25 +420,84 @@ export const useFormStore = create<FormStore>()(
       storage: createJSONStorage(getStorage),
       // Skip automatic hydration - we'll hydrate manually on client
       skipHydration: true,
-      // Exclude Decision Tree and Step 2 fields from persistence - always start blank
-      partialize: (state) => ({
-        ...state,
-        formData: {
-          ...state.formData,
-          decisionTree: {
-            propertyType: null,
-            contractType: null,
-            contractTypeSimplified: null, // Include so field always exists in state
-            lotType: null,
-            dualOccupancy: null,
-            status: null,
+      // Custom deep merge function to handle nested objects during hydration
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as any;
+        if (!persisted || !persisted.formData) {
+          return currentState;
+        }
+        
+        // Deep merge nested objects to preserve loaded data
+        return {
+          ...currentState,
+          formData: {
+            ...currentState.formData,
+            // Merge top-level fields
+            ...Object.keys(persisted.formData || {}).reduce((acc, key) => {
+              if (!['decisionTree', 'address', 'riskOverlays', 'contentSections', 'earlyProcessing', 'propertyDescription', 'purchasePrice', 'rentalAssessment'].includes(key)) {
+                acc[key] = persisted.formData[key];
+              }
+              return acc;
+            }, {} as any),
+            // Deep merge nested objects - preserve current state if it has values, otherwise use persisted
+            decisionTree: {
+              ...(persisted.formData.decisionTree || {}),
+              // Only use persisted values if current state doesn't have them (for edit mode loaded data)
+              ...(currentState.formData.decisionTree && Object.values(currentState.formData.decisionTree).some(v => v !== null && v !== '') 
+                ? currentState.formData.decisionTree 
+                : {}),
+            },
+            address: {
+              ...(persisted.formData.address || {}),
+              ...(currentState.formData.address || {}),
+            },
+            riskOverlays: {
+              ...(persisted.formData.riskOverlays || {}),
+              ...(currentState.formData.riskOverlays || {}),
+            },
+            contentSections: {
+              ...(persisted.formData.contentSections || {}),
+              ...(currentState.formData.contentSections || {}),
+            },
+            earlyProcessing: {
+              ...(persisted.formData.earlyProcessing || {}),
+              ...(currentState.formData.earlyProcessing || {}),
+            },
+            // Step 2 fields - don't persist, always use current
+            propertyDescription: currentState.formData.propertyDescription || {},
+            purchasePrice: currentState.formData.purchasePrice || {},
+            rentalAssessment: currentState.formData.rentalAssessment || {},
           },
-          // Exclude Step 2 fields from persistence
-          propertyDescription: {},
-          purchasePrice: {},
-          rentalAssessment: {},
-        },
-      }),
+        };
+      },
+      // Exclude Decision Tree and Step 2 fields from persistence - always start blank for new forms
+      // But preserve them in edit mode by not resetting if they have values
+      partialize: (state) => {
+        // In edit mode, preserve decisionTree if it has values
+        const hasEditData = state.formData.editMode === true && 
+          state.formData.decisionTree && 
+          Object.values(state.formData.decisionTree).some(v => v !== null && v !== '');
+        
+        return {
+          ...state,
+          formData: {
+            ...state.formData,
+            // Only reset decisionTree if not in edit mode with loaded data
+            decisionTree: hasEditData ? state.formData.decisionTree : {
+              propertyType: null,
+              contractType: null,
+              contractTypeSimplified: null,
+              lotType: null,
+              dualOccupancy: null,
+              status: null,
+            },
+            // Exclude Step 2 fields from persistence (always start blank)
+            propertyDescription: {},
+            purchasePrice: {},
+            rentalAssessment: {},
+          },
+        };
+      },
     }
   )
 );

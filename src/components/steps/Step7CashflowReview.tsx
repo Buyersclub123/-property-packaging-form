@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFormStore } from '@/store/formStore';
 import { constructFolderName } from '@/lib/addressFormatter';
 
@@ -31,6 +31,18 @@ export function Step7CashflowReview() {
   const [creating, setCreating] = useState(false);
   const [folderLink, setFolderLink] = useState<string | null>(formData.address?.folderLink || null);
   const [error, setError] = useState<string | null>(null);
+  const [openingSpreadsheet, setOpeningSpreadsheet] = useState(false);
+  const [spreadsheetError, setSpreadsheetError] = useState<string | null>(null);
+  
+  // Check if in edit mode
+  const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
+
+  // Sync folderLink from formData when it changes (e.g., after loading from GHL)
+  useEffect(() => {
+    if (formData.address?.folderLink) {
+      setFolderLink(formData.address.folderLink);
+    }
+  }, [formData.address?.folderLink]);
 
   // Editable fields state
   const [councilWaterRates, setCouncilWaterRates] = useState(formData.councilWaterRates || '');
@@ -183,6 +195,47 @@ export function Step7CashflowReview() {
       setError(err instanceof Error ? err.message : 'Failed to create folder');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleEditSpreadsheet = async () => {
+    if (!folderLink && !formData.address?.folderLink) {
+      alert('Folder link is required to open the spreadsheet');
+      return;
+    }
+
+    setOpeningSpreadsheet(true);
+    setSpreadsheetError(null);
+    
+    try {
+      const response = await fetch('/api/get-cashflow-spreadsheet-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          folderLink: folderLink || formData.address?.folderLink,
+          contractType: formData.decisionTree?.contractTypeSimplified,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to get spreadsheet link');
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.spreadsheetUrl) {
+        // Open the spreadsheet in a new tab
+        window.open(result.spreadsheetUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        throw new Error(result.error || 'Failed to get spreadsheet link');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to open spreadsheet';
+      setSpreadsheetError(errorMessage);
+      alert(errorMessage);
+    } finally {
+      setOpeningSpreadsheet(false);
     }
   };
 
@@ -388,9 +441,77 @@ export function Step7CashflowReview() {
 
       {/* Folder Creation Section */}
       <div className="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
-        <h3 className="text-lg font-semibold mb-4">Create Property Folder</h3>
+        <h3 className="text-lg font-semibold mb-4">
+          {isEditMode ? 'Property Folder' : 'Create Property Folder'}
+        </h3>
         
-        {!folderLink ? (
+        {isEditMode ? (
+          // Edit mode: Show View Folder button (folder should exist, but handle missing folderLink gracefully)
+          folderLink ? (
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <p className="text-sm font-medium text-green-900">Folder exists</p>
+                </div>
+                <a
+                  href={folderLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium text-sm break-all"
+                >
+                  {folderLink}
+                </a>
+              </div>
+              
+              <div className="flex gap-3">
+                <a
+                  href={folderLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary inline-flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  View Folder in Google Drive
+                </a>
+                
+                <button
+                  onClick={handleEditSpreadsheet}
+                  disabled={openingSpreadsheet}
+                  className="btn-secondary inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {openingSpreadsheet ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Opening...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit Cashflow Spreadsheet
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {spreadsheetError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-sm text-red-700">{spreadsheetError}</p>
+                </div>
+              )}
+            </div>
+          ) : null
+        ) : !folderLink ? (
+          // Create mode: Show Create Folder button
           <div className="space-y-4">
             <p className="text-sm text-gray-700">
               Click the button below to create the Google Drive folder and populate the cashflow spreadsheet with all the data above.
@@ -414,6 +535,7 @@ export function Step7CashflowReview() {
             </button>
           </div>
         ) : (
+          // Create mode: Folder created successfully
           <div className="space-y-4">
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
