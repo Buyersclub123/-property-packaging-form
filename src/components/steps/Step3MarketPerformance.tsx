@@ -1844,7 +1844,6 @@ export function Step3MarketPerformance() {
                   target.style.height = 'auto';
                   target.style.height = `${target.scrollHeight}px`;
                 }}
-                readOnly={marketPerformance?.isSaved === true && !showDataCollection}
                 className="input-field resize-none overflow-hidden"
                 rows={3}
                 placeholder="Any additional details about market performance"
