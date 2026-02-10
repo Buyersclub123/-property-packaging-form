@@ -91,7 +91,7 @@ export function Step3MarketPerformance() {
     }
     
     // Remove % signs and spaces for numeric processing
-    let cleaned = value.replace(/%/g, '').replace(/\s/g, '');
+    let cleaned = trimmed.replace(/%/g, '').replace(/\s/g, '');
     
     // If after cleaning it's empty or just a decimal point, return empty
     if (cleaned === '' || cleaned === '.') {
@@ -446,8 +446,13 @@ export function Step3MarketPerformance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address.suburbName, address.state]); // Removed updateFormData from deps to prevent unnecessary re-fetches
 
-  // Single save handler that can save SPI, REI, or both
+      // Single save handler that can save SPI, REI, or both
   const handleSaveMarketPerformanceData = async () => {
+    // Check if user had clicked "Check data" (isVerified was false, requiring verification)
+    // Get latest state from store to ensure we have the current value
+    const currentFormData = useFormStore.getState().formData;
+    const wasVerificationRequired = currentFormData.marketPerformance?.isVerified === false;
+    
     // Check if this is a new suburb (no existing data)
     const isNewSuburb = !lookupResult?.found || lookupResult?.isMockData;
     
@@ -605,12 +610,16 @@ export function Step3MarketPerformance() {
               vacancyRate: formData_REI.vacancyRate,
             }),
             isSaved: savedToSheet, // Only true if saved to sheet
+            // If user clicked "Check data" and then updated data, mark as verified after saving
+            // This allows progression to step 5 without needing to click "Data is fine" again
+            isVerified: wasVerificationRequired ? true : marketPerformance?.isVerified,
           },
         });
 
         setShowSPIForm(false);
         setShowREIForm(false);
         setShowDataCollection(false);
+        setShowStaleDataLinks(false); // Hide the "Check data" links section after saving
       }
 
       // Show appropriate message based on whether it was saved to sheet
@@ -649,6 +658,8 @@ export function Step3MarketPerformance() {
                 rentalPopulation: refreshResult.data.rentalPopulation,
                 vacancyRate: refreshResult.data.vacancyRate,
                 isSaved: true, // Keep saved flag after refresh
+                // Preserve isVerified if it was set to true during save
+                isVerified: wasVerificationRequired ? true : currentFormData.marketPerformance?.isVerified,
               },
             });
             setScenario('fresh-data');
@@ -982,34 +993,17 @@ export function Step3MarketPerformance() {
 
       {/* Google Sheet Info */}
       <div className="p-4 bg-blue-50 rounded-lg mb-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm font-semibold text-blue-900 mb-2">Google Sheet:</p>
-            <p className="text-blue-700 text-sm">
-              <strong>Name:</strong> Property Review Static Data - Market Performance
-            </p>
-            <p className="text-blue-700 text-sm">
-              <strong>Tab:</strong> Market Performance
-            </p>
-            <p className="text-blue-700 text-sm">
-              <strong>Lookup:</strong> By Suburb ({address.suburbName || 'TBD'}) and State ({address.state || 'TBD'})
-            </p>
-          </div>
-          {/* Test button - for testing error state */}
-          <button
-            onClick={() => {
-              // Simulate error for testing
-              setError('Test error: Simulated Google Sheet connection failure');
-              setScenario('error');
-              setShowDataCollection(true);
-              setShowSPIForm(true);
-              setShowREIForm(true);
-            }}
-            className="btn-secondary text-xs px-2 py-1 bg-yellow-100 border-yellow-300"
-            title="Test error state - simulates Google Sheet being inaccessible"
-          >
-            Test Error
-          </button>
+        <div>
+          <p className="text-sm font-semibold text-blue-900 mb-2">Google Sheet:</p>
+          <p className="text-blue-700 text-sm">
+            <strong>Name:</strong> Property Review Static Data - Market Performance
+          </p>
+          <p className="text-blue-700 text-sm">
+            <strong>Tab:</strong> Market Performance
+          </p>
+          <p className="text-blue-700 text-sm">
+            <strong>Lookup:</strong> By Suburb ({address.suburbName || 'TBD'}) and State ({address.state || 'TBD'})
+          </p>
         </div>
       </div>
 
@@ -1139,6 +1133,7 @@ export function Step3MarketPerformance() {
                 <button
                   onClick={() => {
                     // Clear both SPI and REI fields in marketPerformance
+                    // Preserve isVerified state (should be false if user clicked "Check data")
                     updateFormData({
                       marketPerformance: {
                         ...marketPerformance,
@@ -1151,6 +1146,8 @@ export function Step3MarketPerformance() {
                         rentalPopulation: '',
                         vacancyRate: '',
                         isSaved: false,
+                        // Explicitly preserve isVerified (should be false if "Check data" was clicked)
+                        isVerified: marketPerformance?.isVerified,
                       },
                     });
                     // Clear form state variables
@@ -1557,7 +1554,7 @@ export function Step3MarketPerformance() {
                   ? 'Saving...' 
                   : scenario === 'error'
                     ? 'Save for this review (will update Google Sheet if connection restored)'
-                    : 'Save Market Performance Data'}
+                    : 'Confirm data is loaded and progress to step 5'}
               </button>
             </div>
           )}
@@ -1639,7 +1636,7 @@ export function Step3MarketPerformance() {
                 onChange={(e) => {
                   const cleaned = cleanNumericInput(e.target.value, false);
                   updateFormData({
-                    marketPerformance: { ...marketPerformance, medianPriceChange3Year: cleaned },
+                    marketPerformance: { ...marketPerformance, medianPriceChange3Year: cleaned, isVerified: undefined, isSaved: false },
                   });
                 }}
                 readOnly={marketPerformance?.isSaved === true && !showDataCollection}
@@ -1655,7 +1652,7 @@ export function Step3MarketPerformance() {
                 onChange={(e) => {
                   const cleaned = cleanNumericInput(e.target.value, false);
                   updateFormData({
-                    marketPerformance: { ...marketPerformance, medianPriceChange5Year: cleaned },
+                    marketPerformance: { ...marketPerformance, medianPriceChange5Year: cleaned, isVerified: undefined, isSaved: false },
                   });
                 }}
                 readOnly={marketPerformance?.isSaved === true && !showDataCollection}
@@ -1724,7 +1721,7 @@ export function Step3MarketPerformance() {
                 onChange={(e) => {
                   const cleaned = cleanNumericInput(e.target.value, false);
                   updateFormData({
-                    marketPerformance: { ...marketPerformance, medianPriceChange3Months: cleaned },
+                    marketPerformance: { ...marketPerformance, medianPriceChange3Months: cleaned, isVerified: undefined, isSaved: false },
                   });
                 }}
                 readOnly={marketPerformance?.isSaved === true && !showDataCollection}
@@ -1740,7 +1737,7 @@ export function Step3MarketPerformance() {
                 onChange={(e) => {
                   const cleaned = cleanNumericInput(e.target.value, false);
                   updateFormData({
-                    marketPerformance: { ...marketPerformance, medianPriceChange1Year: cleaned },
+                    marketPerformance: { ...marketPerformance, medianPriceChange1Year: cleaned, isVerified: undefined, isSaved: false },
                   });
                 }}
                 readOnly={marketPerformance?.isSaved === true && !showDataCollection}
@@ -1756,7 +1753,7 @@ export function Step3MarketPerformance() {
                 onChange={(e) => {
                   const cleaned = cleanNumericInput(e.target.value, false);
                   updateFormData({
-                    marketPerformance: { ...marketPerformance, medianYield: cleaned },
+                    marketPerformance: { ...marketPerformance, medianYield: cleaned, isVerified: undefined, isSaved: false },
                   });
                 }}
                 readOnly={marketPerformance?.isSaved === true && !showDataCollection}
@@ -1772,7 +1769,7 @@ export function Step3MarketPerformance() {
                 onChange={(e) => {
                   const cleaned = cleanNumericInput(e.target.value, false);
                   updateFormData({
-                    marketPerformance: { ...marketPerformance, medianRentChange1Year: cleaned },
+                    marketPerformance: { ...marketPerformance, medianRentChange1Year: cleaned, isVerified: undefined, isSaved: false },
                   });
                 }}
                 readOnly={marketPerformance?.isSaved === true && !showDataCollection}
@@ -1788,7 +1785,7 @@ export function Step3MarketPerformance() {
                 onChange={(e) => {
                   const cleaned = cleanNumericInput(e.target.value, false);
                   updateFormData({
-                    marketPerformance: { ...marketPerformance, rentalPopulation: cleaned },
+                    marketPerformance: { ...marketPerformance, rentalPopulation: cleaned, isVerified: undefined, isSaved: false },
                   });
                 }}
                 readOnly={marketPerformance?.isSaved === true && !showDataCollection}
@@ -1804,7 +1801,7 @@ export function Step3MarketPerformance() {
                 onChange={(e) => {
                   const cleaned = cleanNumericInput(e.target.value, false);
                   updateFormData({
-                    marketPerformance: { ...marketPerformance, vacancyRate: cleaned },
+                    marketPerformance: { ...marketPerformance, vacancyRate: cleaned, isVerified: undefined, isSaved: false },
                   });
                 }}
                 readOnly={marketPerformance?.isSaved === true && !showDataCollection}
@@ -1837,7 +1834,13 @@ export function Step3MarketPerformance() {
               <textarea
                 value={marketPerformance?.marketPerformanceAdditionalDialogue || ''}
                 onChange={(e) => updateFormData({
-                  marketPerformance: { ...marketPerformance, marketPerformanceAdditionalDialogue: e.target.value },
+                  marketPerformance: { 
+                    ...marketPerformance, 
+                    marketPerformanceAdditionalDialogue: e.target.value, 
+                    // Preserve isVerified state - dialogue box is optional and shouldn't reset verification
+                    isVerified: marketPerformance?.isVerified,
+                    isSaved: false, // Still mark as unsaved since dialogue was edited
+                  },
                 })}
                 onInput={(e) => {
                   const target = e.target as HTMLTextAreaElement;
