@@ -48,6 +48,14 @@ export function Step7CashflowReview() {
   const [councilWaterRates, setCouncilWaterRates] = useState(formData.councilWaterRates || '');
   // Pre-populate insurance from Step 6 Insurance Calculator, fallback to saved insuranceAmount
   const [insuranceAmount, setInsuranceAmount] = useState(formData.insurance || formData.insuranceAmount || '');
+
+  // Sync councilWaterRates and insurance to formData when they change (for edit mode)
+  useEffect(() => {
+    updateFormData({
+      councilWaterRates,
+      insurance: insuranceAmount, // Map insuranceAmount to insurance field
+    });
+  }, [councilWaterRates, insuranceAmount, updateFormData]);
   const [buildWindow, setBuildWindow] = useState(formData.buildWindow || '09 mo');
   const [cashback1Month, setCashback1Month] = useState(formData.cashback1Month || '5');
   const [cashback2Month, setCashback2Month] = useState(formData.cashback2Month || '7');

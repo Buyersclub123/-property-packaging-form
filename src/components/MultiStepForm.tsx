@@ -191,6 +191,7 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
   const [isHydrated, setIsHydrated] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const validationErrorRef = useRef<string | null>(null);
+  const initialDataRef = useRef<any>(null); // Store initial data for comparison
   
   // Wrapper to update both state and ref synchronously
   const setValidationErrorWithRef = (error: string | null) => {
@@ -265,6 +266,28 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
           status: initialData.status,
         };
       }
+      
+      // Store initial data in ref for later comparison (deep clone to prevent mutation)
+      // Also normalize empty strings to null to match processedData format
+      const normalizeInitialData = (obj: any): any => {
+        if (Array.isArray(obj)) {
+          return obj.map(item => normalizeInitialData(item));
+        }
+        if (typeof obj === 'object' && obj !== null) {
+          const result: any = {};
+          for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              result[key] = normalizeInitialData(obj[key]);
+            }
+          }
+          return result;
+        }
+        if (obj === '') {
+          return null;
+        }
+        return obj;
+      };
+      initialDataRef.current = normalizeInitialData(JSON.parse(JSON.stringify(dataToUpdate)));
       
       console.log('[MultiStepForm] Data being sent to updateFormData:', JSON.stringify(dataToUpdate, null, 2));
       console.log('[MultiStepForm] decisionTree in dataToUpdate:', JSON.stringify(dataToUpdate.decisionTree, null, 2));
@@ -1338,16 +1361,185 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
 
       const processedData = convertEmptyStringsToNull(cleanedFormData);
 
-      // Update via PUT API endpoint
+      // ⭐ NEW: Compare with initial data and only send changed fields
+      // Helper to check if a value is "empty" (null, undefined, or empty string)
+      const isEmpty = (val: any): boolean => {
+        return val === null || val === undefined || val === '';
+      };
+
+      // Helper to normalize values for comparison (convert empty strings to null)
+      const normalizeForComparison = (val: any): any => {
+        if (val === '' || val === null || val === undefined) return null;
+        return val;
+      };
+
+      const getChangedFields = (current: any, initial: any): any => {
+        if (!initial) {
+          // If no initial data, send everything (first time edit)
+          return current;
+        }
+
+        const changed: any = {};
+        
+        // List of top-level keys to process
+        const topLevelKeys = [
+          'address', 'decisionTree', 'riskOverlays', 'propertyDescription',
+          'purchasePrice', 'rentalAssessment', 'contentSections',
+          'sourcer', 'packager', 'dealType', 'reviewDate', 'status',
+          'sellingAgentName', 'sellingAgentEmail', 'sellingAgentMobile',
+          'messageForBA', 'attachmentsAdditionalDialogue', 'folderLink',
+          'insurance', 'councilWaterRates', 'depreciation', 'lots'
+        ];
+
+        // Process each top-level key
+        for (const key of topLevelKeys) {
+          const currentVal = current?.[key];
+          const initialVal = initial?.[key];
+          
+          // Debug logging for councilWaterRates, insurance, sourcer BEFORE skip check
+          if (key === 'councilWaterRates' || key === 'insurance' || key === 'sourcer') {
+            console.log(`[getChangedFields] ${key} BEFORE skip check:`, {
+              currentVal,
+              initialVal,
+              currentType: typeof currentVal,
+              initialType: typeof initialVal,
+              isEmptyCurrent: isEmpty(currentVal),
+              isEmptyInitial: isEmpty(initialVal),
+              willSkip: isEmpty(currentVal) && isEmpty(initialVal)
+            });
+          }
+          
+          // Skip if both are undefined/null/empty
+          if (isEmpty(currentVal) && isEmpty(initialVal)) {
+            if (key === 'councilWaterRates' || key === 'insurance' || key === 'sourcer') {
+              console.log(`[getChangedFields] ${key} SKIPPED - both empty`);
+            }
+            continue;
+          }
+          
+          // Skip metadata fields
+          if (['ghlRecordId', 'editMode', 'returnTo', 'editor'].includes(key)) continue;
+          
+          // Compare values
+          if (typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal)) {
+            // Nested object - compare recursively
+            const nestedChanged: any = {};
+            const allNestedKeys = new Set([
+              ...Object.keys(currentVal || {}),
+              ...Object.keys(initialVal || {})
+            ]);
+            
+            let hasNestedChanges = false;
+            for (const nestedKey of allNestedKeys) {
+              // Skip internal fields
+              if (key === 'address' && INTERNAL_FIELDS.address.includes(nestedKey)) continue;
+              if (key === 'marketPerformance' && INTERNAL_FIELDS.marketPerformance.includes(nestedKey)) continue;
+              
+              const currentNestedVal = currentVal?.[nestedKey];
+              const initialNestedVal = initialVal?.[nestedKey];
+              
+              // Normalize both values for comparison (empty string -> null)
+              const normalizedCurrent = normalizeForComparison(currentNestedVal);
+              const normalizedInitial = normalizeForComparison(initialNestedVal);
+              
+              // Only include if values are different AND not both empty
+              if (normalizedCurrent !== normalizedInitial && !(isEmpty(normalizedCurrent) && isEmpty(normalizedInitial))) {
+                // Only include if current value is not empty (don't send null for unchanged empty fields)
+                if (!isEmpty(currentNestedVal)) {
+                  nestedChanged[nestedKey] = currentNestedVal;
+                  hasNestedChanges = true;
+                } else if (!isEmpty(initialNestedVal)) {
+                  // Field was cleared (had value, now empty) - include null to clear it
+                  nestedChanged[nestedKey] = null;
+                  hasNestedChanges = true;
+                }
+              }
+            }
+            
+            if (hasNestedChanges) {
+              changed[key] = nestedChanged;
+            }
+          } else {
+            // Primitive value or array - compare directly
+            const normalizedCurrent = normalizeForComparison(currentVal);
+            const normalizedInitial = normalizeForComparison(initialVal);
+            
+          // Debug logging for councilWaterRates and sourcer (primitive)
+          if (key === 'councilWaterRates' || key === 'sourcer' || key === 'insurance') {
+            console.log(`[getChangedFields] ${key} (primitive):`, {
+              currentVal,
+              initialVal,
+              normalizedCurrent,
+              normalizedInitial,
+              areDifferent: normalizedCurrent !== normalizedInitial,
+              bothEmpty: isEmpty(normalizedCurrent) && isEmpty(normalizedInitial),
+              willInclude: normalizedCurrent !== normalizedInitial && !(isEmpty(normalizedCurrent) && isEmpty(normalizedInitial)),
+              isEmptyCurrent: isEmpty(currentVal),
+              isEmptyInitial: isEmpty(initialVal)
+            });
+          }
+            
+            // Only include if values are different AND not both empty
+            if (normalizedCurrent !== normalizedInitial && !(isEmpty(normalizedCurrent) && isEmpty(normalizedInitial))) {
+              // Only include if current value is not empty (don't send null for unchanged empty fields)
+              if (!isEmpty(currentVal)) {
+                changed[key] = currentVal;
+                if (key === 'councilWaterRates') {
+                  console.log('[getChangedFields] councilWaterRates ADDED to changed:', currentVal);
+                }
+              } else if (!isEmpty(initialVal)) {
+                // Field was cleared (had value, now empty) - include null to clear it
+                changed[key] = null;
+              }
+            } else if (key === 'councilWaterRates') {
+              console.log('[getChangedFields] councilWaterRates NOT included - values are same or both empty');
+            }
+          }
+        }
+
+        // Return changed object (empty if no changes)
+        return changed;
+      };
+
+      // Get only changed fields
+      const initialDataForComparison = initialDataRef.current;
+      const changedFieldsOnly = getChangedFields(processedData, initialDataForComparison);
+      
+      // If no changes detected, show message and return
+      if (!changedFieldsOnly || Object.keys(changedFieldsOnly).length === 0) {
+        alert('ℹ️ No changes detected. All fields match the original values.');
+        return;
+      }
+
+      console.log('[handleSubmitChange] Sending only changed fields:', JSON.stringify(changedFieldsOnly, null, 2));
+      console.log('[handleSubmitChange] Changed field count:', Object.keys(changedFieldsOnly).length);
+
+      // Update via PUT API endpoint - only send changed fields
       const updateResponse = await fetch(`/api/properties/${formData.ghlRecordId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(processedData),
+        body: JSON.stringify(changedFieldsOnly),
       });
 
       if (!updateResponse.ok) {
         const errorData = await updateResponse.json().catch(() => ({}));
         throw new Error(errorData.error || `Update failed: ${updateResponse.status}`);
+      }
+
+      // Update initialDataRef with new values after successful update
+      // This ensures subsequent edits only track new changes
+      if (initialDataRef.current) {
+        const updateInitialData = (target: any, source: any) => {
+          for (const key in source) {
+            if (source[key] !== null && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+              if (!target[key]) target[key] = {};
+              updateInitialData(target[key], source[key]);
+            } else {
+              target[key] = source[key];
+            }
+          }
+        };
+        updateInitialData(initialDataRef.current, changedFieldsOnly);
       }
 
       // Call Make.com webhook for update (non-blocking)
@@ -1365,8 +1557,9 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
         }).catch((err) => console.log('Webhook call failed:', err));
       }
 
-      // Show success message
-      alert('✅ Changes saved successfully! The GHL record has been updated.');
+      // Show success message with count of changed fields
+      const fieldCount = Object.keys(changedFieldsOnly).length;
+      alert(`✅ Changes saved successfully! ${fieldCount} field${fieldCount !== 1 ? 's' : ''} updated in GHL.`);
     } catch (error) {
       console.error('Error submitting changes:', error);
       alert(`❌ Error saving changes: ${error instanceof Error ? error.message : 'Unknown error'}`);

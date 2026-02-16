@@ -87,12 +87,14 @@ export function Step2PropertyDetails() {
     return Array.from({ length: 11 }, (_, i) => currentYear + i);
   };
   
-  // Pre-populate Comparable Sales field with default text
+  // Clear default text on mount if it's exactly the default (no user content added)
+  // This ensures checkbox starts unchecked for new properties
   useEffect(() => {
-    if (!purchasePrice?.comparableSales) {
-      updatePurchasePrice({ comparableSales: 'We have seen comparable properties trade in the ' });
+    const defaultText = 'We have seen comparable properties trade in the ';
+    if (purchasePrice?.comparableSales === defaultText) {
+      updatePurchasePrice({ comparableSales: '' });
     }
-  }, []);
+  }, []); // Only run once on mount
 
   // Debug logging removed - was causing excessive logs on every keystroke
 
@@ -1095,6 +1097,30 @@ export function Step2PropertyDetails() {
             )}
 
             <div>
+              <div className="mb-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={purchasePrice?.comparableSales?.startsWith('We have seen comparable properties trade in the ') || false}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        updatePurchasePrice({ comparableSales: 'We have seen comparable properties trade in the ' });
+                      } else {
+                        // When unchecking, remove the default text if it's at the start
+                        const currentValue = purchasePrice?.comparableSales || '';
+                        if (currentValue.startsWith('We have seen comparable properties trade in the ')) {
+                          const remainingText = currentValue.replace(/^We have seen comparable properties trade in the /, '').trim();
+                          updatePurchasePrice({ comparableSales: remainingText });
+                        }
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Use default opening: "We have seen comparable properties trade in the "
+                  </span>
+                </label>
+              </div>
               <label className="label-field">Comparable Sales (Text will appear exactly as typed in email template) *</label>
               <textarea
                 value={purchasePrice?.comparableSales || ''}

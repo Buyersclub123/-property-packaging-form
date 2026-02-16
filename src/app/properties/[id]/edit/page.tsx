@@ -133,10 +133,6 @@ export default function EditPropertyPage() {
         }
 
         const result = await response.json();
-        console.log('API response:', result);
-        console.log('API response - decisionTree:', result.data?.decisionTree);
-        console.log('API response - dealType:', result.data?.dealType);
-        console.log('API response - status:', result.data?.status);
 
         if (!result.success) {
           throw new Error(result.error || 'Failed to load property');
