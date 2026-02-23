@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useFormStore } from '@/store/formStore';
 
 // GHL Configuration (using NEXT_PUBLIC_ prefix for client-side access)
@@ -17,46 +17,60 @@ export function Step8Submission() {
   const { address, decisionTree } = formData;
   
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+  const [noMessageNeeded, setNoMessageNeeded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ghlRecordId, setGhlRecordId] = useState<string | null>(null);
+  const [ghlRecordId, setGhlRecordId] = useState<string | null>(formData.ghlRecordId || null);
   const [emailStatus, setEmailStatus] = useState<'pending' | 'sent' | 'failed'>('pending');
   const [emailError, setEmailError] = useState<string | null>(null);
+
+  // Check if property has already been submitted (prevents duplicate submissions)
+  // In edit mode, don't auto-show success screen - allow user to see form and submit changes
+  const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
+
+  useEffect(() => {
+    // Only auto-show success screen in create mode if record already exists
+    // In edit mode, always show the form so user can make changes and see message to BA
+    if (!isEditMode && (formData.ghlRecordId || formData.submissionAttempted)) {
+      setSubmitted(true);
+      if (formData.ghlRecordId) {
+        setGhlRecordId(formData.ghlRecordId);
+      }
+      setEmailStatus('sent');
+    } else {
+      if (formData.ghlRecordId) {
+        setGhlRecordId(formData.ghlRecordId);
+      }
+    }
+  }, [formData.ghlRecordId, formData.submissionAttempted, isEditMode]);
 
   // Generate dynamic checklist based on property type
   const checklistItems = useMemo((): ChecklistItem[] => {
     const items: ChecklistItem[] = [
       { id: 'cashflow', label: 'Cashflow spreadsheet created and populated' },
-      { id: 'photos', label: 'Property photos uploaded' },
-      { id: 'investmentHighlights', label: 'Investment highlights reviewed' },
+      { id: 'cmaReports', label: 'CMA reports and Hotspotting report added to the folder' },
     ];
 
     // Conditional items based on property type
     const propertyType = decisionTree?.propertyType;
-    
-    // Note: P&B and PCI reports are now removed from checklist as they're optional
-    // if (propertyType === 'Established') {
-    //   items.push({ id: 'pbReport', label: 'P&B (Pest & Building) report uploaded' });
-    // } else if (propertyType === 'New') {
-    //   items.push({ id: 'pciReport', label: 'PCI (Practical Completion Inspection) report uploaded' });
-    // }
 
-    // Dual occupancy
-    if (decisionTree?.dualOccupancy === 'Yes') {
-      items.push({ id: 'dualOccupancy', label: 'Dual occupancy details confirmed (2 sets of bed/bath/garage)' });
+    // New properties: Marketing Materials (stage plan, inclusions, etc.)
+    // Established properties: Property photos
+    if (propertyType === 'New') {
+      items.push({ id: 'marketingMaterials', label: 'Marketing Materials uploaded' });
+    } else {
+      items.push({ id: 'photos', label: 'Property photos uploaded' });
     }
 
-    // Split contract
-    if (decisionTree?.contractTypeSimplified === 'Split Contract') {
-      items.push({ id: 'splitContract', label: 'Land cost and build cost confirmed' });
-    }
+    // Note: Removed dual occupancy and split contract checkboxes as those fields are mandatory
+    // Users can't proceed without filling them, so no need to check them here
 
     return items;
   }, [decisionTree]);
 
   // Initialize checklist state when items change
-  useMemo(() => {
+  useEffect(() => {
     const initialChecklist: Record<string, boolean> = {};
     checklistItems.forEach(item => {
       if (!(item.id in checklist)) {
@@ -71,6 +85,19 @@ export function Step8Submission() {
   const allChecked = useMemo(() => {
     return checklistItems.every(item => checklist[item.id] === true);
   }, [checklist, checklistItems]);
+
+  // Check if Message for BA is valid (either has text OR "no message needed" is checked)
+  const isMessageForBAValid = useMemo(() => {
+    const hasMessage = formData.messageForBA && formData.messageForBA.trim() !== '';
+    return hasMessage || noMessageNeeded;
+  }, [formData.messageForBA, noMessageNeeded]);
+
+  // Reset "no message needed" checkbox when user types in the field
+  useEffect(() => {
+    if (formData.messageForBA && formData.messageForBA.trim() !== '') {
+      setNoMessageNeeded(false);
+    }
+  }, [formData.messageForBA]);
 
   const handleChecklistChange = (id: string) => {
     setChecklist(prev => ({
@@ -88,13 +115,38 @@ export function Step8Submission() {
   };
 
   const handleSubmit = async () => {
-    if (!allChecked) {
-      setError('Please check all items before submitting.');
-      return;
+    const editRecordId = formData.ghlRecordId;
+
+    // In edit mode, skip duplicate submission check
+    if (!isEditMode) {
+      const hasRecordId = formData.ghlRecordId || ghlRecordId;
+      const wasAttempted = formData.submissionAttempted;
+
+      if (submitted || hasRecordId || wasAttempted) {
+        setError('This property has already been submitted. You cannot submit the same property twice.');
+        return;
+      }
+    }
+
+    // In edit mode, make checklist and BA message optional (record already exists)
+    // In create mode, require both
+    if (!isEditMode) {
+      if (!allChecked) {
+        setError('Please check all items before submitting.');
+        return;
+      }
+
+      if (!isMessageForBAValid) {
+        setError('Please either enter a message for BA or confirm "No message needed".');
+        return;
+      }
     }
 
     setSubmitting(true);
     setError(null);
+
+    // Mark submission as attempted immediately to prevent duplicate clicks
+    updateFormData({ submissionAttempted: true });
 
     try {
       // Fields that are internal/UI state and should NOT be sent to Make.com/GHL
@@ -226,6 +278,10 @@ export function Step8Submission() {
       const recordId = makeResult.recordId || makeResult.id || makeResult.ghlRecordId;
       if (recordId) {
         setGhlRecordId(recordId);
+        updateFormData({
+          ghlRecordId: recordId,
+          submittedAt: new Date().toISOString(),
+        });
       }
 
       // Add suburb to Investment Highlights Google Sheet if report was selected from dropdown
@@ -339,6 +395,9 @@ export function Step8Submission() {
     } catch (err) {
       console.error('Error submitting property:', err);
       setError(err instanceof Error ? err.message : 'Failed to submit property');
+
+      // Allow retry on failure (do not permanently lock submission)
+      updateFormData({ submissionAttempted: false });
     } finally {
       setSubmitting(false);
     }
@@ -536,7 +595,7 @@ export function Step8Submission() {
           </div>
         )}
 
-        {allChecked && !error && (
+        {allChecked && isMessageForBAValid && !error && (
           <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
             <p className="text-sm text-green-800 font-medium">
               ✓ All items checked. Ready to submit!
@@ -553,7 +612,7 @@ export function Step8Submission() {
 
       {/* Attachments Additional Dialogue Section */}
       <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
-        <label className="label-field">Attachments Additional Dialogue (Optional)</label>
+        <label className="text-lg font-semibold mb-4 block">Attachments Additional Dialogue (Optional)</label>
         <p className="text-xs text-gray-500 mb-2">
           Additional notes or dialogue related to attachments and supporting documentation.
         </p>
@@ -568,7 +627,24 @@ export function Step8Submission() {
 
       {/* Message for BA Section */}
       <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
-        <label className="text-lg font-semibold mb-4 block">Message for BA (Optional)</label>
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-lg font-semibold block">Message for BA (Optional)</label>
+          {(!formData.messageForBA || formData.messageForBA.trim() === '') && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="noMessageNeeded"
+                checked={noMessageNeeded}
+                onChange={(e) => !submitted && setNoMessageNeeded(e.target.checked)}
+                disabled={submitted}
+                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="noMessageNeeded" className="text-sm text-gray-700 cursor-pointer">
+                No message needed
+              </label>
+            </div>
+          )}
+        </div>
         <p className="text-xs text-gray-500 mb-2">
           This message will appear at the beginning of the email sent to the Business Analyst. Use it to provide any additional context or instructions.
         </p>
@@ -585,10 +661,10 @@ export function Step8Submission() {
       <div className="mt-6">
         <button
           onClick={handleSubmit}
-          disabled={submitting || !allChecked}
+          disabled={submitted || submitting || (!isEditMode && (!allChecked || !isMessageForBAValid))}
           className="btn-primary w-full text-lg py-3 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Submitting...' : 'Submit Property'}
+          {submitted ? 'Already Submitted' : submitting ? 'Submitting...' : (isEditMode ? 'Submit Change' : 'Submit Property')}
         </button>
       </div>
     </div>

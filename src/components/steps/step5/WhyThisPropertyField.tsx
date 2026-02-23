@@ -28,6 +28,7 @@ interface WhyThisPropertyFieldProps {
   lga?: string;
   disabled?: boolean;
   preFetchedData?: string | null;
+  earlyProcessingError?: string | null;
 }
 
 export function WhyThisPropertyField({ 
@@ -36,7 +37,8 @@ export function WhyThisPropertyField({
   preFetchedData, 
   suburb, 
   lga, 
-  disabled = false 
+  disabled = false,
+  earlyProcessingError
 }: WhyThisPropertyFieldProps) {
   const textareaRef = useAutoResize(value); // Auto-growing textarea from Phase 4A
   
@@ -140,6 +142,9 @@ export function WhyThisPropertyField({
     onChange(newValue);
   };
 
+  // Check if LGA is missing (required for AI generation)
+  const isLgaMissing = !lga || lga.trim() === '';
+
   return (
     <div className="space-y-4">
       <div>
@@ -150,6 +155,25 @@ export function WhyThisPropertyField({
         <p className="text-xs text-gray-500 italic mt-1">
           Format: Each bullet point as "• **Heading** - Description"
         </p>
+
+        {/* Missing LGA Warning or Early Processing Error */}
+        {(isLgaMissing || earlyProcessingError) && (
+          <div className="mt-3 mb-3 p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
+            <div className="flex items-start gap-2">
+              <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-blue-900 mb-1">
+                  {earlyProcessingError ? 'AI Generation Failed' : 'LGA (Local Government Area) is required for AI generation'}
+                </p>
+                <p className="text-sm text-blue-800">
+                  {earlyProcessingError || 'The AI service needs the LGA to generate "Why This Property" content. Please go back to Page 1 (Address & Risk Check) and enter the LGA, or paste the content manually below.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Loading State */}
         {loading && (

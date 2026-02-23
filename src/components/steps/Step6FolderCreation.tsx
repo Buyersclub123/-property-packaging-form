@@ -295,8 +295,7 @@ export function Step6FolderCreation() {
       setEmailStatus('sent');
 
       // Show success screen
-      // TEMPORARILY DISABLED FOR TESTING - allows multiple submissions
-      // setShowSuccess(true);
+      setShowSuccess(true);
     } catch (error) {
       console.error('Error submitting property:', error);
       setSubmitError(error instanceof Error ? error.message : 'Failed to submit property');

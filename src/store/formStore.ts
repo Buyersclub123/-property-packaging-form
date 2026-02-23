@@ -108,7 +108,7 @@ export const useFormStore = create<FormStore>()(
             // Exclude nested objects from top-level spread - we'll merge them separately
             ...(Object.keys(data).reduce((acc, key) => {
               if (!['decisionTree', 'address', 'riskOverlays', 'contentSections', 'earlyProcessing'].includes(key)) {
-                acc[key] = data[key];
+                acc[key] = (data as any)[key];
               }
               return acc;
             }, {} as any)),

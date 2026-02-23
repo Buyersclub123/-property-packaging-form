@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logToFile, logAPI } from '@/lib/logger';
 
 /**
  * GHL API Configuration
@@ -34,9 +35,37 @@ export async function GET(
       );
     }
 
+    // DIAGNOSTIC: Log environment configuration (masked for security)
+    const envDiagnostics = {
+      GHL_BASE_URL,
+      GHL_OBJECT_ID: GHL_OBJECT_ID ? `${GHL_OBJECT_ID.substring(0, 8)}...${GHL_OBJECT_ID.substring(GHL_OBJECT_ID.length - 4)}` : 'MISSING',
+      GHL_LOCATION_ID: GHL_LOCATION_ID ? `${GHL_LOCATION_ID.substring(0, 8)}...${GHL_LOCATION_ID.substring(GHL_LOCATION_ID.length - 4)}` : 'MISSING',
+      GHL_BEARER_TOKEN: GHL_BEARER_TOKEN ? `${GHL_BEARER_TOKEN.substring(0, 8)}...${GHL_BEARER_TOKEN.substring(GHL_BEARER_TOKEN.length - 4)}` : 'MISSING',
+      GHL_API_VERSION,
+      recordId,
+    };
+    console.log('[GET /api/properties] Environment Configuration (masked):', envDiagnostics);
+    logAPI('GET', `/api/properties/${recordId}/env-config`, envDiagnostics);
+
     // Fetch property from GHL
     // Include locationId as query parameter (required by GHL API)
-    const url = `${GHL_BASE_URL}/objects/${GHL_OBJECT_ID}/records/${recordId}?locationId=${GHL_LOCATION_ID}`;
+    // Add cache-busting timestamp to force fresh data (GHL API caches aggressively)
+    const cacheBuster = Date.now();
+    const url = `${GHL_BASE_URL}/objects/${GHL_OBJECT_ID}/records/${recordId}?locationId=${GHL_LOCATION_ID}&_t=${cacheBuster}`;
+    
+    // DIAGNOSTIC: Log the exact API call being made
+    const apiCallDiagnostics = {
+      method: 'GET',
+      url: url.replace(GHL_BEARER_TOKEN, '***MASKED***'),
+      headers: {
+        'Authorization': 'Bearer ***MASKED***',
+        'Version': GHL_API_VERSION,
+        'Content-Type': 'application/json',
+      },
+      fullUrl: url,
+    };
+    console.log('[GET /api/properties] API Call Diagnostics:', apiCallDiagnostics);
+    logAPI('GET', `/api/properties/${recordId}/api-call`, apiCallDiagnostics);
     
     const response = await fetch(
       url,
@@ -50,9 +79,20 @@ export async function GET(
       }
     );
 
+    // DIAGNOSTIC: Log response status and headers
+    const responseDiagnostics = {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      ok: response.ok,
+    };
+    console.log('[GET /api/properties] Response Diagnostics:', responseDiagnostics);
+    logAPI('GET', `/api/properties/${recordId}/response-diagnostics`, responseDiagnostics);
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('GHL API error:', response.status, errorText);
+      logAPI('GET', `/api/properties/${recordId}/error`, { status: response.status, error: errorText });
       return NextResponse.json(
         { success: false, error: `GHL API error: ${response.status} ${errorText}` },
         { status: response.status }
@@ -61,9 +101,53 @@ export async function GET(
 
     const ghlResponse = await response.json();
     
+    // DIAGNOSTIC: Log response structure analysis
+    const responseStructureAnalysis = {
+      hasRecord: !!ghlResponse.record,
+      recordId: ghlResponse.record?.id,
+      locationId: ghlResponse.record?.locationId,
+      objectId: ghlResponse.record?.objectId,
+      hasProperties: !!ghlResponse.record?.properties,
+      propertiesKeyCount: ghlResponse.record?.properties ? Object.keys(ghlResponse.record.properties).length : 0,
+      topLevelKeys: Object.keys(ghlResponse),
+      recordLevelKeys: ghlResponse.record ? Object.keys(ghlResponse.record) : [],
+      propertiesKeys: ghlResponse.record?.properties ? Object.keys(ghlResponse.record.properties) : [],
+      // Check for custom fields specifically - check both undefined and null
+      hasCfInsurance: ghlResponse.record?.properties?.cf_insurance_value_ !== undefined && ghlResponse.record?.properties?.cf_insurance_value_ !== null,
+      hasCfDepreciation: ghlResponse.record?.properties?.cf_depreciation_ !== undefined && ghlResponse.record?.properties?.cf_depreciation_ !== null,
+      hasCfCouncilWaterRates: ghlResponse.record?.properties?.cf_councilwater_rates_ !== undefined && ghlResponse.record?.properties?.cf_councilwater_rates_ !== null,
+      hasMessageForBA: ghlResponse.record?.properties?.message_for_ba !== undefined && ghlResponse.record?.properties?.message_for_ba !== null,
+      hasAttachmentsAdditionalDialogue: ghlResponse.record?.properties?.attachments_additional_dialogue !== undefined && ghlResponse.record?.properties?.attachments_additional_dialogue !== null,
+      // Check actual values (even if empty string)
+      cfInsuranceValue: ghlResponse.record?.properties?.cf_insurance_value_,
+      cfDepreciationValue: ghlResponse.record?.properties?.cf_depreciation_,
+      cfCouncilWaterRatesValue: ghlResponse.record?.properties?.cf_councilwater_rates_,
+      messageForBAValue: ghlResponse.record?.properties?.message_for_ba,
+      attachmentsAdditionalDialogueValue: ghlResponse.record?.properties?.attachments_additional_dialogue,
+      // Check for any keys starting with 'cf_' (custom fields)
+      customFieldKeys: ghlResponse.record?.properties ? Object.keys(ghlResponse.record.properties).filter(k => k.startsWith('cf_')) : [],
+      // Compare with working fields to see the pattern
+      workingFields: {
+        sourcer: ghlResponse.record?.properties?.sourcer,
+        packager: ghlResponse.record?.properties?.packager,
+        folder_link: ghlResponse.record?.properties?.folder_link,
+      },
+    };
+    console.log('[GET /api/properties] Response Structure Analysis:', responseStructureAnalysis);
+    logAPI('GET', `/api/properties/${recordId}/structure-analysis`, responseStructureAnalysis);
+    
+    // Log the FULL GHL response to see if custom fields are nested elsewhere
+    console.log('[GET /api/properties] FULL GHL Response:', JSON.stringify(ghlResponse, null, 2));
+    logAPI('GET', `/api/properties/${recordId}/full-response`, ghlResponse);
+    
     // GHL API returns: { record: { id: "...", properties: {...} } }
     const props = ghlResponse.record?.properties || {};
     const recordIdFromGHL = ghlResponse.record?.id || recordId;
+    
+    // Also check if custom fields are at the record level, not in properties
+    const recordLevelKeys = Object.keys(ghlResponse.record || {});
+    console.log('[GET /api/properties] Record level keys (outside properties):', recordLevelKeys);
+    logAPI('GET', `/api/properties/${recordId}/record-keys`, { recordLevelKeys, record: ghlResponse.record });
     
     // Helper function to normalize YesNo values (form expects "Yes", "No", or "")
     const normalizeYesNo = (value: string | undefined | null): string => {
@@ -93,7 +177,36 @@ export async function GET(
 
     // Debug: Log what we received - specifically Decision Tree fields
     const allPropertyKeys = Object.keys(props);
-    console.log('[GET /api/properties] GHL Response structure:', {
+    // Find all keys that contain "sourcer" (case-insensitive)
+    const sourcerKeys = allPropertyKeys.filter(k => k.toLowerCase().includes('sourcer'));
+    const sourcerValues: Record<string, any> = {};
+    sourcerKeys.forEach(key => {
+      sourcerValues[key] = props[key];
+    });
+    // Find all keys that contain "insurance" (case-insensitive)
+    const insuranceKeys = allPropertyKeys.filter(k => k.toLowerCase().includes('insurance'));
+    const insuranceValues: Record<string, any> = {};
+    insuranceKeys.forEach(key => {
+      insuranceValues[key] = props[key];
+    });
+    // Find all keys that contain "depreciation" (case-insensitive)
+    const depreciationKeys = allPropertyKeys.filter(k => k.toLowerCase().includes('depreciation'));
+    const depreciationValues: Record<string, any> = {};
+    depreciationKeys.forEach(key => {
+      depreciationValues[key] = props[key];
+    });
+    // Find all keys that contain "council" or "water" or "rates" (case-insensitive)
+    const councilWaterRatesKeys = allPropertyKeys.filter(k => 
+      k.toLowerCase().includes('council') || 
+      k.toLowerCase().includes('water') || 
+      k.toLowerCase().includes('rates')
+    );
+    const councilWaterRatesValues: Record<string, any> = {};
+    councilWaterRatesKeys.forEach(key => {
+      councilWaterRatesValues[key] = props[key];
+    });
+    
+    const ghlResponseLog = {
       hasRecord: !!ghlResponse.record,
       hasProperties: !!ghlResponse.record?.properties,
       totalPropertyKeys: allPropertyKeys.length,
@@ -116,7 +229,32 @@ export async function GET(
       baths_additional__secondary__dual_key: props.baths_additional__secondary__dual_key,
       bath_primary_type: typeof props.bath_primary,
       baths_additional_type: typeof props.baths_additional__secondary__dual_key,
-    });
+      // Sourcer fields from GHL
+      sourcerKeys: sourcerKeys,
+      sourcerValues: sourcerValues,
+      props_sourcer: props.sourcer,
+      props_Sourcer: props.Sourcer,
+      props_SOURCER: props.SOURCER,
+      // Insurance fields from GHL
+      insuranceKeys: insuranceKeys,
+      insuranceValues: insuranceValues,
+      props_cf_insurance_value_: props.cf_insurance_value_,
+      props_cf_insurance_value: props.cf_insurance_value,
+      props_insurance: props.insurance,
+      // Depreciation fields from GHL
+      depreciationKeys: depreciationKeys,
+      depreciationValues: depreciationValues,
+      props_cf_depreciation_: props.cf_depreciation_,
+      props_depreciation: props.depreciation,
+      // Council/Water Rates fields from GHL
+      councilWaterRatesKeys: councilWaterRatesKeys,
+      councilWaterRatesValues: councilWaterRatesValues,
+      props_cf_councilwater_rates_: props.cf_councilwater_rates_,
+      props_council_water_rates: props.council_water_rates,
+      props_councilWaterRates: props.councilWaterRates,
+    };
+    console.log('[GET /api/properties] GHL Response structure:', ghlResponseLog);
+    logAPI('GET', `/api/properties/${recordId}`, ghlResponseLog);
 
     // Map GHL fields back to FormData structure (REVERSE of submit-property mapping)
     // NOTE: template_type is NOT used by the form - form uses propertyType and lotType directly
@@ -276,12 +414,13 @@ export async function GET(
         // GHL may convert double underscores to single, or use camelCase
         bathSecondary: (() => {
           // Try all possible variations of the field name
+          // CONFIRMED: bath_secondary does NOT exist in GHL (per GHL Field name 20260216.csv)
+          // Only baths_additional__secondary__dual_key exists (line 16 in CSV)
           const possibleKeys = [
-            'baths_additional__secondary__dual_key',  // Original (double underscore)
-            'baths_additional_secondary_dual_key',     // Single underscore variant
-            'bathsAdditionalSecondaryDualKey',        // camelCase variant
+            'baths_additional__secondary__dual_key',  // Only valid field in GHL
+            'baths_additional_secondary_dual_key',     // Single underscore variant (if GHL converts)
+            'bathsAdditionalSecondaryDualKey',        // camelCase variant (if GHL converts)
             'baths_additional_secondary',              // Shortened variant
-            'bath_secondary',                          // Simple variant
             'bathsSecondary',                         // camelCase simple
             'bathSecondary',                          // camelCase without 's'
           ];
@@ -299,26 +438,19 @@ export async function GET(
           }
           
           // Also check all keys for partial matches (case-insensitive)
+          // Note: bath_secondary is already checked first in possibleKeys above
           if (value === undefined) {
             const allKeys = Object.keys(props);
-            const matchingKey = allKeys.find(key => 
-              key.toLowerCase().includes('bath') && 
-              (key.toLowerCase().includes('secondary') || key.toLowerCase().includes('additional'))
-            );
+            const matchingKey = allKeys.find(key => {
+              const lowerKey = key.toLowerCase();
+              return lowerKey.includes('bath') && 
+                     (lowerKey.includes('secondary') || lowerKey.includes('additional'));
+            });
             if (matchingKey) {
               value = props[matchingKey];
               foundKey = matchingKey;
             }
           }
-          
-          console.log('[GET /api/properties] bathSecondary mapping:', {
-            allPossibleKeys: possibleKeys,
-            foundKey: foundKey,
-            foundValue: value,
-            valueType: typeof value,
-            allBathKeys: Object.keys(props).filter(k => k.toLowerCase().includes('bath')),
-            stringValue: value != null && value !== '' ? String(value) : 'null/undefined',
-          });
           
           // Convert to string, handling numbers, decimals, and strings
           if (value != null && value !== '') {
@@ -410,6 +542,7 @@ export async function GET(
       sellingAgentEmail: props.agent_email || '',
       sellingAgentMobile: props.agent_mobile || '',
       // Other fields
+      // We send sourcer, so GHL should return it as sourcer
       sourcer: props.sourcer || '',
       packager: props.packager || '',
       dealType: dealType || '', // deal_type is the full contract type
@@ -417,18 +550,23 @@ export async function GET(
       reviewDate: props.review_date || '',
       folderLink: props.folder_link || '',
       // Message for BA
+      // GHL field: message_for_ba (from unique key: custom_objects.property_reviews.message_for_ba)
       messageForBA: props.message_for_ba || '',
       // Attachments Additional Dialogue
+      // GHL field: attachments_additional_dialogue (from unique key: custom_objects.property_reviews.attachments_additional_dialogue)
       attachmentsAdditionalDialogue: props.attachments_additional_dialogue || '',
       // Insurance, Depreciation, and Council/Water Rates (for edit mode - optional)
       // GHL custom field: cf_insurance_value_ (display name: "CF Insurance Value $")
+      // Try multiple field names as fallbacks (GHL may return under different names)
       insurance: props.cf_insurance_value_ || props.insurance || props.annual_insurance_cost || props.insurance_amount || '',
       // GHL custom field: cf_councilwater_rates_ (display name: "CF Council/Water Rates $")
+      // Try multiple field names as fallbacks
       councilWaterRates: props.cf_councilwater_rates_ || props.council_water_rates || props.councilWaterRates || '',
       // Depreciation (object with year1-year10)
       // Can be stored as: JSON string, comma-separated values, or individual fields
       depreciation: (() => {
         // Try to get depreciation from GHL - could be stored as JSON string, comma-separated, or object
+        // Try multiple field names as fallbacks
         const depValue = props.depreciation || props.cf_depreciation_;
         if (!depValue) {
           // Try individual year fields (depreciation_year_1, etc.)
@@ -490,7 +628,7 @@ export async function GET(
     });
 
     // Debug: Log the final formData structure
-    console.log('[GET /api/properties] Final formData being returned:', {
+    const finalFormDataLog = {
       hasDecisionTree: !!formData.decisionTree,
       decisionTree: JSON.stringify(formData.decisionTree),
       hasDealType: !!formData.dealType,
@@ -507,7 +645,54 @@ export async function GET(
       bathSecondary: formData.propertyDescription?.bathSecondary,
       bathPrimaryType: typeof formData.propertyDescription?.bathPrimary,
       bathSecondaryType: typeof formData.propertyDescription?.bathSecondary,
-    });
+      // Sourcer and other fields
+      sourcer: formData.sourcer,
+      sourcerType: typeof formData.sourcer,
+      sourcerLength: formData.sourcer?.length,
+      packager: formData.packager,
+      // Check what GHL actually returned for sourcer
+      ghlSourcerRaw: props.sourcer,
+      ghlSourcerKeys: Object.keys(props).filter(k => k.toLowerCase().includes('sourcer')),
+      // Insurance fields
+      insurance: formData.insurance,
+      insuranceType: typeof formData.insurance,
+      insuranceLength: formData.insurance?.length,
+      // Check what GHL actually returned for insurance
+      ghlInsuranceRaw: props.cf_insurance_value_,
+      ghlInsuranceKeys: Object.keys(props).filter(k => k.toLowerCase().includes('insurance')),
+      // Depreciation fields
+      depreciation: formData.depreciation,
+      depreciationType: typeof formData.depreciation,
+      depreciationKeys: formData.depreciation ? Object.keys(formData.depreciation) : [],
+      // Check what GHL actually returned for depreciation
+      ghlDepreciationRaw: props.cf_depreciation_,
+      ghlDepreciationKeys: Object.keys(props).filter(k => k.toLowerCase().includes('depreciation')),
+      // Council/Water Rates fields
+      councilWaterRates: formData.councilWaterRates,
+      councilWaterRatesType: typeof formData.councilWaterRates,
+      councilWaterRatesLength: formData.councilWaterRates?.length,
+      // Check what GHL actually returned for councilWaterRates
+      ghlCouncilWaterRatesRaw: props.cf_councilwater_rates_,
+      ghlCouncilWaterRatesKeys: Object.keys(props).filter(k => 
+        k.toLowerCase().includes('council') || 
+        k.toLowerCase().includes('water') || 
+        k.toLowerCase().includes('rates')
+      ),
+      // Message for BA and Attachments fields
+      messageForBA: formData.messageForBA,
+      messageForBAType: typeof formData.messageForBA,
+      messageForBALength: formData.messageForBA?.length,
+      ghlMessageForBARaw: props.message_for_ba,
+      attachmentsAdditionalDialogue: formData.attachmentsAdditionalDialogue,
+      attachmentsAdditionalDialogueType: typeof formData.attachmentsAdditionalDialogue,
+      attachmentsAdditionalDialogueLength: formData.attachmentsAdditionalDialogue?.length,
+      ghlAttachmentsAdditionalDialogueRaw: props.attachments_additional_dialogue,
+      // Check for any keys containing "message" or "attachment"
+      ghlMessageKeys: Object.keys(props).filter(k => k.toLowerCase().includes('message')),
+      ghlAttachmentKeys: Object.keys(props).filter(k => k.toLowerCase().includes('attachment')),
+    };
+    console.log('[GET /api/properties] Final formData being returned:', finalFormDataLog);
+    logAPI('GET', `/api/properties/${recordId}/final`, finalFormDataLog);
     
     return NextResponse.json({
       success: true,
@@ -536,6 +721,22 @@ export async function PUT(
   try {
     const { recordId } = await Promise.resolve(params);
     const formData = await request.json();
+    
+    // Debug: Log what we received
+    const putRequestLog = {
+      recordId,
+      formDataKeys: Object.keys(formData),
+      insurance: formData.insurance,
+      councilWaterRates: formData.councilWaterRates,
+      sourcer: formData.sourcer,
+      messageForBA: formData.messageForBA,
+      attachmentsAdditionalDialogue: formData.attachmentsAdditionalDialogue,
+      depreciation: formData.depreciation,
+    };
+    console.log('[PUT /api/properties] Received formData keys:', Object.keys(formData));
+    console.log('[PUT /api/properties] Insurance in request:', formData.insurance);
+    console.log('[PUT /api/properties] CouncilWaterRates in request:', formData.councilWaterRates);
+    logAPI('PUT', `/api/properties/${recordId}/request`, putRequestLog);
 
     if (!recordId) {
       return NextResponse.json(
@@ -661,11 +862,24 @@ export async function PUT(
     if (includeIfProvided(formData.riskOverlays?.specialInfrastructureDialogue)) ghlRecord.special_infrastructure_dialogue = formData.riskOverlays.specialInfrastructureDialogue;
     if (includeIfProvided(formData.riskOverlays?.dueDiligenceAcceptance)) ghlRecord.due_diligence_acceptance = formData.riskOverlays.dueDiligenceAcceptance;
 
+    // Helper function to convert bath values from decimal to "point" format (matching Make.com behavior)
+    // Converts "2.5" to "2point5", leaves whole numbers like "2" unchanged
+    const mapBathValueForGHL = (val: any): string | null => {
+      if (!val || val === '') return null;
+      const strVal = String(val).trim();
+      // Convert decimal to "point" format (e.g., "2.5" -> "2point5")
+      if (strVal.includes('.')) {
+        return strVal.replace('.', 'point');
+      }
+      // Return as-is for whole numbers or other formats
+      return strVal;
+    };
+
     // Property Description
     if (includeIfProvided(formData.propertyDescription?.bedsPrimary)) ghlRecord.beds_primary = formData.propertyDescription.bedsPrimary;
     if (includeIfProvided(formData.propertyDescription?.bedsSecondary)) ghlRecord.beds_additional__secondary__dual_key = formData.propertyDescription.bedsSecondary;
-    if (includeIfProvided(formData.propertyDescription?.bathPrimary)) ghlRecord.bath_primary = formData.propertyDescription.bathPrimary;
-    if (includeIfProvided(formData.propertyDescription?.bathSecondary)) ghlRecord.baths_additional__secondary__dual_key = formData.propertyDescription.bathSecondary;
+    if (includeIfProvided(formData.propertyDescription?.bathPrimary)) ghlRecord.bath_primary = mapBathValueForGHL(formData.propertyDescription.bathPrimary);
+    if (includeIfProvided(formData.propertyDescription?.bathSecondary)) ghlRecord.baths_additional__secondary__dual_key = mapBathValueForGHL(formData.propertyDescription.bathSecondary);
     if (includeIfProvided(formData.propertyDescription?.garagePrimary)) ghlRecord.garage_primary = formData.propertyDescription.garagePrimary;
     if (includeIfProvided(formData.propertyDescription?.garageSecondary)) ghlRecord.garage_additional__secondary__dual_key = formData.propertyDescription.garageSecondary;
     if (includeIfProvided(formData.propertyDescription?.carportPrimary)) ghlRecord.carport_primary = formData.propertyDescription.carportPrimary;
@@ -728,9 +942,30 @@ export async function PUT(
     
     // Insurance, Depreciation, and Council/Water Rates (for edit mode - only send if provided)
     // GHL custom field: cf_insurance_value_ (display name: "CF Insurance Value $")
-    if (includeIfProvided(formData.insurance)) ghlRecord.cf_insurance_value_ = formData.insurance;
+    console.log('[PUT /api/properties] Insurance field:', {
+      value: formData.insurance,
+      type: typeof formData.insurance,
+      includeIfProvided: includeIfProvided(formData.insurance),
+      isEmpty: formData.insurance === '' || formData.insurance === null || formData.insurance === undefined
+    });
+    if (includeIfProvided(formData.insurance)) {
+      ghlRecord.cf_insurance_value_ = formData.insurance;
+      console.log('[PUT /api/properties] Insurance ADDED to ghlRecord:', formData.insurance);
+    } else {
+      console.log('[PUT /api/properties] Insurance NOT added - failed includeIfProvided check');
+    }
     // GHL custom field: cf_councilwater_rates_ (display name: "CF Council/Water Rates $")
-    if (includeIfProvided(formData.councilWaterRates)) ghlRecord.cf_councilwater_rates_ = formData.councilWaterRates;
+    console.log('[PUT /api/properties] CouncilWaterRates field:', {
+      value: formData.councilWaterRates,
+      type: typeof formData.councilWaterRates,
+      includeIfProvided: includeIfProvided(formData.councilWaterRates)
+    });
+    if (includeIfProvided(formData.councilWaterRates)) {
+      ghlRecord.cf_councilwater_rates_ = formData.councilWaterRates;
+      console.log('[PUT /api/properties] CouncilWaterRates ADDED to ghlRecord:', formData.councilWaterRates);
+    } else {
+      console.log('[PUT /api/properties] CouncilWaterRates NOT added - failed includeIfProvided check');
+    }
     
     // Depreciation - store as comma-separated values
     // GHL custom field: cf_depreciation_ (display name: "CF Depreciation")
@@ -770,6 +1005,13 @@ export async function PUT(
     const requestBody = {
       properties: ghlRecord,
     };
+    
+    // Debug: Log what's being sent to GHL
+    console.log('[PUT /api/properties] ghlRecord keys being sent:', Object.keys(ghlRecord));
+    console.log('[PUT /api/properties] Insurance in ghlRecord:', ghlRecord.cf_insurance_value_);
+    console.log('[PUT /api/properties] CouncilWaterRates in ghlRecord:', ghlRecord.cf_councilwater_rates_);
+    console.log('[PUT /api/properties] Sourcer in ghlRecord:', ghlRecord.sourcer);
+    console.log('[PUT /api/properties] Full ghlRecord:', JSON.stringify(ghlRecord, null, 2));
     
     const response = await fetch(
       url,
