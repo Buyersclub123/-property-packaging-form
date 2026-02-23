@@ -657,6 +657,43 @@ export function Step8Submission() {
         />
       </div>
 
+      {isEditMode && (
+        <>
+          <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
+            <label className="text-lg font-semibold mb-4 block">Resubmit for testing?</label>
+            <select
+              value={formData.resubmitForTesting || ''}
+              onChange={(e) => updateFormData({ resubmitForTesting: e.target.value as any })}
+              className="input-field"
+            >
+              <option value="">Select</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+
+          <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
+            <label className="text-lg font-semibold mb-4 block">Packager Approved</label>
+            <input
+              value={formData.packagerApproved || ''}
+              onChange={(e) => updateFormData({ packagerApproved: e.target.value })}
+              className="input-field"
+              placeholder="Please input"
+            />
+          </div>
+
+          <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
+            <label className="text-lg font-semibold mb-4 block">QA Approved</label>
+            <input
+              value={formData.qaApproved || ''}
+              onChange={(e) => updateFormData({ qaApproved: e.target.value })}
+              className="input-field"
+              placeholder="Please input"
+            />
+          </div>
+        </>
+      )}
+
       {/* Submit button */}
       <div className="mt-6">
         <button

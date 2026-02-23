@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { logToFile, logAPI } from '@/lib/logger';
 
 /**
  * GHL API Configuration
@@ -45,7 +44,6 @@ export async function GET(
       recordId,
     };
     console.log('[GET /api/properties] Environment Configuration (masked):', envDiagnostics);
-    logAPI('GET', `/api/properties/${recordId}/env-config`, envDiagnostics);
 
     // Fetch property from GHL
     // Include locationId as query parameter (required by GHL API)
@@ -65,7 +63,6 @@ export async function GET(
       fullUrl: url,
     };
     console.log('[GET /api/properties] API Call Diagnostics:', apiCallDiagnostics);
-    logAPI('GET', `/api/properties/${recordId}/api-call`, apiCallDiagnostics);
     
     const response = await fetch(
       url,
@@ -87,12 +84,10 @@ export async function GET(
       ok: response.ok,
     };
     console.log('[GET /api/properties] Response Diagnostics:', responseDiagnostics);
-    logAPI('GET', `/api/properties/${recordId}/response-diagnostics`, responseDiagnostics);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('GHL API error:', response.status, errorText);
-      logAPI('GET', `/api/properties/${recordId}/error`, { status: response.status, error: errorText });
       return NextResponse.json(
         { success: false, error: `GHL API error: ${response.status} ${errorText}` },
         { status: response.status }
@@ -134,11 +129,9 @@ export async function GET(
       },
     };
     console.log('[GET /api/properties] Response Structure Analysis:', responseStructureAnalysis);
-    logAPI('GET', `/api/properties/${recordId}/structure-analysis`, responseStructureAnalysis);
     
     // Log the FULL GHL response to see if custom fields are nested elsewhere
     console.log('[GET /api/properties] FULL GHL Response:', JSON.stringify(ghlResponse, null, 2));
-    logAPI('GET', `/api/properties/${recordId}/full-response`, ghlResponse);
     
     // GHL API returns: { record: { id: "...", properties: {...} } }
     const props = ghlResponse.record?.properties || {};
@@ -147,16 +140,23 @@ export async function GET(
     // Also check if custom fields are at the record level, not in properties
     const recordLevelKeys = Object.keys(ghlResponse.record || {});
     console.log('[GET /api/properties] Record level keys (outside properties):', recordLevelKeys);
-    logAPI('GET', `/api/properties/${recordId}/record-keys`, { recordLevelKeys, record: ghlResponse.record });
     
-    // Helper function to normalize YesNo values (form expects "Yes", "No", or "")
+    // Helper function to normalize Yes/No values to match the form ("Yes", "No", or "")
     const normalizeYesNo = (value: string | undefined | null): string => {
       if (!value) return '';
       const lower = String(value).toLowerCase().trim();
       if (lower === 'yes') return 'Yes';
       if (lower === 'no') return 'No';
-      // If already "Yes" or "No", return as-is
       if (value === 'Yes' || value === 'No') return value;
+      return '';
+    };
+
+    // Helper function to normalize dropdown option keys (GHL uses lowercase option keys)
+    const normalizeYesNoKey = (value: string | undefined | null): string => {
+      if (!value) return '';
+      const lower = String(value).toLowerCase().trim();
+      if (lower === 'yes') return 'yes';
+      if (lower === 'no') return 'no';
       return '';
     };
     
@@ -254,7 +254,6 @@ export async function GET(
       props_councilWaterRates: props.councilWaterRates,
     };
     console.log('[GET /api/properties] GHL Response structure:', ghlResponseLog);
-    logAPI('GET', `/api/properties/${recordId}`, ghlResponseLog);
 
     // Map GHL fields back to FormData structure (REVERSE of submit-property mapping)
     // NOTE: template_type is NOT used by the form - form uses propertyType and lotType directly
@@ -552,6 +551,15 @@ export async function GET(
       // Message for BA
       // GHL field: message_for_ba (from unique key: custom_objects.property_reviews.message_for_ba)
       messageForBA: props.message_for_ba || '',
+      // Resubmit for testing?
+      // GHL field: resubmit_for_testing (from unique key: custom_objects.property_reviews.resubmit_for_testing)
+      resubmitForTesting: normalizeYesNoKey(props.resubmit_for_testing),
+      // Packager Approved
+      // GHL field: packager_approved (from unique key: custom_objects.property_reviews.packager_approved)
+      packagerApproved: props.packager_approved || '',
+      // QA Approved
+      // GHL field: qa_approved (from unique key: custom_objects.property_reviews.qa_approved)
+      qaApproved: props.qa_approved || '',
       // Attachments Additional Dialogue
       // GHL field: attachments_additional_dialogue (from unique key: custom_objects.property_reviews.attachments_additional_dialogue)
       attachmentsAdditionalDialogue: props.attachments_additional_dialogue || '',
@@ -692,7 +700,6 @@ export async function GET(
       ghlAttachmentKeys: Object.keys(props).filter(k => k.toLowerCase().includes('attachment')),
     };
     console.log('[GET /api/properties] Final formData being returned:', finalFormDataLog);
-    logAPI('GET', `/api/properties/${recordId}/final`, finalFormDataLog);
     
     return NextResponse.json({
       success: true,
@@ -730,13 +737,13 @@ export async function PUT(
       councilWaterRates: formData.councilWaterRates,
       sourcer: formData.sourcer,
       messageForBA: formData.messageForBA,
+      resubmitForTesting: formData.resubmitForTesting,
       attachmentsAdditionalDialogue: formData.attachmentsAdditionalDialogue,
       depreciation: formData.depreciation,
     };
     console.log('[PUT /api/properties] Received formData keys:', Object.keys(formData));
     console.log('[PUT /api/properties] Insurance in request:', formData.insurance);
     console.log('[PUT /api/properties] CouncilWaterRates in request:', formData.councilWaterRates);
-    logAPI('PUT', `/api/properties/${recordId}/request`, putRequestLog);
 
     if (!recordId) {
       return NextResponse.json(
@@ -937,6 +944,9 @@ export async function PUT(
     if (includeIfProvided(formData.sellingAgentEmail)) ghlRecord.agent_email = formData.sellingAgentEmail;
     if (includeIfProvided(formData.sellingAgentMobile)) ghlRecord.agent_mobile = formData.sellingAgentMobile;
     if (includeIfProvided(formData.messageForBA)) ghlRecord.message_for_ba = formData.messageForBA;
+    if (includeIfProvided(formData.resubmitForTesting)) ghlRecord.resubmit_for_testing = formData.resubmitForTesting;
+    if (includeIfProvided(formData.packagerApproved)) ghlRecord.packager_approved = formData.packagerApproved;
+    if (includeIfProvided(formData.qaApproved)) ghlRecord.qa_approved = formData.qaApproved;
     if (includeIfProvided(formData.attachmentsAdditionalDialogue)) ghlRecord.attachments_additional_dialogue = formData.attachmentsAdditionalDialogue;
     if (includeIfProvided(formData.folderLink)) ghlRecord.folder_link = formData.folderLink;
     

@@ -324,6 +324,7 @@ export interface FormData {
   
   // Workflow
   messageForBA?: string;
+  resubmitForTesting?: YesNo;
   pushRecordToDealSheet?: YesNo;
   
   // Investment Highlights (hotspotting report)
