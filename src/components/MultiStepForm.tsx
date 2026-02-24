@@ -1387,7 +1387,7 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
           'purchasePrice', 'rentalAssessment', 'contentSections',
           'sourcer', 'packager', 'dealType', 'reviewDate', 'status',
           'sellingAgentName', 'sellingAgentEmail', 'sellingAgentMobile',
-          'messageForBA', 'attachmentsAdditionalDialogue', 'folderLink',
+          'messageForBA', 'resubmitForTesting', 'packagerApproved', 'qaApproved', 'attachmentsAdditionalDialogue', 'folderLink',
           'insurance', 'councilWaterRates', 'depreciation', 'lots'
         ];
 
