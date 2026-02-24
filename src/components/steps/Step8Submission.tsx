@@ -117,6 +117,43 @@ export function Step8Submission() {
   const handleSubmit = async () => {
     const editRecordId = formData.ghlRecordId;
 
+    if (isEditMode && editRecordId) {
+      setSubmitting(true);
+      setError(null);
+
+      try {
+        const folderLink = (formData as any).folderLink ?? (formData.address?.folderLink ?? '');
+        const payload = {
+          messageForBA: formData.messageForBA ?? '',
+          resubmitForTesting: formData.resubmitForTesting ?? '',
+          packagerApproved: formData.packagerApproved ?? '',
+          qaApproved: formData.qaApproved ?? '',
+          attachmentsAdditionalDialogue: formData.attachmentsAdditionalDialogue ?? '',
+          folderLink,
+        };
+
+        const updateResponse = await fetch(`/api/properties/${editRecordId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!updateResponse.ok) {
+          const errorData = await updateResponse.json().catch(() => ({}));
+          throw new Error(errorData.error || `Update failed: ${updateResponse.status}`);
+        }
+
+        alert('✅ Updates have been made as requested.');
+        return;
+      } catch (error) {
+        console.error('Error saving changes (edit mode):', error);
+        alert(`❌ Error saving changes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return;
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
     // In edit mode, skip duplicate submission check
     if (!isEditMode) {
       const hasRecordId = formData.ghlRecordId || ghlRecordId;

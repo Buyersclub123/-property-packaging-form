@@ -791,6 +791,19 @@ export async function PUT(
       return value !== undefined && value !== null && value !== '';
     };
 
+    const trimStringOrPassThrough = (value: any) => {
+      return typeof value === 'string' ? value.trim() : value;
+    };
+
+    const normalizeYesNoForGhl = (value: any) => {
+      const trimmed = trimStringOrPassThrough(value);
+      if (trimmed === null || trimmed === undefined || trimmed === '') return trimmed;
+      const lower = String(trimmed).toLowerCase();
+      if (lower === 'yes') return 'Yes';
+      if (lower === 'no') return 'No';
+      return trimmed;
+    };
+
     // Helper function to parse currency string to number
     const parseCurrencyToNumber = (value: string | undefined): number | null => {
       if (!value) return null;
@@ -882,6 +895,24 @@ export async function PUT(
       return strVal;
     };
 
+    const toGhlNumberOrUndefined = (val: unknown) => {
+      if (val === null || val === undefined) return undefined;
+      if (typeof val === 'number') return Number.isFinite(val) ? val : undefined;
+
+      const strVal = String(val).trim();
+      if (!strVal) return undefined;
+
+      const cleaned = strVal
+        .replace(/,/g, '')
+        .replace(/%/g, '')
+        .replace(/[`'"\\]/g, '')
+        .replace(/[^0-9.\-]/g, '');
+
+      if (!cleaned) return undefined;
+      const num = Number(cleaned);
+      return Number.isFinite(num) ? num : undefined;
+    };
+
     // Property Description
     if (includeIfProvided(formData.propertyDescription?.bedsPrimary)) ghlRecord.beds_primary = formData.propertyDescription.bedsPrimary;
     if (includeIfProvided(formData.propertyDescription?.bedsSecondary)) ghlRecord.beds_additional__secondary__dual_key = formData.propertyDescription.bedsSecondary;
@@ -934,6 +965,29 @@ export async function PUT(
     if (includeIfProvided(formData.rentalAssessment?.appraisedYield)) ghlRecord.appraised_yield = formData.rentalAssessment.appraisedYield;
     if (includeIfProvided(formData.rentalAssessment?.rentalAssessmentAdditionalDialogue)) ghlRecord.rental_assessment_additional_dialogue = formData.rentalAssessment.rentalAssessmentAdditionalDialogue;
 
+    // Market Performance
+    {
+      const mp = formData.marketPerformance;
+      const medianPriceChange3Months = toGhlNumberOrUndefined(mp?.medianPriceChange3Months);
+      const medianPriceChange1Year = toGhlNumberOrUndefined(mp?.medianPriceChange1Year);
+      const medianPriceChange3Year = toGhlNumberOrUndefined(mp?.medianPriceChange3Year);
+      const medianPriceChange5Year = toGhlNumberOrUndefined(mp?.medianPriceChange5Year);
+      const medianYield = toGhlNumberOrUndefined(mp?.medianYield);
+      const medianRentChange1Year = toGhlNumberOrUndefined(mp?.medianRentChange1Year);
+      const rentalPopulation = toGhlNumberOrUndefined(mp?.rentalPopulation);
+      const vacancyRate = toGhlNumberOrUndefined(mp?.vacancyRate);
+
+      if (medianPriceChange3Months !== undefined) ghlRecord.median_price_change__3_months = medianPriceChange3Months;
+      if (medianPriceChange1Year !== undefined) ghlRecord.median_price_change__1_year = medianPriceChange1Year;
+      if (medianPriceChange3Year !== undefined) ghlRecord.median_price_change__3_year = medianPriceChange3Year;
+      if (medianPriceChange5Year !== undefined) ghlRecord.median_price_change__5_year = medianPriceChange5Year;
+      if (medianYield !== undefined) ghlRecord.median_yield = medianYield;
+      if (medianRentChange1Year !== undefined) ghlRecord.median_rent_change__1_year = medianRentChange1Year;
+      if (rentalPopulation !== undefined) ghlRecord.rental_population = rentalPopulation;
+      if (vacancyRate !== undefined) ghlRecord.vacancy_rate = vacancyRate;
+    }
+    if (includeIfProvided(formData.marketPerformance?.marketPerformanceAdditionalDialogue)) ghlRecord.market_performance_additional_dialogue = formData.marketPerformance.marketPerformanceAdditionalDialogue;
+
     // Content Sections
     if (includeIfProvided(formData.contentSections?.whyThisProperty)) ghlRecord.why_this_property = formData.contentSections.whyThisProperty;
     if (includeIfProvided(formData.contentSections?.proximity)) ghlRecord.proximity = formData.contentSections.proximity;
@@ -944,9 +998,20 @@ export async function PUT(
     if (includeIfProvided(formData.sellingAgentEmail)) ghlRecord.agent_email = formData.sellingAgentEmail;
     if (includeIfProvided(formData.sellingAgentMobile)) ghlRecord.agent_mobile = formData.sellingAgentMobile;
     if (includeIfProvided(formData.messageForBA)) ghlRecord.message_for_ba = formData.messageForBA;
-    if (includeIfProvided(formData.resubmitForTesting)) ghlRecord.resubmit_for_testing = formData.resubmitForTesting;
-    if (includeIfProvided(formData.packagerApproved)) ghlRecord.packager_approved = formData.packagerApproved;
-    if (includeIfProvided(formData.qaApproved)) ghlRecord.qa_approved = formData.qaApproved;
+    {
+      const resubmitForTesting = normalizeYesNoForGhl(formData.resubmitForTesting);
+      if (includeIfProvided(resubmitForTesting)) ghlRecord.resubmit_for_testing = resubmitForTesting;
+
+      if (Object.prototype.hasOwnProperty.call(formData, 'packagerApproved')) {
+        const packagerApproved = trimStringOrPassThrough(formData.packagerApproved);
+        ghlRecord.packager_approved = packagerApproved === undefined || packagerApproved === null ? '' : packagerApproved;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(formData, 'qaApproved')) {
+        const qaApproved = trimStringOrPassThrough(formData.qaApproved);
+        ghlRecord.qa_approved = qaApproved === undefined || qaApproved === null ? '' : qaApproved;
+      }
+    }
     if (includeIfProvided(formData.attachmentsAdditionalDialogue)) ghlRecord.attachments_additional_dialogue = formData.attachmentsAdditionalDialogue;
     if (includeIfProvided(formData.folderLink)) ghlRecord.folder_link = formData.folderLink;
     
@@ -1023,18 +1088,22 @@ export async function PUT(
     console.log('[PUT /api/properties] Sourcer in ghlRecord:', ghlRecord.sourcer);
     console.log('[PUT /api/properties] Full ghlRecord:', JSON.stringify(ghlRecord, null, 2));
     
-    const response = await fetch(
-      url,
-      {
-        method: 'PUT',
+    const makeUpdateRequest = async (method: 'PUT' | 'PATCH') => {
+      return fetch(url, {
+        method,
         headers: {
           'Authorization': `Bearer ${GHL_BEARER_TOKEN}`,
           'Version': GHL_API_VERSION,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
-      }
-    );
+      });
+    };
+
+    let response = await makeUpdateRequest('PUT');
+    if (!response.ok && response.status === 404) {
+      response = await makeUpdateRequest('PATCH');
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
