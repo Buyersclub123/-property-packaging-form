@@ -9,6 +9,8 @@ const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY?.trim();
 const GEOAPIFY_API_BASE_URL = process.env.GEOAPIFY_API_BASE_URL || 'https://api.geoapify.com/v2/places';
 const PSMA_API_ENDPOINT = process.env.PSMA_API_ENDPOINT || 'https://api.psma.com.au/v2/addresses/geocoder';
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
+const ACTIVE_GOOGLE_PLACES_KEY = GOOGLE_PLACES_API_KEY || GOOGLE_MAPS_API_KEY;
 const GOOGLE_MAPS_API_BASE_URL = process.env.GOOGLE_MAPS_API_BASE_URL || 'https://maps.googleapis.com/maps/api/distancematrix/json';
 
 if (!GEOAPIFY_API_KEY || GEOAPIFY_API_KEY.length === 0) {
@@ -48,32 +50,88 @@ interface City {
 // Added back Sunshine Coast Airport (MCY) - important for QLD properties
 // Now includes hardcoded coordinates for Haversine distance calculation
 const AUSTRALIAN_AIRPORTS: Airport[] = [
-  { name: 'Sydney Kingsford Smith Airport', code: 'SYD', address: 'Sydney Airport NSW 2020, Australia', latitude: -33.9399, longitude: 151.1753, group: 1 },
-  { name: 'Melbourne Airport', code: 'MEL', address: 'Melbourne Airport VIC 3045, Australia', latitude: -37.6733, longitude: 144.8433, group: 1 },
-  { name: 'Brisbane Airport', code: 'BNE', address: 'Brisbane Airport QLD 4008, Australia', latitude: -27.3842, longitude: 153.1171, group: 1 },
-  { name: 'Perth Airport', code: 'PER', address: 'Perth Airport WA 6105, Australia', latitude: -31.9402, longitude: 115.9669, group: 1 },
-  { name: 'Adelaide Airport', code: 'ADL', address: 'Adelaide Airport SA 5950, Australia', latitude: -34.9455, longitude: 138.5306, group: 1 },
-  { name: 'Cairns Airport', code: 'CNS', address: 'Cairns Airport QLD 4870, Australia', latitude: -16.8858, longitude: 145.7553, group: 1 },
-  { name: 'Darwin International Airport', code: 'DRW', address: 'Darwin Airport NT 0820, Australia', latitude: -12.4083, longitude: 130.8727, group: 1 },
-  { name: 'Gold Coast Airport', code: 'OOL', address: 'Gold Coast Airport QLD 4218, Australia', latitude: -28.1644, longitude: 153.5047, group: 2 },
-  { name: 'Sunshine Coast Airport', code: 'MCY', address: 'Sunshine Coast Airport QLD 4564, Australia', latitude: -26.6033, longitude: 153.0911, group: 2 },
-  { name: 'Canberra Airport', code: 'CBR', address: 'Canberra Airport ACT 2609, Australia', latitude: -35.3069, longitude: 149.1950, group: 2 },
-  { name: 'Hobart International Airport', code: 'HBA', address: 'Hobart Airport TAS 7170, Australia', latitude: -42.8361, longitude: 147.5103, group: 2 },
+  { name: 'Sydney Kingsford Smith Airport', code: 'SYD', address: 'Sydney Airport NSW 2020, Australia', latitude: -33.946098, longitude: 151.177002, group: 1 },
+  { name: 'Melbourne Airport', code: 'MEL', address: 'Melbourne Airport VIC 3045, Australia', latitude: -37.670732, longitude: 144.837898, group: 1 },
+  { name: 'Brisbane Airport', code: 'BNE', address: 'Brisbane Airport QLD 4008, Australia', latitude: -27.384199142456055, longitude: 153.11700439453125, group: 1 },
+  { name: 'Perth Airport', code: 'PER', address: 'Perth Airport WA 6105, Australia', latitude: -31.94029998779297, longitude: 115.96700286865234, group: 1 },
+  { name: 'Adelaide Airport', code: 'ADL', address: 'Adelaide Airport SA 5950, Australia', latitude: -34.947512, longitude: 138.533393, group: 1 },
+  { name: 'Gold Coast Airport', code: 'OOL', address: 'Gold Coast Airport QLD 4218, Australia', latitude: -28.165962, longitude: 153.506641, group: 1 },
+  { name: 'Cairns International Airport', code: 'CNS', address: 'Cairns Airport QLD 4870, Australia', latitude: -16.878921, longitude: 145.74948, group: 1 },
+  { name: 'Canberra Airport', code: 'CBR', address: 'Canberra Airport ACT 2609, Australia', latitude: -35.3069, longitude: 149.195007, group: 1 },
+  { name: 'Darwin International Airport', code: 'DRW', address: 'Darwin Airport NT 0820, Australia', latitude: -12.41497, longitude: 130.88185, group: 1 },
+  { name: 'Hobart International Airport', code: 'HBA', address: 'Hobart Airport TAS 7170, Australia', latitude: -42.837032, longitude: 147.513022, group: 1 },
+  { name: 'Townsville Airport', code: 'TSV', address: 'Townsville QLD 4810, Australia', latitude: -19.252904, longitude: 146.766512, group: 2 },
+  { name: 'Launceston Airport', code: 'LST', address: 'Launceston TAS 7250, Australia', latitude: -41.544935, longitude: 147.210785, group: 2 },
+  { name: 'Newcastle Airport', code: 'NTL', address: 'Williamtown NSW 2318, Australia', latitude: -32.796114, longitude: 151.835025, group: 2 },
+  { name: 'Sunshine Coast Airport', code: 'MCY', address: 'Maroochydore QLD 4558, Australia', latitude: -26.593324, longitude: 153.08319, group: 2 },
+  { name: 'Alice Springs Airport', code: 'ASP', address: 'Alice Springs NT 0870, Australia', latitude: -23.806588, longitude: 133.903427, group: 2 },
+  { name: 'Ayers Rock (Connellan) Airport', code: 'AYQ', address: 'Yulara NT 0872, Australia', latitude: -25.185913, longitude: 130.97703, group: 2 },
+  { name: 'Broome International Airport', code: 'BME', address: 'Broome WA 6725, Australia', latitude: -17.949194, longitude: 122.2283, group: 2 },
+  { name: 'Ballina Byron Gateway Airport', code: 'BNK', address: 'Ballina NSW 2478, Australia', latitude: -28.833236, longitude: 153.561471, group: 2 },
+  { name: 'Hamilton Island Airport', code: 'HTI', address: 'Hamilton Island QLD 4803, Australia', latitude: -20.3581008911, longitude: 148.95199585, group: 2 },
+  { name: 'Port Hedland International Airport', code: 'PHE', address: 'Port Hedland WA 6721, Australia', latitude: -20.382787, longitude: 118.629789, group: 2 },
+  { name: 'Karratha Airport', code: 'KTA', address: 'Karratha WA 6714, Australia', latitude: -20.712200164799995, longitude: 116.773002625, group: 2 },
+  { name: 'Rockhampton Airport', code: 'ROK', address: 'Rockhampton QLD 4700, Australia', latitude: -23.380019, longitude: 150.475359, group: 2 },
+  { name: 'Avalon Airport', code: 'AVV', address: 'Avalon VIC 3212, Australia', latitude: -38.040269, longitude: 144.467196, group: 3 },
+  { name: 'Essendon Fields Airport', code: 'MEB', address: 'Essendon Fields VIC 3041, Australia', latitude: -37.7281, longitude: 144.901993, group: 3 },
+  { name: 'Moorabbin Airport', code: 'MBW', address: 'Moorabbin VIC 3194, Australia', latitude: -37.977765, longitude: 145.099799, group: 3 },
+  { name: 'Sydney Bankstown Airport', code: 'BWU', address: 'Sydney NSW 2200, Australia', latitude: -33.923618, longitude: 150.990792, group: 3 },
+  { name: 'Hervey Bay Airport', code: 'HVB', address: 'Hervey Bay QLD 4655, Australia', latitude: -25.320127, longitude: 152.880662, group: 3 },
+  { name: 'Albury Airport', code: 'ABX', address: 'Albury NSW 2640, Australia', latitude: -36.066758, longitude: 146.959148, group: 3 },
+  { name: 'Bundaberg Airport', code: 'BDB', address: 'Bundaberg QLD 4670, Australia', latitude: -24.905039, longitude: 152.322612, group: 3 },
+  { name: 'Dubbo Regional Airport', code: 'DBO', address: 'Dubbo NSW 2830, Australia', latitude: -32.2167015076, longitude: 148.574996948, group: 3 },
+  { name: 'Mount Isa Airport', code: 'ISA', address: 'Mount Isa QLD 4825, Australia', latitude: -20.66638, longitude: 139.488468, group: 3 },
+  { name: 'Toowoomba Wellcamp Airport', code: 'WTB', address: 'Toowoomba QLD 4350, Australia', latitude: -27.558332, longitude: 151.793335, group: 3 },
+  { name: 'Jandakot Airport', code: 'JAD', address: 'Perth WA 6164, Australia', latitude: -32.09749984741211, longitude: 115.88099670410156, group: 3 },
 ];
 
 // PHASE 2: Reduced to top 9 cities (from 30) for batch optimization
 // Added back Sunshine Coast - important for QLD properties
 // Now includes hardcoded coordinates for Haversine distance calculation
 const AUSTRALIAN_CITIES: City[] = [
-  { name: 'Melbourne', state: 'Victoria', address: 'Melbourne VIC, Australia', latitude: -37.8136, longitude: 144.9631, group: 1 },
-  { name: 'Sydney', state: 'New South Wales', address: 'Sydney NSW, Australia', latitude: -33.8688, longitude: 151.2093, group: 1 },
-  { name: 'Brisbane', state: 'Queensland', address: 'Brisbane QLD, Australia', latitude: -27.4698, longitude: 153.0251, group: 1 },
-  { name: 'Perth', state: 'Western Australia', address: 'Perth WA, Australia', latitude: -31.9505, longitude: 115.8605, group: 1 },
-  { name: 'Adelaide', state: 'South Australia', address: 'Adelaide SA, Australia', latitude: -34.9285, longitude: 138.6007, group: 1 },
-  { name: 'Canberra', state: 'Australian Capital Territory', address: 'Canberra ACT, Australia', latitude: -35.2809, longitude: 149.1300, group: 1 },
-  { name: 'Hobart', state: 'Tasmania', address: 'Hobart TAS, Australia', latitude: -42.8821, longitude: 147.3272, group: 1 },
-  { name: 'Gold Coast', state: 'Queensland', address: 'Gold Coast QLD, Australia', latitude: -28.0167, longitude: 153.4000, group: 2 },
-  { name: 'Sunshine Coast', state: 'Queensland', address: 'Sunshine Coast QLD, Australia', latitude: -26.6500, longitude: 153.0667, group: 2 },
+  { name: 'Adelaide', state: 'South Australia', address: 'Adelaide SA, Australia', latitude: -34.92866, longitude: 138.59863, group: 1 },
+  { name: 'Brisbane', state: 'Queensland', address: 'Brisbane QLD, Australia', latitude: -27.46977, longitude: 153.02513, group: 1 },
+  { name: 'Canberra', state: 'Australian Capital Territory', address: 'Canberra ACT, Australia', latitude: -35.282, longitude: 149.12868, group: 1 },
+  { name: 'Darwin', state: 'Northern Territory', address: 'Darwin NT, Australia', latitude: -12.46113, longitude: 130.84184, group: 1 },
+  { name: 'Hobart', state: 'Tasmania', address: 'Hobart TAS, Australia', latitude: -42.87936, longitude: 147.32941, group: 1 },
+  { name: 'Melbourne', state: 'Victoria', address: 'Melbourne VIC, Australia', latitude: -37.814, longitude: 144.96332, group: 1 },
+  { name: 'Perth', state: 'Western Australia', address: 'Perth WA, Australia', latitude: -31.95224, longitude: 115.8614, group: 1 },
+  { name: 'Sydney', state: 'New South Wales', address: 'Sydney NSW, Australia', latitude: -33.86882, longitude: 151.20929, group: 1 },
+  { name: 'Albury', state: 'New South Wales', address: 'Albury NSW, Australia', latitude: -36.07482, longitude: 146.92401, group: 2 },
+  { name: 'Ballarat', state: 'Victoria', address: 'Ballarat VIC, Australia', latitude: -37.56622, longitude: 143.84956, group: 2 },
+  { name: 'Bendigo', state: 'Victoria', address: 'Bendigo VIC, Australia', latitude: -36.75818, longitude: 144.28024, group: 2 },
+  { name: 'Bunbury', state: 'Western Australia', address: 'Bunbury WA, Australia', latitude: -33.32711, longitude: 115.64137, group: 2 },
+  { name: 'Cairns', state: 'Queensland', address: 'Cairns QLD, Australia', latitude: -16.92366, longitude: 145.76613, group: 2 },
+  { name: 'Geelong', state: 'Victoria', address: 'Geelong VIC, Australia', latitude: -38.14711, longitude: 144.36069, group: 2 },
+  { name: 'Geraldton', state: 'Western Australia', address: 'Geraldton WA, Australia', latitude: -28.77897, longitude: 114.61459, group: 2 },
+  { name: 'Gold Coast', state: 'Queensland', address: 'Gold Coast QLD, Australia', latitude: -28.00029, longitude: 153.43088, group: 2 },
+  { name: 'Launceston', state: 'Tasmania', address: 'Launceston TAS, Australia', latitude: -41.43876, longitude: 147.13467, group: 2 },
+  { name: 'Mackay', state: 'Queensland', address: 'Mackay QLD, Australia', latitude: -21.15345, longitude: 149.16554, group: 2 },
+  { name: 'Newcastle', state: 'New South Wales', address: 'Newcastle NSW, Australia', latitude: -32.92827, longitude: 151.78168, group: 2 },
+  { name: 'Sunshine Coast', state: 'Queensland', address: 'Sunshine Coast QLD, Australia', latitude: -26.65682, longitude: 153.07954, group: 2 },
+  { name: 'Toowoomba', state: 'Queensland', address: 'Toowoomba QLD, Australia', latitude: -27.56056, longitude: 151.95386, group: 2 },
+  { name: 'Townsville', state: 'Queensland', address: 'Townsville QLD, Australia', latitude: -19.26639, longitude: 146.8057, group: 2 },
+  { name: 'Wodonga', state: 'Victoria', address: 'Wodonga VIC, Australia', latitude: -36.12179, longitude: 146.88809, group: 2 },
+  { name: 'Wollongong', state: 'New South Wales', address: 'Wollongong NSW, Australia', latitude: -34.424, longitude: 150.89345, group: 2 },
+  { name: 'Rockhampton', state: 'Queensland', address: 'Rockhampton QLD, Australia', latitude: -23.38032, longitude: 150.50595, group: 2 },
+  { name: 'Albany', state: 'Western Australia', address: 'Albany WA, Australia', latitude: -35.0269, longitude: 117.8837, group: 3 },
+  { name: 'Bathurst', state: 'New South Wales', address: 'Bathurst NSW, Australia', latitude: -33.41665, longitude: 149.5806, group: 3 },
+  { name: 'Bundaberg', state: 'Queensland', address: 'Bundaberg QLD, Australia', latitude: -24.86621, longitude: 152.3479, group: 3 },
+  { name: 'Coffs Harbour', state: 'New South Wales', address: 'Coffs Harbour NSW, Australia', latitude: -30.29626, longitude: 153.11351, group: 3 },
+  { name: 'Dubbo', state: 'New South Wales', address: 'Dubbo NSW, Australia', latitude: -32.24295, longitude: 148.60484, group: 3 },
+  { name: 'Gladstone', state: 'Queensland', address: 'Gladstone QLD, Australia', latitude: -23.84852, longitude: 151.25775, group: 3 },
+  { name: 'Hervey Bay', state: 'Queensland', address: 'Hervey Bay QLD, Australia', latitude: -25.28762, longitude: 152.76936, group: 3 },
+  { name: 'Kalgoorlie-Boulder', state: 'Western Australia', address: 'Kalgoorlie WA, Australia', latitude: -30.74614, longitude: 121.4742, group: 3 },
+  { name: 'Lismore', state: 'New South Wales', address: 'Lismore NSW, Australia', latitude: -28.81354, longitude: 153.2773, group: 3 },
+  { name: 'Maryborough', state: 'Queensland', address: 'Maryborough QLD, Australia', latitude: -25.54073, longitude: 152.70493, group: 3 },
+  { name: 'Mildura', state: 'Victoria', address: 'Mildura VIC, Australia', latitude: -34.18551, longitude: 142.1625, group: 3 },
+  { name: 'Nowra', state: 'New South Wales', address: 'Nowra NSW, Australia', latitude: -34.88422, longitude: 150.60036, group: 3 },
+  { name: 'Orange', state: 'New South Wales', address: 'Orange NSW, Australia', latitude: -33.28333, longitude: 149.1, group: 3 },
+  { name: 'Port Macquarie', state: 'New South Wales', address: 'Port Macquarie NSW, Australia', latitude: -31.43084, longitude: 152.90894, group: 3 },
+  { name: 'Shepparton', state: 'Victoria', address: 'Shepparton VIC, Australia', latitude: -36.38047, longitude: 145.39867, group: 3 },
+  { name: 'Tamworth', state: 'New South Wales', address: 'Tamworth NSW, Australia', latitude: -31.09048, longitude: 150.92905, group: 3 },
+  { name: 'Wagga Wagga', state: 'New South Wales', address: 'Wagga Wagga NSW, Australia', latitude: -35.10817, longitude: 147.35983, group: 3 },
+  { name: 'Warrnambool', state: 'Victoria', address: 'Warrnambool VIC, Australia', latitude: -38.38176, longitude: 142.48799, group: 3 },
 ];
 
 interface GeoapifyPlace {
@@ -100,6 +158,25 @@ interface ProximityResult {
   category: string;
   formattedLine: string;
 }
+
+type GooglePlacesTextSearchResult = {
+  name?: string;
+  formatted_address?: string;
+  place_id?: string;
+  geometry?: {
+    location?: {
+      lat: number;
+      lng: number;
+    };
+  };
+};
+
+type PlacesNewSearchTextPlace = {
+  id?: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  location?: { latitude: number; longitude: number };
+};
 
 /**
  * Get next Wednesday 9 AM in seconds since epoch
@@ -153,6 +230,154 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function isHospitalSubPoi(place: any): boolean {
+  const name = ((place?.properties?.name || '') as string).trim().toLowerCase();
+  if (!name) return false;
+  const subPoiTerms = ['emergency', 'main reception', 'reception', 'outpatients', 'outpatient', 'ward', 'clinic', 'car park', 'parking'];
+  if (subPoiTerms.includes(name)) return true;
+  if (subPoiTerms.some(t => name === t || name.startsWith(`${t} `) || name.endsWith(` ${t}`))) return true;
+  if (!name.includes('hospital') && subPoiTerms.some(t => name.includes(t))) return true;
+  return false;
+}
+
+async function searchGooglePlacesText(
+  originLat: number,
+  originLon: number,
+  query: string,
+  radiusMeters: number
+): Promise<{ results: GooglePlacesTextSearchResult[]; status?: string; errorMessage?: string }> {
+  if (!ACTIVE_GOOGLE_PLACES_KEY) return { results: [], status: 'NO_KEY' };
+
+  const endpoint = 'https://places.googleapis.com/v1/places:searchText';
+  const fieldMask = ['places.id', 'places.displayName', 'places.formattedAddress', 'places.location'].join(',');
+
+  const payload = {
+    textQuery: query,
+    locationBias: {
+      circle: {
+        center: { latitude: originLat, longitude: originLon },
+        radius: radiusMeters,
+      },
+    },
+  };
+
+  try {
+    const resp = await axios.post(endpoint, payload, {
+      timeout: 8000,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': ACTIVE_GOOGLE_PLACES_KEY,
+        'X-Goog-FieldMask': fieldMask,
+      },
+    });
+
+    const places: PlacesNewSearchTextPlace[] = Array.isArray(resp.data?.places) ? resp.data.places : [];
+    const results: GooglePlacesTextSearchResult[] = places.map(p => {
+      const loc = p.location;
+      return {
+        name: p.displayName?.text,
+        formatted_address: p.formattedAddress,
+        place_id: p.id,
+        geometry: loc ? { location: { lat: loc.latitude, lng: loc.longitude } } : undefined,
+      };
+    });
+
+    return { results, status: String(resp.status) };
+  } catch (error: any) {
+    const status = error?.response?.status ? String(error.response.status) : 'ERROR';
+    const errorMessage = error?.response?.data?.error?.message || error?.message || 'Request failed';
+    return { results: [], status, errorMessage };
+  }
+}
+
+async function getChildcarePlacesFromGoogle(
+  originLat: number,
+  originLon: number,
+  radiusMeters: number,
+  maxResults: number
+): Promise<{
+  items: Array<{ name: string; address: string; lat: number; lon: number; type: 'childcare' | 'kindergarten' }>;
+  debug: {
+    keyPresent: boolean;
+    queries: Array<{ query: string; status?: string; errorMessage?: string; resultsCount: number }>;
+    dedupedCount: number;
+    returnedCount: number;
+  };
+}> {
+  if (!ACTIVE_GOOGLE_PLACES_KEY) {
+    return {
+      items: [],
+      debug: {
+        keyPresent: false,
+        queries: [],
+        dedupedCount: 0,
+        returnedCount: 0,
+      },
+    };
+  }
+
+  const queries = [
+    'childcare',
+    'day care',
+    'daycare',
+    'kindergarten',
+    'preschool',
+    'early learning centre',
+    'early learning center',
+  ];
+
+  const all: GooglePlacesTextSearchResult[] = [];
+  const queryDebug: Array<{ query: string; status?: string; errorMessage?: string; resultsCount: number }> = [];
+  for (const q of queries) {
+    try {
+      const resp = await searchGooglePlacesText(originLat, originLon, q, radiusMeters);
+      const results = resp?.results || [];
+      queryDebug.push({ query: q, status: resp?.status, errorMessage: resp?.errorMessage, resultsCount: results.length });
+      all.push(...results);
+    } catch {
+      queryDebug.push({ query: q, status: 'ERROR', errorMessage: 'Request failed', resultsCount: 0 });
+    }
+  }
+
+  const byPlaceId = new Map<string, GooglePlacesTextSearchResult>();
+  for (const r of all) {
+    if (!r.place_id) continue;
+    if (!byPlaceId.has(r.place_id)) byPlaceId.set(r.place_id, r);
+  }
+
+  const cleaned = Array.from(byPlaceId.values())
+    .map(r => {
+      const loc = r.geometry?.location;
+      const distance = loc ? calculateDistance(originLat, originLon, loc.lat, loc.lng) : Number.POSITIVE_INFINITY;
+      const name = (r.name || '').trim();
+      const address = (r.formatted_address || '').trim();
+      const lower = name.toLowerCase();
+      const type: 'childcare' | 'kindergarten' =
+        lower.includes('kindergarten') || lower.includes('preschool') ? 'kindergarten' : 'childcare';
+      return { name, address, loc, distance, type };
+    })
+    .filter(r => !!r.loc && Number.isFinite(r.distance) && r.distance <= radiusMeters)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, maxResults)
+    .map(r => ({
+      name: r.name,
+      address: r.address,
+      lat: r.loc!.lat,
+      lon: r.loc!.lng,
+      type: r.type,
+    }));
+
+  return {
+    items: cleaned,
+    debug: {
+      keyPresent: !!ACTIVE_GOOGLE_PLACES_KEY,
+      queries: queryDebug,
+      dedupedCount: byPlaceId.size,
+      returnedCount: cleaned.length,
+    },
+  };
 }
 
 /**
@@ -633,7 +858,7 @@ export async function POST(request: Request) {
     }
 
     const allResults: ProximityResult[] = [];
-    let geoapifyDebug: { geoapifyTotalResults: number; geoapifyCategoryBreakdown: any } | null = null;
+    let geoapifyDebug: any | null = null;
     let distanceMatrixApiCallCount = 0;
     let destinationsCount = 0;
 
@@ -662,24 +887,12 @@ export async function POST(request: Request) {
       }
     });
 
-    const closestOverallAirport = airportsWithDistance.sort((a, b) => a.distance - b.distance)[0];
-    const closestAirportGroup = closestOverallAirport?.airport.group;
-
-    const filteredAirports: typeof airportsWithDistance = [];
-    if (closestAirportGroup === 3) {
-      if (closestAirportByGroup[3]) filteredAirports.push(closestAirportByGroup[3]);
-      if (closestAirportByGroup[1]) filteredAirports.push(closestAirportByGroup[1]);
-    } else if (closestAirportGroup === 2) {
-      if (closestAirportByGroup[2]) filteredAirports.push(closestAirportByGroup[2]);
-      if (closestAirportByGroup[1]) filteredAirports.push(closestAirportByGroup[1]);
-    } else {
-      if (closestAirportByGroup[1]) filteredAirports.push(closestAirportByGroup[1]);
-      const tier2And3 = [closestAirportByGroup[2], closestAirportByGroup[3]].filter(Boolean);
-      if (tier2And3.length > 0) {
-        tier2And3.sort((a, b) => a!.distance - b!.distance);
-        filteredAirports.push(tier2And3[0]!);
-      }
-    }
+    // Always show closest 1 from each tier (human can delete if irrelevant)
+    const filteredAirports: typeof airportsWithDistance = [
+      closestAirportByGroup[1],
+      closestAirportByGroup[2],
+      closestAirportByGroup[3],
+    ].filter(Boolean) as typeof airportsWithDistance;
 
     // Calculate Haversine distances for cities
     const citiesWithDistance = AUSTRALIAN_CITIES.map(city => ({
@@ -696,22 +909,31 @@ export async function POST(request: Request) {
       }
     });
 
-    const closestOverallCity = citiesWithDistance.sort((a, b) => a.distance - b.distance)[0];
-    const closestCityGroup = closestOverallCity?.city.group;
+    // Always show closest 1 from each tier
+    const filteredCities: typeof citiesWithDistance = [
+      closestCityByGroup[1],
+      closestCityByGroup[2],
+      closestCityByGroup[3],
+    ].filter(Boolean) as typeof citiesWithDistance;
 
-    const filteredCities: typeof citiesWithDistance = [];
-    if (closestCityGroup === 3) {
-      if (closestCityByGroup[3]) filteredCities.push(closestCityByGroup[3]);
-      if (closestCityByGroup[1]) filteredCities.push(closestCityByGroup[1]);
-    } else if (closestCityGroup === 2) {
-      if (closestCityByGroup[2]) filteredCities.push(closestCityByGroup[2]);
-      if (closestCityByGroup[1]) filteredCities.push(closestCityByGroup[1]);
-    } else {
-      if (closestCityByGroup[1]) filteredCities.push(closestCityByGroup[1]);
-      const tier2And3 = [closestCityByGroup[2], closestCityByGroup[3]].filter(Boolean);
-      if (tier2And3.length > 0) {
-        tier2And3.sort((a, b) => a!.distance - b!.distance);
-        filteredCities.push(tier2And3[0]!);
+    // Extra rule: if Gold Coast or Sunshine Coast is closer than the selected Tier 1 city,
+    // add only the closest of the two as an extra city (unless it's already the Tier 2 selection).
+    const selectedTier1City = closestCityByGroup[1];
+    const goldCoast = citiesWithDistance.find(c => c.city.name === 'Gold Coast');
+    const sunshineCoast = citiesWithDistance.find(c => c.city.name === 'Sunshine Coast');
+
+    const candidateExtras = [goldCoast, sunshineCoast].filter(Boolean) as typeof citiesWithDistance;
+    if (selectedTier1City && candidateExtras.length > 0) {
+      candidateExtras.sort((a, b) => a.distance - b.distance);
+      const closestExtra = candidateExtras[0];
+
+      if (closestExtra.distance < selectedTier1City.distance) {
+        const alreadyIncluded = filteredCities.some(
+          c => c.city.name === closestExtra.city.name && c.city.state === closestExtra.city.state
+        );
+        if (!alreadyIncluded) {
+          filteredCities.push(closestExtra);
+        }
       }
     }
 
@@ -869,26 +1091,65 @@ export async function POST(request: Request) {
         }
       });
 
-      // Kindergarten & Childcare (take top 4 from up to 10 each, sorted by Haversine)
-      const childcareOnly = childcareSorted.slice(0, 10).filter(item => {
-        const categories = item.place.properties.categories || [];
-        return !categories.some(cat => cat.includes('kindergarten'));
-      });
-      const combined = [
-        ...kindergartenSorted.slice(0, 10).map(item => ({ ...item, type: 'kindergarten' as const })),
-        ...childcareOnly.map(item => ({ ...item, type: 'childcare' as const })),
-      ].sort((a, b) => a.distance - b.distance);
-      combined.slice(0, 4).forEach(item => {
-        const place = item.place;
-        if (place.geometry?.coordinates) {
+      // Kindergarten & Childcare (Google Places primary; fallback to Geoapify)
+      const childcareRadiusMeters = 10000;
+      const childcareMaxResults = 6;
+      let googleChildcare: Array<{ name: string; address: string; lat: number; lon: number; type: 'childcare' | 'kindergarten' }> = [];
+      let googleChildcareDebug: any = null;
+      try {
+        const resp = await getChildcarePlacesFromGoogle(lat, lon, childcareRadiusMeters, childcareMaxResults);
+        googleChildcare = resp.items;
+        googleChildcareDebug = resp.debug;
+      } catch {
+      }
+
+      if (googleChildcare.length > 0) {
+        googleChildcare.forEach(item => {
+          const place = {
+            properties: {
+              name: item.name,
+              categories: item.type === 'kindergarten' ? ['childcare.kindergarten'] : ['childcare'],
+              address_line1: item.address,
+            },
+            geometry: {
+              coordinates: [item.lon, item.lat] as [number, number],
+            },
+          };
           batch2Destinations.push({
-            lat: place.geometry.coordinates[1],
-            lon: place.geometry.coordinates[0],
+            lat: item.lat,
+            lon: item.lon,
             metadata: { type: item.type, place },
           });
           batch2Metadata.push({ type: item.type, place });
-        }
-      });
+        });
+      } else {
+        const childcareOnly = childcareSorted.slice(0, 10).filter(item => {
+          const categories = item.place.properties.categories || [];
+          return !categories.some(cat => cat.includes('kindergarten'));
+        });
+        const combined = [
+          ...kindergartenSorted.slice(0, 10).map(item => ({ ...item, type: 'kindergarten' as const })),
+          ...childcareOnly.map(item => ({ ...item, type: 'childcare' as const })),
+        ].sort((a, b) => a.distance - b.distance);
+        combined.slice(0, 4).forEach(item => {
+          const place = item.place;
+          if (place.geometry?.coordinates) {
+            batch2Destinations.push({
+              lat: place.geometry.coordinates[1],
+              lon: place.geometry.coordinates[0],
+              metadata: { type: item.type, place },
+            });
+            batch2Metadata.push({ type: item.type, place });
+          }
+        });
+      }
+
+      if (geoapifyDebug) {
+        geoapifyDebug.childcareGooglePlaces = {
+          used: googleChildcare.length > 0,
+          debug: googleChildcareDebug,
+        };
+      }
 
       // Schools (take top 3 from up to 10, sorted by Haversine)
       schoolSorted.slice(0, 10).slice(0, 3).forEach(item => {
@@ -917,7 +1178,9 @@ export async function POST(request: Request) {
       });
 
       // Hospitals (take top 2 from up to 10, sorted by Haversine)
-      hospitalSorted.slice(0, 10).slice(0, 2).forEach(item => {
+      const hospitalCandidates = hospitalSorted.slice(0, 50).filter(item => !isHospitalSubPoi(item.place));
+      const hospitalsForBatch = (hospitalCandidates.length > 0 ? hospitalCandidates : hospitalSorted.slice(0, 50)).slice(0, 2);
+      hospitalsForBatch.forEach(item => {
         const place = item.place;
         if (place.geometry?.coordinates) {
           batch2Destinations.push({
@@ -1101,9 +1364,10 @@ export async function POST(request: Request) {
 
         // Process kindergarten & childcare (top 4)
         if (childcareResults.length > 0) {
-          childcareResults.sort((a, b) => a.distance - b.distance);
-          const top4 = childcareResults.slice(0, 4);
-          top4.forEach(item => {
+          const childcareWithin10km = childcareResults.filter(item => item.distance <= 10000);
+          childcareWithin10km.sort((a, b) => a.distance - b.distance);
+          const top3 = childcareWithin10km.slice(0, 3);
+          top3.forEach(item => {
             const { distance: distStr, time: timeStr } = formatDistanceTime(item.distance, item.duration);
             let placeName = (item.place.properties.name || '').trim();
             if (!placeName) placeName = item.place.properties.address_line1 || (item.type === 'kindergarten' ? 'Kindergarten' : 'Childcare');
@@ -1155,8 +1419,9 @@ export async function POST(request: Request) {
 
         // Process hospitals (top 2, sorted by Google Maps distance)
         if (hospitalResults.length > 0) {
-          hospitalResults.sort((a, b) => a.distance - b.distance);
-          const top2 = hospitalResults.slice(0, 2);
+          const filteredHospitals = hospitalResults.filter(h => !isHospitalSubPoi(h.place));
+          (filteredHospitals.length > 0 ? filteredHospitals : hospitalResults).sort((a, b) => a.distance - b.distance);
+          const top2 = (filteredHospitals.length > 0 ? filteredHospitals : hospitalResults).slice(0, 2);
           top2.forEach(hospital => {
             const { distance: distStr, time: timeStr } = formatDistanceTime(hospital.distance, hospital.duration);
             let hospitalName = (hospital.place.properties.name || '').trim();
