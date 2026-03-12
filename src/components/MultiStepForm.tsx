@@ -1385,10 +1385,11 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
         const topLevelKeys = [
           'address', 'decisionTree', 'riskOverlays', 'propertyDescription',
           'purchasePrice', 'rentalAssessment', 'contentSections',
+          'marketPerformance',
           'sourcer', 'packager', 'dealType', 'reviewDate', 'status',
           'sellingAgentName', 'sellingAgentEmail', 'sellingAgentMobile',
           'messageForBA', 'resubmitForTesting', 'packagerApproved', 'qaApproved', 'attachmentsAdditionalDialogue', 'folderLink',
-          'insurance', 'councilWaterRates', 'depreciation', 'lots'
+          'insurance', 'councilWaterRates', 'depreciation', 'lots', 'clearInGhl'
         ];
 
         // Process each top-level key
@@ -1556,6 +1557,8 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
           body: JSON.stringify(payload),
         }).catch((err) => console.log('Webhook call failed:', err));
       }
+
+      updateFormData({ clearInGhl: {} });
 
       // Show success message with count of changed fields
       const fieldCount = Object.keys(changedFieldsOnly).length;

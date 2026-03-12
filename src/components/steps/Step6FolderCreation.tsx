@@ -14,7 +14,9 @@ interface ChecklistItem {
 }
 
 export function Step6FolderCreation() {
-  const { formData, updateAddress, updateFormData, setCurrentStep, resetForm } = useFormStore();
+  const { formData, updateFormData, setCurrentStep, updateAddress, resetForm } = useFormStore();
+  const { clearInGhl } = formData;
+  const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
   const { address, decisionTree } = formData;
   
   const [folderName, setFolderName] = useState('');
@@ -563,11 +565,30 @@ export function Step6FolderCreation() {
             </p>
             <textarea
               value={formData.attachmentsAdditionalDialogue || ''}
-              onChange={(e) => updateFormData({ attachmentsAdditionalDialogue: e.target.value })}
+              onChange={(e) => {
+                updateFormData({ clearInGhl: { attachmentsAdditionalDialogue: false } });
+                updateFormData({ attachmentsAdditionalDialogue: e.target.value });
+              }}
               className="input-field min-h-[120px] resize-y"
               placeholder="Enter any additional notes about attachments..."
               spellCheck={true}
             />
+            {isEditMode && (
+              <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={!!clearInGhl?.attachmentsAdditionalDialogue}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    updateFormData({ clearInGhl: { attachmentsAdditionalDialogue: next } });
+                    if (next) {
+                      updateFormData({ attachmentsAdditionalDialogue: '' });
+                    }
+                  }}
+                />
+                Clear in GHL
+              </label>
+            )}
           </div>
 
           {/* Message for BA Section */}

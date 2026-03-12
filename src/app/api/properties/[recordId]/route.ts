@@ -476,6 +476,7 @@ export async function GET(
         singleOrDualOccupancy: props.single_or_dual_occupancy || '',
         landRegistration: props.land_registration || '',
         propertyDescriptionAdditionalDialogue: props.property_description_additional_dialogue || '',
+        projectBrief: props.project_brief || '',
         };
       })(),
       // Purchase Price
@@ -791,6 +792,19 @@ export async function PUT(
       return value !== undefined && value !== null && value !== '';
     };
 
+    const shouldClear = (path: string): boolean => {
+      const clearInGhl = formData?.clearInGhl;
+      if (!clearInGhl || typeof clearInGhl !== 'object') return false;
+
+      const parts = path.split('.');
+      let cur: any = clearInGhl;
+      for (const p of parts) {
+        if (!cur || typeof cur !== 'object') return false;
+        cur = cur[p];
+      }
+      return cur === true;
+    };
+
     const trimStringOrPassThrough = (value: any) => {
       return typeof value === 'string' ? value.trim() : value;
     };
@@ -853,13 +867,6 @@ export async function PUT(
     if (includeIfProvided(formData.address?.lga)) ghlRecord.lga = formData.address.lga;
 
     // Decision Tree fields
-    if (formData.decisionTree?.propertyType) {
-      ghlRecord.template_type = formData.decisionTree.propertyType === 'New' && formData.decisionTree?.lotType === 'Multiple' 
-        ? 'Project' 
-        : formData.decisionTree.propertyType === 'New' 
-          ? 'H&L with Sales Assessment' 
-          : 'Standard';
-    }
     if (includeIfProvided(formData.decisionTree?.contractTypeSimplified)) ghlRecord.contract_type = formData.decisionTree.contractTypeSimplified;
     if (includeIfProvided(formData.sourcer)) ghlRecord.sourcer = formData.sourcer;
     if (includeIfProvided(formData.packager)) ghlRecord.packager = formData.packager;
@@ -870,16 +877,21 @@ export async function PUT(
     // Risk Overlays
     if (includeIfProvided(formData.riskOverlays?.zoning)) ghlRecord.zoning = formData.riskOverlays.zoning;
     if (includeIfProvided(formData.riskOverlays?.flood)) ghlRecord.flood = formData.riskOverlays.flood;
-    if (includeIfProvided(formData.riskOverlays?.floodDialogue)) ghlRecord.flood_dialogue = formData.riskOverlays.floodDialogue;
+    if (shouldClear('riskOverlays.floodDialogue')) ghlRecord.flood_dialogue = null;
+    else if (includeIfProvided(formData.riskOverlays?.floodDialogue)) ghlRecord.flood_dialogue = formData.riskOverlays.floodDialogue;
     if (includeIfProvided(formData.riskOverlays?.bushfire)) ghlRecord.bushfire = formData.riskOverlays.bushfire;
-    if (includeIfProvided(formData.riskOverlays?.bushfireDialogue)) ghlRecord.bushfire_dialogue = formData.riskOverlays.bushfireDialogue;
+    if (shouldClear('riskOverlays.bushfireDialogue')) ghlRecord.bushfire_dialogue = null;
+    else if (includeIfProvided(formData.riskOverlays?.bushfireDialogue)) ghlRecord.bushfire_dialogue = formData.riskOverlays.bushfireDialogue;
     if (includeIfProvided(formData.riskOverlays?.mining)) ghlRecord.mining = formData.riskOverlays.mining;
     // Note: GHL field has typo "mining_dialogie" - use typo version to match GHL
-    if (includeIfProvided(formData.riskOverlays?.miningDialogue)) ghlRecord.mining_dialogie = formData.riskOverlays.miningDialogue;
+    if (shouldClear('riskOverlays.miningDialogue')) ghlRecord.mining_dialogie = null;
+    else if (includeIfProvided(formData.riskOverlays?.miningDialogue)) ghlRecord.mining_dialogie = formData.riskOverlays.miningDialogue;
     if (includeIfProvided(formData.riskOverlays?.otherOverlay)) ghlRecord.other_overlay = formData.riskOverlays.otherOverlay;
-    if (includeIfProvided(formData.riskOverlays?.otherOverlayDialogue)) ghlRecord.other_overlay_dialogue = formData.riskOverlays.otherOverlayDialogue;
+    if (shouldClear('riskOverlays.otherOverlayDialogue')) ghlRecord.other_overlay_dialogue = null;
+    else if (includeIfProvided(formData.riskOverlays?.otherOverlayDialogue)) ghlRecord.other_overlay_dialogue = formData.riskOverlays.otherOverlayDialogue;
     if (includeIfProvided(formData.riskOverlays?.specialInfrastructure)) ghlRecord.special_infrastructure = formData.riskOverlays.specialInfrastructure;
-    if (includeIfProvided(formData.riskOverlays?.specialInfrastructureDialogue)) ghlRecord.special_infrastructure_dialogue = formData.riskOverlays.specialInfrastructureDialogue;
+    if (shouldClear('riskOverlays.specialInfrastructureDialogue')) ghlRecord.special_infrastructure_dialogue = null;
+    else if (includeIfProvided(formData.riskOverlays?.specialInfrastructureDialogue)) ghlRecord.special_infrastructure_dialogue = formData.riskOverlays.specialInfrastructureDialogue;
     if (includeIfProvided(formData.riskOverlays?.dueDiligenceAcceptance)) ghlRecord.due_diligence_acceptance = formData.riskOverlays.dueDiligenceAcceptance;
 
     // Helper function to convert bath values from decimal to "point" format (matching Make.com behavior)
@@ -929,11 +941,15 @@ export async function PUT(
     if (includeIfProvided(formData.propertyDescription?.buildSize)) ghlRecord.build_size = formData.propertyDescription.buildSize;
     if (includeIfProvided(formData.propertyDescription?.title)) ghlRecord.title = formData.propertyDescription.title;
     if (includeIfProvided(formData.propertyDescription?.bodyCorpPerQuarter)) ghlRecord.body_corp__per_quarter = formData.propertyDescription.bodyCorpPerQuarter;
-    if (includeIfProvided(formData.propertyDescription?.bodyCorpDescription)) ghlRecord.body_corp_description = formData.propertyDescription.bodyCorpDescription;
+    if (shouldClear('bodyCorpDescription')) ghlRecord.body_corp_description = null;
+    else if (includeIfProvided(formData.propertyDescription?.bodyCorpDescription)) ghlRecord.body_corp_description = formData.propertyDescription.bodyCorpDescription;
     if (includeIfProvided(formData.propertyDescription?.doesThisPropertyHave2Dwellings)) ghlRecord.does_this_property_have_2_dwellings = formData.propertyDescription.doesThisPropertyHave2Dwellings;
     if (includeIfProvided(formData.propertyDescription?.singleOrDualOccupancy)) ghlRecord.single_or_dual_occupancy = formData.propertyDescription.singleOrDualOccupancy;
     if (includeIfProvided(formData.propertyDescription?.landRegistration)) ghlRecord.land_registration = formData.propertyDescription.landRegistration;
-    if (includeIfProvided(formData.propertyDescription?.propertyDescriptionAdditionalDialogue)) ghlRecord.property_description_additional_dialogue = formData.propertyDescription.propertyDescriptionAdditionalDialogue;
+    if (shouldClear('propertyDescriptionAdditionalDialogue')) ghlRecord.property_description_additional_dialogue = null;
+    else if (includeIfProvided(formData.propertyDescription?.propertyDescriptionAdditionalDialogue)) ghlRecord.property_description_additional_dialogue = formData.propertyDescription.propertyDescriptionAdditionalDialogue;
+    if (shouldClear('projectBrief')) ghlRecord.project_brief = null;
+    else if (includeIfProvided(formData.propertyDescription?.projectBrief)) ghlRecord.project_brief = formData.propertyDescription.projectBrief;
 
     // Purchase Price
     if (includeIfProvided(formData.purchasePrice?.asking)) ghlRecord.asking = formData.purchasePrice.asking;
@@ -947,10 +963,10 @@ export async function PUT(
     if (netPrice !== null) ghlRecord.net_price = netPrice;
     if (includeIfProvided(formData.purchasePrice?.cashbackRebateValue)) ghlRecord.cashback_rebate_value = formData.purchasePrice.cashbackRebateValue;
     if (includeIfProvided(formData.purchasePrice?.cashbackRebateType)) ghlRecord.cashback_rebate_type = formData.purchasePrice.cashbackRebateType;
-    if (includeIfProvided(formData.purchasePrice?.purchasePriceAdditionalDialogue)) ghlRecord.purchase_price_additional_dialogue = formData.purchasePrice.purchasePriceAdditionalDialogue;
+    if (shouldClear('purchasePriceAdditionalDialogue')) ghlRecord.purchase_price_additional_dialogue = null;
+    else if (includeIfProvided(formData.purchasePrice?.purchasePriceAdditionalDialogue)) ghlRecord.purchase_price_additional_dialogue = formData.purchasePrice.purchasePriceAdditionalDialogue;
 
     // Rental Assessment
-    if (includeIfProvided(formData.rentalAssessment?.occupancy)) ghlRecord.occupancy = formData.rentalAssessment.occupancy;
     if (includeIfProvided(formData.rentalAssessment?.occupancyPrimary)) ghlRecord.occupancy_primary = formData.rentalAssessment.occupancyPrimary;
     if (includeIfProvided(formData.rentalAssessment?.occupancySecondary)) ghlRecord.occupancy_secondary = formData.rentalAssessment.occupancySecondary;
     if (includeIfProvided(formData.rentalAssessment?.currentRentPrimary)) ghlRecord.current_rent_primary__per_week = formData.rentalAssessment.currentRentPrimary;
@@ -963,7 +979,8 @@ export async function PUT(
     if (includeIfProvided(formData.rentalAssessment?.rentAppraisalSecondaryTo)) ghlRecord.rent_appraisal_secondary_to = formData.rentalAssessment.rentAppraisalSecondaryTo;
     if (includeIfProvided(formData.rentalAssessment?.yield)) ghlRecord.yield = formData.rentalAssessment.yield;
     if (includeIfProvided(formData.rentalAssessment?.appraisedYield)) ghlRecord.appraised_yield = formData.rentalAssessment.appraisedYield;
-    if (includeIfProvided(formData.rentalAssessment?.rentalAssessmentAdditionalDialogue)) ghlRecord.rental_assessment_additional_dialogue = formData.rentalAssessment.rentalAssessmentAdditionalDialogue;
+    if (shouldClear('rentalAssessmentAdditionalDialogue')) ghlRecord.rental_assessment_additional_dialogue = null;
+    else if (includeIfProvided(formData.rentalAssessment?.rentalAssessmentAdditionalDialogue)) ghlRecord.rental_assessment_additional_dialogue = formData.rentalAssessment.rentalAssessmentAdditionalDialogue;
 
     // Market Performance
     {
@@ -986,7 +1003,8 @@ export async function PUT(
       if (rentalPopulation !== undefined) ghlRecord.rental_population = rentalPopulation;
       if (vacancyRate !== undefined) ghlRecord.vacancy_rate = vacancyRate;
     }
-    if (includeIfProvided(formData.marketPerformance?.marketPerformanceAdditionalDialogue)) ghlRecord.market_performance_additional_dialogue = formData.marketPerformance.marketPerformanceAdditionalDialogue;
+    if (shouldClear('marketPerformanceAdditionalDialogue')) ghlRecord.market_performance_additional_dialogue = null;
+    else if (includeIfProvided(formData.marketPerformance?.marketPerformanceAdditionalDialogue)) ghlRecord.market_performance_additional_dialogue = formData.marketPerformance.marketPerformanceAdditionalDialogue;
 
     // Content Sections
     if (includeIfProvided(formData.contentSections?.whyThisProperty)) ghlRecord.why_this_property = formData.contentSections.whyThisProperty;
@@ -997,7 +1015,8 @@ export async function PUT(
     if (includeIfProvided(formData.sellingAgentName)) ghlRecord.agent_name = formData.sellingAgentName;
     if (includeIfProvided(formData.sellingAgentEmail)) ghlRecord.agent_email = formData.sellingAgentEmail;
     if (includeIfProvided(formData.sellingAgentMobile)) ghlRecord.agent_mobile = formData.sellingAgentMobile;
-    if (includeIfProvided(formData.messageForBA)) ghlRecord.message_for_ba = formData.messageForBA;
+    if (shouldClear('messageForBA')) ghlRecord.message_for_ba = null;
+    else if (includeIfProvided(formData.messageForBA)) ghlRecord.message_for_ba = formData.messageForBA;
     {
       const resubmitForTesting = normalizeYesNoForGhl(formData.resubmitForTesting);
       if (includeIfProvided(resubmitForTesting)) ghlRecord.resubmit_for_testing = resubmitForTesting;
@@ -1012,7 +1031,8 @@ export async function PUT(
         ghlRecord.qa_approved = qaApproved === undefined || qaApproved === null ? '' : qaApproved;
       }
     }
-    if (includeIfProvided(formData.attachmentsAdditionalDialogue)) ghlRecord.attachments_additional_dialogue = formData.attachmentsAdditionalDialogue;
+    if (shouldClear('attachmentsAdditionalDialogue')) ghlRecord.attachments_additional_dialogue = null;
+    else if (includeIfProvided(formData.attachmentsAdditionalDialogue)) ghlRecord.attachments_additional_dialogue = formData.attachmentsAdditionalDialogue;
     if (includeIfProvided(formData.folderLink)) ghlRecord.folder_link = formData.folderLink;
     
     // Insurance, Depreciation, and Council/Water Rates (for edit mode - only send if provided)

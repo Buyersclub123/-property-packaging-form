@@ -5,11 +5,12 @@ import { TitleType, YesNo, AskingType, OccupancyType, CashbackRebateType } from 
 import { useMemo, useEffect, useState } from 'react';
 
 export function Step2PropertyDetails() {
-  const { formData, updatePropertyDescription, updatePurchasePrice, updateRentalAssessment, updateLotPropertyDescription, updateLotPurchasePrice, updateLotRentalAssessment, replicateLotData } = useFormStore();
-  const { decisionTree, propertyDescription, purchasePrice, rentalAssessment, lots } = formData;
+  const { formData, updateFormData, updatePropertyDescription, updatePurchasePrice, updateRentalAssessment, updateLotPropertyDescription, updateLotPurchasePrice, updateLotRentalAssessment, replicateLotData } = useFormStore();
+  const { decisionTree, propertyDescription, purchasePrice, rentalAssessment, lots, clearInGhl } = formData;
   const [isPropertyDescriptionAdditionalDialogueExpanded, setIsPropertyDescriptionAdditionalDialogueExpanded] = useState<boolean>(false); // Collapsed by default as non-mandatory
   const [isPurchasePriceAdditionalDialogueExpanded, setIsPurchasePriceAdditionalDialogueExpanded] = useState<boolean>(false); // Collapsed by default as non-mandatory
   const [isRentalAssessmentAdditionalDialogueExpanded, setIsRentalAssessmentAdditionalDialogueExpanded] = useState<boolean>(false); // Collapsed by default as non-mandatory
+  const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
   
   // Format number as currency ($640,000)
   const formatCurrency = (value: string | undefined): string => {
@@ -838,7 +839,10 @@ export function Step2PropertyDetails() {
               <label className="label-field">Body Corp Description (Text will appear exactly as typed in email template)</label>
               <textarea
                 value={propertyDescription?.bodyCorpDescription || ''}
-                onChange={(e) => updatePropertyDescription({ bodyCorpDescription: e.target.value })}
+                onChange={(e) => {
+                  updateFormData({ clearInGhl: { bodyCorpDescription: false } });
+                  updatePropertyDescription({ bodyCorpDescription: e.target.value });
+                }}
                 onInput={(e) => {
                   const target = e.target as HTMLTextAreaElement;
                   target.style.height = 'auto';
@@ -849,6 +853,22 @@ export function Step2PropertyDetails() {
                 placeholder="Describe what's included in body corp"
                 spellCheck={true}
               />
+              {isEditMode && (
+                <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={!!clearInGhl?.bodyCorpDescription}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      updateFormData({ clearInGhl: { bodyCorpDescription: next } });
+                      if (next) {
+                        updatePropertyDescription({ bodyCorpDescription: '' });
+                      }
+                    }}
+                  />
+                  Clear in GHL
+                </label>
+              )}
             </div>
           )}
 
@@ -874,7 +894,10 @@ export function Step2PropertyDetails() {
               <div className="p-4 bg-white">
                 <textarea
                   value={propertyDescription?.propertyDescriptionAdditionalDialogue || ''}
-                  onChange={(e) => updatePropertyDescription({ propertyDescriptionAdditionalDialogue: e.target.value })}
+                  onChange={(e) => {
+                    updateFormData({ clearInGhl: { propertyDescriptionAdditionalDialogue: false } });
+                    updatePropertyDescription({ propertyDescriptionAdditionalDialogue: e.target.value });
+                  }}
                   onInput={(e) => {
                     const target = e.target as HTMLTextAreaElement;
                     target.style.height = 'auto';
@@ -885,6 +908,22 @@ export function Step2PropertyDetails() {
                   placeholder="Any additional details about the property"
                   spellCheck={true}
                 />
+                {isEditMode && (
+                  <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={!!clearInGhl?.propertyDescriptionAdditionalDialogue}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        updateFormData({ clearInGhl: { propertyDescriptionAdditionalDialogue: next } });
+                        if (next) {
+                          updatePropertyDescription({ propertyDescriptionAdditionalDialogue: '' });
+                        }
+                      }}
+                    />
+                    Clear in GHL
+                  </label>
+                )}
               </div>
             )}
           </div>
@@ -1233,7 +1272,10 @@ export function Step2PropertyDetails() {
                   )}
                   <textarea
                     value={purchasePrice?.purchasePriceAdditionalDialogue || ''}
-                    onChange={(e) => updatePurchasePrice({ purchasePriceAdditionalDialogue: e.target.value })}
+                    onChange={(e) => {
+                      updateFormData({ clearInGhl: { purchasePriceAdditionalDialogue: false } });
+                      updatePurchasePrice({ purchasePriceAdditionalDialogue: e.target.value });
+                    }}
                     onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;
                       target.style.height = 'auto';
@@ -1241,10 +1283,26 @@ export function Step2PropertyDetails() {
                     }}
                     className="input-field resize-none overflow-hidden"
                     rows={3}
-                    placeholder="Any additional details about purchase price"
+                    placeholder={purchasePrice?.cashbackRebateType === 'rebate' ? 'Describe the rebate structure (e.g., included in price, paid at settlement)' : 'Additional dialogue for purchase price'}
                     spellCheck={true}
                     required={purchasePrice?.cashbackRebateType === 'rebate'}
                   />
+                  {isEditMode && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!clearInGhl?.purchasePriceAdditionalDialogue}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          updateFormData({ clearInGhl: { purchasePriceAdditionalDialogue: next } });
+                          if (next) {
+                            updatePurchasePrice({ purchasePriceAdditionalDialogue: '' });
+                          }
+                        }}
+                      />
+                      Clear in GHL
+                    </label>
+                  )}
                 </div>
               )}
             </div>
@@ -1989,7 +2047,10 @@ export function Step2PropertyDetails() {
                 <div className="p-4 bg-white">
                   <textarea
                     value={rentalAssessment?.rentalAssessmentAdditionalDialogue || ''}
-                    onChange={(e) => updateRentalAssessment({ rentalAssessmentAdditionalDialogue: e.target.value })}
+                    onChange={(e) => {
+                      updateFormData({ clearInGhl: { rentalAssessmentAdditionalDialogue: false } });
+                      updateRentalAssessment({ rentalAssessmentAdditionalDialogue: e.target.value });
+                    }}
                     onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;
                       target.style.height = 'auto';
@@ -2000,6 +2061,22 @@ export function Step2PropertyDetails() {
                     placeholder="Any additional details about rental assessment"
                     spellCheck={true}
                   />
+                  {isEditMode && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!clearInGhl?.rentalAssessmentAdditionalDialogue}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          updateFormData({ clearInGhl: { rentalAssessmentAdditionalDialogue: next } });
+                          if (next) {
+                            updateRentalAssessment({ rentalAssessmentAdditionalDialogue: '' });
+                          }
+                        }}
+                      />
+                      Clear in GHL
+                    </label>
+                  )}
                 </div>
               )}
             </div>
@@ -2564,6 +2641,7 @@ function ProjectLotsView() {
                     data-project-brief
                     value={propertyDescription?.projectBrief || ''}
                     onChange={(e) => {
+                      updateFormData({ clearInGhl: { projectBrief: false } });
                       updatePropertyDescription({ projectBrief: e.target.value });
                     }}
                     onInput={(e) => {
@@ -2576,6 +2654,22 @@ function ProjectLotsView() {
                     placeholder="Enter project brief (applies to all lots)"
                     spellCheck={true}
                   />
+                  {isEditMode && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!clearInGhl?.projectBrief}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          updateFormData({ clearInGhl: { projectBrief: next } });
+                          if (next) {
+                            updatePropertyDescription({ projectBrief: '' });
+                          }
+                        }}
+                      />
+                      Clear in GHL
+                    </label>
+                  )}
                 </div>
               )}
             </div>

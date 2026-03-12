@@ -31,7 +31,8 @@ type Scenario = 'loading' | 'no-data' | 'mock-data' | 'stale-data' | 'fresh-data
 
 export function Step3MarketPerformance() {
   const { formData, updateFormData, userEmail, setCurrentStep } = useFormStore();
-  const { address, marketPerformance } = formData;
+  const { address, marketPerformance, clearInGhl } = formData;
+  const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
   
   // Generate smart URLs with suburb and state pre-populated
   // These use Google search to find the suburb profile page on each site
@@ -1833,15 +1834,18 @@ export function Step3MarketPerformance() {
             <div className="p-4 bg-white">
               <textarea
                 value={marketPerformance?.marketPerformanceAdditionalDialogue || ''}
-                onChange={(e) => updateFormData({
-                  marketPerformance: { 
-                    ...marketPerformance, 
-                    marketPerformanceAdditionalDialogue: e.target.value, 
-                    // Preserve isVerified state - dialogue box is optional and shouldn't reset verification
-                    isVerified: marketPerformance?.isVerified,
-                    isSaved: false, // Still mark as unsaved since dialogue was edited
-                  },
-                })}
+                onChange={(e) => {
+                  updateFormData({ clearInGhl: { marketPerformanceAdditionalDialogue: false } });
+                  updateFormData({
+                    marketPerformance: {
+                      ...marketPerformance,
+                      marketPerformanceAdditionalDialogue: e.target.value,
+                      // Preserve isVerified state - dialogue box is optional and shouldn't reset verification
+                      isVerified: marketPerformance?.isVerified,
+                      isSaved: false, // Still mark as unsaved since dialogue was edited
+                    },
+                  });
+                }}
                 onInput={(e) => {
                   const target = e.target as HTMLTextAreaElement;
                   target.style.height = 'auto';
@@ -1852,6 +1856,27 @@ export function Step3MarketPerformance() {
                 placeholder="Any additional details about market performance"
                 spellCheck={true}
               />
+              {isEditMode && (
+                <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={!!clearInGhl?.marketPerformanceAdditionalDialogue}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      updateFormData({ clearInGhl: { marketPerformanceAdditionalDialogue: next } });
+                      if (next) {
+                        updateFormData({
+                          marketPerformance: {
+                            ...marketPerformance,
+                            marketPerformanceAdditionalDialogue: '',
+                          },
+                        });
+                      }
+                    }}
+                  />
+                  Clear in GHL
+                </label>
+              )}
             </div>
           )}
         </div>

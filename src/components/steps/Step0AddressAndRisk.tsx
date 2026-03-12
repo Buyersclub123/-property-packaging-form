@@ -462,7 +462,7 @@ function StashFieldDisplay({ field }: { field: 'floodRisk' | 'bushfireRisk' }) {
 
 export function Step0AddressAndRisk() {
   const { formData, updateAddress, updateRiskOverlays, updateFormData, setStashData, setStashLoading, setStashError, setCurrentStep, stashLoading, stashError, stashData } = useFormStore();
-  const { address, riskOverlays, sourcer, sellingAgentName, sellingAgentEmail, sellingAgentMobile } = formData;
+  const { address, riskOverlays, sourcer, sellingAgentName, sellingAgentEmail, sellingAgentMobile, clearInGhl } = formData;
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [packagingEnabled, setPackagingEnabled] = useState(false);
   const [addressFieldsEditable, setAddressFieldsEditable] = useState(address.addressFieldsEditable || false);
@@ -471,6 +471,7 @@ export function Step0AddressAndRisk() {
   const [mobileDisplayValue, setMobileDisplayValue] = useState(sellingAgentMobile || '');
   const isMobileEditingRef = useRef(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
   
   // Sync mobile display value when formData changes (only when not actively editing)
   useEffect(() => {
@@ -1690,12 +1691,43 @@ export function Step0AddressAndRisk() {
                   <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.floodDialogue || ''}
-                    onChange={(e) => handleDialogueChange('floodDialogue', e.target.value)}
+                    onChange={(e) => {
+                      updateFormData({
+                        clearInGhl: {
+                          riskOverlays: {
+                            floodDialogue: false,
+                          },
+                        },
+                      });
+                      handleDialogueChange('floodDialogue', e.target.value);
+                    }}
                     placeholder="Dialogue text (appears after 'Yes - ')"
                     className="input-field min-h-[80px] resize-y"
                     rows={3}
                     spellCheck={true}
                   />
+                  {isEditMode && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!clearInGhl?.riskOverlays?.floodDialogue}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          updateFormData({
+                            clearInGhl: {
+                              riskOverlays: {
+                                floodDialogue: next,
+                              },
+                            },
+                          });
+                          if (next) {
+                            handleDialogueChange('floodDialogue', '');
+                          }
+                        }}
+                      />
+                      Clear in GHL
+                    </label>
+                  )}
                   {!riskOverlays.floodDialogue && (
                     <p className="text-xs text-yellow-600 mt-1">
                       ⚠️ Warning: Flood is Yes but no dialogue provided. Are you sure you want to continue?
@@ -1726,12 +1758,43 @@ export function Step0AddressAndRisk() {
                   <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.bushfireDialogue || ''}
-                    onChange={(e) => handleDialogueChange('bushfireDialogue', e.target.value)}
+                    onChange={(e) => {
+                      updateFormData({
+                        clearInGhl: {
+                          riskOverlays: {
+                            bushfireDialogue: false,
+                          },
+                        },
+                      });
+                      handleDialogueChange('bushfireDialogue', e.target.value);
+                    }}
                     placeholder="Dialogue text (appears after 'Yes - ')"
                     className="input-field min-h-[80px] resize-y"
                     rows={3}
                     spellCheck={true}
                   />
+                  {isEditMode && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!clearInGhl?.riskOverlays?.bushfireDialogue}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          updateFormData({
+                            clearInGhl: {
+                              riskOverlays: {
+                                bushfireDialogue: next,
+                              },
+                            },
+                          });
+                          if (next) {
+                            handleDialogueChange('bushfireDialogue', '');
+                          }
+                        }}
+                      />
+                      Clear in GHL
+                    </label>
+                  )}
                   {!riskOverlays.bushfireDialogue && (
                     <p className="text-xs text-yellow-600 mt-1">
                       ⚠️ Warning: Bushfire is Yes but no dialogue provided. Are you sure you want to continue?
@@ -1762,12 +1825,43 @@ export function Step0AddressAndRisk() {
                   <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.miningDialogue || ''}
-                    onChange={(e) => handleDialogueChange('miningDialogue', e.target.value)}
+                    onChange={(e) => {
+                      updateFormData({
+                        clearInGhl: {
+                          riskOverlays: {
+                            miningDialogue: false,
+                          },
+                        },
+                      });
+                      handleDialogueChange('miningDialogue', e.target.value);
+                    }}
                     placeholder="Dialogue text (appears after 'Yes - ')"
                     className="input-field min-h-[80px] resize-y"
                     rows={3}
                     spellCheck={true}
                   />
+                  {isEditMode && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!clearInGhl?.riskOverlays?.miningDialogue}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          updateFormData({
+                            clearInGhl: {
+                              riskOverlays: {
+                                miningDialogue: next,
+                              },
+                            },
+                          });
+                          if (next) {
+                            handleDialogueChange('miningDialogue', '');
+                          }
+                        }}
+                      />
+                      Clear in GHL
+                    </label>
+                  )}
                   {!riskOverlays.miningDialogue && (
                     <p className="text-xs text-yellow-600 mt-1">
                       ⚠️ Warning: Mining is Yes but no dialogue provided. Are you sure you want to continue?
@@ -1797,12 +1891,43 @@ export function Step0AddressAndRisk() {
                   <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.otherOverlayDialogue || ''}
-                    onChange={(e) => handleDialogueChange('otherOverlayDialogue', e.target.value)}
+                    onChange={(e) => {
+                      updateFormData({
+                        clearInGhl: {
+                          riskOverlays: {
+                            otherOverlayDialogue: false,
+                          },
+                        },
+                      });
+                      handleDialogueChange('otherOverlayDialogue', e.target.value);
+                    }}
                     placeholder="Dialogue text (appears after 'Yes - ')"
                     className="input-field min-h-[80px] resize-y"
                     rows={3}
                     spellCheck={true}
                   />
+                  {isEditMode && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!clearInGhl?.riskOverlays?.otherOverlayDialogue}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          updateFormData({
+                            clearInGhl: {
+                              riskOverlays: {
+                                otherOverlayDialogue: next,
+                              },
+                            },
+                          });
+                          if (next) {
+                            handleDialogueChange('otherOverlayDialogue', '');
+                          }
+                        }}
+                      />
+                      Clear in GHL
+                    </label>
+                  )}
                   {!riskOverlays.otherOverlayDialogue && (
                     <p className="text-xs text-yellow-600 mt-1">
                       ⚠️ Warning: Other Overlay is Yes but no dialogue provided. Are you sure you want to continue?
@@ -1832,12 +1957,43 @@ export function Step0AddressAndRisk() {
                   <label className="text-sm font-medium text-gray-700 block mb-1">Dialogue (Text will appear exactly as typed in email template)</label>
                   <textarea
                     value={riskOverlays.specialInfrastructureDialogue || ''}
-                    onChange={(e) => handleDialogueChange('specialInfrastructureDialogue', e.target.value)}
+                    onChange={(e) => {
+                      updateFormData({
+                        clearInGhl: {
+                          riskOverlays: {
+                            specialInfrastructureDialogue: false,
+                          },
+                        },
+                      });
+                      handleDialogueChange('specialInfrastructureDialogue', e.target.value);
+                    }}
                     placeholder="Dialogue text (appears after 'Yes - ')"
                     className="input-field min-h-[80px] resize-y"
                     rows={3}
                     spellCheck={true}
                   />
+                  {isEditMode && (
+                    <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!clearInGhl?.riskOverlays?.specialInfrastructureDialogue}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          updateFormData({
+                            clearInGhl: {
+                              riskOverlays: {
+                                specialInfrastructureDialogue: next,
+                              },
+                            },
+                          });
+                          if (next) {
+                            handleDialogueChange('specialInfrastructureDialogue', '');
+                          }
+                        }}
+                      />
+                      Clear in GHL
+                    </label>
+                  )}
                   {!riskOverlays.specialInfrastructureDialogue && (
                     <p className="text-xs text-yellow-600 mt-1">
                       ⚠️ Warning: Special Infrastructure is Yes but no dialogue provided. Are you sure you want to continue?
@@ -2139,6 +2295,7 @@ export function Step0AddressAndRisk() {
                       }).catch((err) => console.log('Webhook call failed:', err));
                     }
 
+                    updateFormData({ clearInGhl: {} });
                     alert('✅ Changes saved successfully! The GHL record has been updated.');
                   } catch (error) {
                     console.error('Error submitting changes:', error);

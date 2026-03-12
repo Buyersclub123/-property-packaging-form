@@ -208,6 +208,24 @@ export interface AgentInfo {
   agentEmail?: string;
 }
 
+ export interface ClearInGhlFlags {
+   riskOverlays?: {
+     floodDialogue?: boolean;
+     bushfireDialogue?: boolean;
+     miningDialogue?: boolean;
+     otherOverlayDialogue?: boolean;
+     specialInfrastructureDialogue?: boolean;
+   };
+   bodyCorpDescription?: boolean;
+   propertyDescriptionAdditionalDialogue?: boolean;
+   projectBrief?: boolean;
+   purchasePriceAdditionalDialogue?: boolean;
+   rentalAssessmentAdditionalDialogue?: boolean;
+   marketPerformanceAdditionalDialogue?: boolean;
+   messageForBA?: boolean;
+   attachmentsAdditionalDialogue?: boolean;
+ }
+
 // Complete Form Data
 export interface FormData {
   // Package Info
@@ -218,6 +236,11 @@ export interface FormData {
   sellingAgentMobile?: string; // Selling agent mobile
   sellingAgent?: string; // Combined field: "Name, Email, Mobile" (computed on submit)
   status?: StatusType;
+
+   clearInGhl?: ClearInGhlFlags;
+
+  packagerApproved?: string;
+  qaApproved?: string;
   dealType?: DealType;
   reviewDate?: string;
   

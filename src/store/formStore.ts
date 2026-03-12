@@ -48,6 +48,7 @@ const initialFormData: FormData = {
   address: {
     propertyAddress: '',
   },
+  clearInGhl: {},
   riskOverlays: {
     flood: '' as YesNo,
     bushfire: '' as YesNo,
@@ -103,11 +104,13 @@ export const useFormStore = create<FormStore>()(
         console.log('[formStore] updateFormData called with:', data);
         console.log('[formStore] data.decisionTree:', data.decisionTree);
         set((state) => {
+          const hasClearInGhlUpdate = Object.prototype.hasOwnProperty.call(data, 'clearInGhl');
+
           const newFormData = {
             ...state.formData,
             // Exclude nested objects from top-level spread - we'll merge them separately
             ...(Object.keys(data).reduce((acc, key) => {
-              if (!['decisionTree', 'address', 'riskOverlays', 'contentSections', 'earlyProcessing'].includes(key)) {
+              if (!['decisionTree', 'address', 'riskOverlays', 'contentSections', 'earlyProcessing', 'clearInGhl'].includes(key)) {
                 acc[key] = (data as any)[key];
               }
               return acc;
@@ -135,6 +138,20 @@ export const useFormStore = create<FormStore>()(
               ...(state.formData.earlyProcessing || {}),
               ...data.earlyProcessing,
             } : (state.formData.earlyProcessing || {}),
+            clearInGhl: hasClearInGhlUpdate
+              ? ((data as any).clearInGhl && Object.keys((data as any).clearInGhl).length > 0
+                ? {
+                    ...(state.formData.clearInGhl || {}),
+                    ...(data as any).clearInGhl,
+                    riskOverlays: (data as any).clearInGhl?.riskOverlays
+                      ? {
+                          ...((state.formData.clearInGhl as any)?.riskOverlays || {}),
+                          ...(data as any).clearInGhl.riskOverlays,
+                        }
+                      : ((state.formData.clearInGhl as any)?.riskOverlays || {}),
+                  }
+                : {})
+              : (state.formData.clearInGhl || {}),
           };
           console.log('[formStore] New formData after merge:', newFormData);
           console.log('[formStore] decisionTree after merge:', newFormData.decisionTree);
@@ -372,6 +389,7 @@ export const useFormStore = create<FormStore>()(
         const clearedFormData: FormData = {
           decisionTree: currentState.formData.decisionTree,
           address: currentState.formData.address,
+          clearInGhl: currentState.formData.clearInGhl || {},
           riskOverlays: currentState.formData.riskOverlays,
           propertyDescription: emptyPropertyDescription,
           purchasePrice: emptyPurchasePrice,

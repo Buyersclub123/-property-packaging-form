@@ -28,6 +28,7 @@ export function Step8Submission() {
   // Check if property has already been submitted (prevents duplicate submissions)
   // In edit mode, don't auto-show success screen - allow user to see form and submit changes
   const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
+  const { clearInGhl } = formData;
 
   useEffect(() => {
     // Only auto-show success screen in create mode if record already exists
@@ -130,6 +131,7 @@ export function Step8Submission() {
           qaApproved: formData.qaApproved ?? '',
           attachmentsAdditionalDialogue: formData.attachmentsAdditionalDialogue ?? '',
           folderLink,
+          clearInGhl: formData.clearInGhl ?? {},
         };
 
         const updateResponse = await fetch(`/api/properties/${editRecordId}`, {
@@ -142,6 +144,8 @@ export function Step8Submission() {
           const errorData = await updateResponse.json().catch(() => ({}));
           throw new Error(errorData.error || `Update failed: ${updateResponse.status}`);
         }
+
+        updateFormData({ clearInGhl: {} });
 
         alert('✅ Updates have been made as requested.');
         return;
@@ -649,17 +653,38 @@ export function Step8Submission() {
 
       {/* Attachments Additional Dialogue Section */}
       <div className="mb-6 p-6 bg-gray-50 rounded-lg border border-gray-200">
-        <label className="text-lg font-semibold mb-4 block">Attachments Additional Dialogue (Optional)</label>
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-lg font-semibold block">Attachments Additional Dialogue (Optional)</label>
+        </div>
         <p className="text-xs text-gray-500 mb-2">
           Additional notes or dialogue related to attachments and supporting documentation.
         </p>
         <textarea
           value={formData.attachmentsAdditionalDialogue || ''}
-          onChange={(e) => updateFormData({ attachmentsAdditionalDialogue: e.target.value })}
+          onChange={(e) => {
+            updateFormData({ clearInGhl: { attachmentsAdditionalDialogue: false } });
+            updateFormData({ attachmentsAdditionalDialogue: e.target.value });
+          }}
           className="input-field min-h-[120px] resize-y"
           placeholder="Enter any additional notes about attachments..."
           spellCheck={true}
         />
+        {isEditMode && (
+          <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={!!clearInGhl?.attachmentsAdditionalDialogue}
+              onChange={(e) => {
+                const next = e.target.checked;
+                updateFormData({ clearInGhl: { attachmentsAdditionalDialogue: next } });
+                if (next) {
+                  updateFormData({ attachmentsAdditionalDialogue: '' });
+                }
+              }}
+            />
+            Clear in GHL
+          </label>
+        )}
       </div>
 
       {/* Message for BA Section */}
