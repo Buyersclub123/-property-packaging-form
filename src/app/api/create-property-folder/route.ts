@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { 
   createFolder, 
   copyFolderStructure, 
+  copyFileToFolder,
   setFolderPermissions, 
   findGoogleSheetsInFolder,
   renameFile,
@@ -11,7 +12,7 @@ import {
   setFilePermissions,
   getFileName
 } from '@/lib/googleDrive';
-import { constructAndSanitizeFolderName } from '@/lib/addressFormatter';
+import { constructAndSanitizeFolderName, constructFullAddress } from '@/lib/addressFormatter';
 import { serverLog } from '@/lib/serverLogger';
 
 /**
@@ -92,6 +93,7 @@ export async function POST(request: Request) {
     // Check contractType directly first (more reliable), then contractTypeSimplified as fallback
     const isSplitContract = formData?.decisionTree?.contractType === '01_hl_comms' ||
                            formData?.decisionTree?.contractTypeSimplified === 'Split Contract';
+    const isProject = formData?.decisionTree?.propertyType === 'New' && formData?.decisionTree?.lotType === 'Multiple';
     
     console.log('isHL (lotType === Individual):', isHL);
     console.log('isSplitContract:', isSplitContract);
@@ -165,6 +167,10 @@ export async function POST(request: Request) {
           formData.address?.suburbName
         ].filter(Boolean);
         const addressString = addressParts.join(' ');
+
+        const selectedLotNumberRaw = (formData as any)?.cashflowSelectedLotNumber;
+        const selectedLotNumber = typeof selectedLotNumberRaw === 'string' ? selectedLotNumberRaw.trim() : '';
+        const lotPrefix = selectedLotNumber ? `Lot ${selectedLotNumber}` : '';
         
         console.log('Address parts:', addressParts);
         console.log('Formatted address:', addressString);
@@ -192,10 +198,84 @@ export async function POST(request: Request) {
         // Find the kept spreadsheet (either Split Contract or Single Contract)
         const keptSheet = contractTypeLower === 'split contract' ? splitContractSheet : singleContractSheet;
         
-        // Rename kept spreadsheet
-        if (keptSheet) {
+        if (!keptSheet) {
+          console.warn('No spreadsheet found in folder - cannot rename or populate');
+        } else if (isProject && Array.isArray(formData?.lots) && formData.lots.length > 0) {
+          console.log(`✓ Project detected - creating one CF spreadsheet per lot (lots: ${formData.lots.length})`);
           try {
-            const newName = `CF spreadsheet ${addressString}`;
+            const createdSheetIds: string[] = [];
+
+            for (const lot of formData.lots) {
+              const lotNumber = typeof lot?.lotNumber === 'string' ? lot.lotNumber.trim() : '';
+              const hasUnitNumbers = lot?.hasUnitNumbers === true;
+              const unitNumber = hasUnitNumbers && typeof lot?.unitNumber === 'string' ? lot.unitNumber.trim() : '';
+              const lotPrefixForSheet = lotNumber ? `Lot ${lotNumber}` : '';
+              const unitPrefixForSheet = unitNumber ? `Unit ${unitNumber}` : '';
+              const newName = `CF spreadsheet ${[lotPrefixForSheet, unitPrefixForSheet, addressString].filter(Boolean).join(' ')}`;
+
+              const copied = await copyFileToFolder(keptSheet.id, propertyFolder.id, SHARED_DRIVE_ID, newName);
+              createdSheetIds.push(copied.id);
+              console.log(`✓ Created CF spreadsheet copy: ${copied.name} (${copied.id})`);
+
+              const overridesEnabledLegacy = !!lot?.cashflowOverrides?.enabled;
+
+              const useCouncilOverride = overridesEnabledLegacy || lot?.cashflowOverrides?.overrideCouncilWaterRates === true;
+              const useInsuranceOverride = overridesEnabledLegacy || lot?.cashflowOverrides?.overrideInsurance === true;
+              const useDepreciationOverride = overridesEnabledLegacy || lot?.cashflowOverrides?.overrideDepreciation === true;
+
+              const lotCouncilWaterRates = useCouncilOverride && lot?.cashflowOverrides?.councilWaterRates
+                ? lot.cashflowOverrides.councilWaterRates
+                : formData.councilWaterRates;
+              const lotInsuranceAmount = useInsuranceOverride && lot?.cashflowOverrides?.insurance
+                ? lot.cashflowOverrides.insurance
+                : (formData.insuranceAmount || formData.insurance);
+              const lotDepreciation = useDepreciationOverride && lot?.cashflowOverrides?.depreciation
+                ? { ...(formData.depreciation || {}), ...(lot.cashflowOverrides.depreciation || {}) }
+                : formData.depreciation;
+
+              const lotFormData = {
+                ...formData,
+                cashflowSelectedLotNumber: lotNumber,
+                address: {
+                  ...(formData.address || {}),
+                  lotNumber,
+                  unitNumber,
+                  lotNumberNotApplicable: false,
+                  hasUnitNumbers,
+                  propertyAddress: constructFullAddress({
+                    ...(formData.address || {}),
+                    lotNumber,
+                    unitNumber,
+                    lotNumberNotApplicable: false,
+                    hasUnitNumbers,
+                  }),
+                },
+                propertyDescription: lot?.propertyDescription || {},
+                purchasePrice: lot?.purchasePrice || {},
+                rentalAssessment: lot?.rentalAssessment || {},
+                councilWaterRates: lotCouncilWaterRates,
+                insuranceAmount: lotInsuranceAmount,
+                depreciation: lotDepreciation,
+              };
+
+              await populateHLSpreadsheet(copied.id, lotFormData);
+              console.log(`✓ Populated CF spreadsheet for ${lotPrefixForSheet || 'lot'}: ${copied.id}`);
+            }
+
+            try {
+              await deleteFile(keptSheet.id, SHARED_DRIVE_ID);
+              console.log(`✓ Deleted template CF spreadsheet after copying (${keptSheet.id})`);
+            } catch (deleteError) {
+              console.warn('Warning: Could not delete template CF spreadsheet (non-blocking):', deleteError);
+            }
+          } catch (populateError) {
+            console.error('Error creating/populating per-lot spreadsheets:', populateError);
+            throw populateError;
+          }
+        } else {
+          // Rename kept spreadsheet (non-Project)
+          try {
+            const newName = `CF spreadsheet ${[lotPrefix, addressString].filter(Boolean).join(' ')}`;
             await renameFile(keptSheet.id, newName, SHARED_DRIVE_ID);
             console.log(`✓ Renamed CF spreadsheet to: ${newName}`);
             
@@ -211,8 +291,6 @@ export async function POST(request: Request) {
             console.error('Error populating sheet:', populateError);
             throw populateError; // Re-throw so we can see it in logs
           }
-        } else {
-          console.warn('No spreadsheet found in folder - cannot rename or populate');
         }
       } catch (error) {
         console.error('=== ERROR PROCESSING SHEETS ===');

@@ -520,9 +520,14 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
         
         // Validation for Projects (Multiple lots)
         if (isProject) {
-          // Project Address is required at project level
-          if (isEmpty(address?.projectAddress)) {
-            setValidationErrorWithRef('Project Address is required.');
+          // Project Address: do not block progress. Try to auto-fill from propertyAddress.
+          if (isEmpty(address?.projectAddress) && !isEmpty(address?.propertyAddress)) {
+            useFormStore.getState().updateAddress({ projectAddress: address.propertyAddress });
+          }
+          // If both are empty, something is wrong earlier (Step 1 requires propertyAddress).
+          // Keep a generic blocker to avoid sending empty addresses downstream.
+          if (isEmpty(address?.projectAddress) && isEmpty(address?.propertyAddress)) {
+            setValidationErrorWithRef('Property Address is required.');
             return false;
           }
           
@@ -886,43 +891,68 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
         return true;
 
       case 7: // Washington Brown
-        const { depreciation } = formData;
-        
-        if (!depreciation) {
-          setValidationError('Please parse the Washington Brown report or manually enter all 10 years of depreciation values.');
-          return false;
-        }
-        
-        // Check all 10 years
-        const missingYears: number[] = [];
-        const invalidYears: number[] = [];
-        
-        for (let i = 1; i <= 10; i++) {
-          const yearKey = `year${i}` as keyof typeof depreciation;
-          const value = depreciation[yearKey];
-          
-          if (!value || value.trim() === '') {
-            missingYears.push(i);
-          } else {
-            // Validate that it's a valid number
-            const numValue = parseFloat(value.replace(/,/g, ''));
-            if (isNaN(numValue) || numValue < 0) {
-              invalidYears.push(i);
+        {
+          const isProject = formData.decisionTree?.propertyType === 'New' && formData.decisionTree?.lotType === 'Multiple';
+          const depreciation = formData.depreciation;
+
+          const validateDepSchedule = (dep: any) => {
+            if (!dep) return { ok: true, missing: [] as number[], invalid: [] as number[] };
+            const missing: number[] = [];
+            const invalid: number[] = [];
+            let filledCount = 0;
+            for (let i = 1; i <= 10; i++) {
+              const value = dep[`year${i}`];
+              if (!value || String(value).trim() === '') {
+                missing.push(i);
+              } else {
+                filledCount++;
+                const numValue = parseFloat(String(value).replace(/,/g, ''));
+                if (isNaN(numValue) || numValue < 0) invalid.push(i);
+              }
+            }
+
+            // If the user hasn't entered any depreciation values at all, don't block progress.
+            if (filledCount === 0) return { ok: true, missing: [] as number[], invalid: [] as number[] };
+
+            return { ok: missing.length === 0 && invalid.length === 0, missing, invalid };
+          };
+
+          if (!isProject) {
+            const { ok, missing, invalid } = validateDepSchedule(depreciation);
+            if (!ok) {
+              if (missing.length > 0) {
+                setValidationErrorWithRef(`Missing depreciation value for Year ${missing.join(', ')}. All 10 years are required.`);
+                return false;
+              }
+              setValidationErrorWithRef(`Invalid depreciation value for Year ${invalid.join(', ')}. Values must be valid positive numbers.`);
+              return false;
+            }
+            return true;
+          }
+
+          const lots = formData.lots || [];
+          if (lots.length === 0) {
+            setValidationErrorWithRef('At least one lot is required.');
+            return false;
+          }
+
+          for (let idx = 0; idx < lots.length; idx++) {
+            const lot = lots[idx];
+            const lotNumber = lot.lotNumber || String(idx + 1);
+            const lotDep = lot.cashflowOverrides?.overrideDepreciation ? lot.cashflowOverrides?.depreciation : depreciation;
+            const { ok, missing, invalid } = validateDepSchedule(lotDep);
+            if (!ok) {
+              if (missing.length > 0) {
+                setValidationErrorWithRef(`Lot ${lotNumber}: Missing depreciation value for Year ${missing.join(', ')}. All 10 years are required.`);
+                return false;
+              }
+              setValidationErrorWithRef(`Lot ${lotNumber}: Invalid depreciation value for Year ${invalid.join(', ')}. Values must be valid positive numbers.`);
+              return false;
             }
           }
+
+          return true;
         }
-        
-        if (missingYears.length > 0) {
-          setValidationError(`Missing depreciation value for Year ${missingYears.join(', ')}. All 10 years are required.`);
-          return false;
-        }
-        
-        if (invalidYears.length > 0) {
-          setValidationError(`Invalid depreciation value for Year ${invalidYears.join(', ')}. Values must be valid positive numbers.`);
-          return false;
-        }
-        
-        return true;
 
       case 8: // Cashflow Review
         // Check if folder has been created (required in create mode, optional in edit mode)

@@ -27,7 +27,7 @@ const Field = ({ label, value, editable = false, children }: {
 );
 
 export function Step7CashflowReview() {
-  const { formData, setCurrentStep, updateFormData } = useFormStore();
+  const { formData, setCurrentStep, updateFormData, updateLotCashflowOverrides } = useFormStore();
   const [creating, setCreating] = useState(false);
   const [folderLink, setFolderLink] = useState<string | null>(formData.address?.folderLink || null);
   const [error, setError] = useState<string | null>(null);
@@ -44,12 +44,51 @@ export function Step7CashflowReview() {
     }
   }, [formData.address?.folderLink]);
 
-  // Editable fields state
+  const isProject = formData.decisionTree?.propertyType === 'New' && formData.decisionTree?.lotType === 'Multiple';
+  const lots = formData.lots || [];
+  const [selectedLotIndex, setSelectedLotIndex] = useState(0);
+  
+  useEffect(() => {
+    if (selectedLotIndex >= lots.length) {
+      setSelectedLotIndex(0);
+    }
+  }, [lots.length, selectedLotIndex]);
+
+  // Editable fields state (Project defaults)
   const [councilWaterRates, setCouncilWaterRates] = useState(formData.councilWaterRates || '');
   // Pre-populate insurance from Step 6 Insurance Calculator, fallback to saved insuranceAmount
   const [insuranceAmount, setInsuranceAmount] = useState(formData.insurance || formData.insuranceAmount || '');
 
-  // Sync councilWaterRates and insurance to formData when they change (for edit mode)
+  const { address, decisionTree, depreciation } = formData;
+
+  const selectedLot = isProject ? lots[selectedLotIndex] : null;
+  const councilOverrideEnabled = !!selectedLot?.cashflowOverrides?.overrideCouncilWaterRates;
+  const insuranceOverrideEnabled = !!selectedLot?.cashflowOverrides?.overrideInsurance;
+  const depreciationOverrideEnabled = !!selectedLot?.cashflowOverrides?.overrideDepreciation;
+  const lotOverridesEnabled = councilOverrideEnabled || insuranceOverrideEnabled || depreciationOverrideEnabled;
+  const effectiveCouncilWaterRates = isProject && councilOverrideEnabled
+    ? (selectedLot?.cashflowOverrides?.councilWaterRates && selectedLot.cashflowOverrides.councilWaterRates.trim() !== ''
+        ? selectedLot.cashflowOverrides.councilWaterRates
+        : councilWaterRates)
+    : councilWaterRates;
+  const effectiveInsuranceAmount = isProject && insuranceOverrideEnabled
+    ? (selectedLot?.cashflowOverrides?.insurance && selectedLot.cashflowOverrides.insurance.trim() !== ''
+        ? selectedLot.cashflowOverrides.insurance
+        : insuranceAmount)
+    : insuranceAmount;
+
+  const effectiveDepreciation = (() => {
+    if (!isProject) return depreciation;
+    if (!depreciationOverrideEnabled) return depreciation;
+    const lotDep = selectedLot?.cashflowOverrides?.depreciation;
+    if (!lotDep) return depreciation;
+    return {
+      ...(depreciation || {}),
+      ...lotDep,
+    };
+  })();
+
+  // Sync councilWaterRates and insurance to formData when they change (Project defaults + single-property fields)
   useEffect(() => {
     updateFormData({
       councilWaterRates,
@@ -59,11 +98,12 @@ export function Step7CashflowReview() {
   const [buildWindow, setBuildWindow] = useState(formData.buildWindow || '09 mo');
   const [cashback1Month, setCashback1Month] = useState(formData.cashback1Month || '5');
   const [cashback2Month, setCashback2Month] = useState(formData.cashback2Month || '7');
-
-  const { address, decisionTree, propertyDescription, purchasePrice, rentalAssessment, depreciation } = formData;
+  const effectivePropertyDescription = isProject ? (selectedLot?.propertyDescription || {}) : (formData.propertyDescription || {});
+  const effectivePurchasePrice = isProject ? (selectedLot?.purchasePrice || {}) : (formData.purchasePrice || {});
+  const effectiveRentalAssessment = isProject ? (selectedLot?.rentalAssessment || {}) : (formData.rentalAssessment || {});
   const isDualOccupancy = decisionTree?.dualOccupancy === 'Yes';
   const isSplitContract = decisionTree?.contractTypeSimplified === 'Split Contract';
-  const isStrata = ['strata', 'owners_corp_community', 'survey_strata', 'built_strata'].includes(propertyDescription?.title || '');
+  const isStrata = ['strata', 'owners_corp_community', 'survey_strata', 'built_strata'].includes(effectivePropertyDescription?.title || '');
 
   // Calculate values
   const calculateTotalCost = () => {
@@ -71,28 +111,28 @@ export function Step7CashflowReview() {
     const propertyType = decisionTree?.propertyType;
     
     if (contractType === 'Split Contract') {
-      const land = parseFloat(purchasePrice?.landPrice || '0');
-      const build = parseFloat(purchasePrice?.buildPrice || '0');
+      const land = parseFloat(effectivePurchasePrice?.landPrice || '0');
+      const build = parseFloat(effectivePurchasePrice?.buildPrice || '0');
       const total = land + build;
       return total;
     } else if (propertyType === 'New') {
-      const total = parseFloat(purchasePrice?.totalPrice || '0');
+      const total = parseFloat(effectivePurchasePrice?.totalPrice || '0');
       return total;
     } else {
       // Established property - use acceptableAcquisitionTo (NOT acceptedAcquisitionPriceTo)
-      const total = parseFloat(purchasePrice?.acceptableAcquisitionTo || '0');
+      const total = parseFloat(effectivePurchasePrice?.acceptableAcquisitionTo || '0');
       return total;
     }
   };
 
   const calculateInsuranceTotal = () => {
     if (isStrata) {
-      const bodyCorpPerQuarter = parseFloat(propertyDescription?.bodyCorpPerQuarter || '0');
+      const bodyCorpPerQuarter = parseFloat(effectivePropertyDescription?.bodyCorpPerQuarter || '0');
       const annualisedBodyCorp = bodyCorpPerQuarter * 4;
-      const insurance = parseFloat(insuranceAmount || '0');
+      const insurance = parseFloat(effectiveInsuranceAmount || '0');
       return { annualisedBodyCorp, insurance, total: annualisedBodyCorp + insurance };
     }
-    return { insurance: parseFloat(insuranceAmount || '0') };
+    return { insurance: parseFloat(effectiveInsuranceAmount || '0') };
   };
 
   const calculateRent = (from: string, to: string, secondaryFrom?: string, secondaryTo?: string) => {
@@ -119,12 +159,12 @@ export function Step7CashflowReview() {
 
   // Validation
   const validateFields = () => {
-    if (!councilWaterRates || councilWaterRates.trim() === '') {
+    if (!effectiveCouncilWaterRates || effectiveCouncilWaterRates.trim() === '') {
       setError('Council/Water Rates $ is required');
       return false;
     }
     
-    if (!insuranceAmount || insuranceAmount.trim() === '') {
+    if (!effectiveInsuranceAmount || effectiveInsuranceAmount.trim() === '') {
       setError('Insurance Amount is required');
       return false;
     }
@@ -155,8 +195,8 @@ export function Step7CashflowReview() {
 
     // Save editable fields to store
     updateFormData({
-      councilWaterRates,
-      insuranceAmount,
+      councilWaterRates: effectiveCouncilWaterRates,
+      insuranceAmount: effectiveInsuranceAmount,
       buildWindow: isSplitContract ? buildWindow : undefined,
       cashback1Month: isSplitContract ? cashback1Month : undefined,
       cashback2Month: isSplitContract ? cashback2Month : undefined,
@@ -173,8 +213,12 @@ export function Step7CashflowReview() {
           propertyAddress: constructFolderName(formData.address),
           formData: {
             ...formData,
-            councilWaterRates,
-            insuranceAmount,
+            cashflowSelectedLotNumber: isProject ? selectedLot?.lotNumber : undefined,
+            propertyDescription: effectivePropertyDescription,
+            purchasePrice: effectivePurchasePrice,
+            rentalAssessment: effectiveRentalAssessment,
+            councilWaterRates: effectiveCouncilWaterRates,
+            insuranceAmount: effectiveInsuranceAmount,
             buildWindow: isSplitContract ? buildWindow : undefined,
             cashback1Month: isSplitContract ? cashback1Month : undefined,
             cashback2Month: isSplitContract ? cashback2Month : undefined,
@@ -250,10 +294,10 @@ export function Step7CashflowReview() {
   const totalCost = calculateTotalCost();
   const insuranceCalc = calculateInsuranceTotal();
   const rentCalc = calculateRent(
-    rentalAssessment?.rentAppraisalPrimaryFrom || '0',
-    rentalAssessment?.rentAppraisalPrimaryTo || '0',
-    rentalAssessment?.rentAppraisalSecondaryFrom,
-    rentalAssessment?.rentAppraisalSecondaryTo
+    effectiveRentalAssessment?.rentAppraisalPrimaryFrom || '0',
+    effectiveRentalAssessment?.rentAppraisalPrimaryTo || '0',
+    effectiveRentalAssessment?.rentAppraisalSecondaryFrom,
+    effectiveRentalAssessment?.rentAppraisalSecondaryTo
   );
 
   return (
@@ -264,6 +308,93 @@ export function Step7CashflowReview() {
           Property Address: <span className="font-semibold">{address?.propertyAddress || 'N/A'}</span>
         </p>
       </div>
+
+      {isProject && lots.length > 0 && (
+        <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">Project cashflow defaults + per-lot overrides</h3>
+              <p className="text-xs text-gray-600">Defaults apply to all lots unless a lot override is enabled.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700">Lot</label>
+              <select
+                value={selectedLotIndex}
+                onChange={(e) => setSelectedLotIndex(parseInt(e.target.value, 10))}
+                className="input-field"
+              >
+                {lots.map((lot, idx) => (
+                  <option key={idx} value={idx}>
+                    Lot {lot.lotNumber || idx + 1}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={councilOverrideEnabled}
+                  onChange={(e) => {
+                    updateLotCashflowOverrides(selectedLotIndex, {
+                      overrideCouncilWaterRates: e.target.checked,
+                      ...(e.target.checked ? {} : { councilWaterRates: '' }),
+                    } as any);
+                  }}
+                />
+                Override Council/Water Rates for this lot
+              </label>
+              {councilOverrideEnabled && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={selectedLot?.cashflowOverrides?.councilWaterRates || ''}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      updateLotCashflowOverrides(selectedLotIndex, { councilWaterRates: value } as any);
+                    }}
+                    className="input-field"
+                    placeholder="Enter annual council/water rates"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={insuranceOverrideEnabled}
+                  onChange={(e) => {
+                    updateLotCashflowOverrides(selectedLotIndex, {
+                      overrideInsurance: e.target.checked,
+                      ...(e.target.checked ? {} : { insurance: '' }),
+                    } as any);
+                  }}
+                />
+                Override Insurance for this lot
+              </label>
+              {insuranceOverrideEnabled && (
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    value={selectedLot?.cashflowOverrides?.insurance || ''}
+                    onChange={(e) => {
+                      const sanitized = e.target.value.replace(/[^\d,.-]/g, '');
+                      updateLotCashflowOverrides(selectedLotIndex, { insurance: sanitized } as any);
+                    }}
+                    className="input-field"
+                    placeholder="e.g., 1250"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <p className="text-sm text-gray-600 mb-6">
         Review all fields that will be populated in the cashflow spreadsheet. Fields marked with * are editable on this page.
@@ -287,8 +418,8 @@ export function Step7CashflowReview() {
 
         {isSplitContract && (
           <>
-            <Field label="Land Cost" value={formatCurrency(purchasePrice?.landPrice)} />
-            <Field label="Build Cost" value={formatCurrency(purchasePrice?.buildPrice)} />
+            <Field label="Land Cost" value={formatCurrency(effectivePurchasePrice?.landPrice)} />
+            <Field label="Build Cost" value={formatCurrency(effectivePurchasePrice?.buildPrice)} />
           </>
         )}
         <Field 
@@ -299,8 +430,8 @@ export function Step7CashflowReview() {
           } 
           value={formatCurrency(totalCost)} 
         />
-        {purchasePrice?.cashbackRebateType === 'cashback' && (
-          <Field label="Cashback Value" value={formatCurrency(purchasePrice?.cashbackRebateValue)} />
+        {effectivePurchasePrice?.cashbackRebateType === 'cashback' && (
+          <Field label="Cashback Value" value={formatCurrency(effectivePurchasePrice?.cashbackRebateValue)} />
         )}
 
         {/* 3. Property Features */}
@@ -310,24 +441,47 @@ export function Step7CashflowReview() {
 
         <Field 
           label="Total Bed" 
-          value={isDualOccupancy 
-            ? `${propertyDescription?.bedsPrimary || 0} + ${propertyDescription?.bedsSecondary || 0}`
-            : propertyDescription?.bedsPrimary || 'N/A'
-          } 
+          value={(() => {
+            const bedsPrimaryStr = isProject ? selectedLot?.propertyDescription?.bedsPrimary : effectivePropertyDescription?.bedsPrimary;
+            const bedsSecondaryStr = isProject ? selectedLot?.propertyDescription?.bedsSecondary : effectivePropertyDescription?.bedsSecondary;
+            const bedsPrimary = parseInt(bedsPrimaryStr || '0');
+            const bedsSecondary = parseInt(bedsSecondaryStr || '0');
+            const total = bedsPrimary + bedsSecondary;
+            return total > 0 ? total : 'N/A';
+          })()} 
         />
+
         <Field 
           label="Total Bath" 
-          value={isDualOccupancy 
-            ? `${propertyDescription?.bathPrimary || 0} + ${propertyDescription?.bathSecondary || 0}`
-            : propertyDescription?.bathPrimary || 'N/A'
-          } 
+          value={(() => {
+            const bathPrimaryStr = isProject ? selectedLot?.propertyDescription?.bathPrimary : effectivePropertyDescription?.bathPrimary;
+            const bathSecondaryStr = isProject ? selectedLot?.propertyDescription?.bathSecondary : effectivePropertyDescription?.bathSecondary;
+            const bathPrimary = parseInt(bathPrimaryStr || '0');
+            const bathSecondary = parseInt(bathSecondaryStr || '0');
+            const total = bathPrimary + bathSecondary;
+            return total > 0 ? total : 'N/A';
+          })()} 
         />
+
         <Field 
           label="Total Garage" 
-          value={isDualOccupancy 
-            ? `${propertyDescription?.garagePrimary || 0} + ${propertyDescription?.garageSecondary || 0}`
-            : propertyDescription?.garagePrimary || 'N/A'
-          } 
+          value={(() => {
+            const garagePrimaryStr = isProject ? selectedLot?.propertyDescription?.garagePrimary : effectivePropertyDescription?.garagePrimary;
+            const garageSecondaryStr = isProject ? selectedLot?.propertyDescription?.garageSecondary : effectivePropertyDescription?.garageSecondary;
+            const carspacePrimaryStr = isProject ? selectedLot?.propertyDescription?.carspacePrimary : effectivePropertyDescription?.carspacePrimary;
+            const carspaceSecondaryStr = isProject ? selectedLot?.propertyDescription?.carspaceSecondary : effectivePropertyDescription?.carspaceSecondary;
+            const carportPrimaryStr = isProject ? selectedLot?.propertyDescription?.carportPrimary : effectivePropertyDescription?.carportPrimary;
+            const carportSecondaryStr = isProject ? selectedLot?.propertyDescription?.carportSecondary : effectivePropertyDescription?.carportSecondary;
+
+            const garagePrimary = parseInt(garagePrimaryStr || '0');
+            const garageSecondary = parseInt(garageSecondaryStr || '0');
+            const carspacePrimary = parseInt(carspacePrimaryStr || '0');
+            const carspaceSecondary = parseInt(carspaceSecondaryStr || '0');
+            const carportPrimary = parseInt(carportPrimaryStr || '0');
+            const carportSecondary = parseInt(carportSecondaryStr || '0');
+            const total = garagePrimary + garageSecondary + carspacePrimary + carspaceSecondary + carportPrimary + carportSecondary;
+            return total > 0 ? total : 'N/A';
+          })()} 
         />
 
         {/* 4. Rental Income */}
@@ -346,10 +500,14 @@ export function Step7CashflowReview() {
         <Field label="Council/Water Rates $" editable>
           <input
             type="text"
-            value={councilWaterRates ? parseInt(councilWaterRates).toLocaleString() : ''}
+            value={effectiveCouncilWaterRates ? parseInt(effectiveCouncilWaterRates).toLocaleString() : ''}
             onChange={(e) => {
               const value = e.target.value.replace(/[^0-9]/g, '');
-              setCouncilWaterRates(value);
+              if (isProject && councilOverrideEnabled) {
+                updateLotCashflowOverrides(selectedLotIndex, { councilWaterRates: value } as any);
+              } else {
+                setCouncilWaterRates(value);
+              }
             }}
             className="w-full px-3 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="Enter annual council/water rates"
@@ -375,7 +533,7 @@ export function Step7CashflowReview() {
               </div>
             </div>
           ) : (
-            <span className="text-sm text-gray-900">{formatCurrency(insuranceCalc.insurance || parseFloat(insuranceAmount || '0'))}</span>
+            <span className="text-sm text-gray-900">{formatCurrency(insuranceCalc.insurance || parseFloat(effectiveInsuranceAmount || '0'))}</span>
           )}
         </Field>
 
@@ -393,7 +551,7 @@ export function Step7CashflowReview() {
           <Field 
             key={year}
             label={`Year ${year}`} 
-            value={formatCurrency(depreciation?.[`year${year}` as keyof typeof depreciation] || '0')} 
+            value={formatCurrency(effectiveDepreciation?.[`year${year}` as keyof typeof effectiveDepreciation] || '0')} 
           />
         ))}
 

@@ -4,21 +4,33 @@ import { useState, useEffect, useRef } from 'react';
 import { useFormStore } from '@/store/formStore';
 
 export function Step6WashingtonBrown() {
-  const { formData, updateFormData } = useFormStore();
+  const { formData, updateFormData, updateLotCashflowOverrides } = useFormStore();
   const [pastedText, setPastedText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [depreciation, setDepreciation] = useState<Record<string, string>>(
-    formData.depreciation || {}
-  );
+  const isProject = formData.decisionTree?.propertyType === 'New' && formData.decisionTree?.lotType === 'Multiple';
+  const lots = formData.lots || [];
+  const [selectedLotIndex, setSelectedLotIndex] = useState(0);
+  const selectedLot = isProject ? lots[selectedLotIndex] : null;
+  const [depreciation, setDepreciation] = useState<Record<string, string>>(() => {
+    if (isProject) return (selectedLot?.cashflowOverrides?.depreciation as any) || {};
+    return formData.depreciation || {};
+  });
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Load existing depreciation data on mount
   useEffect(() => {
+    if (isProject) {
+      const lotDep = (selectedLot?.cashflowOverrides?.depreciation as any) || {};
+      setDepreciation(lotDep);
+      const allYearsPopulated = Array.from({ length: 10 }, (_, i) => i + 1).every((year) => lotDep?.[`year${year}`]);
+      setSuccess(allYearsPopulated);
+      return;
+    }
+
     if (formData.depreciation) {
       setDepreciation(formData.depreciation);
-      // Check if all 10 years are populated
       const allYearsPopulated = Array.from({ length: 10 }, (_, i) => i + 1).every(
         (year) => formData.depreciation?.[`year${year}` as keyof typeof formData.depreciation]
       );
@@ -26,14 +38,13 @@ export function Step6WashingtonBrown() {
         setSuccess(true);
       }
     }
-  }, [formData.depreciation]);
+  }, [formData.depreciation, isProject, selectedLotIndex, selectedLot?.cashflowOverrides?.depreciation]);
 
   // Auto-save depreciation data to form store whenever it changes
   useEffect(() => {
+    if (isProject) return;
     if (Object.keys(depreciation).length > 0) {
-      updateFormData({
-        depreciation: depreciation
-      });
+      updateFormData({ depreciation: depreciation });
     }
   }, [depreciation, updateFormData]);
 
@@ -73,6 +84,12 @@ export function Step6WashingtonBrown() {
         setSuccess(false);
       } else {
         setDepreciation(parsed);
+        if (isProject) {
+          updateLotCashflowOverrides(selectedLotIndex, {
+            overrideDepreciation: true,
+            depreciation: parsed,
+          } as any);
+        }
         setError(null);
         setSuccess(true);
       }
@@ -92,6 +109,15 @@ export function Step6WashingtonBrown() {
       ...prev,
       [`year${year}`]: sanitized
     }));
+
+    if (isProject) {
+      updateLotCashflowOverrides(selectedLotIndex, {
+        overrideDepreciation: true,
+        depreciation: {
+          [`year${year}`]: sanitized,
+        },
+      } as any);
+    }
     
     // Clear error if user is manually fixing
     if (error) {
@@ -125,6 +151,17 @@ export function Step6WashingtonBrown() {
 
   const hasAnyData = Object.keys(depreciation).length > 0 && 
     Object.values(depreciation).some(v => v && v.trim() !== '');
+
+  const handleUseForAllLots = () => {
+    if (!isProject) return;
+    if (!hasAnyData) return;
+    lots.forEach((_, idx) => {
+      updateLotCashflowOverrides(idx, {
+        overrideDepreciation: true,
+        depreciation: depreciation,
+      } as any);
+    });
+  };
 
   return (
     <div>
@@ -211,6 +248,35 @@ export function Step6WashingtonBrown() {
 
         {/* Textarea for pasting */}
         <div>
+          {isProject && lots.length > 0 && (
+            <div className="mb-3 flex items-center gap-3">
+              <label className="text-sm font-medium text-gray-700">Lot</label>
+              <select
+                value={selectedLotIndex}
+                onChange={(e) => {
+                  setSelectedLotIndex(parseInt(e.target.value, 10));
+                  setPastedText('');
+                  setError(null);
+                  setSuccess(false);
+                }}
+                className="input-field"
+              >
+                {lots.map((lot, idx) => (
+                  <option key={idx} value={idx}>
+                    Lot {lot.lotNumber || idx + 1}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleUseForAllLots}
+                disabled={!hasAnyData}
+                className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Use these numbers for all lots
+              </button>
+            </div>
+          )}
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Paste Washington Brown Report (Optional - for manual entry)
           </label>

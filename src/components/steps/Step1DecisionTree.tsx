@@ -15,6 +15,34 @@ export function Step1DecisionTree() {
   const [hasUnitNumbers, setHasUnitNumbers] = useState<boolean | undefined>(address?.hasUnitNumbers);
   const [unitNumber, setUnitNumber] = useState<string>(address?.unitNumber || '');
 
+  const sanitizeUnitNumberInput = (input: string) => input.toUpperCase().replace(/\s+/g, ' ').replace(/^\s+/, '');
+
+  const isValidUnitNumberInput = (value: string) => {
+    const v = value.trim();
+    if (v === '') return true;
+
+    // Only allow characters we support
+    if (!/^[A-Z0-9,\-\s]+$/.test(v)) return false;
+
+    // Allow user to type progressively
+    if (/[\s,\-]$/.test(v)) return true;
+
+    const parts = v.split(',').map((p) => p.trim());
+    return parts.every((p) => {
+      if (p === '') return true;
+      if (/^\d+$/.test(p)) return true; // 2
+      if (/^[A-Z]$/.test(p)) return true; // A
+      if (/^\d+\s*-\s*\d+$/.test(p)) return true; // 1-8
+      if (/^[A-Z]\s*-\s*[A-Z]$/.test(p)) return true; // A-C
+
+      // Progressive typing support: allow unfinished range
+      if (/^\d+\s*-$/.test(p)) return true;
+      if (/^[A-Z]\s*-$/.test(p)) return true;
+
+      return false;
+    });
+  };
+
   const isProject = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple';
   const isHAndL = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual';
   const hasPropertyType = decisionTree.propertyType !== null; // Show unit number for all property types
@@ -270,7 +298,7 @@ export function Step1DecisionTree() {
   }, [numberOfLots, isProject]);
 
   // Update lot when user changes values
-  const updateLot = (index: number, field: keyof LotDetails, value: string | DualOccupancy) => {
+  const updateLot = (index: number, field: keyof LotDetails, value: string | boolean | DualOccupancy) => {
     const updatedLots = [...lots];
     updatedLots[index] = {
       ...updatedLots[index],
@@ -284,6 +312,8 @@ export function Step1DecisionTree() {
   const addLot = () => {
     const newLot: LotDetails = {
       lotNumber: '',
+      hasUnitNumbers: undefined,
+      unitNumber: '',
       singleOrDual: '',
     };
     const updatedLots = [...lots, newLot];
@@ -771,7 +801,8 @@ export function Step1DecisionTree() {
                   type="text"
                   value={unitNumber}
                   onChange={(e) => {
-                    const value = e.target.value.trim();
+                    const value = sanitizeUnitNumberInput(e.target.value);
+                    if (!isValidUnitNumberInput(value)) return;
                     setUnitNumber(value);
                     
                     // Update address with unit number
@@ -882,6 +913,8 @@ export function Step1DecisionTree() {
                       for (let i = 0; i < count; i++) {
                         newLots.push({
                           lotNumber: lots[i]?.lotNumber || '',
+                          hasUnitNumbers: lots[i]?.hasUnitNumbers,
+                          unitNumber: lots[i]?.unitNumber || '',
                           singleOrDual: lots[i]?.singleOrDual || '',
                         });
                       }
@@ -961,6 +994,63 @@ export function Step1DecisionTree() {
                           <option value="Yes">Dual Occupancy</option>
                         </select>
                       </div>
+                      <div>
+                        <label className="label-field">Does this lot have unit numbers? *</label>
+                        <div className="flex items-center gap-6 mt-2">
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="radio"
+                              name={`lot-${index}-hasUnitNumbers`}
+                              tabIndex={0}
+                              checked={lot.hasUnitNumbers === true}
+                              onChange={() => updateLot(index, 'hasUnitNumbers', true)}
+                            />
+                            Yes
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="radio"
+                              name={`lot-${index}-hasUnitNumbers`}
+                              tabIndex={0}
+                              checked={lot.hasUnitNumbers === false}
+                              onChange={() => {
+                                const updatedLots = [...lots];
+                                updatedLots[index] = {
+                                  ...updatedLots[index],
+                                  hasUnitNumbers: false,
+                                  unitNumber: '',
+                                };
+                                setLots(updatedLots);
+                                updateLots(updatedLots);
+                              }}
+                            />
+                            No
+                          </label>
+                        </div>
+                        {lot.hasUnitNumbers === undefined && (
+                          <p className="text-xs text-gray-500 mt-1">Please select Yes or No</p>
+                        )}
+                      </div>
+                      {lot.hasUnitNumbers === true && (
+                        <div>
+                          <label className="label-field">Which unit(s) are we buying? *</label>
+                          <input
+                            type="text"
+                            value={lot.unitNumber || ''}
+                            onChange={(e) => {
+                              const value = sanitizeUnitNumberInput(e.target.value);
+                              if (!isValidUnitNumberInput(value)) return;
+                              updateLot(index, 'unitNumber', value);
+                            }}
+                            className="input-field"
+                            placeholder="e.g., 2, 1-8, A,B,C, or A-C"
+                            required
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Enter single unit (e.g., "2" or "A"), range (e.g., "1-8" or "A-C"), or comma-separated list (e.g., "1,2,3" or "A,B,C")
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -17,6 +17,7 @@ interface FormStore extends FormState {
   updateAddress: (address: Partial<AddressData>) => void;
   updateRiskOverlays: (overlays: Partial<RiskOverlays>) => void;
   updateLots: (lots: LotDetails[]) => void;
+  updateLotCashflowOverrides: (lotIndex: number, overrides: NonNullable<LotDetails['cashflowOverrides']>) => void;
   updateLotPropertyDescription: (lotIndex: number, description: Partial<PropertyDescription>) => void;
   updateLotPurchasePrice: (lotIndex: number, price: Partial<PurchasePrice>) => void;
   updateLotRentalAssessment: (lotIndex: number, assessment: Partial<RentalAssessment>) => void;
@@ -205,6 +206,35 @@ export const useFormStore = create<FormStore>()(
             lots: lots,
           },
         })),
+
+      updateLotCashflowOverrides: (lotIndex, overrides) =>
+        set((state) => {
+          const updatedLots = [...(state.formData.lots || [])];
+          if (updatedLots[lotIndex]) {
+            const existingOverrides = updatedLots[lotIndex].cashflowOverrides || {};
+            const mergedDepreciation = overrides?.depreciation
+              ? {
+                  ...(existingOverrides.depreciation || {}),
+                  ...overrides.depreciation,
+                }
+              : existingOverrides.depreciation;
+
+            updatedLots[lotIndex] = {
+              ...updatedLots[lotIndex],
+              cashflowOverrides: {
+                ...existingOverrides,
+                ...overrides,
+                ...(overrides?.depreciation ? { depreciation: mergedDepreciation } : {}),
+              },
+            };
+          }
+          return {
+            formData: {
+              ...state.formData,
+              lots: updatedLots,
+            },
+          };
+        }),
       
       updateLotPropertyDescription: (lotIndex, description) =>
         set((state) => {

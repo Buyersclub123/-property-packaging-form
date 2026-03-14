@@ -88,10 +88,32 @@ export interface RiskOverlays {
 // Lot Details (for Projects with Multiple Lots)
 export interface LotDetails {
   lotNumber: string;
+  hasUnitNumbers?: boolean;
+  unitNumber?: string;
   singleOrDual: DualOccupancy; // Yes = Dual, No = Single
   propertyDescription?: PropertyDescription;
   purchasePrice?: PurchasePrice;
   rentalAssessment?: RentalAssessment;
+  cashflowOverrides?: {
+    enabled?: boolean;
+    overrideCouncilWaterRates?: boolean;
+    overrideInsurance?: boolean;
+    overrideDepreciation?: boolean;
+    councilWaterRates?: string;
+    insurance?: string;
+    depreciation?: {
+      year1?: string;
+      year2?: string;
+      year3?: string;
+      year4?: string;
+      year5?: string;
+      year6?: string;
+      year7?: string;
+      year8?: string;
+      year9?: string;
+      year10?: string;
+    };
+  };
 }
 
 // Property Description
