@@ -2932,7 +2932,7 @@ function ProjectLotsView() {
       </div>
 
       {/* Body Corp Description (Shared) - Projects only */}
-      {showSharedBodyCorpDescription && (
+      {false && (
         <div className="px-6 mt-8 pt-6 border-t">
           <div className="mb-4">
             <label className="text-lg font-semibold text-gray-900 block">Body Corp Description (Shared)</label>
