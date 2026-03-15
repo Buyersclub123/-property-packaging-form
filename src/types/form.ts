@@ -12,7 +12,7 @@ export type OccupancyType = 'owner_occupied' | 'tenanted' | 'vacant' | 'tbc';
 export type TitleType = 'individual' | 'torrens' | 'green' | 'strata' | 'owners_corp_community' | 'survey_strata' | 'built_strata' | 'tbc';
 export type CashbackRebateType = 'cashback' | 'rebate';
 export type DealType = '01_hl_comms' | '02_single_comms' | '03_internal_with_comms' | '04_internal_nocomms' | '05_established';
-export type StatusType = '01_available' | '02_eoi' | '03_contr_exchanged' | '05_remove_no_interest' | '06_remove_lost';
+export type StatusType = '01_available' | '02_eoi' | '03_contr_exchanged' | '05_remove_no_interest' | '06_remove_lost' | '07_test_record';
 
 // Step 0: Decision Tree (now Step 1 after reordering)
 export interface DecisionTree {
@@ -369,6 +369,7 @@ export interface FormData {
   
   // Workflow
   messageForBA?: string;
+  noBodyCorpDialogueNeeded?: boolean;
   resubmitForTesting?: YesNo;
   pushRecordToDealSheet?: YesNo;
   

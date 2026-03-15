@@ -14,7 +14,7 @@ export const mockDataProject = (): Partial<FormData> => ({
     contractType: '01_hl_comms',
     lotType: 'Multiple',
     dualOccupancy: 'No',
-    status: '01_available',
+    status: '07_test_record',
   },
   address: {
     propertyAddress: '123 Test Street Maroochydore QLD 4558',

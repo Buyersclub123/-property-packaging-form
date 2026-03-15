@@ -613,6 +613,20 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
               }
             }
           }
+
+          // Shared Body Corp Description (Projects): required confirmation when any lot has body corp titles
+          const anyLotNeedsBodyCorp = (lots || []).some((lot) => {
+            const t = lot?.propertyDescription?.title?.toLowerCase() || '';
+            return t.includes('strata') || t.includes('owners_corp');
+          });
+          if (anyLotNeedsBodyCorp) {
+            const hasSharedDialogue = !!(propertyDescription?.bodyCorpDescription && propertyDescription.bodyCorpDescription.trim() !== '');
+            const confirmedNone = formData.noBodyCorpDialogueNeeded === true;
+            if (!hasSharedDialogue && !confirmedNone) {
+              setValidationErrorWithRef('Body Corp Description (Shared): add dialogue or tick "No body corp dialogue needed".');
+              return false;
+            }
+          }
           
           return true;
         }

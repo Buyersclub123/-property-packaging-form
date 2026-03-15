@@ -533,6 +533,7 @@ export function Step1DecisionTree() {
             <option value="01_available">01 Available</option>
             <option value="02_eoi">02 EOI</option>
             <option value="03_contr_exchanged">03 Contr' Exchanged</option>
+            <option value="07_test_record">07 Test Record</option>
             {/* Options 05 and 06: Available in code for editing scenarios, but hidden when creating new properties */}
             {/* Show these options only if status is already set to one of them (edit mode) */}
             {(decisionTree.status === '05_remove_no_interest' || decisionTree.status === '06_remove_lost') && (

@@ -2090,7 +2090,7 @@ export function Step2PropertyDetails() {
 // Project Lots View Component
 function ProjectLotsView() {
   const { formData, updateLotPropertyDescription, updateLotPurchasePrice, updateLotRentalAssessment, replicateLotData, updatePurchasePrice, updatePropertyDescription, updateRentalAssessment, updateAddress } = useFormStore();
-  const { lots, decisionTree, purchasePrice, propertyDescription, rentalAssessment } = formData;
+  const { lots, decisionTree, purchasePrice, propertyDescription, rentalAssessment, noBodyCorpDialogueNeeded } = formData;
   const [expandedLots, setExpandedLots] = useState<Set<number>>(new Set([0])); // First lot expanded by default
   const [isProjectFieldsExpanded, setIsProjectFieldsExpanded] = useState<boolean>(true); // Project fields expanded by default
   const [expandedProjectSections, setExpandedProjectSections] = useState<Set<string>>(new Set(['address', 'comparableSales', 'cashback'])); // Project Brief (overview) collapsed by default as it's not mandatory
@@ -2418,6 +2418,11 @@ function ProjectLotsView() {
     );
   }
   
+  const showSharedBodyCorpDescription = (lots || []).some((lot) => {
+    const titleLower = lot?.propertyDescription?.title?.toLowerCase() || '';
+    return titleLower.includes('strata') || titleLower.includes('owners_corp');
+  });
+
   return (
     <div>
       <div className="mb-6">
@@ -2926,8 +2931,51 @@ function ProjectLotsView() {
         })}
       </div>
 
+      {/* Body Corp Description (Shared) - Projects only */}
+      {showSharedBodyCorpDescription && (
+        <div className="px-6 mt-8 pt-6 border-t">
+          <div className="mb-4">
+            <label className="text-lg font-semibold text-gray-900 block">Body Corp Description (Shared)</label>
+            <p className="text-xs text-gray-500 mt-1">
+              Text will appear exactly as typed in email template
+            </p>
+          </div>
+
+          {(!propertyDescription?.bodyCorpDescription || propertyDescription.bodyCorpDescription.trim() === '') && (
+            <div className="mb-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!noBodyCorpDialogueNeeded}
+                  onChange={(e) => useFormStore.getState().updateFormData({ noBodyCorpDialogueNeeded: e.target.checked })}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                No body corp dialogue needed
+              </label>
+            </div>
+          )}
+
+          <textarea
+            value={propertyDescription?.bodyCorpDescription || ''}
+            onChange={(e) => {
+              useFormStore.getState().updateFormData({ noBodyCorpDialogueNeeded: false });
+              updatePropertyDescription({ bodyCorpDescription: e.target.value });
+            }}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement;
+              target.style.height = 'auto';
+              target.style.height = `${target.scrollHeight}px`;
+            }}
+            className="input-field resize-none overflow-hidden"
+            rows={3}
+            placeholder="Describe what's included in body corp (applies to all lots)"
+            spellCheck={true}
+          />
+        </div>
+      )}
+
       {/* Optional Shared Fields - At the bottom */}
-      <div className="mt-8 pt-6 border-t">
+      <div className="mt-8 pt-6 border-t px-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Optional Additional Information (Shared)</h3>
         
         {/* Property Description Additional Dialogue - Shared - Collapsible */}
@@ -3459,27 +3507,6 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
       )}
 
     </div>
-    
-    {/* Body Corp Description - Only show if Title contains "strata" or "owners_corp" - Outside grid for full width like H&L view */}
-    {(propertyDescription?.title?.toLowerCase().includes('strata') || 
-      propertyDescription?.title?.toLowerCase().includes('owners_corp')) && (
-      <div className="mt-4">
-        <label className="label-field">Body Corp Description (Text will appear exactly as typed in email template)</label>
-        <textarea
-          value={propertyDescription?.bodyCorpDescription || ''}
-          onChange={(e) => updateLotPropertyDescription(lotIndex, { bodyCorpDescription: e.target.value })}
-          onInput={(e) => {
-            const target = e.target as HTMLTextAreaElement;
-            target.style.height = 'auto';
-            target.style.height = `${target.scrollHeight}px`;
-          }}
-          className="input-field resize-none overflow-hidden"
-          rows={3}
-          placeholder="Describe what's included in body corp"
-          spellCheck={true}
-        />
-      </div>
-    )}
     </>
   );
 }

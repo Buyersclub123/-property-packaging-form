@@ -50,6 +50,7 @@ const initialFormData: FormData = {
     propertyAddress: '',
   },
   clearInGhl: {},
+  noBodyCorpDialogueNeeded: false,
   riskOverlays: {
     flood: '' as YesNo,
     bushfire: '' as YesNo,
