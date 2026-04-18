@@ -595,6 +595,13 @@ export function Step8Submission() {
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Pre-Submission Checklist</h2>
+
+      {formData.subjectLine && (
+        <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <span className="text-sm font-semibold text-gray-700">Subject Line: </span>
+          <span className="text-sm text-gray-900">{formData.subjectLine}</span>
+        </div>
+      )}
       
       <div className="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
         <p className="text-sm text-gray-700 mb-4">

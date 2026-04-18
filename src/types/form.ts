@@ -4,7 +4,8 @@ export type PropertyType = 'New' | 'Established';
 export type ContractType = '01_hl_comms' | '02_single_comms' | '03_internal_with_comms' | '04_internal_nocomms' | '05_established';
 export type ContractTypeSimplified = 'Single Contract' | 'Split Contract';
 export type LotType = 'Individual' | 'Multiple';
-export type DualOccupancy = 'Yes' | 'No' | 'Mixed' | 'TBC' | '';
+export type DualOccupancy = 'Yes' | 'No' | 'Tri-plus' | 'Mixed' | 'TBC' | '';
+export type DwellingType = 'unit' | 'townhouse' | 'villa' | 'house' | 'dualkey' | 'duplex' | 'multidwelling' | 'block_of_units';
 
 export type YesNo = 'Yes' | 'No' | '';
 export type AskingType = 'onmarket' | 'offmarket' | 'prelaunch_opportunity' | 'coming_soon' | 'tbc';
@@ -21,6 +22,7 @@ export interface DecisionTree {
   contractTypeSimplified?: ContractTypeSimplified | null; // Computed field: "Single Contract" or "Split Contract" for H&L properties
   lotType: LotType | null;
   dualOccupancy: DualOccupancy | null;
+  dwellingType?: DwellingType | null;
   status: StatusType | null;
 }
 
@@ -264,6 +266,7 @@ export interface FormData {
   packagerApproved?: string;
   qaApproved?: string;
   dealType?: DealType;
+  subjectLine?: string;
   reviewDate?: string;
   
   // Pre-fetched data (loaded early for better UX)

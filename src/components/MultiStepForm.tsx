@@ -18,6 +18,7 @@ import { Step6FolderCreation } from './steps/Step6FolderCreation';
 import { Step4Review } from './steps/Step4Review';
 import { Step9PhotoDocuments } from './steps/Step9PhotoDocuments';
 import { getUserEmail } from '@/lib/userAuth';
+import { useSubjectLine } from '@/hooks/useSubjectLine';
 
 // Steps numbered starting from 1
 const STEPS = [
@@ -182,6 +183,7 @@ function EditableEmail() {
 
 export function MultiStepForm({ userEmail, mode = 'create', initialData, recordId, returnTo, editor }: MultiStepFormProps) {
   const { currentStep, setCurrentStep, formData, setUserEmail, updateFormData } = useFormStore();
+  const subjectLine = useSubjectLine();
   
   // Store user email in form store for logging purposes
   useEffect(() => {
@@ -1643,6 +1645,12 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
             </div>
             {currentStep === 1 && <EditableEmail />}
           </div>
+          {subjectLine && (
+            <div className="mt-2">
+              <span className="text-xs font-semibold text-gray-500">Subject Line: </span>
+              <span className="text-xs text-gray-700">{subjectLine}</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -331,6 +331,7 @@ export async function GET(
         contractTypeSimplified: contractTypeSimplified === 'Single Contract' || contractTypeSimplified === 'Split Contract' ? contractTypeSimplified : null,
         lotType,
         dualOccupancy,
+        dwellingType: props.dwelling_type || null,
         // status comes from top-level status field
         status: status || null,
       },
@@ -623,6 +624,7 @@ export async function GET(
         
         return undefined;
       })(),
+      subjectLine: props.subject_line || '',
     };
 
     // Debug: Log what we're returning
@@ -873,6 +875,8 @@ export async function PUT(
     if (includeIfProvided(formData.dealType)) ghlRecord.deal_type = formData.dealType;
     if (includeIfProvided(formData.reviewDate)) ghlRecord.review_date = formData.reviewDate;
     if (includeIfProvided(formData.status)) ghlRecord.status = formData.status;
+    if (includeIfProvided(formData.decisionTree?.dwellingType)) ghlRecord.dwelling_type = formData.decisionTree.dwellingType;
+    if (includeIfProvided(formData.subjectLine)) ghlRecord.subject_line = formData.subjectLine;
 
     // Risk Overlays
     if (includeIfProvided(formData.riskOverlays?.zoning)) ghlRecord.zoning = formData.riskOverlays.zoning;

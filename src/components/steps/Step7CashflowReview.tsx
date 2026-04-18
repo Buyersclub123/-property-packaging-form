@@ -410,6 +410,10 @@ export function Step7CashflowReview() {
         
         <Field label="Address" value={address?.propertyAddress} />
         <Field label="State" value={address?.state} />
+        <div className="py-3 px-4 border-b border-gray-200 hover:bg-gray-50">
+          <div className="text-sm font-medium text-gray-700 mb-1">Subject Line</div>
+          <div className="text-sm text-gray-900">{formData.subjectLine || 'Not yet computed'}</div>
+        </div>
 
         {/* 2. Financial Details */}
         <div className="bg-gray-100 px-4 py-2 border-b border-gray-300 mt-4">

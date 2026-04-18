@@ -3,7 +3,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { FormData, FormState, StashResponse, DecisionTree, AddressData, RiskOverlays, LotDetails, PropertyDescription, PurchasePrice, RentalAssessment, YesNo } from '@/types/form';
+import { FormData, FormState, StashResponse, DecisionTree, AddressData, RiskOverlays, LotDetails, PropertyDescription, PurchasePrice, RentalAssessment, YesNo, DwellingType } from '@/types/form';
 
 interface FormStore extends FormState {
   // User email for logging
@@ -44,6 +44,7 @@ const initialFormData: FormData = {
     contractTypeSimplified: null,
     lotType: null,
     dualOccupancy: null,
+    dwellingType: null,
     status: null,
   },
   address: {
@@ -66,6 +67,7 @@ const initialFormData: FormData = {
   contentSections: {},
   agentInfo: {},
   lots: [],
+  subjectLine: '',
 };
 
 // SSR-safe storage - no-op during SSR, localStorage on client
@@ -538,6 +540,7 @@ export const useFormStore = create<FormStore>()(
               contractTypeSimplified: null,
               lotType: null,
               dualOccupancy: null,
+              dwellingType: null,
               status: null,
             },
             // Exclude Step 2 fields from persistence (always start blank)

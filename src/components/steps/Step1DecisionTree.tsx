@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useFormStore } from '@/store/formStore';
-import { PropertyType, ContractType, LotType, DualOccupancy, StatusType, LotDetails, ContractTypeSimplified } from '@/types/form';
+import { PropertyType, ContractType, LotType, DualOccupancy, DwellingType, StatusType, LotDetails, ContractTypeSimplified } from '@/types/form';
 
 export function Step1DecisionTree() {
   const { formData, updateDecisionTree, updateLots, clearStep2Data, setCurrentStep, updateAddress } = useFormStore();
@@ -381,6 +381,7 @@ export function Step1DecisionTree() {
                 contractType: null,
                 lotType: null,
                 dualOccupancy: null,
+                dwellingType: null,
                 status: null,
               });
               
@@ -433,6 +434,7 @@ export function Step1DecisionTree() {
                 propertyType: newType,
                 lotType: null, // Clear lot type when property type changes
                 dualOccupancy: null, // Clear dual occupancy when property type changes
+                dwellingType: null, // Clear dwelling type when property type changes
               });
               clearDependentAddressFields(); // Clear lot/unit numbers from address
             }}
@@ -457,6 +459,7 @@ export function Step1DecisionTree() {
                 updateDecisionTree({ 
                   lotType: newLotType,
                   dualOccupancy: null, // Clear dual occupancy when H&L/Project changes
+                  dwellingType: null, // Clear dwelling type when H&L/Project changes
                 });
                 clearDependentAddressFields(); // Clear lot/unit numbers from address
               }}
@@ -478,7 +481,7 @@ export function Step1DecisionTree() {
             <select
               value={decisionTree.dualOccupancy || ''}
               onChange={(e) =>
-                updateDecisionTree({ dualOccupancy: e.target.value as DualOccupancy })
+                updateDecisionTree({ dualOccupancy: e.target.value as DualOccupancy, dwellingType: null })
               }
               className="input-field"
               required={!isEditMode}
@@ -486,6 +489,46 @@ export function Step1DecisionTree() {
               <option value="">Select...</option>
               <option value="No">Single Occupancy</option>
               <option value="Yes">Dual Occupancy</option>
+              <option value="Tri-plus">Tri-plus</option>
+            </select>
+          </div>
+        )}
+
+        {/* Dwelling Type - after occupancy, filtered by occupancy selection */}
+        {(decisionTree.propertyType === 'Established' || 
+          (decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual')) && 
+          decisionTree.dualOccupancy && (
+          <div>
+            <label className="label-field">Dwelling Type *</label>
+            <select
+              value={decisionTree.dwellingType || ''}
+              onChange={(e) =>
+                updateDecisionTree({ dwellingType: e.target.value as DwellingType })
+              }
+              className="input-field"
+              required={!isEditMode}
+            >
+              <option value="">Select...</option>
+              {decisionTree.dualOccupancy === 'No' && (
+                <>
+                  <option value="unit">Unit</option>
+                  <option value="townhouse">Townhouse</option>
+                  <option value="villa">Villa</option>
+                  <option value="house">House</option>
+                </>
+              )}
+              {decisionTree.dualOccupancy === 'Yes' && (
+                <>
+                  <option value="dualkey">Dual-key</option>
+                  <option value="duplex">Duplex</option>
+                </>
+              )}
+              {decisionTree.dualOccupancy === 'Tri-plus' && (
+                <>
+                  <option value="multidwelling">Multi-dwelling</option>
+                  <option value="block_of_units">Block of Units</option>
+                </>
+              )}
             </select>
           </div>
         )}

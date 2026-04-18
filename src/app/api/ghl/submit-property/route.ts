@@ -87,6 +87,8 @@ export async function POST(request: Request) {
       packager: formData.packager || '',
       deal_type: formData.dealType || '',
       contract_type: formData.decisionTree?.contractTypeSimplified || '',
+      dwelling_type: formData.decisionTree?.dwellingType || '',
+      subject_line: formData.subjectLine || '',
       review_date: formData.reviewDate || new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Australia/Sydney',
         year: 'numeric',
