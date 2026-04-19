@@ -314,8 +314,11 @@ export async function GET(
     // Reverse single_or_dual_occupancy mapping:
     // Submit: dualOccupancy='Yes' → single_or_dual_occupancy='dual_occupancy'
     // Submit: dualOccupancy='No' → single_or_dual_occupancy='single_occupancy'
-    let dualOccupancy: 'Yes' | 'No' | null = null;
-    if (singleOrDualOccupancy) {
+    let dualOccupancy: 'Yes' | 'No' | 'Tri-plus' | null = null;
+    const dwellingTypeValue = props.dwelling_type;
+    if (dwellingTypeValue === 'multidwelling' || dwellingTypeValue === 'block_of_units') {
+      dualOccupancy = 'Tri-plus';
+    } else if (singleOrDualOccupancy) {
       const lower = String(singleOrDualOccupancy).toLowerCase();
       if (lower.includes('dual')) dualOccupancy = 'Yes';
       else if (lower.includes('single')) dualOccupancy = 'No';
@@ -625,6 +628,15 @@ export async function GET(
         return undefined;
       })(),
       subjectLine: props.subject_line || '',
+      dwellings: (() => {
+        try {
+          const raw = props.dwelling_details;
+          if (raw && typeof raw === 'string') return JSON.parse(raw);
+        } catch (e) {
+          console.error('Failed to parse dwelling_details:', e);
+        }
+        return [];
+      })(),
     };
 
     // Debug: Log what we're returning
@@ -1087,6 +1099,13 @@ export async function PUT(
           ghlRecord.cf_depreciation_ = values.join(',');
         }
       }
+    }
+
+    // Dwelling details (Tri-plus)
+    if (formData.dwellings && formData.dwellings.length > 0) {
+      ghlRecord.dwelling_details = JSON.stringify(formData.dwellings);
+    } else if (formData.dwellings && formData.dwellings.length === 0) {
+      ghlRecord.dwelling_details = '';
     }
 
     // Call GHL API to update custom object record

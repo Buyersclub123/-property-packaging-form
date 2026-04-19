@@ -133,6 +133,9 @@ export async function POST(request: Request) {
       body_corp__per_quarter: formData.propertyDescription?.bodyCorpPerQuarter || '',
       body_corp_description: formData.propertyDescription?.bodyCorpDescription || '',
       does_this_property_have_2_dwellings: formData.propertyDescription?.doesThisPropertyHave2Dwellings || '',
+      dwelling_details: formData.dwellings && formData.dwellings.length > 0 
+        ? JSON.stringify(formData.dwellings) 
+        : '',
       property_description_additional_dialogue: formData.propertyDescription?.propertyDescriptionAdditionalDialogue || '',
       asking: formData.purchasePrice?.asking || '',
       asking_text: formData.purchasePrice?.askingText || '',
@@ -146,7 +149,22 @@ export async function POST(request: Request) {
       cashback_rebate_value: formData.purchasePrice?.cashbackRebateValue || '',
       cashback_rebate_type: formData.purchasePrice?.cashbackRebateType || '',
       purchase_price_additional_dialogue: formData.purchasePrice?.purchasePriceAdditionalDialogue || '',
-      occupancy: formData.rentalAssessment?.occupancy || '',
+      occupancy_primary: (() => {
+        const dt = formData.decisionTree;
+        if (dt?.dualOccupancy === 'Tri-plus' && formData.dwellings && formData.dwellings.length > 0) {
+          const allOccupancies: string[] = [];
+          formData.dwellings.forEach((d: any) => {
+            if (d.rentalAssessment?.occupancyPrimary) allOccupancies.push(d.rentalAssessment.occupancyPrimary);
+            if (d.singleOrDual === 'Yes' && d.rentalAssessment?.occupancySecondary) allOccupancies.push(d.rentalAssessment.occupancySecondary);
+          });
+          const unique = [...new Set(allOccupancies)];
+          if (unique.length === 1 && unique[0] === 'tenanted') return 'tenanted';
+          if (unique.length === 1 && unique[0] === 'vacant') return 'vacant';
+          if (unique.length > 0) return 'partially_tenanted';
+          return '';
+        }
+        return formData.rentalAssessment?.occupancyPrimary || formData.rentalAssessment?.occupancy || '';
+      })(),
       current_rent_primary__per_week: formData.rentalAssessment?.currentRentPrimary || '',
       current_rent_secondary__per_week: formData.rentalAssessment?.currentRentSecondary || '',
       expiry_primary: formData.rentalAssessment?.expiryPrimary || '',

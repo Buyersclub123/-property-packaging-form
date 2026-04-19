@@ -9,7 +9,7 @@ export type DwellingType = 'unit' | 'townhouse' | 'villa' | 'house' | 'dualkey' 
 
 export type YesNo = 'Yes' | 'No' | '';
 export type AskingType = 'onmarket' | 'offmarket' | 'prelaunch_opportunity' | 'coming_soon' | 'tbc';
-export type OccupancyType = 'owner_occupied' | 'tenanted' | 'vacant' | 'tbc';
+export type OccupancyType = 'owner_occupied' | 'tenanted' | 'vacant' | 'tbc' | 'partially_tenanted';
 export type TitleType = 'individual' | 'torrens' | 'green' | 'strata' | 'owners_corp_community' | 'survey_strata' | 'built_strata' | 'tbc';
 export type CashbackRebateType = 'cashback' | 'rebate';
 export type DealType = '01_hl_comms' | '02_single_comms' | '03_internal_with_comms' | '04_internal_nocomms' | '05_established';
@@ -116,6 +116,15 @@ export interface LotDetails {
       year10?: string;
     };
   };
+}
+
+// Dwelling Details (for Tri-plus: Multi-dwelling / Block of Units)
+export interface DwellingDetails {
+  label: string;                          // "Dwelling 1", "Unit 2", etc. (auto-generated)
+  unitNumber?: string;                    // Unit/dwelling number (e.g., "1A", "2B")
+  singleOrDual: DualOccupancy;            // Independent per-dwelling: 'Yes' | 'No'
+  propertyDescription?: PropertyDescription;  // beds, baths, garage, carport, carspace, build size, etc.
+  rentalAssessment?: RentalAssessment;        // occupancy, rent, appraisal, etc.
 }
 
 // Property Description
@@ -307,6 +316,9 @@ export interface FormData {
   
   // Lots (for Projects - Multiple lots)
   lots?: LotDetails[];
+  
+  // Dwellings (for Tri-plus: Multi-dwelling / Block of Units)
+  dwellings?: DwellingDetails[];
   
   // Property Description (for H&L Individual or Established)
   propertyDescription: PropertyDescription;

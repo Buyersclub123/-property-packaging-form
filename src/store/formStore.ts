@@ -3,7 +3,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { FormData, FormState, StashResponse, DecisionTree, AddressData, RiskOverlays, LotDetails, PropertyDescription, PurchasePrice, RentalAssessment, YesNo, DwellingType } from '@/types/form';
+import { FormData, FormState, StashResponse, DecisionTree, AddressData, RiskOverlays, LotDetails, DwellingDetails, PropertyDescription, PurchasePrice, RentalAssessment, YesNo, DwellingType } from '@/types/form';
 
 interface FormStore extends FormState {
   // User email for logging
@@ -22,6 +22,9 @@ interface FormStore extends FormState {
   updateLotPurchasePrice: (lotIndex: number, price: Partial<PurchasePrice>) => void;
   updateLotRentalAssessment: (lotIndex: number, assessment: Partial<RentalAssessment>) => void;
   replicateLotData: (sourceLotIndex: number, targetLotIndices: number[], sections: ('propertyDescription' | 'purchasePrice' | 'rentalAssessment' | 'all')[]) => void;
+  updateDwellings: (dwellings: DwellingDetails[]) => void;
+  updateDwellingPropertyDescription: (index: number, desc: Partial<PropertyDescription>) => void;
+  updateDwellingRentalAssessment: (index: number, rental: Partial<RentalAssessment>) => void;
   updatePropertyDescription: (description: Partial<PropertyDescription>) => void;
   updatePurchasePrice: (price: Partial<PurchasePrice>) => void;
   updateRentalAssessment: (assessment: Partial<RentalAssessment>) => void;
@@ -67,6 +70,7 @@ const initialFormData: FormData = {
   contentSections: {},
   agentInfo: {},
   lots: [],
+  dwellings: [],
   subjectLine: '',
 };
 
@@ -209,6 +213,61 @@ export const useFormStore = create<FormStore>()(
             lots: lots,
           },
         })),
+
+      updateDwellings: (dwellings) =>
+        set((state) => ({
+          formData: {
+            ...state.formData,
+            dwellings: dwellings,
+          },
+        })),
+
+      updateDwellingPropertyDescription: (index, desc) =>
+        set((state) => {
+          const updatedDwellings = [...(state.formData.dwellings || [])];
+          if (updatedDwellings[index]) {
+            const newPropertyDescription: PropertyDescription = { ...updatedDwellings[index].propertyDescription };
+            Object.keys(desc).forEach((key) => {
+              const typedKey = key as keyof PropertyDescription;
+              const value = desc[typedKey];
+              if (value === undefined) {
+                delete newPropertyDescription[typedKey];
+              } else {
+                newPropertyDescription[typedKey] = value as any;
+              }
+            });
+            updatedDwellings[index] = {
+              ...updatedDwellings[index],
+              propertyDescription: newPropertyDescription,
+            };
+          }
+          return {
+            formData: {
+              ...state.formData,
+              dwellings: updatedDwellings,
+            },
+          };
+        }),
+
+      updateDwellingRentalAssessment: (index, rental) =>
+        set((state) => {
+          const updatedDwellings = [...(state.formData.dwellings || [])];
+          if (updatedDwellings[index]) {
+            updatedDwellings[index] = {
+              ...updatedDwellings[index],
+              rentalAssessment: {
+                ...updatedDwellings[index].rentalAssessment,
+                ...rental,
+              },
+            };
+          }
+          return {
+            formData: {
+              ...state.formData,
+              dwellings: updatedDwellings,
+            },
+          };
+        }),
 
       updateLotCashflowOverrides: (lotIndex, overrides) =>
         set((state) => {

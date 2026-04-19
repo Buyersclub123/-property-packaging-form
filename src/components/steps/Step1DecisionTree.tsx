@@ -2,14 +2,16 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useFormStore } from '@/store/formStore';
-import { PropertyType, ContractType, LotType, DualOccupancy, DwellingType, StatusType, LotDetails, ContractTypeSimplified } from '@/types/form';
+import { PropertyType, ContractType, LotType, DualOccupancy, DwellingType, StatusType, LotDetails, DwellingDetails, ContractTypeSimplified } from '@/types/form';
 
 export function Step1DecisionTree() {
-  const { formData, updateDecisionTree, updateLots, clearStep2Data, setCurrentStep, updateAddress } = useFormStore();
+  const { formData, updateDecisionTree, updateLots, updateDwellings, clearStep2Data, setCurrentStep, updateAddress } = useFormStore();
   const { decisionTree, address, editMode, ghlRecordId } = formData;
   const isEditMode = editMode === true || !!ghlRecordId; // In edit mode if editMode is true or if we have a record ID
   const [numberOfLots, setNumberOfLots] = useState<string>('');
   const [lots, setLots] = useState<LotDetails[]>(formData.lots || []);
+  const [numberOfDwellings, setNumberOfDwellings] = useState<string>('');
+  const [dwellings, setDwellings] = useState<DwellingDetails[]>(formData.dwellings || []);
   const [lotNumber, setLotNumber] = useState<string>(address?.lotNumber || '');
   const [lotNumberNotApplicable, setLotNumberNotApplicable] = useState<boolean>(address?.lotNumberNotApplicable || false);
   const [hasUnitNumbers, setHasUnitNumbers] = useState<boolean | undefined>(address?.hasUnitNumbers);
@@ -45,6 +47,8 @@ export function Step1DecisionTree() {
 
   const isProject = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Multiple';
   const isHAndL = decisionTree.propertyType === 'New' && decisionTree.lotType === 'Individual';
+  const isTriPlus = decisionTree.propertyType === 'Established' && decisionTree.dualOccupancy === 'Tri-plus' && (decisionTree.dwellingType === 'multidwelling' || decisionTree.dwellingType === 'block_of_units');
+  const dwellingLabel = decisionTree.dwellingType === 'multidwelling' ? 'Dwelling' : 'Unit';
   const hasPropertyType = decisionTree.propertyType !== null; // Show unit number for all property types
   
   // Debug: Log decisionTree values
@@ -278,6 +282,80 @@ export function Step1DecisionTree() {
     }
   }, [isProject, lots.length, updateLots]);
 
+  // Clear dwellings if they switch away from Tri-plus
+  useEffect(() => {
+    if (!isTriPlus && dwellings.length > 0) {
+      setDwellings([]);
+      setNumberOfDwellings('');
+      updateDwellings([]);
+    }
+  }, [isTriPlus, dwellings.length, updateDwellings]);
+
+  // Update dwelling labels when dwellingType changes (multidwelling ↔ block_of_units)
+  useEffect(() => {
+    if (isTriPlus && dwellings.length > 0) {
+      const updatedDwellings = dwellings.map((d, i) => ({
+        ...d,
+        label: `${dwellingLabel} ${i + 1}`,
+      }));
+      setDwellings(updatedDwellings);
+      updateDwellings(updatedDwellings);
+    }
+  }, [decisionTree.dwellingType]);
+
+  // Sync dwelling unit numbers to address
+  useEffect(() => {
+    if (!isTriPlus) return;
+    const unitNumbers = dwellings.map(d => d.unitNumber?.trim()).filter(Boolean) as string[];
+    if (unitNumbers.length === 0) {
+      // Clear unit numbers from address
+      const baseAddressParts: string[] = [];
+      if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+      if (address?.streetName) baseAddressParts.push(address.streetName);
+      if (address?.suburbName) baseAddressParts.push(address.suburbName);
+      if (address?.state) baseAddressParts.push(address.state);
+      if (address?.postCode) baseAddressParts.push(address.postCode);
+      const baseAddress = baseAddressParts.length > 0
+        ? baseAddressParts.join(' ')
+        : (address?.propertyAddress || '').replace(/^(Units?)\s+[^,]+,\s*/i, '').trim();
+      updateAddress({ unitNumber: '', hasUnitNumbers: true, propertyAddress: baseAddress });
+      return;
+    }
+
+    // Try range format: check if all are sequential (numeric or single letters)
+    const allNumeric = unitNumbers.every(n => /^\d+$/.test(n));
+    const allSingleLetter = unitNumbers.every(n => /^[a-zA-Z]$/.test(n));
+    let formatted: string;
+    if (allNumeric && unitNumbers.length > 1) {
+      const nums = unitNumbers.map(Number).sort((a, b) => a - b);
+      const isSequential = nums.every((n, i) => i === 0 || n === nums[i - 1] + 1);
+      formatted = isSequential ? `${nums[0]}-${nums[nums.length - 1]}` : unitNumbers.join(',');
+    } else if (allSingleLetter && unitNumbers.length > 1) {
+      const codes = unitNumbers.map(n => n.toUpperCase().charCodeAt(0)).sort((a, b) => a - b);
+      const isSequential = codes.every((c, i) => i === 0 || c === codes[i - 1] + 1);
+      formatted = isSequential
+        ? `${String.fromCharCode(codes[0])}-${String.fromCharCode(codes[codes.length - 1])}`
+        : unitNumbers.map(n => n.toUpperCase()).join(',');
+    } else {
+      formatted = unitNumbers.join(',');
+    }
+
+    // Build address
+    const baseAddressParts: string[] = [];
+    if (address?.streetNumber) baseAddressParts.push(address.streetNumber);
+    if (address?.streetName) baseAddressParts.push(address.streetName);
+    if (address?.suburbName) baseAddressParts.push(address.suburbName);
+    if (address?.state) baseAddressParts.push(address.state);
+    if (address?.postCode) baseAddressParts.push(address.postCode);
+    const baseAddress = baseAddressParts.length > 0
+      ? baseAddressParts.join(' ')
+      : (address?.propertyAddress || '').replace(/^(Units?)\s+[^,]+,\s*/i, '').trim();
+    const prefix = unitNumbers.length > 1 ? `Units ${formatted}` : `Unit ${formatted}`;
+    const newAddress = baseAddress ? `${prefix}, ${baseAddress}` : prefix;
+    updateAddress({ unitNumber: formatted, hasUnitNumbers: true, propertyAddress: newAddress });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTriPlus, dwellings.map(d => d.unitNumber).join(',')]);
+
   // Initialize lots when numberOfLots changes
   useEffect(() => {
     if (isProject && numberOfLots) {
@@ -348,8 +426,52 @@ export function Step1DecisionTree() {
     return duplicates;
   };
 
+  // Dwelling management functions
+  const updateDwelling = (index: number, field: keyof DwellingDetails, value: string | DualOccupancy) => {
+    const updatedDwellings = [...dwellings];
+    updatedDwellings[index] = {
+      ...updatedDwellings[index],
+      [field]: value,
+    };
+    setDwellings(updatedDwellings);
+    updateDwellings(updatedDwellings);
+  };
+
+  const addDwelling = () => {
+    if (dwellings.length >= 25) return;
+    const newDwelling: DwellingDetails = {
+      label: `${dwellingLabel} ${dwellings.length + 1}`,
+      singleOrDual: '',
+    };
+    const updatedDwellings = [...dwellings, newDwelling];
+    setDwellings(updatedDwellings);
+    setNumberOfDwellings(String(updatedDwellings.length));
+    updateDwellings(updatedDwellings);
+  };
+
+  const removeDwelling = (index: number) => {
+    const updatedDwellings = dwellings.filter((_, i) => i !== index).map((d, i) => ({
+      ...d,
+      label: `${dwellingLabel} ${i + 1}`,
+    }));
+    setDwellings(updatedDwellings);
+    setNumberOfDwellings(String(updatedDwellings.length));
+    updateDwellings(updatedDwellings);
+  };
+
   const duplicateLotNumbers = getDuplicateLotNumbers();
   
+  // Check if a specific dwelling number is a duplicate
+  const isDuplicateDwellingNumber = (dwellingNumber: string, currentIndex: number): boolean => {
+    if (!dwellingNumber) return false;
+    const normalized = dwellingNumber.trim().toUpperCase();
+    return dwellings.some((d, index) => 
+      index !== currentIndex && 
+      d.unitNumber && 
+      d.unitNumber.trim().toUpperCase() === normalized
+    );
+  };
+
   // Check if a specific lot number is a duplicate
   const isDuplicateLotNumber = (lotNumber: string, currentIndex: number): boolean => {
     if (!lotNumber || lotNumber.toUpperCase() === 'TBC') return false;
@@ -489,7 +611,9 @@ export function Step1DecisionTree() {
               <option value="">Select...</option>
               <option value="No">Single Occupancy</option>
               <option value="Yes">Dual Occupancy</option>
-              <option value="Tri-plus">Tri-plus</option>
+              {decisionTree.propertyType === 'Established' && (
+                <option value="Tri-plus">Tri-plus</option>
+              )}
             </select>
           </div>
         )}
@@ -762,8 +886,8 @@ export function Step1DecisionTree() {
           </div>
         )}
 
-        {/* Unit Number Section - For all property types except Project */}
-        {hasPropertyType && !isProject && (
+        {/* Unit Number Section - For all property types except Project and Tri-plus */}
+        {hasPropertyType && !isProject && !isTriPlus && (
           <div className="pt-6 border-t">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Unit Number</h3>
             <p className="text-sm text-gray-600 mb-4">
@@ -927,6 +1051,119 @@ export function Step1DecisionTree() {
                 <p className="text-xs text-gray-500 mt-1">
                   Enter single unit (e.g., "2" or "A"), range (e.g., "1-8" or "A-C"), or comma-separated list (e.g., "1,2,3" or "A,B,C")
                 </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Dwellings Section - Only for Tri-plus */}
+        {isTriPlus && (
+          <div className="pt-6 border-t">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{dwellingLabel}s</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Enter details for each {dwellingLabel.toLowerCase()} in this property. Each {dwellingLabel.toLowerCase()} has its own occupancy, property description, and rental assessment.
+            </p>
+
+            {/* How many dwellings/units? */}
+            <div className="mb-6">
+              <label className="label-field">How many {dwellingLabel.toLowerCase()}s? *</label>
+              <input
+                type="number"
+                min="1"
+                max="25"
+                value={numberOfDwellings}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setNumberOfDwellings(value);
+                  if (value) {
+                    let count = parseInt(value, 10);
+                    if (count > 25) count = 25;
+                    if (count > 0 && count !== dwellings.length) {
+                      const newDwellings: DwellingDetails[] = [];
+                      for (let i = 0; i < count; i++) {
+                        newDwellings.push({
+                          label: `${dwellingLabel} ${i + 1}`,
+                          singleOrDual: dwellings[i]?.singleOrDual || '',
+                        });
+                      }
+                      setDwellings(newDwellings);
+                      updateDwellings(newDwellings);
+                    }
+                  }
+                }}
+                className="input-field w-32"
+                required
+              />
+            </div>
+
+            {/* Dwellings List */}
+            {dwellings.length > 0 && (
+              <div className="space-y-4">
+                {dwellings.map((dwelling, index) => (
+                  <div key={index} className="p-4 border border-gray-300 rounded-lg bg-gray-50">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900">{dwellingLabel} {index + 1}</h4>
+                      {dwellings.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeDwelling(index)}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="label-field">{dwellingLabel} Number *</label>
+                        <input
+                          type="text"
+                          value={dwelling.unitNumber || ''}
+                          onChange={(e) => updateDwelling(index, 'unitNumber', e.target.value)}
+                          className={`input-field ${isDuplicateDwellingNumber(dwelling.unitNumber || '', index) ? 'border-red-500 bg-red-50' : ''}`}
+                          placeholder={`e.g., 1A, 2B, or ${index + 1}`}
+                          required
+                        />
+                        {isDuplicateDwellingNumber(dwelling.unitNumber || '', index) && (
+                          <p className="text-xs text-red-600 mt-1 font-medium">
+                            ⚠️ Duplicate {dwellingLabel.toLowerCase()} number detected
+                          </p>
+                        )}
+                        {!isDuplicateDwellingNumber(dwelling.unitNumber || '', index) && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Enter {dwellingLabel.toLowerCase()} number (e.g., 1, 2, A, B)
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="label-field">Single or Dual Occupancy? *</label>
+                        <select
+                          value={dwelling.singleOrDual}
+                          onChange={(e) => updateDwelling(index, 'singleOrDual', e.target.value as DualOccupancy)}
+                          className="input-field"
+                          required
+                        >
+                          <option value="">Select...</option>
+                          <option value="No">Single Occupancy</option>
+                          <option value="Yes">Dual Occupancy</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Add button */}
+                <div className="mt-4">
+                  {dwellings.length < 25 && (
+                    <button
+                      type="button"
+                      onClick={addDwelling}
+                      className="btn-secondary"
+                    >
+                      + Add Another {dwellingLabel}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

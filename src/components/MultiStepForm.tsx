@@ -427,11 +427,13 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
           }
         }
         
-        // Unit numbers validation - applies to all property types except Projects
+        // Unit numbers validation - applies to all property types except Projects and Tri-plus
         // Skip validation in edit mode since checkbox is hidden
+        const isTriPlus = decisionTree?.propertyType === 'Established' && decisionTree?.dualOccupancy === 'Tri-plus' && (decisionTree?.dwellingType === 'multidwelling' || decisionTree?.dwellingType === 'block_of_units');
         if (!formData.editMode && 
             decisionTree?.propertyType !== null && 
-            !(decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple')) {
+            !(decisionTree?.propertyType === 'New' && decisionTree?.lotType === 'Multiple') &&
+            !isTriPlus) {
           // hasUnitNumbers must be selected (true or false, not undefined)
           if (address?.hasUnitNumbers === undefined) {
             setValidationErrorWithRef('Please select "Yes" or "No" for "Does this property have unit numbers?".');
@@ -707,8 +709,9 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
         }
         
         // Rental Assessment - mandatory fields
-        // Occupancy only required for Established properties
-        if (isEstablished) {
+        // Occupancy only required for Established properties (not Tri-plus — occupancy is per-dwelling)
+        const isTriPlusStep3 = decisionTree?.propertyType === 'Established' && decisionTree?.dualOccupancy === 'Tri-plus' && (decisionTree?.dwellingType === 'multidwelling' || decisionTree?.dwellingType === 'block_of_units');
+        if (isEstablished && !isTriPlusStep3) {
           if (isEmpty(rentalAssessment?.occupancyPrimary)) {
             setValidationErrorWithRef('Occupancy is required for Established properties.');
             return false;

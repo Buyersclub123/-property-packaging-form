@@ -1,0 +1,30 @@
+Email Section,Field,Projects (per lot),Tri-plus (per dwelling),Tri-plus (property-level),Tri-plus (summary totals),Notes
+PROPERTY DESCRIPTION,,,,,,
+,Bed,Per lot,Per dwelling,,Total across all dwellings,Summary at top
+,Bath,Per lot,Per dwelling,,Total across all dwellings,Summary at top
+,Garage,Per lot,Per dwelling,,Total across all dwellings,Summary at top
+,Carport,Per lot,Per dwelling,,Total across all dwellings,Summary at top (only if 1+)
+,Car Space,Per lot,Per dwelling,,Total across all dwellings,Summary at top (only if 1+)
+,Registration,Per lot,N/A,,N/A,Not relevant for Established
+,Built (sqm),Per lot,N/A,Year Built (once),N/A,Established uses Year Built
+,Land Size,Per lot,,Once,N/A,One land parcel for whole property
+,Title,Per lot,,Once,N/A,One title for whole property
+,Body Corp Per Quarter,N/A,,Once (if strata),N/A,Block of Units likely strata
+,Body Corp Description,N/A,,Once (if strata),N/A,
+,Unit/Dwelling Number,Per lot,Per dwelling,,N/A,Accordions for each dwelling
+PURCHASE PRICE,,,,,,
+,House & Land / Asking label,Once (H&L Package),N/A,Once (Asking + Asking Text),N/A,Different label for Established
+,Price / Acceptable Acquisition,Per lot,,Once (From-To),N/A,Established uses acquisition range
+,Net Price,Per lot (if cashback),N/A,,N/A,Not relevant for Established
+,Cashback/Rebate,Per lot,,Once (if 03),N/A,Shown once for whole property
+,Comparable Sales,Once,,Once,N/A,Shared
+,Purchase Price Additional Dialogue,Once,,Once,N/A,Shared
+RENTAL ASSESSMENT,,,,,,
+,Current Rent,N/A (new builds),Per dwelling (if tenanted),,Total across all tenanted dwellings,Summary at top
+,Current Yield,N/A,,Once (combined),N/A,Auto-calc from total current rents
+,Appraisal (From-To),Per lot,Per dwelling,,Total across all dwellings,Summary at top
+,Appraised Yield,Per lot,,Once (combined),N/A,Auto-calc from total appraisals
+,Price Group,N/A,,Once,N/A,Auto-calc from Acceptable Acquisition To
+,Occupancy,N/A (new builds),Per dwelling,,N/A,Per dwelling in accordion
+,Expiry,N/A (new builds),Per dwelling (if tenanted),,N/A,Per dwelling in accordion
+,Rental Assessment Additional Dialogue,Once,,Once,N/A,Shared
