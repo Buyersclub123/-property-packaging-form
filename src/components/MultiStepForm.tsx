@@ -639,6 +639,10 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
             setValidationErrorWithRef('Land Registration is required for H&L/Project properties.');
             return false;
           }
+          if (isSingleContract && isEmpty(propertyDescription?.completionDate)) {
+            setValidationErrorWithRef('Completion Date is required for Single Contract New properties.');
+            return false;
+          }
         }
         
         // Build Size required for H&L

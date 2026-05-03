@@ -141,6 +141,7 @@ export interface PropertyDescription {
   carportSecondary?: string;
   yearBuilt?: string;
   landRegistration?: string; // For H&L/Projects: "Registered" OR "Month Year approx." OR "TBC"
+  completionDate?: string; // For Single Contract New: "Completed" OR "Month Year approx." OR "TBC"
   landSize?: string;
   buildSize?: string; // For H&L single occupancy: Build size in sqm (e.g., "144.75" or "TBC")
   buildSizePrimary?: string; // For H&L dual occupancy: Primary build size in sqm
@@ -393,6 +394,10 @@ export interface FormData {
   hotspottingPdfFileId?: string; // PDF file ID from dropdown selection or upload
   hotspottingReportName?: string; // Report name (for adding suburb on submission)
   hotspottingValidPeriod?: string; // Valid period (for adding suburb on submission)
+
+  // Internal AMAP Report
+  amapReportFileId?: string; // Google Drive file ID of selected AMAP report
+  amapReportName?: string; // Display name of selected AMAP report
 }
 
 // Form State

@@ -370,6 +370,50 @@ export async function POST(request: Request) {
     } else {
       serverLog('[create-property-folder] No PDF fileId found - skipping shortcut creation');
     }
+
+    // Step 5: Add AMAP report shortcut if amapReportFileId exists
+    serverLog('[create-property-folder] Checking for AMAP report shortcut...');
+    serverLog('[create-property-folder] formData?.amapReportFileId:', formData?.amapReportFileId);
+    serverLog('[create-property-folder] formData?.amapReportName:', formData?.amapReportName);
+
+    if (formData?.amapReportFileId) {
+      try {
+        serverLog('[create-property-folder] Adding AMAP report shortcut to property folder...');
+
+        let amapShortcutName = 'AMAP Report.pdf';
+        const amapOriginalName = await getFileName(formData.amapReportFileId, SHARED_DRIVE_ID);
+        if (amapOriginalName) {
+          amapShortcutName = amapOriginalName;
+          serverLog('[create-property-folder] Using original AMAP name for shortcut:', amapShortcutName);
+        }
+
+        const amapShortcut = await createShortcut(
+          formData.amapReportFileId,
+          propertyFolder.id,
+          amapShortcutName,
+          SHARED_DRIVE_ID
+        );
+        serverLog('[create-property-folder] AMAP report shortcut created successfully:', amapShortcut.id);
+
+        try {
+          await setFilePermissions(formData.amapReportFileId, 'reader', SHARED_DRIVE_ID);
+          serverLog('[create-property-folder] AMAP report permissions set to "Anyone with the link"');
+        } catch (permError: any) {
+          serverLog('[create-property-folder] Warning: Failed to set permissions on AMAP report (non-blocking):', {
+            message: permError?.message,
+            code: permError?.code,
+          });
+        }
+      } catch (error: any) {
+        serverLog('[create-property-folder] Error creating AMAP report shortcut:', {
+          message: error?.message || 'Unknown error',
+          code: error?.code,
+        });
+        // Don't fail folder creation if shortcut creation fails
+      }
+    } else {
+      serverLog('[create-property-folder] No AMAP report fileId found - skipping shortcut creation');
+    }
     
     return NextResponse.json({
       success: true,

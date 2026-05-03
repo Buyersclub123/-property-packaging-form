@@ -723,6 +723,122 @@ export function Step2PropertyDetails() {
               </div>
             )}
 
+            {/* Completion Date - Only for Single Contract New */}
+            {isHAndL && isSingleContract && (
+              <div className={isDualOccupancy ? 'col-span-2' : ''}>
+                <label className="label-field">Completion Date *</label>
+                {(() => {
+                  const completionValue = propertyDescription?.completionDate || '';
+                  const isCompleted = completionValue.toUpperCase() === 'COMPLETED';
+                  const isCompTBC = completionValue.toUpperCase() === 'TBC';
+                  const completionData = parseExpiry(completionValue.replace('COMPLETED', 'REGISTERED'));
+                  const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                                  'July', 'August', 'September', 'October', 'November', 'December'];
+                  const years = getYearOptions();
+                  
+                  return (
+                    <div className="space-y-3">
+                      {/* Expected (Target Date) Option - First */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="completionDate"
+                            id="completionExpected"
+                            checked={!isCompleted && !isCompTBC && (completionValue !== '' || !!completionData.month || !!completionData.year)}
+                            onChange={() => {
+                              if (!completionData.month && !completionData.year) {
+                                updatePropertyDescription({ completionDate: '' });
+                              }
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <label htmlFor="completionExpected" className="text-sm text-gray-700 cursor-pointer font-medium">
+                            Expected
+                          </label>
+                        </div>
+                        {/* Month/Year Dropdowns - Show if Expected is selected */}
+                        {!isCompleted && !isCompTBC && (
+                          <div className="ml-6 grid grid-cols-2 gap-2">
+                            <select
+                              value={completionData.month}
+                              onChange={(e) => {
+                                const month = e.target.value;
+                                const formatted = formatExpiry(month, completionData.year, false, false);
+                                updatePropertyDescription({ completionDate: formatted ? `${formatted} approx.` : '' });
+                              }}
+                              className="input-field"
+                              required={!isCompleted && !isCompTBC}
+                            >
+                              <option value="">Select Month</option>
+                              {months.map(month => (
+                                <option key={month} value={month}>{month}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={completionData.year}
+                              onChange={(e) => {
+                                const year = e.target.value;
+                                const formatted = formatExpiry(completionData.month, year, false, false);
+                                updatePropertyDescription({ completionDate: formatted ? `${formatted} approx.` : '' });
+                              }}
+                              className="input-field"
+                              required={!isCompleted && !isCompTBC}
+                            >
+                              <option value="">Select Year</option>
+                              {years.map(year => (
+                                <option key={year} value={String(year)}>{year}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Completed Option - Second */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="completionCompleted"
+                          checked={isCompleted}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updatePropertyDescription({ completionDate: 'Completed' });
+                            } else {
+                              updatePropertyDescription({ completionDate: '' });
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <label htmlFor="completionCompleted" className="text-sm text-gray-700 cursor-pointer">
+                          Completed
+                        </label>
+                      </div>
+
+                      {/* TBC Option - Third */}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="completionTBC"
+                          checked={isCompTBC}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              updatePropertyDescription({ completionDate: 'TBC' });
+                            } else {
+                              updatePropertyDescription({ completionDate: '' });
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        <label htmlFor="completionTBC" className="text-sm text-gray-700 cursor-pointer">
+                          TBC
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             {/* Land Size - Always on its own row, ~50% width */}
             <div className={`max-w-md ${isDualOccupancy ? 'col-span-2' : ''}`}>
               <label className="label-field">Land Size (m²) *</label>

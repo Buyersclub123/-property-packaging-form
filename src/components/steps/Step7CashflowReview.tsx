@@ -34,6 +34,20 @@ export function Step7CashflowReview() {
   const [openingSpreadsheet, setOpeningSpreadsheet] = useState(false);
   const [spreadsheetError, setSpreadsheetError] = useState<string | null>(null);
   
+  // AMAP internal report state
+  const [amapReports, setAmapReports] = useState<Array<{ id: string; name: string }>>([]);
+  const [amapLoading, setAmapLoading] = useState(false);
+  const [amapError, setAmapError] = useState<string | null>(null);
+  const [amapSearch, setAmapSearch] = useState('');
+  const [amapDropdownOpen, setAmapDropdownOpen] = useState(false);
+  const [selectedAmap, setSelectedAmap] = useState<{ id: string; name: string } | null>(
+    formData.amapReportFileId && formData.amapReportName
+      ? { id: formData.amapReportFileId, name: formData.amapReportName }
+      : null
+  );
+  const [amapNotAvailable, setAmapNotAvailable] = useState(false);
+  const amapResolved = !!selectedAmap || amapNotAvailable;
+  
   // Check if in edit mode
   const isEditMode = formData.editMode === true || !!formData.ghlRecordId;
 
@@ -187,6 +201,53 @@ export function Step7CashflowReview() {
     return true;
   };
 
+  // Fetch AMAP reports from Google Drive folder
+  const fetchAmapReports = async () => {
+    if (amapReports.length > 0) {
+      setAmapDropdownOpen(true);
+      return;
+    }
+    setAmapLoading(true);
+    setAmapError(null);
+    try {
+      const response = await fetch('/api/internal-reports/list');
+      const result = await response.json();
+      if (result.success && result.reports) {
+        setAmapReports(result.reports);
+        setAmapDropdownOpen(true);
+      } else {
+        setAmapError(result.error || 'Failed to load reports');
+      }
+    } catch (err) {
+      setAmapError('Failed to fetch internal reports');
+    } finally {
+      setAmapLoading(false);
+    }
+  };
+
+  const handleAmapSelect = (report: { id: string; name: string }) => {
+    setSelectedAmap(report);
+    setAmapDropdownOpen(false);
+    setAmapSearch('');
+    updateFormData({
+      amapReportFileId: report.id,
+      amapReportName: report.name,
+    });
+  };
+
+  const handleAmapClear = () => {
+    setSelectedAmap(null);
+    setAmapSearch('');
+    updateFormData({
+      amapReportFileId: '',
+      amapReportName: '',
+    });
+  };
+
+  const filteredAmapReports = amapReports.filter(r =>
+    r.name.toLowerCase().includes(amapSearch.toLowerCase())
+  );
+
   const handleCreateFolder = async () => {
     // Validate fields first
     if (!validateFields()) {
@@ -240,6 +301,23 @@ export function Step7CashflowReview() {
           folderLink: result.folderLink, 
           folderName: result.folderName 
         });
+
+        // Log AMAP gap if "Not available" was ticked
+        if (amapNotAvailable && formData.address?.suburbName && formData.address?.state) {
+          try {
+            await fetch('/api/internal-reports/log-gap', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                suburb: formData.address.suburbName,
+                state: formData.address.state,
+                propertyAddress: constructFolderName(formData.address),
+              }),
+            });
+          } catch (logErr) {
+            console.warn('[AMAP Gap] Failed to log gap (non-blocking):', logErr);
+          }
+        }
       } else {
         throw new Error(result.error || 'Failed to create folder');
       }
@@ -609,6 +687,132 @@ export function Step7CashflowReview() {
         )}
       </div>
 
+      {/* Internal AMAP Report Section */}
+      <div className="mb-8 p-6 bg-gray-50 border border-gray-200 rounded-lg">
+        <h3 className="text-lg font-semibold mb-2">Internal AMAP Report</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Select an internal AMAP report to attach to the property folder, or confirm not available.
+        </p>
+
+        {selectedAmap ? (
+          <div className="space-y-3">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <span className="text-sm font-medium text-green-900">{selectedAmap.name}</span>
+                </div>
+                <button
+                  onClick={handleAmapClear}
+                  className="text-sm text-red-600 hover:text-red-800 underline"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : amapNotAvailable ? (
+          <div className="space-y-3">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-yellow-800">No AMAP report available for this property</span>
+                <button
+                  onClick={() => setAmapNotAvailable(false)}
+                  className="text-sm text-blue-600 hover:text-blue-800 underline"
+                >
+                  Change
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={fetchAmapReports}
+                disabled={amapLoading}
+                className="btn-secondary inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {amapLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading Reports...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Browse AMAP Reports
+                  </>
+                )}
+              </button>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={amapNotAvailable}
+                  onChange={(e) => setAmapNotAvailable(e.target.checked)}
+                  className="w-4 h-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                />
+                <span className="text-sm text-gray-600">Not available</span>
+              </label>
+            </div>
+
+            {amapDropdownOpen && (
+              <div className="border border-gray-300 rounded-lg bg-white shadow-lg">
+                <div className="p-2 border-b border-gray-200">
+                  <input
+                    type="text"
+                    value={amapSearch}
+                    onChange={(e) => setAmapSearch(e.target.value)}
+                    placeholder="Search reports..."
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  {filteredAmapReports.length === 0 ? (
+                    <div className="p-3 text-sm text-gray-500 text-center">
+                      {amapSearch ? 'No matching reports found' : 'No reports available'}
+                    </div>
+                  ) : (
+                    filteredAmapReports.map((report) => (
+                      <button
+                        key={report.id}
+                        onClick={() => handleAmapSelect(report)}
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      >
+                        {report.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+                <div className="p-2 border-t border-gray-200 flex justify-end">
+                  <button
+                    onClick={() => setAmapDropdownOpen(false)}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {amapError && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{amapError}</p>
+          </div>
+        )}
+      </div>
+
       {/* Folder Creation Section */}
       <div className="mb-8 p-6 bg-blue-50 border border-blue-200 rounded-lg">
         <h3 className="text-lg font-semibold mb-4">
@@ -688,7 +892,7 @@ export function Step7CashflowReview() {
             </p>
             <button
               onClick={handleCreateFolder}
-              disabled={creating}
+              disabled={creating || !amapResolved}
               className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {creating ? (
@@ -703,6 +907,11 @@ export function Step7CashflowReview() {
                 'Create Folder & Populate Spreadsheet'
               )}
             </button>
+            {!amapResolved && (
+              <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                Please select an AMAP report or tick "Not available" above before creating the folder.
+              </p>
+            )}
           </div>
         ) : (
           // Create mode: Folder created successfully

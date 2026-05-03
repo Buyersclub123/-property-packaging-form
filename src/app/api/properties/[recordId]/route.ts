@@ -479,6 +479,7 @@ export async function GET(
         doesThisPropertyHave2Dwellings: props.does_this_property_have_2_dwellings || '',
         singleOrDualOccupancy: props.single_or_dual_occupancy || '',
         landRegistration: props.land_registration || '',
+        completionDate: props.completion_date || '',
         propertyDescriptionAdditionalDialogue: props.property_description_additional_dialogue || '',
         projectBrief: props.project_brief || '',
         };
@@ -962,6 +963,7 @@ export async function PUT(
     if (includeIfProvided(formData.propertyDescription?.doesThisPropertyHave2Dwellings)) ghlRecord.does_this_property_have_2_dwellings = formData.propertyDescription.doesThisPropertyHave2Dwellings;
     if (includeIfProvided(formData.propertyDescription?.singleOrDualOccupancy)) ghlRecord.single_or_dual_occupancy = formData.propertyDescription.singleOrDualOccupancy;
     if (includeIfProvided(formData.propertyDescription?.landRegistration)) ghlRecord.land_registration = formData.propertyDescription.landRegistration;
+    if (includeIfProvided(formData.propertyDescription?.completionDate)) ghlRecord.completion_date = formData.propertyDescription.completionDate;
     if (shouldClear('propertyDescriptionAdditionalDialogue')) ghlRecord.property_description_additional_dialogue = null;
     else if (includeIfProvided(formData.propertyDescription?.propertyDescriptionAdditionalDialogue)) ghlRecord.property_description_additional_dialogue = formData.propertyDescription.propertyDescriptionAdditionalDialogue;
     if (shouldClear('projectBrief')) ghlRecord.project_brief = null;
