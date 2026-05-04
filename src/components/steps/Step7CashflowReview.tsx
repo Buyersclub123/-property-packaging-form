@@ -311,7 +311,9 @@ export function Step7CashflowReview() {
               body: JSON.stringify({
                 suburb: formData.address.suburbName,
                 state: formData.address.state,
+                lga: formData.address.lga || '',
                 propertyAddress: constructFolderName(formData.address),
+                packager: formData.packager || '',
               }),
             });
           } catch (logErr) {

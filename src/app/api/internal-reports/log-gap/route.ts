@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { suburb, state, propertyAddress } = body;
+    const { suburb, state, propertyAddress, lga, packager } = body;
 
     if (!suburb || !state) {
       return NextResponse.json(
@@ -41,13 +41,15 @@ export async function POST(request: NextRequest) {
       dateStr,                    // A: Date
       suburb,                     // B: Suburb
       state,                      // C: State
-      propertyAddress || '',      // D: Property Address
-      '',                         // E: Emailed (left empty for Apps Script)
+      lga || '',                  // D: LGA
+      propertyAddress || '',      // E: Property Address
+      packager || '',             // F: Packager
+      '',                         // G: Emailed (left empty for Apps Script)
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${TAB_NAME}!A:E`,
+      range: `${TAB_NAME}!A:G`,
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
