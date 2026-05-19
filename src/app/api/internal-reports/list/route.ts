@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { listFilesInFolder } from '@/lib/googleDrive';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * API route to list internal AMAP reports from the Google Drive folder.
  * Returns file name, id, and webViewLink for each PDF in the folder.
