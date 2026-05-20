@@ -40,7 +40,7 @@ function cleanReportNameForFilename(reportName: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { fileId, reportName, validPeriod, suburbs, state, userEmail, mainBody } = body;
+    const { fileId, reportName, validPeriod, suburbs, state, userEmail, mainBody, skipSheetWrite } = body;
     
     // Log input values for debugging
     console.log('[organize-pdf] Input values:', {
@@ -226,16 +226,18 @@ export async function POST(request: NextRequest) {
       console.warn('[organize-pdf] WARNING: File name mismatch! Expected:', newFileName, 'Got:', updatedFile.data.name);
     }
     
-    // Step 7: Save to Google Sheet
-    await saveToGoogleSheet(
-      suburbs || '',
-      state,
-      reportName,
-      validPeriod,
-      mainBody || '',
-      webViewLink,
-      fileId
-    );
+    // Step 7: Save to Google Sheet (skip if called from editor which manages its own sheet writes)
+    if (!skipSheetWrite) {
+      await saveToGoogleSheet(
+        suburbs || '',
+        state,
+        reportName,
+        validPeriod,
+        mainBody || '',
+        webViewLink,
+        fileId
+      );
+    }
     
     // Step 8: Log upload action
     if (userEmail) {

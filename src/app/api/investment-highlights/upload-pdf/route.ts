@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File; // Changed from 'pdf' to 'file' to match old code
     const suburb = formData.get('suburb') as string;
     const state = formData.get('state') as string;
+    const finalFileName = formData.get('finalFileName') as string | null;
 
     if (!file) {
       return NextResponse.json(
@@ -101,10 +102,15 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
     const stream = Readable.from(buffer);
 
-    // Generate filename with suburb/state prefix
-    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const originalName = file.name.replace(/\.pdf$/i, '');
-    const fileName = `${suburb}-${state}-${originalName}-${timestamp}.pdf`;
+    // Generate filename: use finalFileName if provided, otherwise auto-generate
+    let fileName: string;
+    if (finalFileName) {
+      fileName = finalFileName.endsWith('.pdf') ? finalFileName : `${finalFileName}.pdf`;
+    } else {
+      const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const originalName = file.name.replace(/\.pdf$/i, '');
+      fileName = `${suburb}-${state}-${originalName}-${timestamp}.pdf`;
+    }
 
     // Upload to Hotspotting folder
     const uploadResponse = await drive.files.create({
