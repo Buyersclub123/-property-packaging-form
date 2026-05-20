@@ -84,6 +84,15 @@ function EditPropertyForm() {
             </code>
           </p>
         </div>
+
+        <div className="mt-4 text-center">
+          <a
+            href="/admin/market-performance"
+            className="text-sm text-blue-600 hover:text-blue-800 underline"
+          >
+            Data Editor Portal
+          </a>
+        </div>
       </div>
     </div>
   );
