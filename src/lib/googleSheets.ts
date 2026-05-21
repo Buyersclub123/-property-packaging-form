@@ -548,6 +548,7 @@ export interface MarketPerformanceLogEntry {
   rentalPopulation?: string;
   vacancyRate?: string;
   notes?: string;
+  editedViaPortal?: string;
 }
 
 export async function logMarketPerformanceUpdate(
@@ -571,11 +572,12 @@ export async function logMarketPerformanceUpdate(
       entry.rentalPopulation || '', // Rental Population (only if changed)
       entry.vacancyRate || '', // Vacancy Rate (only if changed)
       entry.notes || '', // Notes
+      entry.editedViaPortal || '', // Edited via MP Portal (Y/N)
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${LOG_TAB_NAME}!A:N`, // 14 columns total (removed Date Collected columns)
+      range: `${LOG_TAB_NAME}!A:O`, // 15 columns total (added Edited via Portal column)
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: {
@@ -585,6 +587,37 @@ export async function logMarketPerformanceUpdate(
   } catch (error) {
     console.error('Error logging market performance update:', error);
     // Don't throw - logging failures shouldn't break the main flow
+  }
+}
+
+/**
+ * List all suburbs in the Market Performance sheet (for portal dropdown)
+ */
+export async function listMarketPerformanceSuburbs(): Promise<{ suburbName: string; state: string }[]> {
+  try {
+    if (!SHEET_ID) {
+      throw new Error('GOOGLE_SHEET_ID_MARKET_PERFORMANCE environment variable is not set');
+    }
+    
+    const sheets = getSheetsClient();
+    
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${TAB_NAME}!A2:B`,
+    });
+
+    const rows = response.data.values || [];
+    
+    return rows
+      .filter((row) => row[0] && row[0].trim())
+      .map((row) => ({
+        suburbName: (row[0] || '').trim(),
+        state: (row[1] || '').trim().toUpperCase(),
+      }))
+      .sort((a, b) => a.suburbName.localeCompare(b.suburbName));
+  } catch (error) {
+    console.error('Error listing market performance suburbs:', error);
+    throw error;
   }
 }
 
