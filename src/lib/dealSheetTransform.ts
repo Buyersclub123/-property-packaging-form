@@ -220,6 +220,9 @@ export function transformRecord(record: GHLRecord) {
   // Folder link
   const folderLink = p.folder_link || '';
 
+  // PDF link
+  const pdfLink = p.pdf_link || '';
+
   // Portal link (only when QA approved)
   let portalLink = '';
   if (packagerApproved.toLowerCase() === 'approved' && qaApproved.toLowerCase() === 'approved' && propertyAddress) {
@@ -263,6 +266,7 @@ export function transformRecord(record: GHLRecord) {
     closingDate,
     sortKey,
     folderLink,
+    pdfLink,
     portalLink,
   };
 }

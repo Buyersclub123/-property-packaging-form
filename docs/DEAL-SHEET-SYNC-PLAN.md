@@ -167,7 +167,7 @@ Each activity is self-contained and can be handed to a fresh agent with clear in
 
 ---
 
-### Activity 5: Client-Side Polling (Code — Agent)
+### Activity 5: Client-Side Polling (Code — Agent) ✅ DONE
 
 **Who:** Chat agent
 **Time:** ~20 mins
@@ -181,11 +181,17 @@ Each activity is self-contained and can be handed to a fresh agent with clear in
 - Update local `records` state in-place (no full re-fetch)
 - Show subtle "updated" indicator when records refresh
 
+**Implementation:**
+- `src/app/deal-sheet/page.tsx` — added `useEffect` polling `/api/deal-sheet/changes?since={ts}` every 15s
+- Changed records merged into local state via Map-based upsert
+- Green pulsing sync indicator appears in header for 4 seconds when records update
+- Interval cleaned up on unmount; polling failures are silent/non-blocking
+
 **Output:** Deal sheet auto-updates when records change in GHL
 
 ---
 
-### Activity 6: PDF Link Display (Code — Agent)
+### Activity 6: PDF Link Display (Code — Agent) ✅ DONE
 
 **Who:** Chat agent
 **Time:** ~15 mins
@@ -194,6 +200,10 @@ Each activity is self-contained and can be handed to a fresh agent with clear in
 **Files to modify:**
 1. `src/app/api/deal-sheet/route.ts` — add `pdfLink: p.pdf_link || ''` to `transformRecord()`
 2. `src/app/deal-sheet/page.tsx` — add `pdfLink` to interface, make it clickable (opens PDF in new tab)
+
+**Implementation:**
+- `src/lib/dealSheetTransform.ts` — added `pdfLink: p.pdf_link || ''` to `transformRecord()` return
+- `src/app/deal-sheet/page.tsx` — added `pdfLink` to `DealRecord` interface, `DEFAULT_COLUMNS` (45px "PDF" column), and clickable cell rendering (red "PDF" text linking to Drive URL)
 
 **Output:** PDF viewable from deal sheet when available
 
