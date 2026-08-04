@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GHLRecord, transformRecord } from '@/lib/dealSheetTransform';
+import { getRedisClient } from '@/lib/redis';
 
 const GHL_OBJECT_ID = process.env.GHL_OBJECT_ID || '692d04e3662599ed0c29edfa';
 const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -55,6 +56,17 @@ export async function GET(
     // GHL returns the record directly (not wrapped in a records array)
     const record: GHLRecord = data.record || data;
     const transformed = transformRecord(record);
+
+    // Override pdf_link from Redis if available
+    try {
+      const redis = await getRedisClient();
+      const pdfLink = await redis.get(`pdf_link:${id}`);
+      if (pdfLink) {
+        transformed.pdfLink = pdfLink;
+      }
+    } catch (redisErr) {
+      console.error('Redis pdf_link lookup failed (non-fatal):', redisErr);
+    }
 
     return NextResponse.json({ record: transformed });
   } catch (error) {

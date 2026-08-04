@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GHLRecord, GHLSearchResponse, transformRecord } from '@/lib/dealSheetTransform';
+import { getRedisClient } from '@/lib/redis';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -76,6 +77,24 @@ export async function GET(request: Request) {
         if (!includeRemoved && (row.status.startsWith('05') || row.status.startsWith('06'))) return false;
         return true;
       });
+
+    // Merge pdf_links from Redis (overrides GHL field if present)
+    try {
+      const redis = await getRedisClient();
+      const recordIds = dealSheetRows.map((r) => r.id);
+      if (recordIds.length > 0) {
+        const keys = recordIds.map((id) => `pdf_link:${id}`);
+        const values = await redis.mGet(keys);
+        for (let i = 0; i < dealSheetRows.length; i++) {
+          const val = values[i];
+          if (val) {
+            dealSheetRows[i].pdfLink = val;
+          }
+        }
+      }
+    } catch (redisErr) {
+      console.error('Redis pdf_link lookup failed (non-fatal):', redisErr);
+    }
 
     return NextResponse.json({
       records: dealSheetRows,
