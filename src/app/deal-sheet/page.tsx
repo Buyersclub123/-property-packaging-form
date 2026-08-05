@@ -220,6 +220,7 @@ export default function DealSheetPage() {
   // Saved views
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [showViewMenu, setShowViewMenu] = useState(false);
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [newViewName, setNewViewName] = useState('');
 
   // Column resize state
@@ -299,6 +300,7 @@ export default function DealSheetPage() {
         setShowExportMenu(false);
         setShowViewMenu(false);
         setShowNewMenu(false);
+        setShowColumnMenu(false);
         setExpandedCell(null);
         setOpenFilterDropdown(null);
       }
@@ -943,6 +945,59 @@ export default function DealSheetPage() {
             </div>
           )}
 
+          </div>
+
+          {/* Column toggle */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowColumnMenu(!showColumnMenu)}
+              className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600"
+            >
+              Columns
+            </button>
+            {showColumnMenu && (
+              <div className="absolute top-full right-0 mt-1 w-52 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 p-2 max-h-80 overflow-y-auto">
+                <div className="text-xs font-bold text-gray-400 mb-2">SHOW / HIDE COLUMNS</div>
+                {DEFAULT_COLUMNS.map((col) => {
+                  const isVisible = columns.some((c) => c.key === col.key);
+                  return (
+                    <label key={col.key} className="flex items-center gap-2 px-2 py-1 text-xs text-gray-300 hover:bg-gray-700 rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isVisible}
+                        onChange={() => {
+                          if (isVisible) {
+                            setColumns((prev) => prev.filter((c) => c.key !== col.key));
+                          } else {
+                            const defaultIndex = DEFAULT_COLUMNS.findIndex((c) => c.key === col.key);
+                            setColumns((prev) => {
+                              const next = [...prev];
+                              let insertAt = next.length;
+                              for (let i = defaultIndex + 1; i < DEFAULT_COLUMNS.length; i++) {
+                                const idx = next.findIndex((c) => c.key === DEFAULT_COLUMNS[i].key);
+                                if (idx !== -1) { insertAt = idx; break; }
+                              }
+                              next.splice(insertAt, 0, col);
+                              return next;
+                            });
+                          }
+                        }}
+                        className="accent-blue-500"
+                      />
+                      {col.label}
+                    </label>
+                  );
+                })}
+                <div className="border-t border-gray-600 mt-2 pt-2">
+                  <button
+                    onClick={() => { setColumns([...DEFAULT_COLUMNS]); }}
+                    className="block w-full text-left px-2 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded"
+                  >
+                    Show All
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* New records button with time window dropdown */}
