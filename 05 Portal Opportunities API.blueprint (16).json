@@ -1,0 +1,2231 @@
+{
+    "name": "05 Portal Opportunities API",
+    "flow": [
+        {
+            "id": 8,
+            "module": "gateway:CustomWebHook",
+            "version": 1,
+            "parameters": {
+                "hook": 2405118,
+                "maxResults": 1
+            },
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0
+                },
+                "restore": {
+                    "parameters": {
+                        "hook": {
+                            "data": {
+                                "editable": "true"
+                            },
+                            "label": "Portal Opportunities Webhoo"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "hook",
+                        "type": "hook:gateway-webhook",
+                        "label": "Webhook",
+                        "required": true
+                    },
+                    {
+                        "name": "maxResults",
+                        "type": "number",
+                        "label": "Maximum number of results"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 9,
+            "module": "highlevel:listOpportunities",
+            "version": 1,
+            "parameters": {
+                "__IMTCONN__": 4036862
+            },
+            "mapper": {
+                "limit": "200",
+                "pipeline": "zrb34FRmPnbIyAGFDeXJ"
+            },
+            "metadata": {
+                "designer": {
+                    "x": 300,
+                    "y": 0
+                },
+                "restore": {
+                    "expect": {
+                        "pipeline": {
+                            "mode": "chose",
+                            "label": "04. PROPERTY TEAM Pipeline"
+                        }
+                    },
+                    "parameters": {
+                        "__IMTCONN__": {
+                            "data": {
+                                "scoped": "true",
+                                "connection": "highlevel3"
+                            },
+                            "label": "My GoHighlevel Location OAuth 2.0 connection (Location: Buyers Club)"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "__IMTCONN__",
+                        "type": "account:highlevel,highlevel3",
+                        "label": "Connection",
+                        "required": true
+                    }
+                ],
+                "expect": [
+                    {
+                        "name": "pipeline",
+                        "type": "select",
+                        "label": "Pipeline ID"
+                    },
+                    {
+                        "name": "limit",
+                        "type": "uinteger",
+                        "label": "Limit"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 10,
+            "module": "highlevel:getAnOpportunity",
+            "version": 1,
+            "parameters": {
+                "__IMTCONN__": 4036862
+            },
+            "filter": {
+                "name": "Match Stage IDs",
+                "conditions": [
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "5178d032-35d5-4b8e-8694-48a1afb0145a",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "25e97d2a-5001-4107-9764-4d39bf1ead00",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "45c37207-8210-4e9d-b943-7eb5bf17c75a",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "cef16f11-457a-4192-9ba2-c7a9f88b68d3",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "edd71d3e-11f5-4de5-8546-21b0595be9cd",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "1ab3d6d1-e7cb-44c2-89ae-c32c663a4c92",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "3dbb7880-05d1-4430-9c5f-f0bb97ac0c81",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "c050aa00-cf8a-44fe-be16-d0dc3069dd3b",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "02656e9e-d8eb-4267-a3fc-8fe91a8b9cc7",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "f66556a2-08bc-4731-a5f1-161838e85487",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "09e08409-928f-4a37-89a0-9b8b20fb58dc",
+                            "o": "text:equal"
+                        }
+                    ],
+                    [
+                        {
+                            "a": "{{9.pipelineStageId}}",
+                            "b": "5aaeb8c3-4680-438f-b545-21e5b9e92582",
+                            "o": "text:equal"
+                        }
+                    ]
+                ]
+            },
+            "mapper": {
+                "opportunity": "{{9.id}}"
+            },
+            "metadata": {
+                "designer": {
+                    "x": 600,
+                    "y": 0
+                },
+                "restore": {
+                    "expect": {
+                        "opportunity": {
+                            "mode": "edit"
+                        }
+                    },
+                    "parameters": {
+                        "__IMTCONN__": {
+                            "data": {
+                                "scoped": "true",
+                                "connection": "highlevel3"
+                            },
+                            "label": "My GoHighlevel Location OAuth 2.0 connection (Location: Buyers Club)"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "__IMTCONN__",
+                        "type": "account:highlevel,highlevel3",
+                        "label": "Connection",
+                        "required": true
+                    }
+                ],
+                "expect": [
+                    {
+                        "name": "opportunity",
+                        "type": "select",
+                        "label": "Opportunity ID",
+                        "required": true
+                    }
+                ],
+                "interface": [
+                    {
+                        "name": "id",
+                        "type": "text",
+                        "label": "Opportunity ID"
+                    },
+                    {
+                        "name": "name",
+                        "type": "text",
+                        "label": "Name"
+                    },
+                    {
+                        "name": "monetaryValue",
+                        "type": "number",
+                        "label": "Monetary Value"
+                    },
+                    {
+                        "name": "pipelineId",
+                        "type": "text",
+                        "label": "Pipeline ID"
+                    },
+                    {
+                        "name": "pipelineStageId",
+                        "type": "text",
+                        "label": "Pipeline Stage ID"
+                    },
+                    {
+                        "name": "pipelineStageUId",
+                        "type": "text",
+                        "label": "Pipeline Stage UId"
+                    },
+                    {
+                        "name": "assignedTo",
+                        "type": "text",
+                        "label": "Assigned To"
+                    },
+                    {
+                        "name": "status",
+                        "type": "text",
+                        "label": "Status"
+                    },
+                    {
+                        "name": "source",
+                        "type": "text",
+                        "label": "Source"
+                    },
+                    {
+                        "name": "lastStatusChangeAt",
+                        "type": "date",
+                        "label": "Last Status Change At"
+                    },
+                    {
+                        "name": "createdAt",
+                        "type": "date",
+                        "label": "Created At"
+                    },
+                    {
+                        "name": "updatedAt",
+                        "type": "date",
+                        "label": "Updated At"
+                    },
+                    {
+                        "name": "contact",
+                        "spec": [
+                            {
+                                "name": "id",
+                                "type": "text",
+                                "label": "ID"
+                            },
+                            {
+                                "name": "name",
+                                "type": "text",
+                                "label": "Name"
+                            },
+                            {
+                                "name": "companyName",
+                                "type": "text",
+                                "label": "Company Name"
+                            },
+                            {
+                                "name": "email",
+                                "type": "text",
+                                "label": "Email"
+                            },
+                            {
+                                "name": "phone",
+                                "type": "text",
+                                "label": "Phone"
+                            },
+                            {
+                                "name": "tags",
+                                "spec": {
+                                    "type": "text"
+                                },
+                                "type": "array",
+                                "label": "Tags"
+                            },
+                            {
+                                "name": "followers",
+                                "spec": {
+                                    "type": "text"
+                                },
+                                "type": "array",
+                                "label": "Followers"
+                            }
+                        ],
+                        "type": "collection",
+                        "label": "Contact"
+                    },
+                    {
+                        "name": "contactId",
+                        "type": "text",
+                        "label": "Contact ID"
+                    },
+                    {
+                        "name": "lastStageChangeAt",
+                        "type": "date",
+                        "label": "Last Stage Change At"
+                    },
+                    {
+                        "name": "lastActionDate",
+                        "type": "date",
+                        "label": "Last Action Date"
+                    },
+                    {
+                        "name": "indexVersion",
+                        "type": "number",
+                        "label": "Index Version"
+                    },
+                    {
+                        "name": "notes",
+                        "spec": {
+                            "type": "text"
+                        },
+                        "type": "array",
+                        "label": "Notes"
+                    },
+                    {
+                        "name": "tasks",
+                        "spec": {
+                            "type": "text"
+                        },
+                        "type": "array",
+                        "label": "Tasks"
+                    },
+                    {
+                        "name": "calendarEvents",
+                        "spec": {
+                            "type": "text"
+                        },
+                        "type": "array",
+                        "label": "Calendar Events"
+                    },
+                    {
+                        "name": "customFields",
+                        "spec": {
+                            "spec": [
+                                {
+                                    "name": "id",
+                                    "type": "text"
+                                },
+                                {
+                                    "name": "fieldValue",
+                                    "type": "text"
+                                }
+                            ],
+                            "type": "collection"
+                        },
+                        "type": "array",
+                        "label": "Custom Fields"
+                    },
+                    {
+                        "name": "followers",
+                        "spec": {
+                            "type": "array"
+                        },
+                        "type": "array",
+                        "label": "Followers"
+                    },
+                    {
+                        "name": "locationId",
+                        "type": "text",
+                        "label": "Location ID"
+                    },
+                    {
+                        "name": "isAttribute",
+                        "type": "boolean",
+                        "label": "Is Attribute"
+                    },
+                    {
+                        "name": "internalSource",
+                        "spec": [
+                            {
+                                "name": "apiVersion",
+                                "type": "date",
+                                "label": "Api Version"
+                            },
+                            {
+                                "name": "channel",
+                                "type": "text",
+                                "label": "Channel"
+                            },
+                            {
+                                "name": "id",
+                                "type": "text",
+                                "label": "ID"
+                            },
+                            {
+                                "name": "source",
+                                "type": "text",
+                                "label": "Source"
+                            },
+                            {
+                                "name": "type",
+                                "type": "text",
+                                "label": "Type"
+                            }
+                        ],
+                        "type": "collection",
+                        "label": "Internal Source"
+                    },
+                    {
+                        "name": "customField",
+                        "spec": [
+                            {
+                                "name": "0Uaewh58DjFL2Vm5u7PQ",
+                                "type": "date",
+                                "label": "Date signed up"
+                            },
+                            {
+                                "name": "0cQWiQ6frYV4KogjCPI6",
+                                "type": "text",
+                                "label": "Fee Structure Full",
+                                "multiline": true
+                            },
+                            {
+                                "name": "2aqKEo0QNVcfFO9CjMhD",
+                                "type": "text",
+                                "label": "Purchase Date"
+                            },
+                            {
+                                "name": "3YsATTuyAn1QMkeqjm7U",
+                                "type": "text",
+                                "label": "Pipedrive - Deal Created"
+                            },
+                            {
+                                "name": "3skfeLt5V5P1snBE1xdz",
+                                "type": "text",
+                                "label": "Purchase Information",
+                                "multiline": true
+                            },
+                            {
+                                "name": "4HzYrWHv2pG7SAordLBn",
+                                "type": "text",
+                                "label": "CC- Meeting Type"
+                            },
+                            {
+                                "name": "4WY1Bnwdiul4sAJYStgc",
+                                "type": "text",
+                                "label": "Pipedrive - Pipeline"
+                            },
+                            {
+                                "name": "5MeAFf0G7MwIuYKdPA7L",
+                                "type": "text",
+                                "label": "Preferred Name"
+                            },
+                            {
+                                "name": "5qXOC7NzFD0Kbu2s81lO",
+                                "type": "text",
+                                "label": "Extra Funds Available"
+                            },
+                            {
+                                "name": "5rgUZN6RJ0jC90eiH7ie",
+                                "type": "text",
+                                "label": "Agent/Builder Details",
+                                "multiline": true
+                            },
+                            {
+                                "name": "6PpImppa1Fo0KmV4XMB3",
+                                "type": "text",
+                                "label": "Finance Notes",
+                                "multiline": true
+                            },
+                            {
+                                "name": "6Q2CB40Cqz1a9ZLE4eLo",
+                                "type": "text",
+                                "label": "CC - Reason for Lost Deal"
+                            },
+                            {
+                                "name": "74CCXln5g0SRqjoaTFIw",
+                                "type": "text",
+                                "label": "To Better Support Your Property Investment Journey, Please Select The Key Area Where You Need Help. Our Expertise Includes:"
+                            },
+                            {
+                                "name": "7FapLQx05hz4oRbopClY",
+                                "type": "text",
+                                "label": "Update"
+                            },
+                            {
+                                "name": "7K332cn6Z3MHFcZeXQVy",
+                                "type": "text",
+                                "label": "Value"
+                            },
+                            {
+                                "name": "7gf8wPxFTpF3S1RQ4ahS",
+                                "type": "text",
+                                "label": "SBX P Tag 2"
+                            },
+                            {
+                                "name": "7uiohiqscNxUqcWtSqZD",
+                                "type": "number",
+                                "label": "Formal Loan Amount "
+                            },
+                            {
+                                "name": "80Pulu9pcLddehLTDbux",
+                                "type": "text",
+                                "label": "Pipeline Stage"
+                            },
+                            {
+                                "name": "A0k1s96skC3NPTt3p1bK",
+                                "type": "text",
+                                "label": "Price"
+                            },
+                            {
+                                "name": "ApYJjn9LEbz0sVxx42xM",
+                                "type": "text",
+                                "label": "Deposit Source"
+                            },
+                            {
+                                "name": "B92pd5TaDX5F5fs5Cmnj",
+                                "type": "text",
+                                "label": "What is Your Current Savings + Equity Available?"
+                            },
+                            {
+                                "name": "C9unVQfayhPT6mLX2rII",
+                                "type": "text",
+                                "label": "Funds available ",
+                                "multiline": true
+                            },
+                            {
+                                "name": "EbDMmXJTBxkkWFBDChy5",
+                                "type": "text",
+                                "label": "TRUST Name"
+                            },
+                            {
+                                "name": "EtZulUclcrg2Cjjjtl2n",
+                                "type": "text",
+                                "label": "CC Member"
+                            },
+                            {
+                                "name": "EyYryA0yuE5qp3yTM8Ob",
+                                "type": "array",
+                                "label": "Property Type Selection"
+                            },
+                            {
+                                "name": "GEi5BUkMOpcSjSliKvcg",
+                                "type": "array",
+                                "label": "Entity Type"
+                            },
+                            {
+                                "name": "HDwoH4y1hFNkZH8Eibfw",
+                                "type": "text",
+                                "label": "Pipedrive - Pipeline Stage"
+                            },
+                            {
+                                "name": "InfKrSEr0AD6U30Jq4lM",
+                                "type": "text",
+                                "label": "Client Onboarding Date"
+                            },
+                            {
+                                "name": "Iu9MR3V97SPd2rK5w5T5",
+                                "type": "text",
+                                "label": "Pipedrive - Deal Owner"
+                            },
+                            {
+                                "name": "K1cNtbHHWNo5Ts4oQnPH",
+                                "type": "text",
+                                "label": "Registeration Date"
+                            },
+                            {
+                                "name": "KPUQ0d2r9EhnFZHEAAno",
+                                "type": "text",
+                                "label": "Mood"
+                            },
+                            {
+                                "name": "KpxtSsE1JT2Hgo8gSkvF",
+                                "type": "text",
+                                "label": "Partner Address"
+                            },
+                            {
+                                "name": "LCDD2XNIgTjhPTcPnWl7",
+                                "type": "text",
+                                "label": "Create EOI Form"
+                            },
+                            {
+                                "name": "MCJtJMyRDf3WrMf6K3Ux",
+                                "type": "text",
+                                "label": "Consulting Agreement"
+                            },
+                            {
+                                "name": "Mka8oMdTJcb2VvJP2Cpn",
+                                "type": "array",
+                                "label": "Depreciation schedule"
+                            },
+                            {
+                                "name": "NXqFwEzo28k6lOkbyT5N",
+                                "type": "text",
+                                "label": "Assigned BA"
+                            },
+                            {
+                                "name": "NuszrwLLrpT3dpNgbcwP",
+                                "type": "text",
+                                "label": "SBX P Tag 3"
+                            },
+                            {
+                                "name": "OrLRZdrUri5A11hOoACZ",
+                                "type": "number",
+                                "label": "Lead age"
+                            },
+                            {
+                                "name": "PSVpklPBJDISVjjAdjE7",
+                                "type": "text",
+                                "label": "Followers"
+                            },
+                            {
+                                "name": "PeP9w9etMhLUzSD04HTw",
+                                "type": "text",
+                                "label": "Type of Property (Auto)"
+                            },
+                            {
+                                "name": "PlNx1851lV5PSAotT4FT",
+                                "type": "text",
+                                "label": "Registered Address",
+                                "multiline": true
+                            },
+                            {
+                                "name": "Q1711sa1k5aAHsbnNFhz",
+                                "type": "text",
+                                "label": "Opportunity Source"
+                            },
+                            {
+                                "name": "QBUOItYFZxWM45oiiH6l",
+                                "type": "text",
+                                "label": "What State Are You Located In?"
+                            },
+                            {
+                                "name": "QOoYpW6A8G1Jk8xWs7h1",
+                                "type": "text",
+                                "label": "Solicitor Name",
+                                "multiline": true
+                            },
+                            {
+                                "name": "SQwuifVkGaYglkBUGseP",
+                                "type": "text",
+                                "label": "Property Manager"
+                            },
+                            {
+                                "name": "TBoDiq7bvj3R4GzmseZU",
+                                "type": "text",
+                                "label": "Pipedrive - Deal Email Count"
+                            },
+                            {
+                                "name": "TMp0nk4hFIHhi6y9en6d",
+                                "type": "array",
+                                "label": "CC- Reason for not booking into Presentation"
+                            },
+                            {
+                                "name": "TNvzBboSKQizt9wNSqus",
+                                "type": "text",
+                                "label": "Accountant Name"
+                            },
+                            {
+                                "name": "TPRxcKeLzPdpdc4gkLE1",
+                                "type": "text",
+                                "label": "Create Consulting Agreement"
+                            },
+                            {
+                                "name": "TouR3nblp67iCuwnCpVv",
+                                "type": "text",
+                                "label": "Appointment Status"
+                            },
+                            {
+                                "name": "Tr8IJ0dACCBTdUaGHWLx",
+                                "spec": [
+                                    {
+                                        "name": "28bc0a56-9749-4375-918e-ef95c0ddac71",
+                                        "type": "text",
+                                        "label": "SMSF "
+                                    },
+                                    {
+                                        "name": "7af016d5-50d9-4815-8c13-ea4f85ff90f0",
+                                        "type": "text",
+                                        "label": "PERS"
+                                    }
+                                ],
+                                "type": "collection",
+                                "label": "Trust Entity Name ",
+                                "metadata": {
+                                    "textboxList": true
+                                }
+                            },
+                            {
+                                "name": "UgtJu3I87HQLVdt918BZ",
+                                "type": "text",
+                                "label": "Property Manager Details ",
+                                "multiline": true
+                            },
+                            {
+                                "name": "V62a5vivXnAKQ4pwKajt",
+                                "type": "text",
+                                "label": "Property Entity Type"
+                            },
+                            {
+                                "name": "VBQfmOaYOGj4JwiiRWGh",
+                                "type": "number",
+                                "label": "Rent Per Week "
+                            },
+                            {
+                                "name": "VKv00dMYPpRBmoMoxU4G",
+                                "type": "text",
+                                "label": "Type of Property - List"
+                            },
+                            {
+                                "name": "Wga9uuqSh3z9y3wbWKEm",
+                                "type": "text",
+                                "label": "Trust Entity Type"
+                            },
+                            {
+                                "name": "WufYszUrjyOT5RiJoUH4",
+                                "type": "array",
+                                "label": "KPI Selection"
+                            },
+                            {
+                                "name": "YGGKViIjzZM2rUHIQWQz",
+                                "type": "text",
+                                "label": "Pipedrive - Deal ID"
+                            },
+                            {
+                                "name": "YHNGye1GqmuDQsaSfWDh",
+                                "type": "text",
+                                "label": "Person Source"
+                            },
+                            {
+                                "name": "YlibNITZMTN5lvdNJhyc",
+                                "type": "number",
+                                "label": "Purchase price "
+                            },
+                            {
+                                "name": "ZL5nvIr4c8sznqZ298Hc",
+                                "type": "text",
+                                "label": "Sale Type"
+                            },
+                            {
+                                "name": "ZXp0hdXlOPECPzzRIzkd",
+                                "type": "array",
+                                "label": "Insurance "
+                            },
+                            {
+                                "name": "Zc4Taq8cn1yViTw3bt8H",
+                                "type": "text",
+                                "label": "Pipedrive - Deal Linked Contact Person"
+                            },
+                            {
+                                "name": "ZgeaZcW5QjtqqX63Jt1s",
+                                "type": "text",
+                                "label": "Entity"
+                            },
+                            {
+                                "name": "a2wkES9YeAl5Aas9xIO8",
+                                "type": "array",
+                                "label": "Property Location Selection"
+                            },
+                            {
+                                "name": "au8bFMQMUPStn89D6cKx",
+                                "type": "text",
+                                "label": "Client Detalis"
+                            },
+                            {
+                                "name": "b4XmO5lyiItGcipyHZeK",
+                                "type": "text",
+                                "label": "Special Conditions - Brieft",
+                                "multiline": true
+                            },
+                            {
+                                "name": "b8YrDWDbOKPzXrLgiRTi",
+                                "type": "text",
+                                "label": "Max Purchase Price"
+                            },
+                            {
+                                "name": "bDa3PIK7nkSPcNSDzxZI",
+                                "type": "text",
+                                "label": "Client Source"
+                            },
+                            {
+                                "name": "bQ7bndudaNLmlLkYeDpG",
+                                "type": "text",
+                                "label": "Solicitor Company"
+                            },
+                            {
+                                "name": "bV6k9SaZ1UJpOuALO1xY",
+                                "type": "text",
+                                "label": "Broker Company"
+                            },
+                            {
+                                "name": "bZn8W90nXvcKhguDE0Pv",
+                                "type": "array",
+                                "label": "Property Location Dropdown"
+                            },
+                            {
+                                "name": "d0iUirsqy4kdUVMpHLfD",
+                                "type": "text",
+                                "label": "Partner Email"
+                            },
+                            {
+                                "name": "dA8HfSC9lrNbTOEMeakI",
+                                "type": "text",
+                                "label": "Loan"
+                            },
+                            {
+                                "name": "dqkjf9sWGmMMGHkRYhx0",
+                                "type": "text",
+                                "label": "How Familiar Are You With Investing In Real Estate?"
+                            },
+                            {
+                                "name": "eJLct739hxbwrkrdtfca",
+                                "type": "number",
+                                "label": "Total Purchase Price"
+                            },
+                            {
+                                "name": "ei3J0z2Meclm0iEW8pRU",
+                                "type": "text",
+                                "label": "Property Address"
+                            },
+                            {
+                                "name": "eq4QfKuI5201IPAFlSzq",
+                                "type": "text",
+                                "label": "Accountant Email"
+                            },
+                            {
+                                "name": "ff8fVDpZc9gwDH9nJdTR",
+                                "type": "text",
+                                "label": "Solicitor Phone"
+                            },
+                            {
+                                "name": "ffoovkLD5oZVMMPNzf8u",
+                                "type": "text",
+                                "label": "How Do You Plan To Purchase Your Property?"
+                            },
+                            {
+                                "name": "fqfRmDMeRq4G3mQdwM6t",
+                                "type": "text",
+                                "label": "SMS DND Status"
+                            },
+                            {
+                                "name": "fr5S8FvqtZi3Pixo7fSY",
+                                "type": "text",
+                                "label": "Solicitor Email"
+                            },
+                            {
+                                "name": "g3hL714UQnNi7Jgn4vXA",
+                                "type": "text",
+                                "label": "Buyer Brief Form Creation"
+                            },
+                            {
+                                "name": "gjmnmpztiiuD0IM5RfC9",
+                                "type": "array",
+                                "label": "Property Type Selection Dropdown"
+                            },
+                            {
+                                "name": "gpStrUSjZVHE4xyolRvH",
+                                "type": "text",
+                                "label": "Partner Phone"
+                            },
+                            {
+                                "name": "hSW5hSoB1mZyHsnk2o6n",
+                                "type": "text",
+                                "label": "Broker Mobile"
+                            },
+                            {
+                                "name": "hbdhoIEbPlPR0Q3AyWPj",
+                                "type": "text",
+                                "label": "How Can We Best Help You?"
+                            },
+                            {
+                                "name": "iRgTmkWKtmj0QmNhzaAf",
+                                "type": "text",
+                                "label": "Brief notes",
+                                "multiline": true
+                            },
+                            {
+                                "name": "insFd9vDswfRMD6XksQx",
+                                "type": "text",
+                                "label": "My Enquiries Relates to"
+                            },
+                            {
+                                "name": "j0jDstZDmENWByU82fqR",
+                                "type": "text",
+                                "label": "Consultant"
+                            },
+                            {
+                                "name": "jY0D9emvA78Tr7TsKMB3",
+                                "type": "text",
+                                "label": "Postal Address",
+                                "multiline": true
+                            },
+                            {
+                                "name": "k4qOVFWfWOKZPw1mLoRJ",
+                                "type": "text",
+                                "label": "SBX P Tag 1"
+                            },
+                            {
+                                "name": "lVMFePVASFQEJFzJ72LV",
+                                "type": "array",
+                                "label": "KPI Selection Dropdown"
+                            },
+                            {
+                                "name": "lWfSyDNYwWalhkMcHyAQ",
+                                "type": "text",
+                                "label": "Settlement date "
+                            },
+                            {
+                                "name": "lX2e29gQ1iFuQ0DksM5W",
+                                "type": "text",
+                                "label": "Broker Name"
+                            },
+                            {
+                                "name": "lZW1wpqlrecYq7ZlLpf4",
+                                "type": "text",
+                                "label": "Campaign Source"
+                            },
+                            {
+                                "name": "lb2NCnviFLlPQgVlxkkp",
+                                "type": "text",
+                                "label": "Rental Amount"
+                            },
+                            {
+                                "name": "lgJynBaQMZemkipfEViz",
+                                "type": "text",
+                                "label": "How Soon Are You Looking To Invest?"
+                            },
+                            {
+                                "name": "ljswUFpPhVTCEU2UrI96",
+                                "type": "text",
+                                "label": "Balance of fee",
+                                "multiline": true
+                            },
+                            {
+                                "name": "lrTkHTwupZIAAFnq4Bv7",
+                                "type": "text",
+                                "label": "Fee Structure"
+                            },
+                            {
+                                "name": "n9xrznext1KfbPheR2fH",
+                                "type": "array",
+                                "label": "CC- Reason for Presentation Call not going ahead"
+                            },
+                            {
+                                "name": "nBqYSK34WosWmF8vb4tg",
+                                "type": "text",
+                                "label": "Last Portfolio Review Details"
+                            },
+                            {
+                                "name": "nF8IwljxXfmnb6noOKI1",
+                                "type": "text",
+                                "label": "Handover Date "
+                            },
+                            {
+                                "name": "nLp13NWG8JNirtwLLvdx",
+                                "type": "number",
+                                "label": "Total Fee"
+                            },
+                            {
+                                "name": "p1IK7Zi8w1q2tLBwTrIE",
+                                "type": "text",
+                                "label": "Type of Property"
+                            },
+                            {
+                                "name": "pl9pUdSc00bF4JeUdCgf",
+                                "type": "text",
+                                "label": "Accountant Mobile"
+                            },
+                            {
+                                "name": "puGMV3MWyU13n4sBLHDj",
+                                "type": "text",
+                                "label": "Broker Email"
+                            },
+                            {
+                                "name": "r6FCoCoWAsoFsZYo8Km3",
+                                "type": "text",
+                                "label": "Client Information",
+                                "multiline": true
+                            },
+                            {
+                                "name": "sdFwARYMzQjJo5dRNs3D",
+                                "type": "number",
+                                "label": "Loan Amount"
+                            },
+                            {
+                                "name": "trxorFuw4WPqKZT8f78U",
+                                "type": "text",
+                                "label": "Accountant Company"
+                            },
+                            {
+                                "name": "v8C1es1253EvfHQR4NfC",
+                                "type": "text",
+                                "label": "What Is Your Combined Household Income?"
+                            },
+                            {
+                                "name": "wVp16iLPa3gd5p0Ib99w",
+                                "type": "text",
+                                "label": "Pipedrive - Deal Title"
+                            },
+                            {
+                                "name": "wWJMsF5GadaOEEVuPsGP",
+                                "type": "text",
+                                "label": "SMSF Name"
+                            },
+                            {
+                                "name": "wczPvNIbg3JKBL5Wdyh8",
+                                "type": "text",
+                                "label": "Pipedrive - Deal Linked Contact Person ID"
+                            },
+                            {
+                                "name": "wsnXOFf7F4z3TDQEFsCw",
+                                "type": "text",
+                                "label": "PERSONAL Name"
+                            },
+                            {
+                                "name": "xFKbtz7Lt1X2nNTeFSSH",
+                                "type": "text",
+                                "label": "Partner Name"
+                            }
+                        ],
+                        "type": "collection",
+                        "label": "Custom Fields"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 11,
+            "module": "highlevel:getAContact",
+            "version": 1,
+            "parameters": {
+                "__IMTCONN__": 4036862
+            },
+            "mapper": {
+                "contact": "{{9.contactId}}"
+            },
+            "metadata": {
+                "designer": {
+                    "x": 900,
+                    "y": 0
+                },
+                "restore": {
+                    "expect": {
+                        "contact": {
+                            "mode": "edit"
+                        }
+                    },
+                    "parameters": {
+                        "__IMTCONN__": {
+                            "data": {
+                                "scoped": "true",
+                                "connection": "highlevel3"
+                            },
+                            "label": "My GoHighlevel Location OAuth 2.0 connection (Location: Buyers Club)"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "__IMTCONN__",
+                        "type": "account:highlevel,highlevel3",
+                        "label": "Connection",
+                        "required": true
+                    }
+                ],
+                "expect": [
+                    {
+                        "mode": "edit",
+                        "name": "contact",
+                        "type": "select",
+                        "label": "Contact ID",
+                        "required": true
+                    }
+                ],
+                "interface": [
+                    {
+                        "name": "id",
+                        "type": "text",
+                        "label": "Contact ID"
+                    },
+                    {
+                        "name": "locationId",
+                        "type": "text",
+                        "label": "Location ID"
+                    },
+                    {
+                        "name": "dateOfBirth",
+                        "type": "date",
+                        "label": "Date Of Birth"
+                    },
+                    {
+                        "name": "email",
+                        "type": "text",
+                        "label": "Email"
+                    },
+                    {
+                        "name": "birthMonth",
+                        "type": "number",
+                        "label": "Birth Month"
+                    },
+                    {
+                        "name": "firstName",
+                        "type": "text",
+                        "label": "First Name"
+                    },
+                    {
+                        "name": "fullNameLowerCase",
+                        "type": "text",
+                        "label": "Full Name Lower Case"
+                    },
+                    {
+                        "name": "firstNameLowerCase",
+                        "type": "text",
+                        "label": "First Name Lower Case"
+                    },
+                    {
+                        "name": "state",
+                        "type": "text",
+                        "label": "State"
+                    },
+                    {
+                        "name": "timezone",
+                        "type": "text",
+                        "label": "Timezone"
+                    },
+                    {
+                        "name": "country",
+                        "type": "text",
+                        "label": "Country"
+                    },
+                    {
+                        "name": "lastName",
+                        "type": "text",
+                        "label": "Last Name"
+                    },
+                    {
+                        "name": "emailLowerCase",
+                        "type": "text",
+                        "label": "Email Lower Case"
+                    },
+                    {
+                        "name": "postalCode",
+                        "type": "text",
+                        "label": "Postal Code"
+                    },
+                    {
+                        "name": "city",
+                        "type": "text",
+                        "label": "City"
+                    },
+                    {
+                        "name": "lastNameLowerCase",
+                        "type": "text",
+                        "label": "Last Name Lower Case"
+                    },
+                    {
+                        "name": "birthDay",
+                        "type": "number",
+                        "label": "Birth Day"
+                    },
+                    {
+                        "name": "address1",
+                        "type": "text",
+                        "label": "Address 1"
+                    },
+                    {
+                        "name": "companyName",
+                        "type": "text",
+                        "label": "Company Name"
+                    },
+                    {
+                        "name": "website",
+                        "type": "text",
+                        "label": "Website"
+                    },
+                    {
+                        "name": "phone",
+                        "type": "text",
+                        "label": "Phone"
+                    },
+                    {
+                        "name": "dndDate",
+                        "spec": [
+                            {
+                                "name": "_seconds",
+                                "type": "number",
+                                "label": " Seconds"
+                            },
+                            {
+                                "name": "_nanoseconds",
+                                "type": "number",
+                                "label": " Nanoseconds"
+                            }
+                        ],
+                        "type": "collection",
+                        "label": "Dnd Date"
+                    },
+                    {
+                        "name": "conversations",
+                        "spec": {
+                            "spec": [
+                                {
+                                    "name": "id",
+                                    "type": "text",
+                                    "label": "ID"
+                                }
+                            ],
+                            "type": "collection"
+                        },
+                        "type": "array",
+                        "label": "Conversations"
+                    },
+                    {
+                        "name": "tags",
+                        "spec": {
+                            "type": "text"
+                        },
+                        "type": "array",
+                        "label": "Tags"
+                    },
+                    {
+                        "name": "dateUpdated",
+                        "type": "date",
+                        "label": "Date Updated"
+                    },
+                    {
+                        "name": "source",
+                        "type": "text",
+                        "label": "Source"
+                    },
+                    {
+                        "name": "type",
+                        "type": "text",
+                        "label": "Type"
+                    },
+                    {
+                        "name": "dnd",
+                        "type": "boolean",
+                        "label": "Dnd"
+                    },
+                    {
+                        "name": "dndSettings",
+                        "spec": [
+                            {
+                                "name": "Call",
+                                "spec": [
+                                    {
+                                        "name": "status",
+                                        "type": "text",
+                                        "label": "Status"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "Email",
+                                "spec": [
+                                    {
+                                        "name": "status",
+                                        "type": "text",
+                                        "label": "Status"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "SMS",
+                                "spec": [
+                                    {
+                                        "name": "status",
+                                        "type": "text",
+                                        "label": "Status"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "FB",
+                                "spec": [
+                                    {
+                                        "name": "status",
+                                        "type": "text",
+                                        "label": "Status"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "GMB",
+                                "spec": [
+                                    {
+                                        "name": "status",
+                                        "type": "text",
+                                        "label": "Status"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "WhatsApp",
+                                "spec": [
+                                    {
+                                        "name": "status",
+                                        "type": "text",
+                                        "label": "Status"
+                                    }
+                                ],
+                                "type": "collection"
+                            }
+                        ],
+                        "type": "collection",
+                        "label": "Dnd Settings"
+                    },
+                    {
+                        "name": "createdBy",
+                        "spec": [
+                            {
+                                "name": "sourceId",
+                                "type": "text",
+                                "label": "Source ID"
+                            },
+                            {
+                                "name": "channel",
+                                "type": "text",
+                                "label": "Channel"
+                            },
+                            {
+                                "name": "source",
+                                "type": "text",
+                                "label": "Source"
+                            },
+                            {
+                                "name": "timestamp",
+                                "type": "date",
+                                "label": "Timestamp"
+                            }
+                        ],
+                        "type": "collection",
+                        "label": "Created By"
+                    },
+                    {
+                        "name": "dateAdded",
+                        "type": "date",
+                        "label": "Date Added"
+                    },
+                    {
+                        "name": "additionalEmails",
+                        "type": "array",
+                        "label": "Additional Emails"
+                    },
+                    {
+                        "name": "customField",
+                        "spec": [
+                            {
+                                "name": "0wtTahe3j9X5pon8saSj",
+                                "type": "text",
+                                "label": "LF: How Do You Plan To Purchase Your Property?"
+                            },
+                            {
+                                "name": "197u7x0tuVt6fZRtdR14",
+                                "type": "text",
+                                "label": "What did you enjoy most about working with our agency?",
+                                "multiline": true
+                            },
+                            {
+                                "name": "1QGKIhR8jH1rDPGEUw4R",
+                                "type": "text",
+                                "label": "Pipedrive - How Soon Are You Looking To Invest?"
+                            },
+                            {
+                                "name": "2DJlgIaerrveJMAmCx6s",
+                                "type": "text",
+                                "label": "Was the buying/selling process explained to you clearly?"
+                            },
+                            {
+                                "name": "2vB27RY4bSn0vjOx70bJ",
+                                "type": "text",
+                                "label": "Pipedrive - SMS DND Status"
+                            },
+                            {
+                                "name": "55ER22e8ms5tmRse0ibi",
+                                "type": "text",
+                                "label": "Project Description",
+                                "multiline": true
+                            },
+                            {
+                                "name": "6ZI98JPowSw1tkipTnYb",
+                                "spec": [
+                                    {
+                                        "name": "url",
+                                        "type": "text",
+                                        "label": "URL"
+                                    },
+                                    {
+                                        "name": "meta",
+                                        "spec": [
+                                            {
+                                                "name": "name",
+                                                "type": "text",
+                                                "label": "Name"
+                                            },
+                                            {
+                                                "name": "originalname",
+                                                "type": "text",
+                                                "label": "Original name"
+                                            },
+                                            {
+                                                "name": "encoding",
+                                                "type": "text",
+                                                "label": "Encoding"
+                                            },
+                                            {
+                                                "name": "size",
+                                                "type": "number",
+                                                "label": "Size"
+                                            },
+                                            {
+                                                "name": "mimetype",
+                                                "type": "text",
+                                                "label": "Mime Type"
+                                            },
+                                            {
+                                                "name": "fieldname",
+                                                "type": "text",
+                                                "label": "Field Name"
+                                            },
+                                            {
+                                                "name": "uuid",
+                                                "type": "text",
+                                                "label": "UUID"
+                                            }
+                                        ],
+                                        "type": "collection",
+                                        "label": "Meta"
+                                    },
+                                    {
+                                        "name": "deleted",
+                                        "type": "boolean",
+                                        "label": "Deleted"
+                                    }
+                                ],
+                                "type": "array",
+                                "label": "File Upload",
+                                "metadata": {
+                                    "file": true
+                                }
+                            },
+                            {
+                                "name": "71Su06kx1sqzRL32vr70",
+                                "type": "text",
+                                "label": "LF: To Better Support Your Property Investment Journey, Please Select The Key Area Where You Need Help. Our Expertise Includes:"
+                            },
+                            {
+                                "name": "76etxDMbt0C0lrcDxzvt",
+                                "type": "text",
+                                "label": "Single Dropdown 25rc0"
+                            },
+                            {
+                                "name": "7b1emWX4qIMVeDl03Wpc",
+                                "type": "text",
+                                "label": "Pipedrive - Which state are you located in?"
+                            },
+                            {
+                                "name": "7ga7woCKVt5yYN84n1tz",
+                                "type": "text",
+                                "label": "Name Tracker"
+                            },
+                            {
+                                "name": "7vupmgUT2nikyf5V35jk",
+                                "type": "text",
+                                "label": "Add Opportunity"
+                            },
+                            {
+                                "name": "Ag6nQjh7dQDFTWR0kxEh",
+                                "spec": [
+                                    {
+                                        "name": "34d15049-fca2-4d00-b20b-ffe2ace0ea90",
+                                        "type": "text",
+                                        "label": "1"
+                                    },
+                                    {
+                                        "name": "860a0234-9654-458b-884d-85728775776b",
+                                        "type": "text",
+                                        "label": "2"
+                                    },
+                                    {
+                                        "name": "1234145b-0927-4e14-9a16-5c5f36ed3a01",
+                                        "type": "text",
+                                        "label": "3"
+                                    }
+                                ],
+                                "type": "collection",
+                                "label": "Text Box List 2bw6",
+                                "metadata": {
+                                    "textboxList": true
+                                }
+                            },
+                            {
+                                "name": "BZxF8Nnjv3SbCR2qKrHz",
+                                "type": "text",
+                                "label": "Pipedrive - Consultant"
+                            },
+                            {
+                                "name": "CCKgHTSxtlnwI0YZUWsY",
+                                "type": "text",
+                                "label": "Pipedrive - Person Owner"
+                            },
+                            {
+                                "name": "CCf7iCIT7UtnDMuHeA3P",
+                                "type": "date",
+                                "label": "Date Picker 4tjm"
+                            },
+                            {
+                                "name": "CHw9fGXi2RR20ndLTPHU",
+                                "type": "text",
+                                "label": "Single Dropdown 365ll"
+                            },
+                            {
+                                "name": "CQfMYHcIVJRhTzs82mHa",
+                                "type": "text",
+                                "label": "Single Dropdown 26k9u"
+                            },
+                            {
+                                "name": "CnKdBasWCM6cFbUmFynx",
+                                "type": "text",
+                                "label": "Contact_ID"
+                            },
+                            {
+                                "name": "DHguzBnwY3qiSfxWl48p",
+                                "type": "text",
+                                "label": "Pipedrive - SBX P Tag 3"
+                            },
+                            {
+                                "name": "FaWeBmogCaWkAPo2lqXq",
+                                "type": "text",
+                                "label": "Any additional comments or feedback?",
+                                "multiline": true
+                            },
+                            {
+                                "name": "FtgTxYP2Zn8A4O2gu5ML",
+                                "type": "text",
+                                "label": "Multi Line 147lx",
+                                "multiline": true
+                            },
+                            {
+                                "name": "HBU6p66LDjPfcSuQDiVR",
+                                "type": "text",
+                                "label": "Pipedrive - Deal Status"
+                            },
+                            {
+                                "name": "HLdQacrDxXxeyGiLG1QJ",
+                                "type": "text",
+                                "label": "Pipedrive - Pipedrive Deal Linked Contact Person"
+                            },
+                            {
+                                "name": "HScyD7UpAgKqPEPx6k0o",
+                                "type": "text",
+                                "label": "Partner Address"
+                            },
+                            {
+                                "name": "HtcUhmflhhCtD2wBfrww",
+                                "type": "text",
+                                "label": "Pipedrive - Person Full Postal Address"
+                            },
+                            {
+                                "name": "HwEwgeMCZgmWa3cPrLjQ",
+                                "type": "text",
+                                "label": "Pipedrive - What Is Your Combined Household Income?"
+                            },
+                            {
+                                "name": "ICHj3fi5raUc57UdQRD1",
+                                "type": "text",
+                                "label": "Pipedrive - Pipedrive Deal Created"
+                            },
+                            {
+                                "name": "IOmrHcA1wZT9hapuACV3",
+                                "type": "text",
+                                "label": "Pipedrive - Person Label"
+                            },
+                            {
+                                "name": "IR06x9hbhjItIPgbam8A",
+                                "type": "text",
+                                "label": "SBX campaign_name"
+                            },
+                            {
+                                "name": "IWM5kP7wkk7kol9f9pMR",
+                                "type": "text",
+                                "label": "Pipedrive - Deal Owner"
+                            },
+                            {
+                                "name": "JTmb9c9YoRVVXIxH68yO",
+                                "type": "text",
+                                "label": "Partner Email"
+                            },
+                            {
+                                "name": "Kly8qZB6DJSzGrxMfaZc",
+                                "type": "text",
+                                "label": "LF: What is Your Current Savings + Equity Available?"
+                            },
+                            {
+                                "name": "Mj5TWAd5qndxiePg0541",
+                                "type": "text",
+                                "label": "To better support your property investment journey, please select the key area where you need help. Our expertise includes:\t"
+                            },
+                            {
+                                "name": "OXqZHY7EWiTuk4PNCDTa",
+                                "type": "text",
+                                "label": "Pipedrive - How Can We Best Help You?"
+                            },
+                            {
+                                "name": "OajLe2ZXo4SaAsHfMxqO",
+                                "type": "date",
+                                "label": "End Date"
+                            },
+                            {
+                                "name": "Ol3b10je0HlxUMHFUbDn",
+                                "type": "text",
+                                "label": "Pipedrive - Additional email 2"
+                            },
+                            {
+                                "name": "PPaGQaWCW2GpLtNLni4E",
+                                "type": "text",
+                                "label": "Partner Name"
+                            },
+                            {
+                                "name": "Q41cWqpan9Cpwu0oSXFx",
+                                "type": "text",
+                                "label": "Pipedrive - My Enquiries Relates To"
+                            },
+                            {
+                                "name": "QWcuzLC7xkdoibxQgmDH",
+                                "type": "text",
+                                "label": "Pipedrive - SBX P Tag 1"
+                            },
+                            {
+                                "name": "QrGnpORg49cUcYgx4Bf6",
+                                "type": "number",
+                                "label": "How would you rate the communication and updates provided during your real estate journey? (1 = Poor, 5 = Excellent)"
+                            },
+                            {
+                                "name": "RgJjjf9JP85FQOw8AdT7",
+                                "type": "text",
+                                "label": "How satisfied were you with the professionalism and responsiveness of your agent?"
+                            },
+                            {
+                                "name": "S29F9WJYCmpMPsafISUm",
+                                "type": "text",
+                                "label": "Formatted Buyer Name"
+                            },
+                            {
+                                "name": "S5OTt8UlrFqfzVF5259F",
+                                "type": "text",
+                                "label": "Pipedrive - Person Source"
+                            },
+                            {
+                                "name": "UY2PkEetw6wQyGXlRoAy",
+                                "type": "text",
+                                "label": "How satisfied were you with the property options presented to you?"
+                            },
+                            {
+                                "name": "V4mttxn6hKmzp6hQWEk0",
+                                "type": "text",
+                                "label": "Single Dropdown 25v7z"
+                            },
+                            {
+                                "name": "WFExtuEnrmVoNQTMuJVS",
+                                "type": "array",
+                                "label": "Current Lending Position"
+                            },
+                            {
+                                "name": "XHC3bAvWz5GLF0Cbdfrg",
+                                "type": "text",
+                                "label": "Partner Phone"
+                            },
+                            {
+                                "name": "XdG7VFvkBricPOuEdqOh",
+                                "type": "text",
+                                "label": "Pipedrive - Person Creation Date"
+                            },
+                            {
+                                "name": "ZCop8fuOP52k2yy9XB8X",
+                                "type": "text",
+                                "label": "Referrer"
+                            },
+                            {
+                                "name": "aI2E05Hck40sPRlpQqTD",
+                                "type": "text",
+                                "label": "LF: How do you think the property market will perform in 2026?"
+                            },
+                            {
+                                "name": "b1TCaEkaffnJMiXMyNOP",
+                                "type": "text",
+                                "label": "Pipedrive - Person Full Address"
+                            },
+                            {
+                                "name": "bo7fkYFBxzLWqns8YbfN",
+                                "type": "number",
+                                "label": "Lead age"
+                            },
+                            {
+                                "name": "c5vuRYbzXDA9TIq0VatT",
+                                "type": "array",
+                                "label": "Investment Timeframe"
+                            },
+                            {
+                                "name": "cq1MPxqJTMVNKW3BQROq",
+                                "type": "text",
+                                "label": "Single Line 85dgx"
+                            },
+                            {
+                                "name": "dLq5WMXQ2bTOEgUc04lO",
+                                "type": "text",
+                                "label": "Pipedrive - Pipedrive Deal Title"
+                            },
+                            {
+                                "name": "ev3lIe0wRIvZ0YnOp9jD",
+                                "type": "text",
+                                "label": "What marketing strategy piques your interest?"
+                            },
+                            {
+                                "name": "f8Qh07HIryNAPuMddJBR",
+                                "type": "text",
+                                "label": "Pipedrive - Pipedrive Deal ID"
+                            },
+                            {
+                                "name": "fT0uPbdGiGwaaUbVT9cp",
+                                "type": "text",
+                                "label": "Pipedrive - Person Campaign Source"
+                            },
+                            {
+                                "name": "fzsa0DrWgDiy4QxlxvOt",
+                                "type": "text",
+                                "label": "Reason for Leave",
+                                "multiline": true
+                            },
+                            {
+                                "name": "gao8o1x3L953RwqQEcnx",
+                                "type": "text",
+                                "label": "Pipedrive - How Do You Plan To Purchase Your Property"
+                            },
+                            {
+                                "name": "iijeCSQQ2EHj26tyn5Dl",
+                                "type": "text",
+                                "label": "Pipedrive - How Familiar Are You With Investing In Real Estate?"
+                            },
+                            {
+                                "name": "j3V4KlAkc7dfekwEGp4z",
+                                "type": "text",
+                                "label": "Message",
+                                "multiline": true
+                            },
+                            {
+                                "name": "jR4tJKrUWDyv2lAoxpED",
+                                "type": "text",
+                                "label": "Single Line 83c61"
+                            },
+                            {
+                                "name": "jbHnvjKDTJapHfkmYIIb",
+                                "type": "text",
+                                "label": "Phone Call Result"
+                            },
+                            {
+                                "name": "kF7drHeEWuIs1OczlHMe",
+                                "type": "text",
+                                "label": "Pipedrive - Pipeline"
+                            },
+                            {
+                                "name": "mp0OyEhYmG8A4nRjLbr5",
+                                "type": "text",
+                                "label": "How likely are you to recommend us to family or friends?"
+                            },
+                            {
+                                "name": "mq7XZbaugyq7wn3XaT1Z",
+                                "type": "text",
+                                "label": "Pipedrive - Pipeline Stage"
+                            },
+                            {
+                                "name": "nCGZLBuvmnMPzihM95Ye",
+                                "type": "text",
+                                "label": "Did our agent clearly understand your needs and preferences?"
+                            },
+                            {
+                                "name": "ng1rgxWrkilALdCITqrY",
+                                "type": "text",
+                                "label": "LF: How Soon Are You Looking To Invest?"
+                            },
+                            {
+                                "name": "nqReKCcrMtAuMjC9LbhL",
+                                "type": "number",
+                                "label": "Pipedrive - Person ID"
+                            },
+                            {
+                                "name": "owTh382FGBEBRD0JJPOo",
+                                "type": "text",
+                                "label": " evSLeaingle Dropdown 36u92"
+                            },
+                            {
+                                "name": "r27J0vSDrppmoQNlWGnH",
+                                "type": "text",
+                                "label": "Lead Source"
+                            },
+                            {
+                                "name": "rWcGtf0XtU49wA6eDAw5",
+                                "type": "number",
+                                "label": "Pipedrive - Person Email Count"
+                            },
+                            {
+                                "name": "sXAdMQFtBoazESk3Mnbw",
+                                "type": "text",
+                                "label": "Pipedrive - What Is Your Current Savings + Equity Available?"
+                            },
+                            {
+                                "name": "t4gpotulVMtMBgJR1Usj",
+                                "type": "number",
+                                "label": "Pipedrive - Pipdrive Deal Email Count"
+                            },
+                            {
+                                "name": "tIjigC0zjorScGih05bC",
+                                "spec": [
+                                    {
+                                        "name": "url",
+                                        "type": "text",
+                                        "label": "URL"
+                                    },
+                                    {
+                                        "name": "meta",
+                                        "spec": [
+                                            {
+                                                "name": "name",
+                                                "type": "text",
+                                                "label": "Name"
+                                            },
+                                            {
+                                                "name": "originalname",
+                                                "type": "text",
+                                                "label": "Original name"
+                                            },
+                                            {
+                                                "name": "encoding",
+                                                "type": "text",
+                                                "label": "Encoding"
+                                            },
+                                            {
+                                                "name": "size",
+                                                "type": "number",
+                                                "label": "Size"
+                                            },
+                                            {
+                                                "name": "mimetype",
+                                                "type": "text",
+                                                "label": "Mime Type"
+                                            },
+                                            {
+                                                "name": "fieldname",
+                                                "type": "text",
+                                                "label": "Field Name"
+                                            },
+                                            {
+                                                "name": "uuid",
+                                                "type": "text",
+                                                "label": "UUID"
+                                            }
+                                        ],
+                                        "type": "collection",
+                                        "label": "Meta"
+                                    },
+                                    {
+                                        "name": "deleted",
+                                        "type": "boolean",
+                                        "label": "Deleted"
+                                    }
+                                ],
+                                "type": "array",
+                                "label": "pFiUFFile File",
+                                "metadata": {
+                                    "file": true
+                                }
+                            },
+                            {
+                                "name": "tZbsGThPl411tP2SWy0Y",
+                                "type": "number",
+                                "label": "Pipedrive - Person Open Deals"
+                            },
+                            {
+                                "name": "u7oWyEnJ66o9ZvU64eP9",
+                                "type": "text",
+                                "label": "Is there anything we could have done to improve your experience?",
+                                "multiline": true
+                            },
+                            {
+                                "name": "uLCTOmmcmP3l4hI7Dw64",
+                                "type": "date",
+                                "label": "Start Date"
+                            },
+                            {
+                                "name": "udhrJmunyfoTneK2z1Qv",
+                                "type": "text",
+                                "label": "Pipedrive - SBX P Tag 2"
+                            },
+                            {
+                                "name": "wVLKlMVt7RhIwM6BLhYF",
+                                "type": "text",
+                                "label": "Pipedrive - Additional Phone 2"
+                            },
+                            {
+                                "name": "xQHugf9ciauJIQRrjmKd",
+                                "type": "number",
+                                "label": " How would you rate your overall experience with our agency?  (1 = Poor, 5 = Excellent)"
+                            },
+                            {
+                                "name": "xnD8oaP4Z15QO8VQZUK1",
+                                "type": "number",
+                                "label": "Total Fee"
+                            },
+                            {
+                                "name": "yLFRv1hPS5igF6sUgan2",
+                                "spec": [
+                                    {
+                                        "name": "url",
+                                        "type": "text",
+                                        "label": "URL"
+                                    },
+                                    {
+                                        "name": "meta",
+                                        "spec": [
+                                            {
+                                                "name": "name",
+                                                "type": "text",
+                                                "label": "Name"
+                                            },
+                                            {
+                                                "name": "originalname",
+                                                "type": "text",
+                                                "label": "Original name"
+                                            },
+                                            {
+                                                "name": "encoding",
+                                                "type": "text",
+                                                "label": "Encoding"
+                                            },
+                                            {
+                                                "name": "size",
+                                                "type": "number",
+                                                "label": "Size"
+                                            },
+                                            {
+                                                "name": "mimetype",
+                                                "type": "text",
+                                                "label": "Mime Type"
+                                            },
+                                            {
+                                                "name": "fieldname",
+                                                "type": "text",
+                                                "label": "Field Name"
+                                            },
+                                            {
+                                                "name": "uuid",
+                                                "type": "text",
+                                                "label": "UUID"
+                                            }
+                                        ],
+                                        "type": "collection",
+                                        "label": "Meta"
+                                    },
+                                    {
+                                        "name": "deleted",
+                                        "type": "boolean",
+                                        "label": "Deleted"
+                                    }
+                                ],
+                                "type": "array",
+                                "label": "File Upload 1fm6",
+                                "metadata": {
+                                    "file": true
+                                }
+                            },
+                            {
+                                "name": "yy0yZ9JNpJB9yOH9qxK4",
+                                "type": "text",
+                                "label": "Comments",
+                                "multiline": true
+                            },
+                            {
+                                "name": "z0iqn8HGItDTvqvWzIJo",
+                                "type": "text",
+                                "label": "Single Line 68d9h"
+                            },
+                            {
+                                "name": "zUKXEqd04HGyM4ANgPnS",
+                                "type": "text",
+                                "label": "Fee Structure",
+                                "multiline": true
+                            }
+                        ],
+                        "type": "collection",
+                        "label": "Custom Fields"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 59,
+            "module": "util:TextAggregator",
+            "version": 1,
+            "parameters": {
+                "feeder": 9,
+                "rowSeparator": ""
+            },
+            "filter": {
+                "name": "",
+                "conditions": [
+                    [
+                        {
+                            "a": "{{11.id}}{{11.id}}",
+                            "o": "exist"
+                        }
+                    ]
+                ]
+            },
+            "mapper": {
+                "value": "{\r\n  \"id\": \"{{9.id}}\",  \r\n  \"name\": \"{{10.name}}\",\r\n  \"stage\": \"{{10.pipelineStageId}}\",\r\n  \"client\": \"{{11.firstName}} {{11.lastName}}\",\r\n  \"emails\": \"{{11.email}}\\n{{10.customField.d0iUirsqy4kdUVMpHLfD}}\",\r\n  \"partner\": \"{{10.customField.xFKbtz7Lt1X2nNTeFSSH}}\",\r\n  \"follower\": \"{{10.followers}}\",\n  \"assignedTo\": \"{{10.assignedTo}}\",\r\n  \"assignedBA\": \"{{10.customField.NXqFwEzo28k6lOkbyT5N}}\",\r\n  \"status\": \"{{10.status}}\"\r\n}"
+            },
+            "metadata": {
+                "designer": {
+                    "x": 1200,
+                    "y": 0
+                },
+                "restore": {
+                    "extra": {
+                        "feeder": {
+                            "label": "GoHighLevel - Search Opportunities [9]"
+                        }
+                    },
+                    "parameters": {
+                        "rowSeparator": {
+                            "label": "Empty"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "rowSeparator",
+                        "type": "select",
+                        "label": "Row separator",
+                        "validate": {
+                            "enum": [
+                                "\n",
+                                "\t",
+                                "other"
+                            ]
+                        }
+                    }
+                ],
+                "expect": [
+                    {
+                        "name": "value",
+                        "type": "text",
+                        "label": "Text"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 60,
+            "module": "util:ComposeTransformer",
+            "version": 1,
+            "parameters": {},
+            "mapper": {
+                "value": "{{59.text}}"
+            },
+            "metadata": {
+                "designer": {
+                    "x": 1500,
+                    "y": 0
+                },
+                "restore": {},
+                "expect": [
+                    {
+                        "name": "value",
+                        "type": "text",
+                        "label": "Text"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 7,
+            "module": "gateway:WebhookRespond",
+            "version": 1,
+            "parameters": {},
+            "mapper": {
+                "body": "{{60.value}}",
+                "status": "200",
+                "headers": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ]
+            },
+            "metadata": {
+                "designer": {
+                    "x": 1800,
+                    "y": 0
+                },
+                "restore": {
+                    "expect": {
+                        "headers": {
+                            "mode": "chose",
+                            "items": [
+                                null
+                            ]
+                        }
+                    }
+                },
+                "expect": [
+                    {
+                        "name": "status",
+                        "type": "uinteger",
+                        "label": "Status",
+                        "required": true,
+                        "validate": {
+                            "min": 100
+                        }
+                    },
+                    {
+                        "name": "body",
+                        "type": "any",
+                        "label": "Body"
+                    },
+                    {
+                        "name": "headers",
+                        "spec": [
+                            {
+                                "name": "key",
+                                "type": "text",
+                                "label": "Key",
+                                "required": true,
+                                "validate": {
+                                    "max": 256
+                                }
+                            },
+                            {
+                                "name": "value",
+                                "type": "text",
+                                "label": "Value",
+                                "required": true,
+                                "validate": {
+                                    "max": 4096
+                                }
+                            }
+                        ],
+                        "type": "array",
+                        "label": "Custom headers",
+                        "validate": {
+                            "maxItems": 16
+                        }
+                    }
+                ],
+                "advanced": true
+            }
+        }
+    ],
+    "metadata": {
+        "instant": true,
+        "version": 1,
+        "scenario": {
+            "roundtrips": 30,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "slots": null,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false,
+            "freshVariables": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "zone": "eu1.make.com",
+        "notes": []
+    }
+}

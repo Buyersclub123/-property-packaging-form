@@ -42,6 +42,7 @@ interface DealRecord {
   folderLink: string;
   pdfLink: string;
   portalLink: string;
+  createdAt: string;
 }
 
 interface ColumnDef {
@@ -60,12 +61,11 @@ interface SavedView {
 }
 
 type SortDirection = 'asc' | 'desc' | null;
-type Theme = 'dark' | 'light' | 'blue';
+type Theme = 'dark' | 'light';
 
 const THEMES: Record<Theme, { bg: string; headerBg: string; cellBorder: string; text: string; headerText: string; hoverBg: string; inputBg: string; inputBorder: string }> = {
   dark: { bg: 'bg-gray-900', headerBg: 'bg-gray-800', cellBorder: 'border-gray-800', text: 'text-gray-100', headerText: 'text-gray-300', hoverBg: 'hover:bg-gray-800/50', inputBg: 'bg-gray-900', inputBorder: 'border-gray-600' },
   light: { bg: 'bg-white', headerBg: 'bg-gray-100', cellBorder: 'border-gray-200', text: 'text-gray-900', headerText: 'text-gray-700', hoverBg: 'hover:bg-gray-50', inputBg: 'bg-white', inputBorder: 'border-gray-300' },
-  blue: { bg: 'bg-slate-900', headerBg: 'bg-slate-800', cellBorder: 'border-slate-700', text: 'text-slate-100', headerText: 'text-slate-300', hoverBg: 'hover:bg-slate-800/50', inputBg: 'bg-slate-900', inputBorder: 'border-slate-600' },
 };
 
 // ============================================================================
@@ -82,6 +82,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'packagerApproved', label: 'Packager Approved', width: 90 },
   { key: 'qaApproved', label: 'QA Approved', width: 70 },
   { key: 'propertyAddress', label: 'Property Address', width: 180 },
+  { key: 'pdfLink', label: 'PDF', width: 45 },
   { key: 'asking', label: 'Asking', width: 80 },
   { key: 'priceGroup', label: 'Price Grp', width: 75 },
   { key: 'baMessage', label: 'BA Message', width: 120 },
@@ -100,7 +101,6 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'closingPrice', label: 'Close $', width: 75 },
   { key: 'clientClosed', label: 'Client', width: 70 },
   { key: 'closingDate', label: 'Close Date', width: 80 },
-  { key: 'pdfLink', label: 'PDF', width: 45 },
   { key: 'id', label: 'Record ID', width: 120 },
 ];
 
@@ -128,7 +128,7 @@ const PRESET_VIEWS: SavedView[] = [
       { key: 'packagerApproved', label: 'Packager Approved', width: 90 },
       { key: 'qaApproved', label: 'QA Approved', width: 70 },
     ],
-    quickFilter: '01_02',
+    quickFilter: 'all',
     filters: {},
     sortColumn: 'sortKey',
     sortDirection: 'asc',
@@ -230,7 +230,8 @@ export default function DealSheetPage() {
   // Theme (persisted to localStorage)
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
-      return (localStorage.getItem('dealsheet-theme') as Theme) || 'dark';
+      const saved = localStorage.getItem('dealsheet-theme');
+      if (saved === 'dark' || saved === 'light') return saved;
     }
     return 'dark';
   });
@@ -239,9 +240,8 @@ export default function DealSheetPage() {
   // Max cell height (in px, 0 = unlimited)
   const [maxCellHeight, setMaxCellHeight] = useState(60);
 
-  // Bulk select for status update
-  const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
-  const [bulkUpdating, setBulkUpdating] = useState(false);
+  // Expanded cell popup
+  const [expandedCell, setExpandedCell] = useState<{ recordId: string; colKey: string; value: string; x: number; y: number } | null>(null);
 
   // Per-row status editing
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
@@ -289,6 +289,23 @@ export default function DealSheetPage() {
   useEffect(() => {
     localStorage.setItem('dealsheet-saved-views', JSON.stringify(savedViews));
   }, [savedViews]);
+
+  // Click outside to close all dropdowns and filters
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.dropdown-container')) {
+        setShowOtherRecords(false);
+        setShowExportMenu(false);
+        setShowViewMenu(false);
+        setShowNewMenu(false);
+        setExpandedCell(null);
+        setOpenFilterDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Fetch data
   useEffect(() => {
@@ -349,18 +366,16 @@ export default function DealSheetPage() {
     return () => clearInterval(interval);
   }, [loading, error]);
 
-  const [includeRemoved, setIncludeRemoved] = useState(false);
-  const [includeTest, setIncludeTest] = useState(false);
+  // Active statuses param for API fetches
+  const [activeStatuses, setActiveStatuses] = useState<string>('01,02');
 
-  const fetchData = async (opts?: { removed?: boolean; test?: boolean }) => {
+  const fetchData = async (statuses?: string) => {
     setLoading(true);
     setError(null);
-    const removed = opts?.removed ?? includeRemoved;
-    const test = opts?.test ?? includeTest;
+    const statusParam = statuses ?? activeStatuses;
     try {
       const params = new URLSearchParams();
-      if (removed) params.set('includeRemoved', 'true');
-      if (test) params.set('includeTest', 'true');
+      params.set('statuses', statusParam);
       const res = await fetch(`/api/deal-sheet?${params.toString()}`);
       if (!res.ok) {
         const data = await res.json();
@@ -545,70 +560,36 @@ export default function DealSheetPage() {
     }
   };
 
-  // Bulk status target
-  const [bulkStatusTarget, setBulkStatusTarget] = useState<string>('07_test_record');
-
-  // Bulk update selected records to chosen status
-  const bulkUpdateStatus = async () => {
-    if (selectedRecords.size === 0) return;
-    const targetLabel = STATUS_OPTIONS.find((s) => s.value === bulkStatusTarget)?.label || bulkStatusTarget;
-    if (!confirm(`Update ${selectedRecords.size} record(s) to "${targetLabel}"?`)) return;
-    setBulkUpdating(true);
-    let successCount = 0;
-    for (const recordId of selectedRecords) {
-      try {
-        const res = await fetch('/api/deal-sheet/update-status', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recordId, status: bulkStatusTarget }),
-        });
-        if (res.ok) {
-          successCount++;
-          setRecords((prev) =>
-            prev.map((r) =>
-              r.id === recordId ? { ...r, status: targetLabel } : r
-            )
-          );
-        }
-      } catch {
-        // continue with remaining
-      }
-    }
-    alert(`Updated ${successCount} of ${selectedRecords.size} records`);
-    setSelectedRecords(new Set());
-    setBulkUpdating(false);
-  };
-
-  // Toggle record selection
-  const toggleRecordSelect = (id: string) => {
-    setSelectedRecords((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   // Get current theme
   const t = THEMES[theme];
 
+  // New records time window
+  const [newHoursWindow, setNewHoursWindow] = useState(24);
+  const [showNewMenu, setShowNewMenu] = useState(false);
+
+  // Check if record is new (created within selected time window)
+  const isNewRecord = useCallback((createdAt: string) => {
+    if (!createdAt) return false;
+    const created = new Date(createdAt).getTime();
+    return Date.now() - created < newHoursWindow * 60 * 60 * 1000;
+  }, [newHoursWindow]);
 
   // Apply quick filter
   const quickFilteredRecords = useMemo(() => {
     if (quickFilter === 'all') return records;
+    if (quickFilter === 'available')
+      return records.filter((r) => r.status.startsWith('01') && r.packagerApproved.toLowerCase() === 'approved');
+    if (quickFilter === 'eoi')
+      return records.filter((r) => r.status.startsWith('02'));
     if (quickFilter === 'awaiting_packager')
       return records.filter((r) => r.packagerApproved.toLowerCase() !== 'approved' && !r.status.startsWith('05') && !r.status.startsWith('06') && !r.status.startsWith('07'));
     if (quickFilter === 'awaiting_qa')
       return records.filter((r) => r.packagerApproved.toLowerCase() === 'approved' && r.qaApproved.toLowerCase() !== 'approved' && !r.status.startsWith('05') && !r.status.startsWith('06') && !r.status.startsWith('07'));
-    if (quickFilter === '01') return records.filter((r) => r.status.startsWith('01'));
-    if (quickFilter === '01_02')
-      return records.filter((r) => r.status.startsWith('01') || r.status.startsWith('02'));
-    if (quickFilter === 'removed')
-      return records.filter((r) => r.status.startsWith('05') || r.status.startsWith('06'));
-    if (quickFilter === 'test')
-      return records.filter((r) => r.status.startsWith('07'));
+    if (quickFilter === 'new_24h')
+      return records.filter((r) => isNewRecord(r.createdAt));
     return records;
-  }, [records, quickFilter]);
+  }, [records, quickFilter, isNewRecord]);
 
   // Multi-select filter: get unique values for a column (from current quick-filtered view)
   const getUniqueValues = useCallback((column: keyof DealRecord): string[] => {
@@ -663,22 +644,16 @@ export default function DealSheetPage() {
     });
   }, [filteredRecords, sortColumn, sortDirection]);
 
-  // Select/deselect all visible records
-  const toggleSelectAll = () => {
-    if (selectedRecords.size === sortedRecords.length) {
-      setSelectedRecords(new Set());
-    } else {
-      setSelectedRecords(new Set(sortedRecords.map((r) => r.id)));
-    }
-  };
+  // Export state
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
-  // Export current view to CSV (opens in Excel)
-  const exportToExcel = () => {
+  // Export to CSV
+  const exportToCSV = (exportAll: boolean) => {
+    const sourceRecords = exportAll ? records : sortedRecords;
     const headers = columns.map((col) => col.label);
-    const rows = sortedRecords.map((record) =>
+    const rows = sourceRecords.map((record) =>
       columns.map((col) => {
         const val = record[col.key] || '';
-        // Escape quotes and wrap in quotes if contains comma/newline
         if (val.includes(',') || val.includes('"') || val.includes('\n')) {
           return `"${val.replace(/"/g, '""')}"`;
         }
@@ -690,10 +665,14 @@ export default function DealSheetPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `deal-sheet-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `deal-sheet-${exportAll ? 'all' : 'filtered'}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    setShowExportMenu(false);
   };
+
+  // Other Records dropdown state
+  const [showOtherRecords, setShowOtherRecords] = useState(false);
 
   // ============================================================================
   // RENDER
@@ -742,12 +721,13 @@ export default function DealSheetPage() {
           </span>
         </div>
 
-        {/* Quick Filters */}
-        <div className="flex items-center gap-2">
+        {/* Live Records */}
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] opacity-50 mr-1">Live Records</span>
           <button
-            onClick={() => setQuickFilter('all')}
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('all'); }}
             className={`px-2 py-1 rounded text-xs ${
-              quickFilter === 'all'
+              quickFilter === 'all' && activeStatuses === '01,02'
                 ? 'bg-blue-600 text-white'
                 : `${t.inputBg} ${t.headerText} hover:opacity-80`
             }`}
@@ -755,101 +735,144 @@ export default function DealSheetPage() {
             All*
           </button>
           <button
-            onClick={() => setQuickFilter('awaiting_packager')}
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('available'); }}
+            className={`px-2 py-1 rounded text-xs ${
+              quickFilter === 'available'
+                ? 'bg-blue-600 text-white'
+                : `${t.inputBg} ${t.headerText} hover:opacity-80`
+            }`}
+          >
+            Available
+          </button>
+          <button
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('eoi'); }}
+            className={`px-2 py-1 rounded text-xs ${
+              quickFilter === 'eoi'
+                ? 'bg-blue-600 text-white'
+                : `${t.inputBg} ${t.headerText} hover:opacity-80`
+            }`}
+          >
+            EOI
+          </button>
+        </div>
+
+        {/* Housekeeping */}
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] opacity-50 mr-1">Housekeeping</span>
+          <button
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('awaiting_packager'); }}
             className={`px-2 py-1 rounded text-xs ${
               quickFilter === 'awaiting_packager'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-amber-600 text-white'
                 : `${t.inputBg} ${t.headerText} hover:opacity-80`
             }`}
           >
             Awaiting Packager
           </button>
           <button
-            onClick={() => setQuickFilter('awaiting_qa')}
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('awaiting_qa'); }}
             className={`px-2 py-1 rounded text-xs ${
               quickFilter === 'awaiting_qa'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-amber-600 text-white'
                 : `${t.inputBg} ${t.headerText} hover:opacity-80`
             }`}
           >
             Awaiting QA
           </button>
-          <button
-            onClick={() => setQuickFilter('01')}
-            className={`px-2 py-1 rounded text-xs ${
-              quickFilter === '01'
-                ? 'bg-blue-600 text-white'
-                : `${t.inputBg} ${t.headerText} hover:opacity-80`
-            }`}
-          >
-            Available (01)
-          </button>
-          <button
-            onClick={() => setQuickFilter('01_02')}
-            className={`px-2 py-1 rounded text-xs ${
-              quickFilter === '01_02'
-                ? 'bg-blue-600 text-white'
-                : `${t.inputBg} ${t.headerText} hover:opacity-80`
-            }`}
-          >
-            01+02
-          </button>
-          <button
-            onClick={() => {
-              setIncludeRemoved(true);
-              setQuickFilter('removed');
-              fetchData({ removed: true });
-            }}
-            className={`px-2 py-1 rounded text-xs ${
-              quickFilter === 'removed'
-                ? 'bg-blue-600 text-white'
-                : `${t.inputBg} ${t.headerText} hover:opacity-80`
-            }`}
-          >
-            Removed (05+06)
-          </button>
-          <button
-            onClick={() => {
-              setIncludeTest(true);
-              setQuickFilter('test');
-              fetchData({ test: true });
-            }}
-            className={`px-2 py-1 rounded text-xs ${
-              quickFilter === 'test'
-                ? 'bg-blue-600 text-white'
-                : `${t.inputBg} ${t.headerText} hover:opacity-80`
-            }`}
-          >
-            Test (07)
-          </button>
-          <button
-            onClick={() => {
-              setIncludeRemoved(false);
-              setIncludeTest(false);
-              setQuickFilter('all');
-              setFilters({});
-              setExcludedFilters({});
-              setIdFilter('');
-              fetchData({ removed: false, test: false });
-            }}
-            className={`px-2 py-1 rounded text-xs hover:opacity-80 border ${
-              quickFilter !== 'all' || Object.keys(excludedFilters).length > 0 || idFilter.trim() !== '' || Object.values(filters).some(v => v && v.trim() !== '')
-                ? 'bg-amber-600 text-white border-amber-700'
-                : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
-            }`}
-          >
-            Clear Filters
-          </button>
         </div>
 
-        {/* Views + Export + Theme + Refresh + Logo */}
-        <div className="flex items-center gap-2 relative">
+        {/* Clear Filters */}
+        <button
+          onClick={() => {
+            setActiveStatuses('01,02');
+            setQuickFilter('all');
+            setFilters({});
+            setExcludedFilters({});
+            setIdFilter('');
+            fetchData('01,02');
+          }}
+          className={`px-2 py-1 rounded text-xs hover:opacity-80 border ${
+            quickFilter !== 'all' || Object.keys(excludedFilters).length > 0 || idFilter.trim() !== '' || Object.values(filters).some(v => v && v.trim() !== '')
+              ? 'bg-amber-600 text-white border-amber-700'
+              : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
+          }`}
+        >
+          Clear Filters
+        </button>
+
+        {/* Other Records dropdown */}
+        <div className="relative dropdown-container">
           <button
-            onClick={exportToExcel}
-            className="px-2 py-1 bg-green-700 text-white rounded text-xs hover:bg-green-600"
+            onClick={() => setShowOtherRecords(!showOtherRecords)}
+            className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80 border ${t.inputBorder}`}
           >
-            Export
+            Other Records ▼
           </button>
+          {showOtherRecords && (
+            <div className={`absolute top-full right-0 mt-1 w-48 ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
+              <button
+                onClick={() => { setActiveStatuses('all'); setQuickFilter('all'); fetchData('all'); setShowOtherRecords(false); }}
+                className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg}`}
+              >
+                All (all statuses)
+              </button>
+              <button
+                onClick={() => { setActiveStatuses('03'); setQuickFilter('all'); fetchData('03'); setShowOtherRecords(false); }}
+                className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg}`}
+              >
+                Exchanged Contract
+              </button>
+              <button
+                onClick={() => { setActiveStatuses('05'); setQuickFilter('all'); fetchData('05'); setShowOtherRecords(false); }}
+                className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg}`}
+              >
+                Remove No Interest
+              </button>
+              <button
+                onClick={() => { setActiveStatuses('06'); setQuickFilter('all'); fetchData('06'); setShowOtherRecords(false); }}
+                className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg}`}
+              >
+                Remove Lost
+              </button>
+              <button
+                onClick={() => { setActiveStatuses('07'); setQuickFilter('all'); fetchData('07'); setShowOtherRecords(false); }}
+                className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg}`}
+              >
+                Test Records
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Export + Views + Time + Refresh + Theme */}
+        <div className="flex items-center gap-2 relative">
+          {/* Export dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="px-2 py-1 bg-green-700 text-white rounded text-xs hover:bg-green-600"
+            >
+              Export ▼
+            </button>
+            {showExportMenu && (
+              <div className={`absolute top-full right-0 mt-1 w-40 ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
+                <button
+                  onClick={() => exportToCSV(false)}
+                  className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg}`}
+                >
+                  Export Filtered ({sortedRecords.length})
+                </button>
+                <button
+                  onClick={() => exportToCSV(true)}
+                  className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg}`}
+                >
+                  Export All ({records.length})
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="relative dropdown-container">
           <button
             onClick={() => setShowViewMenu(!showViewMenu)}
             className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600"
@@ -859,7 +882,7 @@ export default function DealSheetPage() {
 
           {/* Views dropdown */}
           {showViewMenu && (
-            <div className="absolute top-full right-16 mt-1 w-64 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 p-3">
+            <div className="absolute top-full right-0 mt-1 w-64 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 p-3">
               <div className="text-xs font-bold text-gray-400 mb-2">PRESET VIEWS</div>
               {PRESET_VIEWS.map((view, i) => (
                 <button
@@ -920,6 +943,43 @@ export default function DealSheetPage() {
             </div>
           )}
 
+          </div>
+
+          {/* New records button with time window dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowNewMenu(!showNewMenu)}
+              className={`px-2 py-1 rounded text-xs ${
+                quickFilter === 'new_24h'
+                  ? 'bg-green-600 text-white'
+                  : `${t.inputBg} ${t.headerText} hover:opacity-80`
+              }`}
+            >
+              New ({newHoursWindow}h) ▼
+            </button>
+            {showNewMenu && (
+              <div className={`absolute top-full right-0 mt-1 w-32 ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
+                {[24, 36, 48, 72].map((hours) => (
+                  <button
+                    key={hours}
+                    onClick={() => { setNewHoursWindow(hours); setShowNewMenu(false); if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('new_24h'); }}
+                    className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg} ${newHoursWindow === hours ? 'font-bold' : ''}`}
+                  >
+                    Last {hours} hours
+                  </button>
+                ))}
+                <div className={`border-t ${t.inputBorder} mt-1 pt-1`}>
+                  <button
+                    onClick={() => { setQuickFilter('all'); setShowNewMenu(false); }}
+                    className={`block w-full text-left px-3 py-1.5 text-xs text-red-400 ${t.hoverBg}`}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {syncMessage && (
             <span className="text-xs text-green-400 animate-pulse">
               {syncMessage}
@@ -937,63 +997,22 @@ export default function DealSheetPage() {
             Refresh
           </button>
 
-          {/* Theme selector */}
-          <select
-            value={theme}
-            onChange={(e) => { const v = e.target.value as Theme; setTheme(v); localStorage.setItem('dealsheet-theme', v); }}
-            className={`px-1.5 py-1 rounded text-xs ${t.inputBg} border ${t.inputBorder} ${t.headerText}`}
+          {/* Theme toggle */}
+          <button
+            onClick={() => { const v = theme === 'dark' ? 'light' : 'dark'; setTheme(v); localStorage.setItem('dealsheet-theme', v); }}
+            className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
           >
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-            <option value="blue">Blue</option>
-          </select>
+            {theme === 'dark' ? 'Light' : 'Dark'}
+          </button>
 
         </div>
       </div>
-
-      {/* Bulk action bar */}
-      {selectedRecords.size > 0 && (
-        <div className={`flex items-center gap-3 px-4 py-1.5 ${t.headerBg} border-b ${t.cellBorder}`}>
-          <span className="text-xs">{selectedRecords.size} selected</span>
-          <select
-            value={bulkStatusTarget}
-            onChange={(e) => setBulkStatusTarget(e.target.value)}
-            className={`px-2 py-1 text-xs ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText}`}
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={bulkUpdateStatus}
-            disabled={bulkUpdating}
-            className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {bulkUpdating ? 'Updating...' : 'Update Status'}
-          </button>
-          <button
-            onClick={() => setSelectedRecords(new Set())}
-            className="px-2 py-1 text-xs text-gray-400 hover:text-white"
-          >
-            Clear selection
-          </button>
-        </div>
-      )}
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="border-collapse text-xs" style={{ userSelect: resizingCol !== null ? 'none' : 'auto' }}>
           <thead className="sticky top-0 z-10">
             <tr>
-              {/* Checkbox column */}
-              <th className={`${t.headerBg} border ${t.cellBorder} px-1 py-1.5 w-8 min-w-[32px]`}>
-                <input
-                  type="checkbox"
-                  checked={selectedRecords.size === sortedRecords.length && sortedRecords.length > 0}
-                  onChange={toggleSelectAll}
-                  className="w-3 h-3"
-                />
-              </th>
               {columns.map((col, idx) => (
                 <th
                   key={col.key}
@@ -1080,7 +1099,7 @@ export default function DealSheetPage() {
 
                     {openFilterDropdown === col.key && (
                       <div
-                        className={`absolute top-full left-0 mt-1 w-48 max-h-64 overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-1`}
+                        className={`absolute top-full left-0 mt-1 w-48 max-h-64 overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-1 dropdown-container`}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {/* Sort options */}
@@ -1157,17 +1176,8 @@ export default function DealSheetPage() {
             {sortedRecords.map((record) => (
               <tr
                 key={record.id}
-                className={`${t.hoverBg} ${selectedRecords.has(record.id) ? 'ring-1 ring-blue-500 ring-inset' : ''}`}
+                className={`${t.hoverBg} ${isNewRecord(record.createdAt) ? 'border-l-2 border-l-green-400' : ''}`}
               >
-                {/* Checkbox cell */}
-                <td className={`border ${t.cellBorder} px-1 py-1 text-center`}>
-                  <input
-                    type="checkbox"
-                    checked={selectedRecords.has(record.id)}
-                    onChange={() => toggleRecordSelect(record.id)}
-                    className="w-3 h-3"
-                  />
-                </td>
                 {columns.map((col) => {
                   const value = record[col.key] || '';
                   let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;
@@ -1179,7 +1189,7 @@ export default function DealSheetPage() {
                   if (col.key === 'packagerApproved' || col.key === 'qaApproved') cellClass += ` ${getApprovedColor(value)}`;
 
                   // TBC red highlighting
-                  const tbcStyle = isTBC(value) ? { backgroundColor: '#FFCCCC' } : undefined;
+                  const tbcStyle = isTBC(value) ? { backgroundColor: '#FFCCCC', color: '#000000' } : undefined;
 
                   // Override text color for colored backgrounds
                   if (
@@ -1299,18 +1309,23 @@ export default function DealSheetPage() {
                   return (
                     <td
                       key={col.key}
-                      className={cellClass}
+                      className={`${cellClass} cursor-pointer`}
                       style={{
                         width: col.width,
                         minWidth: col.width,
                         maxWidth: col.width,
-                        maxHeight: maxCellHeight > 0 ? maxCellHeight : undefined,
-                        overflow: maxCellHeight > 0 ? 'hidden' : undefined,
                         ...tbcStyle,
                       }}
                       title={value}
+                      onClick={(e) => {
+                        if (value && value.length > 30) {
+                          setExpandedCell({ recordId: record.id, colKey: col.key, value, x: e.clientX, y: e.clientY });
+                        }
+                      }}
                     >
-                      {cellContent}
+                      <div style={{ maxHeight: maxCellHeight > 0 ? maxCellHeight : undefined, overflow: maxCellHeight > 0 ? 'hidden' : undefined }}>
+                        {cellContent}
+                      </div>
                     </td>
                   );
                 })}
@@ -1325,6 +1340,23 @@ export default function DealSheetPage() {
           </div>
         )}
       </div>
+
+      {/* Expanded cell popup */}
+      {expandedCell && (
+        <div
+          className="fixed z-[100] max-w-md max-h-64 overflow-auto rounded shadow-xl border p-3 text-xs whitespace-pre-wrap bg-gray-900 text-gray-100 border-gray-600 dropdown-container"
+          style={{
+            left: Math.min(expandedCell.x, window.innerWidth - 420),
+            top: Math.min(expandedCell.y + 10, window.innerHeight - 270),
+          }}
+        >
+          <div className="flex justify-between items-start gap-2 mb-1">
+            <span className="font-bold text-gray-400 text-[10px] uppercase">{columns.find(c => c.key === expandedCell.colKey)?.label}</span>
+            <button onClick={() => setExpandedCell(null)} className="text-gray-500 hover:text-white text-sm leading-none">✕</button>
+          </div>
+          <div>{expandedCell.value}</div>
+        </div>
+      )}
     </div>
   );
 }

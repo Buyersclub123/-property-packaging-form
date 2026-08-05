@@ -21,7 +21,7 @@ import { serverLog } from '@/lib/serverLogger';
  */
 export async function POST(request: Request) {
   try {
-    const { propertyAddress, formData } = await request.json();
+    const { propertyAddress, formData, existingFolderId } = await request.json();
     
     if (!propertyAddress) {
       return NextResponse.json(
@@ -48,6 +48,68 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+
+    // --- PROJECT DUPLICATE: Create cashflow sheet in existing folder only ---
+    if (existingFolderId && formData) {
+      console.log('=== PROJECT DUPLICATE: Creating cashflow in existing folder ===');
+      console.log('Existing folder ID:', existingFolderId);
+
+      try {
+        // Find template sheets in the master template folder
+        const templateSheets = await findGoogleSheetsInFolder(TEMPLATE_FOLDER_ID, SHARED_DRIVE_ID);
+        console.log(`Found ${templateSheets.length} template sheets:`, templateSheets.map(s => s.name));
+
+        const contractType = formData?.decisionTree?.contractTypeSimplified || '';
+        const contractTypeLower = contractType.toLowerCase().trim();
+        
+        // Pick the correct template
+        const templateSheet = contractTypeLower === 'split contract'
+          ? templateSheets.find(s => s.name.toLowerCase().includes('split contract'))
+          : templateSheets.find(s => s.name.toLowerCase().includes('single contract'));
+
+        if (!templateSheet) {
+          throw new Error(`No ${contractType || 'matching'} cashflow template found in master folder`);
+        }
+
+        // Build sheet name
+        const addressParts = [
+          formData.address?.streetNumber,
+          formData.address?.streetName,
+          formData.address?.suburbName
+        ].filter(Boolean);
+        const addressString = addressParts.join(' ');
+        const lotNum = formData.address?.lotNumber || '';
+        const lotPrefix = lotNum ? `Lot ${lotNum}` : '';
+        const newName = `CF spreadsheet ${[lotPrefix, addressString].filter(Boolean).join(' ')}`;
+
+        // Copy template sheet into existing folder
+        const copied = await copyFileToFolder(templateSheet.id, existingFolderId, SHARED_DRIVE_ID, newName);
+        console.log(`✓ Copied cashflow template to existing folder: ${copied.name} (${copied.id})`);
+
+        // Populate the sheet
+        await populateHLSpreadsheet(copied.id, formData);
+        console.log(`✓ Populated cashflow spreadsheet with form data`);
+
+        const folderLink = `https://drive.google.com/drive/folders/${existingFolderId}`;
+        return NextResponse.json({
+          success: true,
+          folderId: existingFolderId,
+          folderLink,
+          folderName: 'Existing project folder',
+        });
+      } catch (error) {
+        console.error('Error creating cashflow in existing folder:', error);
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: error instanceof Error ? error.message : 'Failed to create cashflow spreadsheet in existing folder' 
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // --- NORMAL FLOW: Create new folder from template ---
     
     // Step 1: Construct folder name using NEW naming convention from addressFormatter.ts
     // This ensures proper formatting with Lot/Unit numbers

@@ -6,6 +6,12 @@
   "regions": ["syd1"],
   "git": {
     "deploymentEnabled": false
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/deal-sheet/reminders",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
 

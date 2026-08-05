@@ -263,7 +263,51 @@ export async function GET(
     // Submit mapping: single_or_dual_occupancy = dualOccupancy conversion
     
     const dealType = props.deal_type; // This is the FULL contract type (e.g., "05_established") = contractType in form
-    const contractTypeSimplified = props.contract_type; // This is "Single Contract" or "Split Contract"
+    // Normalize contract_type: try multiple field name variants (GHL may use different keys)
+    const rawContractType = (
+      props.contract_type ||
+      props.contractType ||
+      props.contract_type_simplified ||
+      props.contractTypeSimplified ||
+      // Fallback: search all keys containing "contract" (case-insensitive) excluding deal-type-related
+      (() => {
+        const contractKeys = Object.keys(props).filter(k => 
+          k.toLowerCase().includes('contract') && !k.toLowerCase().includes('deal')
+        );
+        for (const key of contractKeys) {
+          const val = props[key];
+          if (val && typeof val === 'string' && val.toLowerCase().includes('contract')) {
+            return val;
+          }
+        }
+        return '';
+      })() ||
+      ''
+    ).trim();
+    console.log('[GET /api/properties] contract_type diagnostics:', {
+      raw_contract_type: props.contract_type,
+      raw_contractType: props.contractType,
+      raw_contract_type_simplified: props.contract_type_simplified,
+      resolved: rawContractType,
+      allKeysWithContract: Object.keys(props).filter(k => k.toLowerCase().includes('contract')),
+      allKeysWithContractValues: Object.keys(props)
+        .filter(k => k.toLowerCase().includes('contract'))
+        .reduce((acc: Record<string, any>, k) => { acc[k] = props[k]; return acc; }, {}),
+    });
+    // Normalize to "Single Contract" or "Split Contract"
+    const contractTypeSimplified = (() => {
+      const lower = rawContractType.toLowerCase().replace(/_/g, ' ');
+      if (lower.includes('single')) return 'Single Contract';
+      if (lower.includes('split') || lower.includes('h&l') || lower.includes('house and land')) return 'Split Contract';
+      return rawContractType || null;
+    })();
+    // Final fallback: derive from deal_type if contract_type field is empty
+    const contractTypeFinal = contractTypeSimplified || (() => {
+      if (dealType === '01_hl_comms') return 'Split Contract';
+      if (dealType === '02_single_comms') return 'Single Contract';
+      return null;
+    })();
+    console.log('[GET /api/properties] contractTypeSimplified result:', contractTypeSimplified, '| final (with dealType fallback):', contractTypeFinal);
     const status = props.status; // Top level status
     const singleOrDualOccupancy = props.single_or_dual_occupancy;
     
@@ -330,8 +374,8 @@ export async function GET(
         propertyType,
         // contractType comes from deal_type (full contract type)
         contractType: dealType && dealType.match(/^\d{2}_/) ? dealType : null,
-        // contractTypeSimplified comes from contract_type
-        contractTypeSimplified: contractTypeSimplified === 'Single Contract' || contractTypeSimplified === 'Split Contract' ? contractTypeSimplified : null,
+        // contractTypeSimplified comes from contract_type (with deal_type fallback)
+        contractTypeSimplified: contractTypeFinal === 'Single Contract' || contractTypeFinal === 'Split Contract' ? contractTypeFinal : null,
         lotType,
         dualOccupancy,
         dwellingType: props.dwelling_type || null,
@@ -533,25 +577,61 @@ export async function GET(
         proximity: props.proximity || '',
         investmentHighlights: props.investment_highlights || '',
       },
-      // Agent Info (for compatibility)
-      agentInfo: {
-        agentName: props.agent_name || '',
-        agentMobile: props.agent_mobile || '',
-        agentEmail: props.agent_email || '',
-      },
+      // Agent Info — try individual fields first, fallback to parsing combined selling_agent
+      agentInfo: (() => {
+        const name = props.agent_name || '';
+        const mobile = props.agent_mobile || '';
+        const email = props.agent_email || '';
+        // If individual fields are all empty, try to parse from combined selling_agent
+        if (!name && !mobile && !email && props.selling_agent) {
+          const parts = props.selling_agent.split(',').map((p: string) => p.trim());
+          return {
+            agentName: parts[0] || '',
+            agentEmail: parts.find((p: string) => p.includes('@')) || '',
+            agentMobile: parts.find((p: string) => /^[+0-9\s()-]+$/.test(p) && p.length >= 8) || '',
+          };
+        }
+        return { agentName: name, agentMobile: mobile, agentEmail: email };
+      })(),
       // Selling Agent fields (form uses these top-level fields)
-      // GHL stores as agent_name, agent_email, agent_mobile
-      // But form may also have a combined selling_agent field
       sellingAgent: props.selling_agent || '',
-      sellingAgentName: props.agent_name || '',
-      sellingAgentEmail: props.agent_email || '',
-      sellingAgentMobile: props.agent_mobile || '',
+      sellingAgentName: (() => {
+        if (props.agent_name) return props.agent_name;
+        if (props.selling_agent) {
+          const parts = props.selling_agent.split(',').map((p: string) => p.trim());
+          return parts[0] || '';
+        }
+        return '';
+      })(),
+      sellingAgentEmail: (() => {
+        if (props.agent_email) return props.agent_email;
+        if (props.selling_agent) {
+          const parts = props.selling_agent.split(',').map((p: string) => p.trim());
+          return parts.find((p: string) => p.includes('@')) || '';
+        }
+        return '';
+      })(),
+      sellingAgentMobile: (() => {
+        if (props.agent_mobile) return props.agent_mobile;
+        if (props.selling_agent) {
+          const parts = props.selling_agent.split(',').map((p: string) => p.trim());
+          return parts.find((p: string) => /^[+0-9\s()-]+$/.test(p) && p.length >= 8) || '';
+        }
+        return '';
+      })(),
       // Other fields
       // We send sourcer, so GHL should return it as sourcer
       sourcer: props.sourcer || '',
       packager: props.packager || '',
+      packagerEmail: props.packager_email || '',
+      priceGroup: props.price_group || '',
       dealType: dealType || '', // deal_type is the full contract type
       status: status || '', // Top-level status (also in decisionTree.status)
+      // Project fields
+      projectIdentifier: props.project_identifier || '',
+      isParentRecord: props.is_parent_record || '',
+      projectParentId: props.project_parent_id || '',
+      projectAddress: props.project_address || '',
       reviewDate: props.review_date || '',
       folderLink: props.folder_link || '',
       // Message for BA

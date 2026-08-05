@@ -1,0 +1,863 @@
+{
+    "name": "07b Contract Team GHL extract & reports",
+    "flow": [
+        {
+            "id": 14,
+            "module": "gateway:CustomWebHook",
+            "version": 1,
+            "parameters": {
+                "hook": 3233566,
+                "maxResults": 1
+            },
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": -375,
+                    "y": 7
+                },
+                "restore": {
+                    "parameters": {
+                        "hook": {
+                            "data": {
+                                "editable": "true"
+                            },
+                            "label": "Finance Formal Approval"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "hook",
+                        "type": "hook:gateway-webhook",
+                        "label": "Webhook",
+                        "required": true
+                    },
+                    {
+                        "name": "maxResults",
+                        "type": "number",
+                        "label": "Maximum number of results"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "module": "highlevel:listOpportunities",
+            "version": 1,
+            "parameters": {
+                "__IMTCONN__": 4036862
+            },
+            "mapper": {
+                "limit": "1000",
+                "pipeline": "zgBRaMnACpskyf1wHCEV"
+            },
+            "metadata": {
+                "designer": {
+                    "x": 11,
+                    "y": 23
+                },
+                "restore": {
+                    "expect": {
+                        "pipeline": {
+                            "mode": "chose",
+                            "label": "06. FINANCE Pipeline"
+                        }
+                    },
+                    "parameters": {
+                        "__IMTCONN__": {
+                            "data": {
+                                "scoped": "true",
+                                "connection": "highlevel3"
+                            },
+                            "label": "My GoHighlevel Location OAuth 2.0 connection (Location: Buyers Club)"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "__IMTCONN__",
+                        "type": "account:highlevel,highlevel3",
+                        "label": "Connection",
+                        "required": true
+                    }
+                ],
+                "expect": [
+                    {
+                        "name": "pipeline",
+                        "type": "select",
+                        "label": "Pipeline ID"
+                    },
+                    {
+                        "name": "limit",
+                        "type": "uinteger",
+                        "label": "Limit"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 21,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 311,
+                    "y": 23
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 17,
+                            "module": "builtin:BasicAggregator",
+                            "version": 1,
+                            "parameters": {
+                                "feeder": 2
+                            },
+                            "mapper": {
+                                "id": "{{2.id}}",
+                                "name": "{{2.name}}",
+                                "sort": "{{2.sort}}",
+                                "notes": "{{2.notes}}",
+                                "tasks": "{{2.tasks}}",
+                                "source": "{{2.source}}",
+                                "status": "{{2.status}}",
+                                "contact": "{{2.contact}}",
+                                "contactId": "{{2.contactId}}",
+                                "createdAt": "{{2.createdAt}}",
+                                "followers": "{{2.followers}}",
+                                "relations": "{{2.relations}}",
+                                "updatedAt": "{{2.updatedAt}}",
+                                "assignedTo": "{{2.assignedTo}}",
+                                "locationId": "{{2.locationId}}",
+                                "pipelineId": "{{2.pipelineId}}",
+                                "__IMTINDEX__": "{{2.`__IMTINDEX__`}}",
+                                "attributions": "{{2.attributions}}",
+                                "customFields": "{{2.customFields}}",
+                                "indexVersion": "{{2.indexVersion}}",
+                                "lostReasonId": "{{2.lostReasonId}}",
+                                "__IMTLENGTH__": "{{2.`__IMTLENGTH__`}}",
+                                "monetaryValue": "{{2.monetaryValue}}",
+                                "calendarEvents": "{{2.calendarEvents}}",
+                                "lastActionDate": "{{2.lastActionDate}}",
+                                "pipelineStageId": "{{2.pipelineStageId}}",
+                                "pipelineStageUId": "{{2.pipelineStageUId}}",
+                                "lastStageChangeAt": "{{2.lastStageChangeAt}}",
+                                "lastStatusChangeAt": "{{2.lastStatusChangeAt}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 733,
+                                    "y": -148
+                                },
+                                "restore": {
+                                    "extra": {
+                                        "feeder": {
+                                            "label": "GoHighLevel - Search Opportunities [2]"
+                                        },
+                                        "target": {
+                                            "label": "Custom"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 6,
+                            "module": "code:ExecuteCode",
+                            "version": 0,
+                            "parameters": {},
+                            "mapper": {
+                                "input": [
+                                    {
+                                        "name": "opportunity",
+                                        "value": "{{17.array}}"
+                                    }
+                                ],
+                                "language": "javascript",
+                                "inputFormat": "editor",
+                                "dependencies": [],
+                                "codeEditorJavascript": "let opportunities = null;\n\nif (input.array && Array.isArray(input.array)) opportunities = input.array;\nelse if (input.opportunities && Array.isArray(input.opportunities)) opportunities = input.opportunities;\nelse if (input.opportunity && Array.isArray(input.opportunity)) opportunities = input.opportunity;\nelse if (Array.isArray(input)) opportunities = input;\nelse if (input.data && Array.isArray(input.data)) opportunities = input.data;\nelse opportunities = [input];\n\nif (!opportunities || opportunities.length === 0) return [];\n\nconst STAGE_NAMES = {\n  '8fc931f4-4694-42aa-a56e-cb80ff314460': '1. Unregistered | Pending Finance',\n  '5a5c4474-150b-48bc-ba3c-a172c415ea1a': '2. SMSF /SINGLE CONTRACT',\n  '30daaf81-e148-4217-a121-d624cc565ced': '3. No val access',\n  'ab0ee0bb-9b05-4cfc-975a-749d565f03fc': '4. Pending Finance',\n  'e6db59ed-b1c4-48cc-9ec3-587d23336691': '5. Valuation Ordered',\n  'c99d0135-cd6a-467a-bb47-eac2f6d494b5': '6. Application Lodged',\n  '2befdf02-7a80-4e9f-8766-8052a6f6cd93': '7. Formal Approval/unregistered',\n  '22a44a98-f33b-4e18-a50d-325e47106419': '8. Formal Approval',\n  '8c6fd147-88ac-4991-aa94-c5b13bce7e4f': '9. Settled'\n};\n\nconst SETTLED_STAGE_ID = '8c6fd147-88ac-4991-aa94-c5b13bce7e4f';\n\nconst flattenCustomFields = (opp) => {\n  const out = {};\n  for (const cf of (opp.customFields || [])) {\n    let val = \"\";\n    if (cf.fieldValueString !== undefined && cf.fieldValueString !== null && cf.fieldValueString !== \"\") {\n      val = cf.fieldValueString;\n    } else if (Array.isArray(cf.fieldValueArray) && cf.fieldValueArray.length > 0) {\n      val = cf.fieldValueArray.join(\", \");\n    } else if (cf.fieldValueDate !== undefined && cf.fieldValueDate !== null && cf.fieldValueDate !== \"\") {\n      const d = new Date(cf.fieldValueDate);\n      val = isNaN(d.getTime()) ? cf.fieldValueDate.toString() : d.toISOString().substring(0, 10);\n    } else if (cf.fieldValueNumeric !== undefined && cf.fieldValueNumeric !== null && cf.fieldValueNumeric !== \"\") {\n      val = cf.fieldValueNumeric.toString();\n    } else if (cf.fieldValue !== undefined && cf.fieldValue !== null && cf.fieldValue !== \"\") {\n      val = cf.fieldValue;\n    }\n    out[cf.id] = (val || \"\").toString().trim();\n  }\n  out[\"__owner\"] = (opp.assignedTo || \"\").toString().trim();\n  out[\"__followers\"] = Array.isArray(opp.followers) ? opp.followers.filter(Boolean).join(\",\") : (opp.followers || \"\").toString().trim();\n  return out;\n};\n\nconst extractNotes = (raw) => {\n  if (!raw) return \"\";\n  if (Array.isArray(raw)) {\n    return raw.map(n => (n && (n.body || n.text)) || \"\").filter(Boolean).join(\" | \");\n  }\n  return raw.toString().trim();\n};\n\nconst rows = [];\n\nfor (const opp of opportunities) {\n  if (!opp || typeof opp !== \"object\") continue;\n\n  const pipelineStageId = (opp.pipelineStageId || \"\").toString().trim();\n  if (pipelineStageId === SETTLED_STAGE_ID) continue;\n\n  const stageName = STAGE_NAMES[pipelineStageId] || \"\";\n  const opportunityName = (opp.name || opp.title || \"\").toString().trim();\n  const opportunityId = (opp.id || \"\").toString().trim();\n  const monetaryValue = (opp.monetaryValue ?? \"\").toString();\n  const status = (opp.status || \"\").toString();\n  const createdAt = (opp.createdAt || \"\").toString();\n  const updatedAt = (opp.updatedAt || \"\").toString();\n  const lastStageChangeAt = (opp.lastStageChangeAt || \"\").toString();\n  const contactName = (opp.contact?.name || opp.contact?.fullName || \"\").toString();\n  const contactEmail = (opp.contact?.email || \"\").toString();\n  const contactPhone = (opp.contact?.phone || \"\").toString();\n  const notes = extractNotes(opp.notes);\n  const customFieldsJson = JSON.stringify(flattenCustomFields(opp));\n\n  rows.push({\n    values: [\n      stageName, opportunityName, monetaryValue, status, contactName,\n      contactEmail, contactPhone, createdAt, updatedAt, lastStageChangeAt,\n      pipelineStageId, opportunityId, notes, customFieldsJson\n    ]\n  });\n}\n\nreturn rows;"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1151,
+                                    "y": -185
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "input": {
+                                            "items": [
+                                                null
+                                            ]
+                                        },
+                                        "language": {
+                                            "mode": "chose",
+                                            "label": "JavaScript"
+                                        },
+                                        "inputFormat": {
+                                            "label": "Code editor"
+                                        }
+                                    }
+                                },
+                                "expect": [
+                                    {
+                                        "name": "language",
+                                        "type": "select",
+                                        "label": "Language",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "javascript",
+                                                "python"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "input",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true,
+                                                    "validate": {
+                                                        "max": 32,
+                                                        "min": 1,
+                                                        "pattern": "^[a-zA-Z0-9_]{1,32}$"
+                                                    }
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "any",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Variable"
+                                        },
+                                        "type": "array",
+                                        "label": "Input"
+                                    },
+                                    {
+                                        "name": "dependencies",
+                                        "spec": {
+                                            "name": "value",
+                                            "type": "text",
+                                            "label": "Dependency",
+                                            "required": true,
+                                            "validate": {
+                                                "max": 214,
+                                                "min": 1,
+                                                "pattern": "^[A-Za-z0-9_@\\./<>\\=\\!~\\^+\\-]{1,214}$"
+                                            }
+                                        },
+                                        "type": "array",
+                                        "label": "Additional dependencies (Enterprise plans only)"
+                                    },
+                                    {
+                                        "name": "inputFormat",
+                                        "type": "select",
+                                        "label": "Input format",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "editor",
+                                                "string"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "codeEditorJavascript",
+                                        "type": "editor",
+                                        "label": "Code",
+                                        "required": true
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 12,
+                            "module": "google-sheets:addMultipleRows",
+                            "version": 2,
+                            "parameters": {
+                                "__IMTCONN__": 4023108
+                            },
+                            "mapper": {
+                                "rows": "{{6.result}}",
+                                "sheetId": "Finance Staging",
+                                "spreadsheetId": "1P-EcxoPm4xmKKzDG_Jq6FhcUW_b4igBoeOvromsS6r0",
+                                "tableFirstRow": "A1:Z1",
+                                "insertDataOption": "INSERT_ROWS",
+                                "valueInputOption": "USER_ENTERED",
+                                "insertUnformatted": false
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1602,
+                                    "y": -197
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "rows": {
+                                            "mode": "edit"
+                                        },
+                                        "sheetId": {
+                                            "mode": "chose",
+                                            "label": "Finance Staging"
+                                        },
+                                        "tableFirstRow": {
+                                            "label": "A-Z"
+                                        },
+                                        "insertDataOption": {
+                                            "mode": "chose",
+                                            "label": "Insert rows"
+                                        },
+                                        "valueInputOption": {
+                                            "mode": "chose",
+                                            "label": "User entered"
+                                        },
+                                        "insertUnformatted": {
+                                            "mode": "chose"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "google"
+                                            },
+                                            "label": "My Google connection (john.t@buyersclub.com.au)"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "__IMTCONN__",
+                                        "type": "account:google",
+                                        "label": "Connection",
+                                        "required": true
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "spreadsheetId",
+                                        "type": "text",
+                                        "label": "Spreadsheet ID",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "insertUnformatted",
+                                        "type": "boolean",
+                                        "label": "Unformatted",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "valueInputOption",
+                                        "type": "select",
+                                        "label": "Value input option"
+                                    },
+                                    {
+                                        "name": "insertDataOption",
+                                        "type": "select",
+                                        "label": "Insert data option"
+                                    },
+                                    {
+                                        "type": "hidden"
+                                    },
+                                    {
+                                        "mode": "edit",
+                                        "name": "sheetId",
+                                        "type": "select",
+                                        "label": "Sheet Name",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "tableFirstRow",
+                                        "type": "select",
+                                        "label": "Column range",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "A1:Z1",
+                                                "A1:BZ1",
+                                                "A1:CZ1",
+                                                "A1:DZ1",
+                                                "A1:MZ1",
+                                                "A1:ZZ1"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "mode": "edit",
+                                        "name": "rows",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "values",
+                                                    "spec": {
+                                                        "type": "text",
+                                                        "label": "Column"
+                                                    },
+                                                    "type": "array",
+                                                    "label": "Values",
+                                                    "labels": {
+                                                        "add": "Add value"
+                                                    }
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Row"
+                                        },
+                                        "type": "array",
+                                        "label": "Rows"
+                                    }
+                                ],
+                                "advanced": true
+                            }
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 41,
+                            "module": "builtin:BasicAggregator",
+                            "version": 1,
+                            "parameters": {
+                                "feeder": 2
+                            },
+                            "mapper": {
+                                "id": "{{2.id}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 733,
+                                    "y": 248
+                                },
+                                "restore": {
+                                    "extra": {
+                                        "feeder": {
+                                            "label": "GoHighLevel - Search Opportunities [2]"
+                                        },
+                                        "target": {
+                                            "label": "Custom"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 42,
+                            "module": "highlevel:listOpportunities",
+                            "version": 1,
+                            "parameters": {
+                                "__IMTCONN__": 4036862
+                            },
+                            "mapper": {
+                                "limit": "1000",
+                                "pipeline": "XMKCHlqekS7IU87PNLKB"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1069,
+                                    "y": 246
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "pipeline": {
+                                            "mode": "chose",
+                                            "label": "07. CONSTRUCTION Pipeline"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "highlevel3"
+                                            },
+                                            "label": "My GoHighlevel Location OAuth 2.0 connection (Location: Buyers Club)"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "__IMTCONN__",
+                                        "type": "account:highlevel,highlevel3",
+                                        "label": "Connection",
+                                        "required": true
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "pipeline",
+                                        "type": "select",
+                                        "label": "Pipeline ID"
+                                    },
+                                    {
+                                        "name": "limit",
+                                        "type": "uinteger",
+                                        "label": "Limit"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 46,
+                            "module": "builtin:BasicRouter",
+                            "version": 1,
+                            "mapper": null,
+                            "metadata": {
+                                "designer": {
+                                    "x": 1401,
+                                    "y": 237
+                                }
+                            },
+                            "routes": [
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 43,
+                                            "module": "builtin:BasicAggregator",
+                                            "version": 1,
+                                            "parameters": {
+                                                "feeder": 42
+                                            },
+                                            "mapper": {
+                                                "id": "{{42.id}}",
+                                                "name": "{{42.name}}",
+                                                "notes": "{{42.notes}}",
+                                                "tasks": "{{42.tasks}}",
+                                                "source": "{{42.source}}",
+                                                "status": "{{42.status}}",
+                                                "contact": "{{42.contact}}",
+                                                "contactId": "{{42.contactId}}",
+                                                "createdAt": "{{42.createdAt}}",
+                                                "followers": "{{42.followers}}",
+                                                "updatedAt": "{{42.updatedAt}}",
+                                                "assignedTo": "{{42.assignedTo}}",
+                                                "locationId": "{{42.locationId}}",
+                                                "pipelineId": "{{42.pipelineId}}",
+                                                "__IMTINDEX__": "{{42.`__IMTINDEX__`}}",
+                                                "customFields": "{{42.customFields}}",
+                                                "indexVersion": "{{42.indexVersion}}",
+                                                "lostReasonId": "{{42.lostReasonId}}",
+                                                "__IMTLENGTH__": "{{42.`__IMTLENGTH__`}}",
+                                                "monetaryValue": "{{42.monetaryValue}}",
+                                                "calendarEvents": "{{42.calendarEvents}}",
+                                                "lastActionDate": "{{42.lastActionDate}}",
+                                                "pipelineStageId": "{{42.pipelineStageId}}",
+                                                "pipelineStageUId": "{{42.pipelineStageUId}}",
+                                                "lastStageChangeAt": "{{42.lastStageChangeAt}}",
+                                                "lastStatusChangeAt": "{{42.lastStatusChangeAt}}"
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1752,
+                                                    "y": 223
+                                                },
+                                                "restore": {
+                                                    "extra": {
+                                                        "feeder": {
+                                                            "label": "GoHighLevel - Search Opportunities [42]"
+                                                        },
+                                                        "target": {
+                                                            "label": "Custom"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 44,
+                                            "module": "code:ExecuteCode",
+                                            "version": 1,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "input": [
+                                                    {
+                                                        "name": "opportunity",
+                                                        "value": "{{43.array}}"
+                                                    }
+                                                ],
+                                                "language": "javascript",
+                                                "inputFormat": "editor",
+                                                "dependencies": [],
+                                                "codeEditorJavascript": "let opportunities = null;\n\nif (input.array && Array.isArray(input.array)) opportunities = input.array;\nelse if (input.opportunities && Array.isArray(input.opportunities)) opportunities = input.opportunities;\nelse if (input.opportunity && Array.isArray(input.opportunity)) opportunities = input.opportunity;\nelse if (Array.isArray(input)) opportunities = input;\nelse if (input.data && Array.isArray(input.data)) opportunities = input.data;\nelse opportunities = [input];\n\nif (!opportunities || opportunities.length === 0) return [];\n\nconst STAGE_NAMES = {\n  '2f519b35-9011-496f-b318-3d1ce5d4a28b': '1. PRE BA SMSF| IN CONSTRUCTION',\n  '77c8dfc4-be73-44ab-9052-ee3fc382c3a2': '2. Pre BA',\n  '754ba328-d153-4cfb-a2d9-22659999623f': '3. BA Issued',\n  'a95c06da-764a-4093-9b99-3cf21184a468': '4. Slab',\n  '3f77b25f-9248-46bd-ae3d-d6630c229ad5': '5. FRAME/PLATE HEIGHT',\n  '4e057da4-0aae-4afd-af4f-92d9fa42c80e': '6. Enclosed/ ROOF COVER',\n  '03da62d5-45fa-4a38-a47a-21611a126aae': '7. TILING/Lock up',\n  'c010c432-9240-48e5-b521-c40b53ba107d': '8. Fixing/ PLASTERING',\n  '114381c7-7f68-47e7-8b0e-efe74755cee2': '9. PRACTICAL COMPLETION',\n  '59f1b5f8-0df3-4af2-9da5-805c8ccde6ed': '10. LANDSCAPING PENDING',\n  '08aa8a2b-4a2a-44f6-97c1-57e26b2f09ac': '11. HANDOVER'\n};\n\nconst flattenCustomFields = (opp) => {\n  const out = {};\n  for (const cf of (opp.customFields || [])) {\n    let val = \"\";\n    if (cf.fieldValueString !== undefined && cf.fieldValueString !== null && cf.fieldValueString !== \"\") {\n      val = cf.fieldValueString;\n    } else if (Array.isArray(cf.fieldValueArray) && cf.fieldValueArray.length > 0) {\n      val = cf.fieldValueArray.join(\", \");\n    } else if (cf.fieldValueDate !== undefined && cf.fieldValueDate !== null && cf.fieldValueDate !== \"\") {\n      const d = new Date(cf.fieldValueDate);\n      val = isNaN(d.getTime()) ? cf.fieldValueDate.toString() : d.toISOString().substring(0, 10);\n    } else if (cf.fieldValueNumeric !== undefined && cf.fieldValueNumeric !== null && cf.fieldValueNumeric !== \"\") {\n      val = cf.fieldValueNumeric.toString();\n    } else if (cf.fieldValue !== undefined && cf.fieldValue !== null && cf.fieldValue !== \"\") {\n      val = cf.fieldValue;\n    }\n    out[cf.id] = (val || \"\").toString().trim();\n  }\n  out[\"__owner\"] = (opp.assignedTo || \"\").toString().trim();\n  out[\"__followers\"] = Array.isArray(opp.followers) ? opp.followers.filter(Boolean).join(\",\") : (opp.followers || \"\").toString().trim();\n  return out;\n};\n\nconst extractNotes = (raw) => {\n  if (!raw) return \"\";\n  if (Array.isArray(raw)) {\n    return raw.map(n => (n && (n.body || n.text)) || \"\").filter(Boolean).join(\" | \");\n  }\n  return raw.toString().trim();\n};\n\nconst rows = [];\n\nfor (const opp of opportunities) {\n  if (!opp || typeof opp !== \"object\") continue;\n\n  const pipelineStageId = (opp.pipelineStageId || \"\").toString().trim();\n  const stageName = STAGE_NAMES[pipelineStageId] || \"\";\n  const opportunityName = (opp.name || opp.title || \"\").toString().trim();\n  const opportunityId = (opp.id || \"\").toString().trim();\n  const monetaryValue = (opp.monetaryValue ?? \"\").toString();\n  const status = (opp.status || \"\").toString();\n  const createdAt = (opp.createdAt || \"\").toString();\n  const updatedAt = (opp.updatedAt || \"\").toString();\n  const lastStageChangeAt = (opp.lastStageChangeAt || \"\").toString();\n  const contactName = (opp.contact?.name || opp.contact?.fullName || \"\").toString();\n  const contactEmail = (opp.contact?.email || \"\").toString();\n  const contactPhone = (opp.contact?.phone || \"\").toString();\n  const notes = extractNotes(opp.notes);\n  const customFieldsJson = JSON.stringify(flattenCustomFields(opp));\n\n  rows.push({\n    values: [\n      stageName, opportunityName, monetaryValue, status, contactName,\n      contactEmail, contactPhone, createdAt, updatedAt, lastStageChangeAt,\n      pipelineStageId, opportunityId, notes, customFieldsJson\n    ]\n  });\n}\n\nreturn rows;"
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 2123,
+                                                    "y": 191
+                                                },
+                                                "restore": {
+                                                    "expect": {
+                                                        "input": {
+                                                            "items": [
+                                                                null
+                                                            ]
+                                                        },
+                                                        "language": {
+                                                            "mode": "chose",
+                                                            "label": "JavaScript"
+                                                        },
+                                                        "inputFormat": {
+                                                            "label": "Code editor"
+                                                        }
+                                                    }
+                                                },
+                                                "expect": [
+                                                    {
+                                                        "name": "language",
+                                                        "type": "select",
+                                                        "label": "Language",
+                                                        "required": true,
+                                                        "validate": {
+                                                            "enum": [
+                                                                "javascript",
+                                                                "python"
+                                                            ]
+                                                        }
+                                                    },
+                                                    {
+                                                        "name": "input",
+                                                        "spec": {
+                                                            "name": "value",
+                                                            "spec": [
+                                                                {
+                                                                    "name": "name",
+                                                                    "type": "text",
+                                                                    "label": "Name",
+                                                                    "required": true,
+                                                                    "validate": {
+                                                                        "max": 32,
+                                                                        "min": 1,
+                                                                        "pattern": "^[a-zA-Z0-9_]{1,32}$"
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "name": "value",
+                                                                    "type": "any",
+                                                                    "label": "Value"
+                                                                }
+                                                            ],
+                                                            "type": "collection",
+                                                            "label": "Variable"
+                                                        },
+                                                        "type": "array",
+                                                        "label": "Input"
+                                                    },
+                                                    {
+                                                        "name": "dependencies",
+                                                        "spec": {
+                                                            "name": "value",
+                                                            "type": "text",
+                                                            "label": "Dependency",
+                                                            "required": true,
+                                                            "validate": {
+                                                                "max": 214,
+                                                                "min": 1,
+                                                                "pattern": "^[A-Za-z0-9_@\\./<>=!~\\^+-]{1,214}$"
+                                                            }
+                                                        },
+                                                        "type": "array",
+                                                        "label": "Additional dependencies (Enterprise plans only)"
+                                                    },
+                                                    {
+                                                        "name": "inputFormat",
+                                                        "type": "select",
+                                                        "label": "Input format",
+                                                        "required": true,
+                                                        "validate": {
+                                                            "enum": [
+                                                                "editor",
+                                                                "string"
+                                                            ]
+                                                        }
+                                                    },
+                                                    {
+                                                        "name": "codeEditorJavascript",
+                                                        "type": "editor",
+                                                        "label": "Code",
+                                                        "required": true
+                                                    }
+                                                ]
+                                            }
+                                        },
+                                        {
+                                            "id": 45,
+                                            "module": "google-sheets:addMultipleRows",
+                                            "version": 2,
+                                            "parameters": {
+                                                "__IMTCONN__": 4023108
+                                            },
+                                            "mapper": {
+                                                "rows": "{{44.result}}",
+                                                "sheetId": "Construction Staging",
+                                                "spreadsheetId": "1P-EcxoPm4xmKKzDG_Jq6FhcUW_b4igBoeOvromsS6r0",
+                                                "tableFirstRow": "A1:Z1",
+                                                "insertDataOption": "INSERT_ROWS",
+                                                "valueInputOption": "USER_ENTERED",
+                                                "insertUnformatted": "No"
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 2464,
+                                                    "y": 173
+                                                },
+                                                "restore": {
+                                                    "expect": {
+                                                        "rows": {
+                                                            "mode": "edit"
+                                                        },
+                                                        "sheetId": {
+                                                            "mode": "chose",
+                                                            "label": "Construction Staging"
+                                                        },
+                                                        "tableFirstRow": {
+                                                            "label": "A-Z"
+                                                        },
+                                                        "insertDataOption": {
+                                                            "mode": "chose",
+                                                            "label": "Insert rows"
+                                                        },
+                                                        "valueInputOption": {
+                                                            "mode": "chose",
+                                                            "label": "User entered"
+                                                        },
+                                                        "insertUnformatted": {
+                                                            "mode": "edit"
+                                                        }
+                                                    },
+                                                    "parameters": {
+                                                        "__IMTCONN__": {
+                                                            "data": {
+                                                                "scoped": "true",
+                                                                "connection": "google"
+                                                            },
+                                                            "label": "My Google connection (john.t@buyersclub.com.au)"
+                                                        }
+                                                    }
+                                                },
+                                                "parameters": [
+                                                    {
+                                                        "name": "__IMTCONN__",
+                                                        "type": "account:google",
+                                                        "label": "Connection",
+                                                        "required": true
+                                                    }
+                                                ],
+                                                "expect": [
+                                                    {
+                                                        "name": "spreadsheetId",
+                                                        "type": "text",
+                                                        "label": "Spreadsheet ID",
+                                                        "required": true
+                                                    },
+                                                    {
+                                                        "name": "insertUnformatted",
+                                                        "type": "boolean",
+                                                        "label": "Unformatted",
+                                                        "required": true
+                                                    },
+                                                    {
+                                                        "name": "valueInputOption",
+                                                        "type": "select",
+                                                        "label": "Value input option"
+                                                    },
+                                                    {
+                                                        "name": "insertDataOption",
+                                                        "type": "select",
+                                                        "label": "Insert data option"
+                                                    },
+                                                    {
+                                                        "type": "hidden"
+                                                    },
+                                                    {
+                                                        "mode": "edit",
+                                                        "name": "sheetId",
+                                                        "type": "select",
+                                                        "label": "Sheet Name",
+                                                        "required": true
+                                                    },
+                                                    {
+                                                        "name": "tableFirstRow",
+                                                        "type": "select",
+                                                        "label": "Column range",
+                                                        "required": true,
+                                                        "validate": {
+                                                            "enum": [
+                                                                "A1:Z1",
+                                                                "A1:BZ1",
+                                                                "A1:CZ1",
+                                                                "A1:DZ1",
+                                                                "A1:MZ1",
+                                                                "A1:ZZ1"
+                                                            ]
+                                                        }
+                                                    },
+                                                    {
+                                                        "mode": "edit",
+                                                        "name": "rows",
+                                                        "spec": {
+                                                            "name": "value",
+                                                            "spec": [
+                                                                {
+                                                                    "name": "values",
+                                                                    "spec": {
+                                                                        "type": "text",
+                                                                        "label": "Column"
+                                                                    },
+                                                                    "type": "array",
+                                                                    "label": "Values",
+                                                                    "labels": {
+                                                                        "add": "Add value"
+                                                                    }
+                                                                }
+                                                            ],
+                                                            "type": "collection",
+                                                            "label": "Row"
+                                                        },
+                                                        "type": "array",
+                                                        "label": "Rows"
+                                                    }
+                                                ],
+                                                "advanced": true
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "instant": true,
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "slots": null,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false,
+            "freshVariables": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "zone": "eu1.make.com",
+        "notes": []
+    }
+}

@@ -3,7 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useFormStore } from '@/store/formStore';
 
-export function Step6WashingtonBrown() {
+interface WashingtonBrownProps {
+  folderLink?: string;
+  sourceDepreciation?: { year: number; value: string }[];
+}
+
+export function Step6WashingtonBrown({ folderLink, sourceDepreciation }: WashingtonBrownProps = {}) {
   const { formData, updateFormData, updateLotCashflowOverrides } = useFormStore();
   const [pastedText, setPastedText] = useState('');
   const [parsing, setParsing] = useState(false);
@@ -235,6 +240,22 @@ export function Step6WashingtonBrown() {
           </div>
         </div>
 
+        {/* Source Record Depreciation Values */}
+        {sourceDepreciation && sourceDepreciation.length > 0 && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <h4 className="text-sm font-semibold text-amber-900 mb-2">Source Record Depreciation Values</h4>
+            <div className="grid grid-cols-5 gap-2 text-xs">
+              {sourceDepreciation.map(d => (
+                <div key={d.year} className="text-center">
+                  <span className="text-amber-700 font-medium">Yr {d.year}:</span>{' '}
+                  <span className="text-amber-900 font-mono">${Number(d.value).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-amber-600 mt-2">These values will be used unless you paste new values below.</p>
+          </div>
+        )}
+
         {/* Instructions */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h3 className="font-semibold text-blue-900 mb-2">Manual Entry Instructions</h3>
@@ -327,65 +348,77 @@ export function Step6WashingtonBrown() {
           </div>
         )}
 
-        {/* Results Table */}
-        {hasAnyData && (
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-4">Depreciation Values (Diminishing Value)</h3>
-            <div className="border border-gray-300 rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-300">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Year
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Diminishing Value ($)
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((year) => {
-                    const value = depreciation[`year${year}`] || '';
-                    const isEmpty = !value || value.trim() === '';
-                    
-                    return (
-                      <tr key={year} className={year % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          Year {year}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="text"
-                            value={value}
-                            onChange={(e) => handleYearChange(year, e.target.value)}
-                            placeholder="0"
-                            className={`w-full px-3 py-2 text-right border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              isEmpty ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                            }`}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* Validation hint */}
-            {!isValid() && (
-              <p className="mt-2 text-sm text-gray-600">
-                <span className="text-red-600">*</span> All 10 years must have valid numeric values before proceeding to the next step.
-              </p>
-            )}
+        {/* Link to existing folder for depreciation schedules */}
+        {folderLink && (
+          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h4 className="text-sm font-semibold text-blue-900 mb-1">Source Property Folder</h4>
+            <p className="text-sm text-blue-800">
+              Open the source property folder to access the existing depreciation schedule from the cashflow spreadsheet.
+            </p>
+            <a
+              href={folderLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block mt-2 text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium"
+            >
+              Open folder →
+            </a>
           </div>
         )}
 
-        {/* Help Text */}
-        {!hasAnyData && (
-          <div className="text-center py-8 text-gray-500">
-            <p className="text-sm">Paste your Washington Brown report above and click "Parse Depreciation Values" to get started.</p>
+        {/* Results Table — always visible so existing values can be reviewed/edited */}
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-4">Depreciation Values (Diminishing Value)</h3>
+          {!hasAnyData && (
+            <p className="text-sm text-gray-500 mb-3">No existing values found. Use the calculator above or paste a report to populate, or enter values manually below.</p>
+          )}
+          <div className="border border-gray-300 rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-300">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Year
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Diminishing Value ($)
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((year) => {
+                  const value = depreciation[`year${year}`] || '';
+                  const isEmpty = !value || value.trim() === '';
+                  
+                  return (
+                    <tr key={year} className={year % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        Year {year}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="text"
+                          value={value}
+                          onChange={(e) => handleYearChange(year, e.target.value)}
+                          placeholder="0"
+                          className={`w-full px-3 py-2 text-right border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                            isEmpty ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                          }`}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
+          
+          {/* Validation hint */}
+          {!isValid() && hasAnyData && (
+            <p className="mt-2 text-sm text-gray-600">
+              <span className="text-red-600">*</span> All 10 years must have valid numeric values before proceeding to the next step.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

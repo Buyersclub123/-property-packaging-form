@@ -525,8 +525,9 @@ if (isPortalRequest) {
   const carspaceSecondaryPortal = vPortal("carspace_secondary") || vPortal("carspace_additional__secondary__dual_key");
   const yearBuiltPortal = vPortal("year_built");
   const landRegistrationPortal = vPortal("land_registration");
+  const completionDatePortal = vPortal("completion_date");
   const buildSizePortal = vPortal("build_size");
-  const landSizePortal = vPortal("land_size");
+  const landSizePortal = (() => { const v = vPortal("land_size"); return v === "0" ? "" : v; })();
   const titlePortal = vPortal("title");
   const bodyCorpQuarterPortal = vPortal("body_corp__per_quarter");
   const bodyCorpDescriptionPortal = vPortal("body_corp_description");
@@ -705,9 +706,9 @@ if (isPortalRequest) {
 
       const landRegistrationLot = lotProps && (lotProps.land_registration || lotProps.landRegistration) ? String(lotProps.land_registration || lotProps.landRegistration) : "";
       const buildSizeLot = lotProps && (lotProps.build_size || lotProps.buildSize) ? String(lotProps.build_size || lotProps.buildSize) : "";
-      const landSizeLot = lotProps && (lotProps.land_size || lotProps.landSize) ? String(lotProps.land_size || lotProps.landSize) : "";
+      const landSizeLot = (() => { const v = lotProps && (lotProps.land_size || lotProps.landSize) ? String(lotProps.land_size || lotProps.landSize) : ""; return v === "0" ? "" : v; })();
       const titleLotRaw = lotProps && lotProps.title ? String(lotProps.title) : "";
-      const bodyCorpQuarterLot = lotProps && (lotProps.body_corp__per_quarter || lotProps.body_corp_per_quarter) ? String(lotProps.body_corp__per_quarter || lotProps.body_corp_per_quarter) : "";
+      const bodyCorpQuarterLot = lotProps && (lotProps.body_corp__per_quarter || lotProps.body_corp_per_quarter || lotProps.bodyCorpPerQuarter) ? String(lotProps.body_corp__per_quarter || lotProps.body_corp_per_quarter || lotProps.bodyCorpPerQuarter) : "";
       const bodyCorpDescriptionLot = lotProps && (lotProps.body_corp_description || lotProps.bodyCorpDescription) ? String(lotProps.body_corp_description || lotProps.bodyCorpDescription) : "";
 
       const bedsDisplayLot = bedsPrimaryLot && bedsSecondaryLot ? `${bedsPrimaryLot} + ${bedsSecondaryLot}` : (bedsPrimaryLot || bedsSecondaryLot || "");
@@ -767,6 +768,14 @@ if (isPortalRequest) {
       if (isLotSoldPD) propertyDescHtmlPortal += '</div>';
       propertyDescHtmlPortal += `<br>`;
       propertyDescTextPortal += "\n";
+    }
+
+    const propDescDialogueProjectPortal = vPortal("property_description_additional_dialogue");
+    if (propDescDialogueProjectPortal) {
+      const propDescDialogueHtmlProjectPortal = normaliseNewlines(propDescDialogueProjectPortal)
+        .split(/\n+/).map((l) => l.trim()).filter(Boolean).join("<br>");
+      propertyDescHtmlPortal += `<p>*${propDescDialogueHtmlProjectPortal}</p>`;
+      propertyDescTextPortal += `*${propDescDialogueProjectPortal}\n`;
     }
   } else if (isTriPlusPortal && dwellingsParsedPortal.length > 0) {
     // TRI-PLUS PROPERTY DESCRIPTION — Summary totals + per-dwelling breakdown
@@ -1061,6 +1070,11 @@ if (isPortalRequest) {
     if (!isEstablishedPortal && landRegistrationDisplayPortal) {
       propertyDescHtmlPortal += htmlLine("Registration", landRegistrationDisplayPortal);
     }
+    // Completion Date: Only show for New Single Contract properties
+    const isSingleContractForDescPortal = contractTypeSimplifiedPortal && contractTypeSimplifiedPortal.toLowerCase().replace(/_/g, " ").trim() === "single contract";
+    if (!isEstablishedPortal && isSingleContractForDescPortal && completionDatePortal) {
+      propertyDescHtmlPortal += htmlLine("Completion Date", completionDatePortal);
+    }
     if (builtDisplayPortal) {
       propertyDescHtmlPortal += htmlLine("Built", builtDisplayPortal);
     }
@@ -1101,6 +1115,10 @@ if (isPortalRequest) {
     // Registration: Only show for New properties (NOT Established)
     if (!isEstablishedPortal && landRegistrationDisplayPortal) {
       propertyDescTextPortal += textLine("Registration", landRegistrationDisplayPortal);
+    }
+    // Completion Date: Only show for New Single Contract properties
+    if (!isEstablishedPortal && isSingleContractForDescPortal && completionDatePortal) {
+      propertyDescTextPortal += textLine("Completion Date", completionDatePortal);
     }
     if (builtDisplayPortal) propertyDescTextPortal += textLine("Built", builtDisplayPortal);
     if (landSizeDisplayPortal) propertyDescTextPortal += textLine("Land Size", landSizeDisplayPortal);
@@ -2401,8 +2419,9 @@ const carspaceSecondary = v("carspace_secondary") || v("carspace_additional__sec
 
 const yearBuilt = v("year_built");
 const landRegistration = v("land_registration");
+const completionDate = v("completion_date");
 const buildSize = v("build_size");
-const landSize = v("land_size");
+const landSize = (() => { const raw = v("land_size"); return raw === "0" ? "" : raw; })();
 const title = v("title");
 const bodyCorpQuarter = v("body_corp__per_quarter");
 const bodyCorpDescription = v("body_corp_description");
@@ -2681,12 +2700,20 @@ try {
 }
 
 // Filter lots by project_identifier + dedupe (non-portal)
+// Only filter if lots have project_identifier (GHL search results from Module 86).
+// Webhook lots don't have this field per-lot and are already scoped to the project.
 if (projectIdentifier) {
-  lotsParsed = lotsParsed.filter((lot) => {
-    const lotProps = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
-    const pid = lotProps && (lotProps.project_identifier || lotProps.projectIdentifier) ? String(lotProps.project_identifier || lotProps.projectIdentifier).trim() : "";
-    return pid === projectIdentifier;
+  const lotsHaveProjectId = lotsParsed.some((lot) => {
+    const lp = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
+    return !!(lp && (lp.project_identifier || lp.projectIdentifier));
   });
+  if (lotsHaveProjectId) {
+    lotsParsed = lotsParsed.filter((lot) => {
+      const lotProps = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
+      const pid = lotProps && (lotProps.project_identifier || lotProps.projectIdentifier) ? String(lotProps.project_identifier || lotProps.projectIdentifier).trim() : "";
+      return pid === projectIdentifier;
+    });
+  }
 }
 {
   const seen = new Set();
@@ -2740,15 +2767,15 @@ if (
     const carspaceSecondaryLot = pd && pd.carspaceSecondary !== undefined ? String(pd.carspaceSecondary) : (lotProps && lotProps.carspace_additional__secondary__dual_key !== undefined ? String(lotProps.carspace_additional__secondary__dual_key) : (lotProps && lotProps.carspaceSecondary !== undefined ? String(lotProps.carspaceSecondary) : ""));
 
     const buildSizeLot = pd && pd.buildSize !== undefined ? String(pd.buildSize) : (lotProps && lotProps.build_size !== undefined ? String(lotProps.build_size) : (lotProps && lotProps.buildSize !== undefined ? String(lotProps.buildSize) : ""));
-    const landSizeLot = pd && pd.landSize !== undefined ? String(pd.landSize) : (lotProps && lotProps.land_size !== undefined ? String(lotProps.land_size) : (lotProps && lotProps.landSize !== undefined ? String(lotProps.landSize) : ""));
+    const landSizeLot = (() => { const v = pd && pd.landSize !== undefined ? String(pd.landSize) : (lotProps && lotProps.land_size !== undefined ? String(lotProps.land_size) : (lotProps && lotProps.landSize !== undefined ? String(lotProps.landSize) : "")); return v === "0" ? "" : v; })();
     const landRegistrationLot = pd && pd.landRegistration !== undefined ? String(pd.landRegistration) : (lotProps && lotProps.land_registration !== undefined ? String(lotProps.land_registration) : (lotProps && lotProps.landRegistration !== undefined ? String(lotProps.landRegistration) : ""));
     const titleLot = pd && pd.title !== undefined ? String(pd.title) : (lotProps && lotProps.title !== undefined ? String(lotProps.title) : "");
-    const bodyCorpQuarterLot = lotProps && (lotProps.body_corp__per_quarter !== undefined || lotProps.body_corp_per_quarter !== undefined)
-      ? String(lotProps.body_corp__per_quarter !== undefined ? lotProps.body_corp__per_quarter : lotProps.body_corp_per_quarter)
-      : "";
-    const bodyCorpDescriptionLot = lotProps && (lotProps.body_corp_description !== undefined || lotProps.bodyCorpDescription !== undefined)
+    const bodyCorpQuarterLot = pd && pd.bodyCorpPerQuarter !== undefined ? String(pd.bodyCorpPerQuarter) : (lotProps && (lotProps.body_corp__per_quarter !== undefined || lotProps.body_corp_per_quarter !== undefined || lotProps.bodyCorpPerQuarter !== undefined)
+      ? String(lotProps.body_corp__per_quarter !== undefined ? lotProps.body_corp__per_quarter : (lotProps.body_corp_per_quarter !== undefined ? lotProps.body_corp_per_quarter : lotProps.bodyCorpPerQuarter))
+      : "");
+    const bodyCorpDescriptionLot = pd && pd.bodyCorpDescription !== undefined ? String(pd.bodyCorpDescription) : (lotProps && (lotProps.body_corp_description !== undefined || lotProps.bodyCorpDescription !== undefined)
       ? String(lotProps.body_corp_description !== undefined ? lotProps.body_corp_description : lotProps.bodyCorpDescription)
-      : "";
+      : "");
 
     const formatBathValueLot = (val) => {
       if (!val) return "";
@@ -2889,6 +2916,14 @@ if (
     propertyDescHtml += `<br>`;
     propertyDescText += `\n`;
   });
+
+  const propDescDialogueProject = v("property_description_additional_dialogue");
+  if (propDescDialogueProject) {
+    const propDescDialogueHtmlProject = normaliseNewlines(propDescDialogueProject)
+      .split(/\n+/).map((l) => l.trim()).filter(Boolean).join("<br>");
+    propertyDescHtml += `<p>*${propDescDialogueHtmlProject}</p>`;
+    propertyDescText += `*${propDescDialogueProject}\n`;
+  }
 } else if (isTriPlus && dwellingsParsed.length > 0) {
   // TRI-PLUS PROPERTY DESCRIPTION — Summary totals + per-dwelling breakdown
 
@@ -3213,6 +3248,11 @@ if (
   if (!isEstablished && landRegistrationDisplay) {
     propertyDescHtml += htmlLine("Registration", landRegistrationDisplay);
   }
+  // Completion Date: Only show for New Single Contract properties
+  const isSingleContractForDesc = contractTypeSimplified && contractTypeSimplified.toLowerCase().replace(/_/g, " ").trim() === "single contract";
+  if (!isEstablished && isSingleContractForDesc && completionDate) {
+    propertyDescHtml += htmlLine("Completion Date", completionDate);
+  }
   if (builtDisplay) {
     propertyDescHtml += htmlLine("Built", builtDisplay);
   }
@@ -3265,6 +3305,10 @@ if (
   // Registration: Only show for New properties (NOT Established)
   if (!isEstablished && landRegistrationDisplay) {
     propertyDescText += textLine("Registration", landRegistrationDisplay);
+  }
+  // Completion Date: Only show for New Single Contract properties
+  if (!isEstablished && isSingleContractForDesc && completionDate) {
+    propertyDescText += textLine("Completion Date", completionDate);
   }
   if (builtDisplay) propertyDescText += textLine("Built", builtDisplay);
   if (landSizeDisplay) propertyDescText += textLine("Land Size", landSizeDisplay);
@@ -3412,12 +3456,20 @@ if (
     }
 
     // Filter lots by project_identifier + dedupe (non-portal purchase)
+    // Only filter if lots have project_identifier (GHL search results from Module 86).
+    // Webhook lots don't have this field per-lot and are already scoped to the project.
     if (projectIdentifier) {
-      projectLots = projectLots.filter((lot) => {
-        const lotProps = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
-        const pid = lotProps && (lotProps.project_identifier || lotProps.projectIdentifier) ? String(lotProps.project_identifier || lotProps.projectIdentifier).trim() : "";
-        return pid === projectIdentifier;
+      const lotsHaveProjectIdPP = projectLots.some((lot) => {
+        const lp = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
+        return !!(lp && (lp.project_identifier || lp.projectIdentifier));
       });
+      if (lotsHaveProjectIdPP) {
+        projectLots = projectLots.filter((lot) => {
+          const lotProps = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
+          const pid = lotProps && (lotProps.project_identifier || lotProps.projectIdentifier) ? String(lotProps.project_identifier || lotProps.projectIdentifier).trim() : "";
+          return pid === projectIdentifier;
+        });
+      }
     }
     {
       const seen = new Set();
@@ -3727,12 +3779,20 @@ if (
     }
 
     // Filter lots by project_identifier + dedupe (non-portal rental)
+    // Only filter if lots have project_identifier (GHL search results from Module 86).
+    // Webhook lots don't have this field per-lot and are already scoped to the project.
     if (projectIdentifier) {
-      projectLots = projectLots.filter((lot) => {
-        const lotProps = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
-        const pid = lotProps && (lotProps.project_identifier || lotProps.projectIdentifier) ? String(lotProps.project_identifier || lotProps.projectIdentifier).trim() : "";
-        return pid === projectIdentifier;
+      const lotsHaveProjectIdRA = projectLots.some((lot) => {
+        const lp = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
+        return !!(lp && (lp.project_identifier || lp.projectIdentifier));
       });
+      if (lotsHaveProjectIdRA) {
+        projectLots = projectLots.filter((lot) => {
+          const lotProps = (lot && lot.properties && typeof lot.properties === "object") ? lot.properties : lot;
+          const pid = lotProps && (lotProps.project_identifier || lotProps.projectIdentifier) ? String(lotProps.project_identifier || lotProps.projectIdentifier).trim() : "";
+          return pid === projectIdentifier;
+        });
+      }
     }
     {
       const seen = new Set();

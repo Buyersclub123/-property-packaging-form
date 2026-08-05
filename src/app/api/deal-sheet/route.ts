@@ -64,18 +64,17 @@ export async function GET(request: Request) {
       }
     }
 
-    // Check query params for inclusion of removed/test records
+    // Check query params for status filtering
     const { searchParams } = new URL(request.url);
-    const includeRemoved = searchParams.get('includeRemoved') === 'true';
-    const includeTest = searchParams.get('includeTest') === 'true';
+    const statusesParam = searchParams.get('statuses') || '01,02';
 
     // Transform records into deal sheet format
     const dealSheetRows = allRecords
       .map((record) => transformRecord(record))
       .filter((row) => {
-        if (!includeTest && row.status.startsWith('07')) return false;
-        if (!includeRemoved && (row.status.startsWith('05') || row.status.startsWith('06'))) return false;
-        return true;
+        if (statusesParam === 'all') return true;
+        const prefixes = statusesParam.split(',').map((s) => s.trim());
+        return prefixes.some((prefix) => row.status.startsWith(prefix));
       });
 
     // Merge pdf_links from Redis (overrides GHL field if present)

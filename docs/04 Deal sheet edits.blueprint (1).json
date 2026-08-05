@@ -1,0 +1,1059 @@
+{
+    "name": "04 Deal sheet edits",
+    "flow": [
+        {
+            "id": 1,
+            "module": "gateway:CustomWebHook",
+            "version": 1,
+            "parameters": {
+                "hook": 3493631,
+                "maxResults": 1
+            },
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 200
+                },
+                "restore": {
+                    "parameters": {
+                        "hook": {
+                            "data": {
+                                "editable": "true"
+                            },
+                            "label": "Deal Sheet Sync Webhook"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "hook",
+                        "type": "hook:gateway-webhook",
+                        "label": "Webhook",
+                        "required": true
+                    },
+                    {
+                        "name": "maxResults",
+                        "type": "number",
+                        "label": "Maximum number of results"
+                    }
+                ],
+                "interface": [
+                    {
+                        "name": "id",
+                        "type": "text"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 470,
+                    "y": 226
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 3,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {
+                                "handleErrors": true,
+                                "useNewZLibDeCompress": true
+                            },
+                            "mapper": {
+                                "ca": "",
+                                "qs": [],
+                                "url": "https://property-packaging-form.vercel.app/api/deal-sheet/webhook",
+                                "data": "{\"recordId\": \"{{1.id}}\", \"timestamp\": \"{{formatDate(now; \"X\")}}\", \"secret\": \"dss_7kQ9xR2mW4pL8vN3jF6tY1cA5hB0eZ\"}",
+                                "gzip": true,
+                                "method": "post",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "timeout": "10",
+                                "useMtls": false,
+                                "authPass": "",
+                                "authUser": "",
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "serializeUrl": false,
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "followRedirect": true,
+                                "useQuerystring": false,
+                                "followAllRedirects": false,
+                                "rejectUnauthorized": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 800,
+                                    "y": 100,
+                                    "name": "POST to Vercel Webhook"
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "qs": {
+                                            "mode": "chose"
+                                        },
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "POST"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null
+                                            ]
+                                        },
+                                        "bodyType": {
+                                            "label": "Raw"
+                                        },
+                                        "contentType": {
+                                            "label": "JSON (application/json)"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "handleErrors",
+                                        "type": "boolean",
+                                        "label": "Evaluate all states as errors (except for 2xx and 3xx )",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "useNewZLibDeCompress",
+                                        "type": "hidden"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 10,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {
+                                "handleErrors": true,
+                                "useNewZLibDeCompress": true
+                            },
+                            "mapper": {
+                                "ca": "",
+                                "qs": [],
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records/{{1.id}}",
+                                "gzip": true,
+                                "method": "get",
+                                "headers": [
+                                    {
+                                        "name": "Version",
+                                        "value": "2021-07-28"
+                                    },
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-1fc3120c-80a7-42d5-b8f1-b391dbf2a793"
+                                    }
+                                ],
+                                "timeout": "",
+                                "useMtls": false,
+                                "authPass": "",
+                                "authUser": "",
+                                "bodyType": "",
+                                "serializeUrl": false,
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "followRedirect": true,
+                                "useQuerystring": false,
+                                "followAllRedirects": false,
+                                "rejectUnauthorized": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 800,
+                                    "y": 400,
+                                    "name": "Get GHL Record"
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "qs": {
+                                            "mode": "chose"
+                                        },
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "GET"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "bodyType": {
+                                            "label": "Empty"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "handleErrors",
+                                        "type": "boolean",
+                                        "label": "Evaluate all states as errors (except for 2xx and 3xx )",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "useNewZLibDeCompress",
+                                        "type": "hidden"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 11,
+                            "module": "google-drive:searchForFilesFolders",
+                            "version": 4,
+                            "parameters": {
+                                "__IMTCONN__": 5154674
+                            },
+                            "mapper": {
+                                "limit": "1",
+                                "query": "{{1.id}}.pdf",
+                                "select": "list",
+                                "folderId": "/13ywQvtmPS-FEXWXDJihdVd4I_PljJV7A",
+                                "operator": "=",
+                                "retrieve": "file",
+                                "searchType": "title",
+                                "destination": "team",
+                                "searchScope": "limit",
+                                "sharedDrive": "0AFVxBPJiTmjPUk9PVA",
+                                "useDomainAdminAccess": false
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": 400
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "select": {
+                                            "label": "Select from the list"
+                                        },
+                                        "folderId": {
+                                            "mode": "chose",
+                                            "path": [
+                                                "Deal Sheet Email PDFs"
+                                            ]
+                                        },
+                                        "operator": {
+                                            "label": "Search for exact term"
+                                        },
+                                        "retrieve": {
+                                            "label": "Files"
+                                        },
+                                        "searchType": {
+                                            "label": "Search within file/folder names"
+                                        },
+                                        "destination": {
+                                            "label": "Google Shared Drive"
+                                        },
+                                        "searchScope": {
+                                            "label": "Limit to the chosen folder"
+                                        },
+                                        "sharedDrive": {
+                                            "label": "Packaging"
+                                        },
+                                        "useDomainAdminAccess": {
+                                            "label": "No"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "google-restricted"
+                                            },
+                                            "label": "My Google Restricted connection (john.t@buyersclub.com.au)"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "__IMTCONN__",
+                                        "type": "account:google-restricted,google-drive",
+                                        "label": "Connection",
+                                        "required": true
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "select",
+                                        "type": "select",
+                                        "label": "Select the Method",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "map",
+                                                "list"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "retrieve",
+                                        "type": "select",
+                                        "label": "Retrieve",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "file",
+                                                "folder",
+                                                "file_folder"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "searchType",
+                                        "type": "select",
+                                        "label": "Search",
+                                        "validate": {
+                                            "enum": [
+                                                "title",
+                                                "fulltext",
+                                                "custom"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "limit",
+                                        "type": "uinteger",
+                                        "label": "Limit"
+                                    },
+                                    {
+                                        "name": "destination",
+                                        "type": "select",
+                                        "label": "Choose a Drive",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "drive",
+                                                "share",
+                                                "team"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "useDomainAdminAccess",
+                                        "type": "select",
+                                        "label": "Use Domain Admin Access",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                true,
+                                                false
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "sharedDrive",
+                                        "type": "select",
+                                        "label": "Shared Drive",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "searchScope",
+                                        "type": "select",
+                                        "label": "Search Scope",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "everywhere",
+                                                "limit"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "folderId",
+                                        "type": "folder",
+                                        "label": "Choose a Folder"
+                                    },
+                                    {
+                                        "name": "query",
+                                        "type": "text",
+                                        "label": "Query",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "operator",
+                                        "type": "select",
+                                        "label": "Search options",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "=",
+                                                "contains"
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 12,
+                            "module": "google-drive:deleteAFile",
+                            "version": 4,
+                            "parameters": {
+                                "__IMTCONN__": 5154674
+                            },
+                            "filter": {
+                                "name": "PDF Found",
+                                "conditions": [
+                                    [
+                                        {
+                                            "a": "{{11.id}}",
+                                            "o": "exist"
+                                        }
+                                    ]
+                                ]
+                            },
+                            "mapper": {
+                                "file": "{{11.id}}",
+                                "select": "map",
+                                "select1": "file"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1600,
+                                    "y": 400
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "select": {
+                                            "label": "Enter manually"
+                                        },
+                                        "select1": {
+                                            "label": "File"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "google-restricted"
+                                            },
+                                            "label": "My Google Restricted connection (john.t@buyersclub.com.au)"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "__IMTCONN__",
+                                        "type": "account:google-restricted,google-drive",
+                                        "label": "Connection",
+                                        "required": true
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "select",
+                                        "type": "select",
+                                        "label": "Enter a File/Folder ID",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "map",
+                                                "value"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "select1",
+                                        "type": "select",
+                                        "label": "Select File/Folder",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "file",
+                                                "folder"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "file",
+                                        "type": "text",
+                                        "label": "File ID",
+                                        "required": true
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 17,
+                            "module": "custom-js:GeneratePDFV2",
+                            "version": 1,
+                            "parameters": {
+                                "__IMTCONN__": 5154594
+                            },
+                            "filter": null,
+                            "mapper": {
+                                "html": "<h1>placeholder</h1>",
+                                "pdfWidthMm": "210",
+                                "pdfHeightMm": "297"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1944,
+                                    "y": 400
+                                },
+                                "restore": {
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "label": "My Custom JS V2 connection",
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "custom-js2"
+                                            }
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "__IMTCONN__",
+                                        "type": "account:custom-js2",
+                                        "label": "Connection",
+                                        "required": true
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "html",
+                                        "type": "text",
+                                        "label": "HTML Code"
+                                    },
+                                    {
+                                        "name": "pdfWidthMm",
+                                        "type": "number",
+                                        "label": "PDF Page Width in mm",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "pdfHeightMm",
+                                        "type": "number",
+                                        "label": "PDF Page Height in mm",
+                                        "required": true
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 18,
+                            "module": "google-drive:uploadAFile",
+                            "version": 4,
+                            "parameters": {
+                                "__IMTCONN__": 5154674
+                            },
+                            "filter": null,
+                            "mapper": {
+                                "select": "map",
+                                "title": "{{1.id}}",
+                                "filename": "{{17.fileName}}",
+                                "data": "{{17.fileData}}",
+                                "convert": false,
+                                "folderId": "13ywQvtmPS-FEXWXDJihdVd4I_PljJV7A"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 2316,
+                                    "y": 395
+                                },
+                                "restore": {
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "label": "My Google Restricted connection (john.t@buyersclub.com.au)",
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "google-restricted"
+                                            }
+                                        }
+                                    },
+                                    "expect": {
+                                        "select": {
+                                            "label": "Enter manually"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "__IMTCONN__",
+                                        "type": "account:google-restricted,google-drive",
+                                        "label": "Connection",
+                                        "required": true
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "select",
+                                        "type": "select",
+                                        "label": "Enter a Folder ID",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "map",
+                                                "value"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "title",
+                                        "type": "text",
+                                        "label": "New File Name"
+                                    },
+                                    {
+                                        "name": "filename",
+                                        "type": "text",
+                                        "label": "File Name",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "data",
+                                        "type": "buffer",
+                                        "label": "Data",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "convert",
+                                        "type": "boolean",
+                                        "label": "Convert a File",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "folderId",
+                                        "type": "text",
+                                        "label": "Folder ID",
+                                        "required": true
+                                    }
+                                ],
+                                "advanced": true
+                            }
+                        },
+                        {
+                            "id": 19,
+                            "module": "google-drive:shareAFileFolder",
+                            "version": 4,
+                            "parameters": {
+                                "__IMTCONN__": 5154674
+                            },
+                            "filter": null,
+                            "mapper": {
+                                "destination": "drive",
+                                "select": "file",
+                                "role": "reader",
+                                "type": "anyone",
+                                "file": "{{18.id}}",
+                                "allowFileDiscovery": false
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 2682,
+                                    "y": 386
+                                },
+                                "restore": {
+                                    "parameters": {
+                                        "__IMTCONN__": {
+                                            "label": "My Google Restricted connection (john.t@buyersclub.com.au)",
+                                            "data": {
+                                                "scoped": "true",
+                                                "connection": "google-restricted"
+                                            }
+                                        }
+                                    },
+                                    "expect": {
+                                        "destination": {
+                                            "label": "My Drive"
+                                        },
+                                        "select": {
+                                            "label": "File"
+                                        },
+                                        "role": {
+                                            "mode": "chose",
+                                            "label": "Reader"
+                                        },
+                                        "type": {
+                                            "mode": "chose",
+                                            "label": "Anyone"
+                                        },
+                                        "file": {
+                                            "mode": "edit",
+                                            "path": []
+                                        },
+                                        "allowFileDiscovery": {
+                                            "mode": "chose"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "__IMTCONN__",
+                                        "type": "account:google-restricted,google-drive",
+                                        "label": "Connection",
+                                        "required": true
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "destination",
+                                        "type": "select",
+                                        "label": "Choose a Drive",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "drive",
+                                                "share",
+                                                "team"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "select",
+                                        "type": "select",
+                                        "label": "Select",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "file",
+                                                "folder"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "role",
+                                        "type": "select",
+                                        "label": "Role",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "owner",
+                                                "writer",
+                                                "commenter",
+                                                "reader"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "type",
+                                        "type": "select",
+                                        "label": "Type",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "user",
+                                                "group",
+                                                "domain",
+                                                "anyone"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "file",
+                                        "type": "file",
+                                        "label": "File ID",
+                                        "mode": "edit",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "allowFileDiscovery",
+                                        "type": "boolean",
+                                        "label": "Allow File Discovery",
+                                        "required": true
+                                    }
+                                ],
+                                "interface": [
+                                    {
+                                        "name": "fileId",
+                                        "type": "text",
+                                        "label": "File ID"
+                                    },
+                                    {
+                                        "name": "kind",
+                                        "type": "text",
+                                        "label": "Kind"
+                                    },
+                                    {
+                                        "name": "id",
+                                        "type": "text",
+                                        "label": "Permission ID"
+                                    },
+                                    {
+                                        "name": "type",
+                                        "type": "text",
+                                        "label": "Type"
+                                    },
+                                    {
+                                        "name": "shareLink",
+                                        "type": "url",
+                                        "label": "Share Link"
+                                    },
+                                    {
+                                        "name": "emailAddress",
+                                        "type": "text",
+                                        "label": "Email Address"
+                                    },
+                                    {
+                                        "name": "domain",
+                                        "type": "text",
+                                        "label": "Domain"
+                                    },
+                                    {
+                                        "name": "role",
+                                        "type": "text",
+                                        "label": "Role"
+                                    },
+                                    {
+                                        "name": "allowFileDiscovery",
+                                        "type": "boolean",
+                                        "label": "Allow File Discovery"
+                                    },
+                                    {
+                                        "name": "displayName",
+                                        "type": "text",
+                                        "label": "Display Name"
+                                    },
+                                    {
+                                        "name": "photoLink",
+                                        "type": "text",
+                                        "label": "Photo Link"
+                                    },
+                                    {
+                                        "name": "expirationTime",
+                                        "type": "date",
+                                        "label": "Expiration Time"
+                                    },
+                                    {
+                                        "name": "teamDrivePermissionDetails",
+                                        "spec": {
+                                            "spec": [
+                                                {
+                                                    "name": "teamDrivePermissionType",
+                                                    "type": "text",
+                                                    "label": "Team Drive Permission Type"
+                                                },
+                                                {
+                                                    "name": "role",
+                                                    "type": "text",
+                                                    "label": "Role"
+                                                },
+                                                {
+                                                    "name": "inheritedFrom",
+                                                    "type": "text",
+                                                    "label": "Inherited From"
+                                                },
+                                                {
+                                                    "name": "inherited",
+                                                    "type": "boolean",
+                                                    "label": "Inherited"
+                                                }
+                                            ],
+                                            "type": "collection"
+                                        },
+                                        "type": "array",
+                                        "label": "Team Drive Permission Details"
+                                    },
+                                    {
+                                        "name": "permissionDetails",
+                                        "spec": {
+                                            "spec": [
+                                                {
+                                                    "name": "permissionType",
+                                                    "type": "text",
+                                                    "label": "Permission Type"
+                                                },
+                                                {
+                                                    "name": "role",
+                                                    "type": "text",
+                                                    "label": "Role"
+                                                },
+                                                {
+                                                    "name": "inheritedFrom",
+                                                    "type": "text",
+                                                    "label": "Inherited From"
+                                                },
+                                                {
+                                                    "name": "inherited",
+                                                    "type": "boolean",
+                                                    "label": "Inherited"
+                                                }
+                                            ],
+                                            "type": "collection"
+                                        },
+                                        "type": "array",
+                                        "label": "Permission Details"
+                                    },
+                                    {
+                                        "name": "deleted",
+                                        "type": "boolean",
+                                        "label": "Deleted"
+                                    },
+                                    {
+                                        "name": "pendingOwner",
+                                        "type": "boolean",
+                                        "label": "Pending Owner"
+                                    },
+                                    {
+                                        "name": "webContentLink",
+                                        "type": "url",
+                                        "label": "Web Content Link"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 20,
+                            "module": "placeholder:Placeholder",
+                            "filter": null,
+                            "metadata": {
+                                "designer": {
+                                    "x": 3062,
+                                    "y": 393
+                                }
+                            }
+                        },
+                        {
+                            "id": 16,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {
+                                "handleErrors": true,
+                                "useNewZLibDeCompress": true
+                            },
+                            "mapper": {
+                                "ca": "",
+                                "qs": [
+                                    {
+                                        "name": "locationId",
+                                        "value": "UJWYn4mrgGodB7KZUcHt"
+                                    }
+                                ],
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records/{{1.id}}",
+                                "data": "{\"properties\": {\"pdf_link\": \"https://drive.google.com/file/d/{{14.id}}/view?usp=sharing\"}}",
+                                "gzip": true,
+                                "method": "put",
+                                "headers": [
+                                    {
+                                        "name": "Version",
+                                        "value": "2021-07-28"
+                                    },
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-1fc3120c-80a7-42d5-b8f1-b391dbf2a793"
+                                    },
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "timeout": "",
+                                "useMtls": false,
+                                "authPass": "",
+                                "authUser": "",
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "serializeUrl": false,
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "followRedirect": true,
+                                "useQuerystring": false,
+                                "followAllRedirects": false,
+                                "rejectUnauthorized": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 4400,
+                                    "y": 400,
+                                    "name": "Write pdf_link to GHL",
+                                    "messages": [
+                                        {
+                                            "category": "reference",
+                                            "severity": "error",
+                                            "message": "'HTTP (legacy) - Make a request' [module ID 16] references non-existing module [module ID 14]."
+                                        }
+                                    ]
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "qs": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null
+                                            ]
+                                        },
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "PUT"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null,
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "bodyType": {
+                                            "label": "Raw"
+                                        },
+                                        "contentType": {
+                                            "label": "JSON (application/json)"
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "handleErrors",
+                                        "type": "boolean",
+                                        "label": "Evaluate all states as errors (except for 2xx and 3xx )",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "useNewZLibDeCompress",
+                                        "type": "hidden"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "instant": false,
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "slots": null,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false,
+            "freshVariables": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "zone": "eu1.make.com",
+        "notes": []
+    }
+}

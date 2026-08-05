@@ -259,6 +259,31 @@ This is fine — the new scenario's "search and delete" logic means no duplicate
 
 ---
 
+## Auto-Email Reminders (Cron)
+
+**Endpoint:** `/api/deal-sheet/reminders`  
+**Schedule:** Hourly (0 * * * *)  
+**Feature flag:** `DEAL_SHEET_REMINDERS_ENABLED=true` in Vercel env to activate  
+**Target records:** Status 01 (Available) only  
+**File:** `src/app/api/deal-sheet/reminders/route.ts`
+
+| # | Email Type | Subject Line | To | CC | Trigger Condition |
+|---|-----------|-------------|----|----|-------------------|
+| 1 | Packager Approval Reminder | "Packager Approval Reminder: X property records awaiting your approval" | Packager's email (`packager_email` field) | packaging@buyersclub.com.au, john.t@buyersclub.com.au | Record created >1 hour ago AND `packager_approved` is not "Approved" |
+| 2 | QA Approval Reminder | "QA Approval Overdue: X records waiting >3 hours" | property@buyersclub.com.au | john.t@buyersclub.com.au | `packager_approved` = "Approved" for >3 hours AND `qa_approved` is not "Approved" |
+| 3 | Auto-Correction Alert | "Auto-Correction: QA approval removed — packager approval was missing (X records)" | property@buyersclub.com.au + packager's email | john.t@buyersclub.com.au | `qa_approved` = "Approved" BUT `packager_approved` is NOT "Approved" |
+
+**Key behaviours:**
+- Emails are **aggregated** — one email per type/recipient per run, listing all affected records
+- Packager reminders are grouped by packager email (each packager gets their own email)
+- Auto-correction also **clears** the `qa_approved` field in GHL automatically
+- Records without a `packager_email` are skipped (can't send reminder without an address)
+- QA reminder timer starts from when the system first sees packager approval (tracked in Redis)
+
+**Testing:** Add `?testMode=true` to target status 07 (Test Record) instead of 01. Add `?dryRun=true` or `?preview=true` for safe testing.
+
+---
+
 ## Notes
 
 - Scenario 02a is NOT retired — it handles all email sending

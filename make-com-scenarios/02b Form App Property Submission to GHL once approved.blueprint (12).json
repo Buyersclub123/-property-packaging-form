@@ -1,0 +1,2183 @@
+{
+    "name": "02b Form App Property Submission to GHL once approved",
+    "flow": [
+        {
+            "id": 1,
+            "module": "gateway:CustomWebHook",
+            "version": 1,
+            "parameters": {
+                "hook": 2303330,
+                "maxResults": 1
+            },
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0
+                },
+                "restore": {
+                    "parameters": {
+                        "hook": {
+                            "data": {
+                                "editable": "true"
+                            },
+                            "label": "Form App Webhook"
+                        }
+                    }
+                },
+                "parameters": [
+                    {
+                        "name": "hook",
+                        "type": "hook:gateway-webhook",
+                        "label": "Webhook",
+                        "required": true
+                    },
+                    {
+                        "name": "maxResults",
+                        "type": "number",
+                        "label": "Maximum number of results"
+                    }
+                ],
+                "interface": [
+                    {
+                        "name": "source",
+                        "type": "text"
+                    },
+                    {
+                        "name": "action",
+                        "type": "text"
+                    },
+                    {
+                        "name": "formData",
+                        "spec": [
+                            {
+                                "name": "decisionTree",
+                                "spec": [
+                                    {
+                                        "name": "propertyType",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "contractType",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "lotType",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "dualOccupancy",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "status",
+                                        "type": "text"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "address",
+                                "spec": [
+                                    {
+                                        "name": "propertyAddress",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "streetNumber",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "streetName",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "suburbName",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "state",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "postCode",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "lga",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "googleMap",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "addressVerified",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "addressFieldsEditable",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "stashPropertyAddress",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "latitude",
+                                        "type": "number"
+                                    },
+                                    {
+                                        "name": "longitude",
+                                        "type": "number"
+                                    },
+                                    {
+                                        "name": "addressSource",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "lotNumber",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "lotNumberNotApplicable",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "unitNumber",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "projectAddress",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "projectName",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "usePropertyAddressForProject",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "folderLink",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "folderName",
+                                        "type": "text"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "riskOverlays",
+                                "spec": [
+                                    {
+                                        "name": "flood",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "bushfire",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "mining",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "otherOverlay",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "specialInfrastructure",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "dueDiligenceAcceptance",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "zoning",
+                                        "type": "text"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "propertyDescription",
+                                "spec": [],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "purchasePrice",
+                                "spec": [
+                                    {
+                                        "name": "cashbackRebateValue",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "cashbackRebateType",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "comparableSales",
+                                        "type": "text"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "rentalAssessment",
+                                "spec": [],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "marketPerformance",
+                                "spec": [
+                                    {
+                                        "name": "medianPriceChange3Months",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianPriceChange1Year",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianPriceChange3Year",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianPriceChange5Year",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianYield",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "medianRentChange1Year",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "rentalPopulation",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "vacancyRate",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "isSaved",
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "name": "daysSinceLastCheck",
+                                        "type": "number"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "contentSections",
+                                "spec": [
+                                    {
+                                        "name": "investmentHighlights",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "proximity",
+                                        "type": "text"
+                                    },
+                                    {
+                                        "name": "whyThisProperty",
+                                        "type": "text"
+                                    }
+                                ],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "agentInfo",
+                                "spec": [],
+                                "type": "collection"
+                            },
+                            {
+                                "name": "lots",
+                                "spec": {
+                                    "spec": [
+                                        {
+                                            "name": "lotNumber",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "name": "singleOrDual",
+                                            "type": "text"
+                                        },
+                                        {
+                                            "name": "purchasePrice",
+                                            "spec": [
+                                                {
+                                                    "name": "cashbackRebateValue",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "cashbackRebateType",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "comparableSales",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "landPrice",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "buildPrice",
+                                                    "type": "text"
+                                                }
+                                            ],
+                                            "type": "collection"
+                                        },
+                                        {
+                                            "name": "propertyDescription",
+                                            "spec": [
+                                                {
+                                                    "name": "bedsPrimary",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "bathPrimary",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "garagePrimary",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "landRegistration",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "landSize",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "buildSize",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "title",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "bodyCorpPerQuarter",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "bodyCorpDescription",
+                                                    "type": "text"
+                                                }
+                                            ],
+                                            "type": "collection"
+                                        },
+                                        {
+                                            "name": "rentalAssessment",
+                                            "spec": [
+                                                {
+                                                    "name": "rentAppraisalPrimaryFrom",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "rentAppraisalPrimaryTo",
+                                                    "type": "text"
+                                                },
+                                                {
+                                                    "name": "appraisedYield",
+                                                    "type": "text"
+                                                }
+                                            ],
+                                            "type": "collection"
+                                        }
+                                    ],
+                                    "type": "collection"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "name": "packager",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sourcer",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sellingAgentName",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sellingAgentEmail",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sellingAgentMobile",
+                                "type": "text"
+                            },
+                            {
+                                "name": "sellingAgent",
+                                "type": "text"
+                            },
+                            {
+                                "name": "folderLink",
+                                "type": "text"
+                            }
+                        ],
+                        "type": "collection"
+                    },
+                    {
+                        "name": "folderLink",
+                        "type": "text"
+                    }
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 316,
+                    "y": -1
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 21,
+                            "module": "code:ExecuteCode",
+                            "version": 0,
+                            "parameters": {},
+                            "filter": {
+                                "name": "Single Property",
+                                "conditions": [
+                                    [
+                                        {
+                                            "a": "{{1.formData.decisionTree.lotType}}",
+                                            "b": "Multiple",
+                                            "o": "text:notequal"
+                                        }
+                                    ]
+                                ]
+                            },
+                            "mapper": {
+                                "input": [
+                                    {
+                                        "name": "fd",
+                                        "value": "{{1.formData}}"
+                                    }
+                                ],
+                                "language": "javascript",
+                                "inputFormat": "editor",
+                                "dependencies": [],
+                                "codeEditorJavascript": "// Access Module 1's output directly (no Input mapping needed)\nconst formData = input.fd;\n\n// Safety check\nif (!formData) {\n    throw new Error(\"No data received from Module 1.\");\n}\n\n// Get folderLink\nconst folderLink = formData.folderLink || null;\n\n// Helper: Ensure property_address is NEVER null (Required by GHL)\nconst requiredString = (val) => {\n    if (!val || val === \"\" || val === null) return \"No Address Provided\";\n    return String(val);\n};\n\nconst nullIfEmpty = (val) => (!val || val === \"\" ? null : val);\n\nconst toFloat = (val) => {\n    if (val === null || val === undefined || val === '') return 0;\n    const num = parseFloat(val);\n    return isNaN(num) ? 0 : num;\n};\n\n// Format to 2 decimal places for market performance fields\n// Converts \"N/A\" and \"TBC\" to null for GHL (GHL doesn't accept string values for numeric fields)\nconst toFloat2Decimals = (val) => {\n    if (val === null || val === undefined || val === '') return null;\n    const strVal = String(val).trim();\n    // Convert \"N/A\" and \"TBC\" to null (GHL expects numeric or null)\n    if (strVal.toUpperCase() === \"N/A\" || strVal.toUpperCase() === \"TBC\") {\n        return null;\n    }\n    const num = parseFloat(strVal);\n    if (isNaN(num)) return null;\n    return Math.round(num * 100) / 100; // Round to 2 decimal places\n};\n\n// Mapping function for asking field values (Form → GHL)\nconst mapAskingValue = (val) => {\n    if (!val) return null;\n    const mapping = {\n        \"onmarket\": \"on-market\",\n        \"offmarket\": \"off-market\",\n        \"prelaunch_opportunity\": \"pre-launch opportunity\",\n        \"coming_soon\": \"coming soon\",\n        \"tbc\": null,\n        \"N/A\": null\n    };\n    return mapping[val] || null;\n};\n\n// Mapping function for single/dual occupancy (Form → GHL)\nconst mapSingleDualOccupancy = (val) => {\n    if (!val) return null;\n    if (val === \"Yes\") return \"dual_occupancy\";\n    if (val === \"No\") return \"single_occupancy\";\n    return null;\n};\n\n// Mapping function for bath values (Form → GHL)\n// Converts \"2.5\" to \"2point5\" as required by GHL\nconst mapBathValue = (val) => {\n    if (!val) return null;\n    const strVal = String(val).trim();\n    // Convert decimal to \"point\" format (e.g., \"2.5\" -> \"2point5\")\n    if (strVal.includes('.')) {\n        return strVal.replace('.', 'point');\n    }\n    // Return as-is for whole numbers or other formats\n    return strVal;\n};\n\n// Build the complete payload\nconst payload = {\n  locationId: \"UJWYn4mrgGodB7KZUcHt\",\n  properties: {\n    property_address: requiredString(formData.address?.propertyAddress),\n    street_number: nullIfEmpty(formData.address?.streetNumber),\n    street_name: nullIfEmpty(formData.address?.streetName),\n    suburb_name: nullIfEmpty(formData.address?.suburbName),\n    state: nullIfEmpty(formData.address?.state),\n    post_code: nullIfEmpty(formData.address?.postCode),\n    lga: nullIfEmpty(formData.address?.lga),\n    unit__lot: nullIfEmpty(formData.address?.unitNumber),\n    google_map: nullIfEmpty(formData.address?.googleMap),\n    sourcer: nullIfEmpty(formData.sourcer?.replace(\"@buyersclub.com.au\", \"\")),\n    packager: nullIfEmpty(formData.packager?.replace(\"@buyersclub.com.au\", \"\")),\n    packager_email: nullIfEmpty(formData.packager),\n    property_type: nullIfEmpty(formData.decisionTree?.propertyType),\n    deal_type: nullIfEmpty(formData.decisionTree?.contractType),\n    contract_type: nullIfEmpty(formData.decisionTree?.contractTypeSimplified),\n    status: nullIfEmpty(formData.decisionTree?.status),\n    folder_link: folderLink,\n    zoning: nullIfEmpty(formData.riskOverlays?.zoning),\n    flood: nullIfEmpty(formData.riskOverlays?.flood),\n    flood_dialogue: nullIfEmpty(formData.riskOverlays?.floodDialogue),\n    bushfire: nullIfEmpty(formData.riskOverlays?.bushfire),\n    bushfire_dialogue: nullIfEmpty(formData.riskOverlays?.bushfireDialogue),\n    mining: nullIfEmpty(formData.riskOverlays?.mining),\n    mining_dialogie: nullIfEmpty(formData.riskOverlays?.miningDialogue),\n    other_overlay: nullIfEmpty(formData.riskOverlays?.otherOverlay),\n    other_overlay_dialogue: nullIfEmpty(formData.riskOverlays?.otherOverlayDialogue),\n    special_infrastructure: nullIfEmpty(formData.riskOverlays?.specialInfrastructure),\n    special_infrastructure_dialogue: nullIfEmpty(formData.riskOverlays?.specialInfrastructureDialogue),\n    due_diligence_acceptance: nullIfEmpty(formData.riskOverlays?.dueDiligenceAcceptance),\n    beds_primary: nullIfEmpty(formData.propertyDescription?.bedsPrimary),\n    beds_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.bedsSecondary),\n    bath_primary: mapBathValue(formData.propertyDescription?.bathPrimary),\n    baths_additional__secondary__dual_key: mapBathValue(formData.propertyDescription?.bathSecondary),\n    garage_primary: nullIfEmpty(formData.propertyDescription?.garagePrimary),\n    garage_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.garageSecondary),\n    carport_primary: nullIfEmpty(formData.propertyDescription?.carportPrimary),\n    carport_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.carportSecondary),\n    carspace_primary: nullIfEmpty(formData.propertyDescription?.carspacePrimary),\n    carspace_additional__secondary__dual_key: nullIfEmpty(formData.propertyDescription?.carspaceSecondary),\n    year_built: nullIfEmpty(formData.propertyDescription?.yearBuilt),\n    land_size: nullIfEmpty(formData.propertyDescription?.landSize),\n    build_size: nullIfEmpty(formData.propertyDescription?.buildSize),\n    land_registration: nullIfEmpty(formData.propertyDescription?.landRegistration),\n    title: nullIfEmpty(formData.propertyDescription?.title),\n    body_corp__per_quarter: nullIfEmpty(formData.propertyDescription?.bodyCorpPerQuarter),\n    body_corp_description: nullIfEmpty(formData.propertyDescription?.bodyCorpDescription),\n    single_or_dual_occupancy: mapSingleDualOccupancy(formData.decisionTree?.dualOccupancy),\n    property_description_additional_dialogue: nullIfEmpty(formData.propertyDescription?.propertyDescriptionAdditionalDialogue),\n    asking: mapAskingValue(formData.purchasePrice?.asking),\n    asking_text: nullIfEmpty(formData.purchasePrice?.askingText),\n    accepted_acquisition_target: nullIfEmpty(formData.purchasePrice?.acceptedAcquisitionTarget),\n    acceptable_acquisition__from: nullIfEmpty(formData.purchasePrice?.acceptableAcquisitionFrom),\n    acceptable_acquisition__to: nullIfEmpty(formData.purchasePrice?.acceptableAcquisitionTo),\n    land_price: nullIfEmpty(formData.purchasePrice?.landPrice),\n    build_price: nullIfEmpty(formData.purchasePrice?.buildPrice),\n    total_price: nullIfEmpty(formData.purchasePrice?.totalPrice),\n    net_price: (() => {\n        // Only calculate Net Price if type is \"cashback\"\n        if (formData.purchasePrice?.cashbackRebateType !== 'cashback') return null;\n        const total = formData.purchasePrice?.totalPrice ? parseFloat(String(formData.purchasePrice.totalPrice).replace(/[$,]/g, '')) : null;\n        const cashback = formData.purchasePrice?.cashbackRebateValue ? parseFloat(String(formData.purchasePrice.cashbackRebateValue).replace(/[$,]/g, '')) : null;\n        if (total !== null && cashback !== null && !isNaN(total) && !isNaN(cashback)) {\n            return total - cashback; // Return as number, not string\n        }\n        return null;\n    })(),\n    cashback_rebate_value: nullIfEmpty(formData.purchasePrice?.cashbackRebateValue),\n    cashback_rebate_type: nullIfEmpty(formData.purchasePrice?.cashbackRebateType),\n    comparable_sales: nullIfEmpty(formData.purchasePrice?.comparableSales),\n    purchase_price_additional_dialogue: nullIfEmpty(formData.purchasePrice?.purchasePriceAdditionalDialogue),\n    price_group: nullIfEmpty(formData.purchasePrice?.priceGroup),\n    occupancy_primary: nullIfEmpty(formData.rentalAssessment?.occupancyPrimary),\n    occupancy_secondary: nullIfEmpty(formData.rentalAssessment?.occupancySecondary),\n    current_rent_primary__per_week: nullIfEmpty(formData.rentalAssessment?.currentRentPrimary),\n    current_rent_secondary__per_week: nullIfEmpty(formData.rentalAssessment?.currentRentSecondary),\n    expiry_primary: nullIfEmpty(formData.rentalAssessment?.expiryPrimary),\n    expiry_secondary: nullIfEmpty(formData.rentalAssessment?.expirySecondary),\n    rent_appraisal_primary_from: nullIfEmpty(formData.rentalAssessment?.rentAppraisalPrimaryFrom),\n    rent_appraisal_primary_to: nullIfEmpty(formData.rentalAssessment?.rentAppraisalPrimaryTo),\n    rent_appraisal_secondary_from: nullIfEmpty(formData.rentalAssessment?.rentAppraisalSecondaryFrom),\n    rent_appraisal_secondary_to: nullIfEmpty(formData.rentalAssessment?.rentAppraisalSecondaryTo),\n    yield: nullIfEmpty(formData.rentalAssessment?.yield),\n    appraised_yield: nullIfEmpty(formData.rentalAssessment?.appraisedYield),\n    rental_assessment_additional_dialogue: nullIfEmpty(formData.rentalAssessment?.rentalAssessmentAdditionalDialogue),\n    // Cashflow Fields\n    cf_insurance_value_: nullIfEmpty(formData.insuranceAmount),\n    cf_depreciation_: (() => {\n        // Convert depreciation object to comma-separated string (years 1-10)\n        const dep = formData.depreciation;\n        if (!dep) return null;\n        const years = [\n            dep.year1, dep.year2, dep.year3, dep.year4, dep.year5,\n            dep.year6, dep.year7, dep.year8, dep.year9, dep.year10\n        ].filter(val => val !== null && val !== undefined && val !== '');\n        return years.length > 0 ? years.join(',') : null;\n    })(),\n    cf_councilwater_rates_: nullIfEmpty(formData.councilWaterRates),\n    median_price_change__3_months: toFloat2Decimals(formData.marketPerformance?.medianPriceChange3Months),\n    median_price_change__1_year: toFloat2Decimals(formData.marketPerformance?.medianPriceChange1Year),\n    median_price_change__3_year: toFloat2Decimals(formData.marketPerformance?.medianPriceChange3Year),\n    median_price_change__5_year: toFloat2Decimals(formData.marketPerformance?.medianPriceChange5Year),\n    median_yield: toFloat2Decimals(formData.marketPerformance?.medianYield),\n    median_rent_change__1_year: toFloat2Decimals(formData.marketPerformance?.medianRentChange1Year),\n    rental_population: toFloat2Decimals(formData.marketPerformance?.rentalPopulation),\n    vacancy_rate: toFloat2Decimals(formData.marketPerformance?.vacancyRate),\n    market_performance_additional_dialogue: nullIfEmpty(formData.marketPerformance?.marketPerformanceAdditionalDialogue),\n    why_this_property: nullIfEmpty(formData.contentSections?.whyThisProperty),\n    proximity: nullIfEmpty(formData.contentSections?.proximity),\n    investment_highlights: nullIfEmpty(formData.contentSections?.investmentHighlights),\n    agent_name: nullIfEmpty(formData.sellingAgentName),\n    agent_mobile: nullIfEmpty(formData.sellingAgentMobile),\n    agent_email: nullIfEmpty(formData.sellingAgentEmail),\n    message_for_ba: nullIfEmpty(formData.messageForBA),\n    attachments_additional_dialogue: nullIfEmpty(formData.attachmentsAdditionalDialogue),\n    push_record_to_deal_sheet: nullIfEmpty(formData.pushRecordToDealSheet),\n    lot_number: nullIfEmpty(formData.address?.lotNumber),\n    project_parent_id: null,\n    project_identifier: null,\n    is_parent_record: null,\n    project_brief: nullIfEmpty(formData.propertyDescription?.projectOverview)\n  }\n};\n\nreturn payload;\n"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 693,
+                                    "y": -173
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "input": {
+                                            "items": [
+                                                null
+                                            ]
+                                        },
+                                        "language": {
+                                            "mode": "chose",
+                                            "label": "JavaScript"
+                                        },
+                                        "inputFormat": {
+                                            "label": "Code editor"
+                                        }
+                                    }
+                                },
+                                "expect": [
+                                    {
+                                        "name": "language",
+                                        "type": "select",
+                                        "label": "Language",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "javascript",
+                                                "python"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "input",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true,
+                                                    "validate": {
+                                                        "max": 32,
+                                                        "min": 1,
+                                                        "pattern": "^[a-zA-Z0-9_]{1,32}$"
+                                                    }
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "any",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Variable"
+                                        },
+                                        "type": "array",
+                                        "label": "Input"
+                                    },
+                                    {
+                                        "name": "dependencies",
+                                        "spec": {
+                                            "name": "value",
+                                            "type": "text",
+                                            "label": "Dependency",
+                                            "required": true,
+                                            "validate": {
+                                                "max": 214,
+                                                "min": 1,
+                                                "pattern": "^[A-Za-z0-9_@\\./<>\\=\\!~\\^+\\-]{1,214}$"
+                                            }
+                                        },
+                                        "type": "array",
+                                        "label": "Additional dependencies (Enterprise plans only)"
+                                    },
+                                    {
+                                        "name": "inputFormat",
+                                        "type": "select",
+                                        "label": "Input format",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "editor",
+                                                "string"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "codeEditorJavascript",
+                                        "type": "editor",
+                                        "label": "Code",
+                                        "required": true
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 14,
+                            "module": "http:MakeRequest",
+                            "version": 4,
+                            "parameters": {
+                                "tlsType": "",
+                                "proxyKeychain": "",
+                                "authenticationType": "noAuth"
+                            },
+                            "mapper": {
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records",
+                                "method": "post",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-1fc3120c-80a7-42d5-b8f1-b391dbf2a793"
+                                    },
+                                    {
+                                        "name": "Version",
+                                        "value": "2021-07-28"
+                                    },
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "contentType": "json",
+                                "inputMethod": "jsonString",
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "allowRedirects": true,
+                                "stopOnHttpError": true,
+                                "jsonStringBodyContent": "{{21.result}}",
+                                "requestCompressedContent": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1034,
+                                    "y": -191
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "POST"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null,
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "contentType": {
+                                            "label": "application/jsonEnter data in the JSON format, as a string or using a data structure."
+                                        },
+                                        "inputMethod": {
+                                            "label": "JSON stringEnter the JSON body as a raw text string. If values contain JSON reserved characters, you must escape them manually."
+                                        },
+                                        "shareCookies": {
+                                            "mode": "chose"
+                                        },
+                                        "parseResponse": {
+                                            "mode": "chose"
+                                        },
+                                        "allowRedirects": {
+                                            "mode": "chose"
+                                        },
+                                        "paginationType": {
+                                            "label": "Empty"
+                                        },
+                                        "queryParameters": {
+                                            "mode": "chose"
+                                        },
+                                        "stopOnHttpError": {
+                                            "mode": "chose"
+                                        },
+                                        "requestCompressedContent": {
+                                            "mode": "chose"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "tlsType": {
+                                            "label": "Empty"
+                                        },
+                                        "proxyKeychain": {
+                                            "label": "Choose a key"
+                                        },
+                                        "authenticationType": {
+                                            "label": "No authenticationUse when no credentials are required for the request."
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "authenticationType",
+                                        "type": "select",
+                                        "label": "Authentication type",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "noAuth",
+                                                "apiKey",
+                                                "basicAuth",
+                                                "oAuth"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "tlsType",
+                                        "type": "select",
+                                        "label": "Transport layer security (TLS)",
+                                        "validate": {
+                                            "enum": [
+                                                "mTls",
+                                                "tls"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "proxyKeychain",
+                                        "type": "keychain:proxy",
+                                        "label": "Proxy"
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "url",
+                                        "type": "url",
+                                        "label": "URL",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "method",
+                                        "type": "select",
+                                        "label": "Method",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "get",
+                                                "head",
+                                                "post",
+                                                "put",
+                                                "patch",
+                                                "delete",
+                                                "options"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "headers",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true,
+                                                    "validate": {
+                                                        "pattern": "^[-!#$%&'*+.^_`|~0-9A-Za-z]+$"
+                                                    }
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "text",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Header"
+                                        },
+                                        "type": "array",
+                                        "label": "Headers"
+                                    },
+                                    {
+                                        "name": "queryParameters",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "text",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Parameter"
+                                        },
+                                        "type": "array",
+                                        "label": "Query parameters"
+                                    },
+                                    {
+                                        "name": "contentType",
+                                        "type": "select",
+                                        "label": "Body content type",
+                                        "validate": {
+                                            "enum": [
+                                                "json",
+                                                "multipart",
+                                                "urlEncoded",
+                                                "custom"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "parseResponse",
+                                        "type": "boolean",
+                                        "label": "Parse response",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "stopOnHttpError",
+                                        "type": "boolean",
+                                        "label": "Return error if HTTP request fails",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "timeout",
+                                        "type": "uinteger",
+                                        "label": "Timeout",
+                                        "validate": {
+                                            "max": 300,
+                                            "min": 1
+                                        }
+                                    },
+                                    {
+                                        "name": "allowRedirects",
+                                        "type": "boolean",
+                                        "label": "Allow redirects",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "shareCookies",
+                                        "type": "boolean",
+                                        "label": "Share cookies with other HTTP modules",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "requestCompressedContent",
+                                        "type": "boolean",
+                                        "label": "Request compressed content",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "inputMethod",
+                                        "type": "select",
+                                        "label": "Body input method",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "dataStructure",
+                                                "jsonString"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "jsonStringBodyContent",
+                                        "type": "text",
+                                        "label": "Body content",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "paginationType",
+                                        "type": "select",
+                                        "label": "Pagination type",
+                                        "validate": {
+                                            "enum": [
+                                                "offsetBased",
+                                                "pageBased",
+                                                "urlBased",
+                                                "tokenBased"
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "interface": [
+                                    {
+                                        "name": "data",
+                                        "type": "any",
+                                        "label": "Data"
+                                    },
+                                    {
+                                        "name": "statusCode",
+                                        "type": "number",
+                                        "label": "Status Code"
+                                    },
+                                    {
+                                        "name": "headers",
+                                        "spec": [
+                                            {
+                                                "name": "content-length",
+                                                "type": "text",
+                                                "label": "Content-Length"
+                                            },
+                                            {
+                                                "name": "content-encoding",
+                                                "type": "text",
+                                                "label": "Content-Encoding"
+                                            },
+                                            {
+                                                "name": "content-type",
+                                                "type": "text",
+                                                "label": "Content-Type"
+                                            },
+                                            {
+                                                "name": "server",
+                                                "type": "text",
+                                                "label": "Server"
+                                            },
+                                            {
+                                                "name": "cache-control",
+                                                "type": "text",
+                                                "label": "Cache-Control"
+                                            },
+                                            {
+                                                "name": "set-cookie",
+                                                "spec": {
+                                                    "type": "text"
+                                                },
+                                                "type": "array",
+                                                "label": "Set-Cookie"
+                                            }
+                                        ],
+                                        "type": "collection",
+                                        "label": "Headers"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 15,
+                            "module": "http:MakeRequest",
+                            "version": 4,
+                            "parameters": {
+                                "tlsType": "",
+                                "proxyKeychain": "",
+                                "authenticationType": "noAuth"
+                            },
+                            "mapper": {
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records/{{14.data.record.id}}?locationId=UJWYn4mrgGodB7KZUcHt",
+                                "method": "get",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-1fc3120c-80a7-42d5-b8f1-b391dbf2a793"
+                                    },
+                                    {
+                                        "name": "Version",
+                                        "value": " 2021-07-28"
+                                    }
+                                ],
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "allowRedirects": true,
+                                "stopOnHttpError": true,
+                                "requestCompressedContent": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1368,
+                                    "y": -218
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "GET"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "contentType": {
+                                            "label": "Empty"
+                                        },
+                                        "shareCookies": {
+                                            "mode": "chose"
+                                        },
+                                        "parseResponse": {
+                                            "mode": "chose"
+                                        },
+                                        "allowRedirects": {
+                                            "mode": "chose"
+                                        },
+                                        "paginationType": {
+                                            "label": "Empty"
+                                        },
+                                        "queryParameters": {
+                                            "mode": "chose"
+                                        },
+                                        "stopOnHttpError": {
+                                            "mode": "chose"
+                                        },
+                                        "requestCompressedContent": {
+                                            "mode": "chose"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "tlsType": {
+                                            "label": "Empty"
+                                        },
+                                        "proxyKeychain": {
+                                            "label": "Choose a key"
+                                        },
+                                        "authenticationType": {
+                                            "label": "No authenticationUse when no credentials are required for the request."
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "authenticationType",
+                                        "type": "select",
+                                        "label": "Authentication type",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "noAuth",
+                                                "apiKey",
+                                                "basicAuth",
+                                                "oAuth"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "tlsType",
+                                        "type": "select",
+                                        "label": "Transport layer security (TLS)",
+                                        "validate": {
+                                            "enum": [
+                                                "mTls",
+                                                "tls"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "proxyKeychain",
+                                        "type": "keychain:proxy",
+                                        "label": "Proxy"
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "url",
+                                        "type": "url",
+                                        "label": "URL",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "method",
+                                        "type": "select",
+                                        "label": "Method",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "get",
+                                                "head",
+                                                "post",
+                                                "put",
+                                                "patch",
+                                                "delete",
+                                                "options"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "headers",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true,
+                                                    "validate": {
+                                                        "pattern": "^[-!#$%&'*+.^_`|~0-9A-Za-z]+$"
+                                                    }
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "text",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Header"
+                                        },
+                                        "type": "array",
+                                        "label": "Headers"
+                                    },
+                                    {
+                                        "name": "queryParameters",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "text",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Parameter"
+                                        },
+                                        "type": "array",
+                                        "label": "Query parameters"
+                                    },
+                                    {
+                                        "name": "contentType",
+                                        "type": "select",
+                                        "label": "Body content type",
+                                        "validate": {
+                                            "enum": [
+                                                "json",
+                                                "multipart",
+                                                "urlEncoded",
+                                                "custom"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "parseResponse",
+                                        "type": "boolean",
+                                        "label": "Parse response",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "stopOnHttpError",
+                                        "type": "boolean",
+                                        "label": "Return error if HTTP request fails",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "timeout",
+                                        "type": "uinteger",
+                                        "label": "Timeout",
+                                        "validate": {
+                                            "max": 300,
+                                            "min": 1
+                                        }
+                                    },
+                                    {
+                                        "name": "allowRedirects",
+                                        "type": "boolean",
+                                        "label": "Allow redirects",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "shareCookies",
+                                        "type": "boolean",
+                                        "label": "Share cookies with other HTTP modules",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "requestCompressedContent",
+                                        "type": "boolean",
+                                        "label": "Request compressed content",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "paginationType",
+                                        "type": "select",
+                                        "label": "Pagination type",
+                                        "validate": {
+                                            "enum": [
+                                                "offsetBased",
+                                                "pageBased",
+                                                "urlBased",
+                                                "tokenBased"
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "interface": [
+                                    {
+                                        "name": "data",
+                                        "type": "any",
+                                        "label": "Data"
+                                    },
+                                    {
+                                        "name": "statusCode",
+                                        "type": "number",
+                                        "label": "Status Code"
+                                    },
+                                    {
+                                        "name": "headers",
+                                        "spec": [
+                                            {
+                                                "name": "content-length",
+                                                "type": "text",
+                                                "label": "Content-Length"
+                                            },
+                                            {
+                                                "name": "content-encoding",
+                                                "type": "text",
+                                                "label": "Content-Encoding"
+                                            },
+                                            {
+                                                "name": "content-type",
+                                                "type": "text",
+                                                "label": "Content-Type"
+                                            },
+                                            {
+                                                "name": "server",
+                                                "type": "text",
+                                                "label": "Server"
+                                            },
+                                            {
+                                                "name": "cache-control",
+                                                "type": "text",
+                                                "label": "Cache-Control"
+                                            },
+                                            {
+                                                "name": "set-cookie",
+                                                "spec": {
+                                                    "type": "text"
+                                                },
+                                                "type": "array",
+                                                "label": "Set-Cookie"
+                                            }
+                                        ],
+                                        "type": "collection",
+                                        "label": "Headers"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 6,
+                            "module": "util:SetVariable2",
+                            "version": 1,
+                            "parameters": {},
+                            "filter": {
+                                "name": "Project",
+                                "conditions": [
+                                    [
+                                        {
+                                            "a": "{{1.formData.decisionTree.lotType}}",
+                                            "b": "Multiple",
+                                            "o": "text:equal"
+                                        }
+                                    ]
+                                ]
+                            },
+                            "mapper": {
+                                "name": "incoming_data",
+                                "scope": "roundtrip",
+                                "value": "{{`1`}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 707,
+                                    "y": 121
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "scope": {
+                                            "label": "One cycle"
+                                        }
+                                    }
+                                },
+                                "expect": [
+                                    {
+                                        "name": "name",
+                                        "type": "text",
+                                        "label": "Variable name",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "scope",
+                                        "type": "select",
+                                        "label": "Variable lifetime",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "roundtrip",
+                                                "execution"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "value",
+                                        "type": "any",
+                                        "label": "Variable value"
+                                    }
+                                ],
+                                "interface": [
+                                    {
+                                        "name": "incoming_data",
+                                        "type": "any",
+                                        "label": "incoming_data"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 13,
+                            "module": "util:SetVariable2",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "name": "project_identifier",
+                                "scope": "roundtrip",
+                                "value": "PROJ-{{formatDate(now; \"YYYYMMDD-HHmmss\")}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1045,
+                                    "y": 124
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "scope": {
+                                            "label": "One cycle"
+                                        }
+                                    }
+                                },
+                                "expect": [
+                                    {
+                                        "name": "name",
+                                        "type": "text",
+                                        "label": "Variable name",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "scope",
+                                        "type": "select",
+                                        "label": "Variable lifetime",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "roundtrip",
+                                                "execution"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "value",
+                                        "type": "any",
+                                        "label": "Variable value"
+                                    }
+                                ],
+                                "interface": [
+                                    {
+                                        "name": "project_identifier",
+                                        "type": "any",
+                                        "label": "project_identifier"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 11,
+                            "module": "builtin:BasicFeeder",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "array": "{{1.formData.lots}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1380,
+                                    "y": 112
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "array": {
+                                            "mode": "edit"
+                                        }
+                                    }
+                                },
+                                "expect": [
+                                    {
+                                        "mode": "edit",
+                                        "name": "array",
+                                        "spec": [],
+                                        "type": "array",
+                                        "label": "Array"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 22,
+                            "module": "code:ExecuteCode",
+                            "version": 0,
+                            "parameters": {},
+                            "mapper": {
+                                "input": [
+                                    {
+                                        "name": "lot_data",
+                                        "value": "{{`11`}}"
+                                    },
+                                    {
+                                        "name": "shared_data",
+                                        "value": "{{6.incoming_data.formData}}"
+                                    },
+                                    {
+                                        "name": "projectIdentifier",
+                                        "value": "{{13.project_identifier}}"
+                                    }
+                                ],
+                                "language": "javascript",
+                                "inputFormat": "editor",
+                                "dependencies": [],
+                                "codeEditorJavascript": "// Access input variables - try multiple patterns\nconst lot_data = input.lot_data || input.lotData;\nlet shared_data = input.shared_data || input.shared_Data || input.sharedData || input.fd;\n\n// Try multiple paths to find shared data\nif (!shared_data) {\n    if (input.incoming_data && input.incoming_data.formData) {\n        shared_data = input.incoming_data.formData;\n    } else if (input.Data && input.Data.formData) {\n        shared_data = input.Data.formData;\n    } else if (input.data && input.data.formData) {\n        shared_data = input.data.formData;\n    }\n}\n\nconst project_identifier = input.project_identifier || input.projectIdentifier;\n\n// Helper functions\nconst requiredString = (val) => {\n    return (!val || val === \"\" || val === null) ? \"No Address Provided\" : String(val);\n};\n\nconst nullIfEmpty = (val) => (!val || val === \"\" ? null : val);\n\nconst toFloat = (val) => {\n    if (val === null || val === undefined || val === '') return 0;\n    const num = parseFloat(val);\n    return isNaN(num) ? 0 : num;\n};\n\n// Format to 2 decimal places for market performance fields\n// Converts \"N/A\" and \"TBC\" to null for GHL (GHL doesn't accept string values for numeric fields)\nconst toFloat2Decimals = (val) => {\n    if (val === null || val === undefined || val === '') return null;\n    const strVal = String(val).trim();\n    // Convert \"N/A\" and \"TBC\" to null (GHL expects numeric or null)\n    if (strVal.toUpperCase() === \"N/A\" || strVal.toUpperCase() === \"TBC\") {\n        return null;\n    }\n    const num = parseFloat(strVal);\n    if (isNaN(num)) return null;\n    return Math.round(num * 100) / 100; // Round to 2 decimal places\n};\n\n// Mapping function for asking field values (Form → GHL)\nconst mapAskingValue = (val) => {\n    if (!val) return null;\n    const mapping = {\n        \"onmarket\": \"on-market\",\n        \"offmarket\": \"off-market\",\n        \"prelaunch_opportunity\": \"pre-launch opportunity\",\n        \"coming_soon\": \"coming soon\",\n        \"tbc\": null,\n        \"N/A\": null\n    };\n    return mapping[val] || null;\n};\n\n// Mapping function for single/dual occupancy (Form → GHL)\nconst mapSingleDualOccupancy = (val) => {\n    if (!val) return null;\n    if (val === \"Yes\") return \"dual_occupancy\";\n    if (val === \"No\") return \"single_occupancy\";\n    return null;\n};\n\n// Mapping function for bath values (Form → GHL)\n// Converts \"2.5\" to \"2point5\" as required by GHL\nconst mapBathValue = (val) => {\n    if (!val) return null;\n    const strVal = String(val).trim();\n    // Convert decimal to \"point\" format (e.g., \"2.5\" -> \"2point5\")\n    if (strVal.includes('.')) {\n        return strVal.replace('.', 'point');\n    }\n    // Return as-is for whole numbers or other formats\n    return strVal;\n};\n\n// Safety checks\nif (!lot_data) {\n    throw \"No lot data received. Check input variable lot_data is mapped correctly\";\n}\n\nif (!shared_data) {\n    throw \"No shared data received. Check module mapping\";\n}\n\n// Extract lot-specific data\nconst lot = lot_data;\nconst lotNumber = lot.lotNumber || \"\";\nconst propertyDesc = lot.propertyDescription || {};\nconst purchasePrice = lot.purchasePrice || {};\nconst rentalAssessment = lot.rentalAssessment || {};\n\n// Extract shared data\nconst projectAddress = shared_data.address?.projectAddress || \"\";\n\n// Build property address from address components (not project address)\n// Construct from street number, street name, suburb, state, postcode with lot number prefix\nconst buildPropertyAddress = () => {\n    const streetNumber = shared_data.address?.streetNumber || \"\";\n    const streetName = shared_data.address?.streetName || \"\";\n    const suburbName = shared_data.address?.suburbName || \"\";\n    const state = shared_data.address?.state || \"\";\n    const postCode = shared_data.address?.postCode || \"\";\n    \n    const addressParts = [streetNumber, streetName, suburbName, state, postCode].filter(part => part && part.trim());\n    const baseAddress = addressParts.join(\" \");\n    \n    if (lotNumber && lotNumber.trim()) {\n        return `Lot ${lotNumber}, ${baseAddress}`;\n    }\n    return baseAddress || shared_data.address?.propertyAddress || \"No Address Provided\";\n};\n\nconst propertyAddress = buildPropertyAddress();\n\n// Build payload\nconst payload = {\n    locationId: \"UJWYn4mrgGodB7KZUcHt\",\n    properties: {\n        // Address fields\n        property_address: requiredString(propertyAddress),\n        lot_number: nullIfEmpty(lotNumber),\n        street_number: nullIfEmpty(shared_data.address?.streetNumber),\n        street_name: nullIfEmpty(shared_data.address?.streetName),\n        suburb_name: nullIfEmpty(shared_data.address?.suburbName),\n        state: nullIfEmpty(shared_data.address?.state),\n        post_code: nullIfEmpty(shared_data.address?.postCode),\n        lga: nullIfEmpty(shared_data.address?.lga),\n        unit__lot: nullIfEmpty(shared_data.address?.unitNumber),\n        google_map: nullIfEmpty(shared_data.address?.googleMap),\n        project_address: nullIfEmpty(shared_data.address?.projectAddress),\n        \n        // Project linking fields (no parent, all are children)\n        project_identifier: nullIfEmpty(project_identifier),\n        is_parent_record: \"No\",\n        \n        // Shared fields\n        property_type: nullIfEmpty(shared_data.decisionTree?.propertyType),\n        sourcer: nullIfEmpty(shared_data.sourcer?.replace(\"@buyersclub.com.au\", \"\")),\n        packager: nullIfEmpty(shared_data.packager?.replace(\"@buyersclub.com.au\", \"\")),\n        deal_type: nullIfEmpty(shared_data.decisionTree?.contractType),\n        contract_type: nullIfEmpty(shared_data.decisionTree?.contractTypeSimplified),\n        status: nullIfEmpty(shared_data.decisionTree?.status),\n        folder_link: nullIfEmpty(shared_data.folderLink),\n        project_name: nullIfEmpty(shared_data.address?.projectName),\n        project_brief: nullIfEmpty(shared_data.propertyDescription?.projectOverview),\n        \n        // Risk Overlays\n        zoning: nullIfEmpty(shared_data.riskOverlays?.zoning),\n        flood: nullIfEmpty(shared_data.riskOverlays?.flood),\n        flood_dialogue: nullIfEmpty(shared_data.riskOverlays?.floodDialogue),\n        bushfire: nullIfEmpty(shared_data.riskOverlays?.bushfire),\n        bushfire_dialogue: nullIfEmpty(shared_data.riskOverlays?.bushfireDialogue),\n        mining: nullIfEmpty(shared_data.riskOverlays?.mining),\n        mining_dialogie: nullIfEmpty(shared_data.riskOverlays?.miningDialogue),\n        other_overlay: nullIfEmpty(shared_data.riskOverlays?.otherOverlay),\n        other_overlay_dialogue: nullIfEmpty(shared_data.riskOverlays?.otherOverlayDialogue),\n        special_infrastructure: nullIfEmpty(shared_data.riskOverlays?.specialInfrastructure),\n        special_infrastructure_dialogue: nullIfEmpty(shared_data.riskOverlays?.specialInfrastructureDialogue),\n        due_diligence_acceptance: nullIfEmpty(shared_data.riskOverlays?.dueDiligenceAcceptance),\n        \n        // Market Performance\n        median_price_change__3_months: toFloat2Decimals(shared_data.marketPerformance?.medianPriceChange3Months),\n        median_price_change__1_year: toFloat2Decimals(shared_data.marketPerformance?.medianPriceChange1Year),\n        median_price_change__3_year: toFloat2Decimals(shared_data.marketPerformance?.medianPriceChange3Year),\n        median_price_change__5_year: toFloat2Decimals(shared_data.marketPerformance?.medianPriceChange5Year),\n        median_yield: toFloat2Decimals(shared_data.marketPerformance?.medianYield),\n        median_rent_change__1_year: toFloat2Decimals(shared_data.marketPerformance?.medianRentChange1Year),\n        rental_population: toFloat2Decimals(shared_data.marketPerformance?.rentalPopulation),\n        vacancy_rate: toFloat2Decimals(shared_data.marketPerformance?.vacancyRate),\n        market_performance_additional_dialogue: nullIfEmpty(shared_data.marketPerformance?.marketPerformanceAdditionalDialogue),\n        \n        // Content Sections\n        why_this_property: nullIfEmpty(shared_data.contentSections?.whyThisProperty),\n        proximity: nullIfEmpty(shared_data.contentSections?.proximity),\n        investment_highlights: nullIfEmpty(shared_data.contentSections?.investmentHighlights),\n        \n        // Property Description\n        beds_primary: nullIfEmpty(propertyDesc.bedsPrimary),\n        beds_additional__secondary__dual_key: nullIfEmpty(propertyDesc.bedsSecondary),\n        bath_primary: mapBathValue(propertyDesc.bathPrimary),\n        baths_additional__secondary__dual_key: mapBathValue(propertyDesc.bathSecondary),\n        garage_primary: nullIfEmpty(propertyDesc.garagePrimary),\n        garage_additional__secondary__dual_key: nullIfEmpty(propertyDesc.garageSecondary),\n        carport_primary: nullIfEmpty(propertyDesc.carportPrimary),\n        carport_additional__secondary__dual_key: nullIfEmpty(propertyDesc.carportSecondary),\n        carspace_primary: nullIfEmpty(propertyDesc.carspacePrimary),\n        carspace_additional__secondary__dual_key: nullIfEmpty(propertyDesc.carspaceSecondary),\n        year_built: nullIfEmpty(propertyDesc.yearBuilt),\n        land_size: nullIfEmpty(propertyDesc.landSize),\n        build_size: nullIfEmpty(propertyDesc.buildSize),\n        land_registration: nullIfEmpty(propertyDesc.landRegistration),\n        title: nullIfEmpty(propertyDesc.title),\n        body_corp__per_quarter: nullIfEmpty(propertyDesc.bodyCorpPerQuarter),\n        body_corp_description: nullIfEmpty(propertyDesc.bodyCorpDescription),\n        single_or_dual_occupancy: mapSingleDualOccupancy(lot.singleOrDual),\n        property_description_additional_dialogue: nullIfEmpty(shared_data.propertyDescription?.propertyDescriptionAdditionalDialogue),\n        \n        // Purchase Price\n        asking: mapAskingValue(shared_data.purchasePrice?.asking),\n        acceptable_acquisition__from: nullIfEmpty(purchasePrice.acceptableAcquisitionFrom),\n        acceptable_acquisition__to: nullIfEmpty(purchasePrice.acceptableAcquisitionTo),\n        land_price: nullIfEmpty(purchasePrice.landPrice),\n        build_price: nullIfEmpty(purchasePrice.buildPrice),\n        total_price: nullIfEmpty(purchasePrice.totalPrice),\n        net_price: (() => {\n            // Only calculate Net Price if type is \"cashback\"\n            if (purchasePrice.cashbackRebateType !== 'cashback') return null;\n            const total = purchasePrice.totalPrice ? parseFloat(String(purchasePrice.totalPrice).replace(/[$,]/g, '')) : null;\n            const cashback = purchasePrice.cashbackRebateValue ? parseFloat(String(purchasePrice.cashbackRebateValue).replace(/[$,]/g, '')) : null;\n            if (total !== null && cashback !== null && !isNaN(total) && !isNaN(cashback)) {\n                return (total - cashback).toString();\n            }\n            return null;\n        })(),\n        cashback_rebate_value: nullIfEmpty(purchasePrice.cashbackRebateValue),\n        cashback_rebate_type: nullIfEmpty(purchasePrice.cashbackRebateType),\n        comparable_sales: nullIfEmpty(shared_data.purchasePrice?.comparableSales),\n        purchase_price_additional_dialogue: nullIfEmpty(shared_data.purchasePrice?.purchasePriceAdditionalDialogue),\n        price_group: nullIfEmpty(shared_data.purchasePrice?.priceGroup),\n        \n        // Rental Assessment\n        occupancy_primary: nullIfEmpty(rentalAssessment.occupancyPrimary),\n        occupancy_secondary: nullIfEmpty(rentalAssessment.occupancySecondary),\n        current_rent_primary__per_week: nullIfEmpty(rentalAssessment.currentRentPrimary),\n        current_rent_secondary__per_week: nullIfEmpty(rentalAssessment.currentRentSecondary),\n        expiry_primary: nullIfEmpty(rentalAssessment.expiryPrimary),\n        expiry_secondary: nullIfEmpty(rentalAssessment.expirySecondary),\n        rent_appraisal_primary_from: nullIfEmpty(rentalAssessment.rentAppraisalPrimaryFrom),\n        rent_appraisal_primary_to: nullIfEmpty(rentalAssessment.rentAppraisalPrimaryTo),\n        rent_appraisal_secondary_from: nullIfEmpty(rentalAssessment.rentAppraisalSecondaryFrom),\n        rent_appraisal_secondary_to: nullIfEmpty(rentalAssessment.rentAppraisalSecondaryTo),\n        yield: nullIfEmpty(rentalAssessment.yield),\n        appraised_yield: nullIfEmpty(rentalAssessment.appraisedYield),\n        rental_assessment_additional_dialogue: nullIfEmpty(shared_data.rentalAssessment?.rentalAssessmentAdditionalDialogue),\n        \n        // Cashflow Fields\n        cf_insurance_value_: nullIfEmpty(shared_data.insuranceAmount),\n        cf_depreciation_: (() => {\n            // Convert depreciation object to comma-separated string (years 1-10)\n            const dep = shared_data.depreciation;\n            if (!dep) return null;\n            const years = [\n                dep.year1, dep.year2, dep.year3, dep.year4, dep.year5,\n                dep.year6, dep.year7, dep.year8, dep.year9, dep.year10\n            ].filter(val => val !== null && val !== undefined && val !== '');\n            return years.length > 0 ? years.join(',') : null;\n        })(),\n        cf_councilwater_rates_: nullIfEmpty(shared_data.councilWaterRates),\n        \n        // Agent Info\n        agent_name: nullIfEmpty(shared_data.sellingAgentName),\n        agent_email: nullIfEmpty(shared_data.sellingAgentEmail),\n        agent_mobile: nullIfEmpty(shared_data.sellingAgentMobile),\n        \n        // Additional fields\n        message_for_ba: nullIfEmpty(shared_data.messageForBA),\n        attachments_additional_dialogue: nullIfEmpty(shared_data.attachmentsAdditionalDialogue)\n    }\n};\n\nreturn payload;\n"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1699,
+                                    "y": 103
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "input": {
+                                            "items": [
+                                                null,
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "language": {
+                                            "mode": "chose",
+                                            "label": "JavaScript"
+                                        },
+                                        "inputFormat": {
+                                            "label": "Code editor"
+                                        }
+                                    }
+                                },
+                                "expect": [
+                                    {
+                                        "name": "language",
+                                        "type": "select",
+                                        "label": "Language",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "javascript",
+                                                "python"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "input",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true,
+                                                    "validate": {
+                                                        "max": 32,
+                                                        "min": 1,
+                                                        "pattern": "^[a-zA-Z0-9_]{1,32}$"
+                                                    }
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "any",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Variable"
+                                        },
+                                        "type": "array",
+                                        "label": "Input"
+                                    },
+                                    {
+                                        "name": "dependencies",
+                                        "spec": {
+                                            "name": "value",
+                                            "type": "text",
+                                            "label": "Dependency",
+                                            "required": true,
+                                            "validate": {
+                                                "max": 214,
+                                                "min": 1,
+                                                "pattern": "^[A-Za-z0-9_@\\./<>\\=\\!~\\^+\\-]{1,214}$"
+                                            }
+                                        },
+                                        "type": "array",
+                                        "label": "Additional dependencies (Enterprise plans only)"
+                                    },
+                                    {
+                                        "name": "inputFormat",
+                                        "type": "select",
+                                        "label": "Input format",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "editor",
+                                                "string"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "codeEditorJavascript",
+                                        "type": "editor",
+                                        "label": "Code",
+                                        "required": true
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 12,
+                            "module": "http:MakeRequest",
+                            "version": 4,
+                            "parameters": {
+                                "tlsType": "",
+                                "proxyKeychain": "",
+                                "authenticationType": "noAuth"
+                            },
+                            "mapper": {
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records",
+                                "method": "post",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-1fc3120c-80a7-42d5-b8f1-b391dbf2a793"
+                                    },
+                                    {
+                                        "name": "Version",
+                                        "value": "2021-07-28"
+                                    }
+                                ],
+                                "contentType": "json",
+                                "inputMethod": "jsonString",
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "allowRedirects": true,
+                                "stopOnHttpError": true,
+                                "jsonStringBodyContent": "{{22.result}}",
+                                "requestCompressedContent": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 2055,
+                                    "y": 94
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "POST"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "contentType": {
+                                            "label": "application/jsonEnter data in the JSON format, as a string or using a data structure."
+                                        },
+                                        "inputMethod": {
+                                            "label": "JSON stringEnter the JSON body as a raw text string. If values contain JSON reserved characters, you must escape them manually."
+                                        },
+                                        "shareCookies": {
+                                            "mode": "chose"
+                                        },
+                                        "parseResponse": {
+                                            "mode": "chose"
+                                        },
+                                        "allowRedirects": {
+                                            "mode": "chose"
+                                        },
+                                        "paginationType": {
+                                            "label": "Empty"
+                                        },
+                                        "queryParameters": {
+                                            "mode": "chose"
+                                        },
+                                        "stopOnHttpError": {
+                                            "mode": "chose"
+                                        },
+                                        "requestCompressedContent": {
+                                            "mode": "chose"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "tlsType": {
+                                            "label": "Empty"
+                                        },
+                                        "proxyKeychain": {
+                                            "label": "Choose a key"
+                                        },
+                                        "authenticationType": {
+                                            "label": "No authenticationUse when no credentials are required for the request."
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "authenticationType",
+                                        "type": "select",
+                                        "label": "Authentication type",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "noAuth",
+                                                "apiKey",
+                                                "basicAuth",
+                                                "oAuth"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "tlsType",
+                                        "type": "select",
+                                        "label": "Transport layer security (TLS)",
+                                        "validate": {
+                                            "enum": [
+                                                "mTls",
+                                                "tls"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "proxyKeychain",
+                                        "type": "keychain:proxy",
+                                        "label": "Proxy"
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "url",
+                                        "type": "url",
+                                        "label": "URL",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "method",
+                                        "type": "select",
+                                        "label": "Method",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "get",
+                                                "head",
+                                                "post",
+                                                "put",
+                                                "patch",
+                                                "delete",
+                                                "options"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "headers",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true,
+                                                    "validate": {
+                                                        "pattern": "^[-!#$%&'*+.^_`|~0-9A-Za-z]+$"
+                                                    }
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "text",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Header"
+                                        },
+                                        "type": "array",
+                                        "label": "Headers"
+                                    },
+                                    {
+                                        "name": "queryParameters",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "text",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Parameter"
+                                        },
+                                        "type": "array",
+                                        "label": "Query parameters"
+                                    },
+                                    {
+                                        "name": "contentType",
+                                        "type": "select",
+                                        "label": "Body content type",
+                                        "validate": {
+                                            "enum": [
+                                                "json",
+                                                "multipart",
+                                                "urlEncoded",
+                                                "custom"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "parseResponse",
+                                        "type": "boolean",
+                                        "label": "Parse response",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "stopOnHttpError",
+                                        "type": "boolean",
+                                        "label": "Return error if HTTP request fails",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "timeout",
+                                        "type": "uinteger",
+                                        "label": "Timeout",
+                                        "validate": {
+                                            "max": 300,
+                                            "min": 1
+                                        }
+                                    },
+                                    {
+                                        "name": "allowRedirects",
+                                        "type": "boolean",
+                                        "label": "Allow redirects",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "shareCookies",
+                                        "type": "boolean",
+                                        "label": "Share cookies with other HTTP modules",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "requestCompressedContent",
+                                        "type": "boolean",
+                                        "label": "Request compressed content",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "inputMethod",
+                                        "type": "select",
+                                        "label": "Body input method",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "dataStructure",
+                                                "jsonString"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "jsonStringBodyContent",
+                                        "type": "text",
+                                        "label": "Body content",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "paginationType",
+                                        "type": "select",
+                                        "label": "Pagination type",
+                                        "validate": {
+                                            "enum": [
+                                                "offsetBased",
+                                                "pageBased",
+                                                "urlBased",
+                                                "tokenBased"
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "interface": [
+                                    {
+                                        "name": "data",
+                                        "type": "any",
+                                        "label": "Data"
+                                    },
+                                    {
+                                        "name": "statusCode",
+                                        "type": "number",
+                                        "label": "Status Code"
+                                    },
+                                    {
+                                        "name": "headers",
+                                        "spec": [
+                                            {
+                                                "name": "content-length",
+                                                "type": "text",
+                                                "label": "Content-Length"
+                                            },
+                                            {
+                                                "name": "content-encoding",
+                                                "type": "text",
+                                                "label": "Content-Encoding"
+                                            },
+                                            {
+                                                "name": "content-type",
+                                                "type": "text",
+                                                "label": "Content-Type"
+                                            },
+                                            {
+                                                "name": "server",
+                                                "type": "text",
+                                                "label": "Server"
+                                            },
+                                            {
+                                                "name": "cache-control",
+                                                "type": "text",
+                                                "label": "Cache-Control"
+                                            },
+                                            {
+                                                "name": "set-cookie",
+                                                "spec": {
+                                                    "type": "text"
+                                                },
+                                                "type": "array",
+                                                "label": "Set-Cookie"
+                                            }
+                                        ],
+                                        "type": "collection",
+                                        "label": "Headers"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "id": 23,
+                            "module": "http:MakeRequest",
+                            "version": 4,
+                            "parameters": {
+                                "tlsType": "",
+                                "proxyKeychain": "",
+                                "authenticationType": "noAuth"
+                            },
+                            "mapper": {
+                                "url": "https://services.leadconnectorhq.com/objects/692d04e3662599ed0c29edfa/records/{{12.data.record.id}}",
+                                "method": "get",
+                                "headers": [
+                                    {
+                                        "name": "Authorization",
+                                        "value": "Bearer pit-1fc3120c-80a7-42d5-b8f1-b391dbf2a793"
+                                    },
+                                    {
+                                        "name": "Version",
+                                        "value": "2021-07-28"
+                                    }
+                                ],
+                                "shareCookies": false,
+                                "parseResponse": true,
+                                "allowRedirects": true,
+                                "stopOnHttpError": true,
+                                "requestCompressedContent": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 2423,
+                                    "y": 97
+                                },
+                                "restore": {
+                                    "expect": {
+                                        "method": {
+                                            "mode": "chose",
+                                            "label": "GET"
+                                        },
+                                        "headers": {
+                                            "mode": "chose",
+                                            "items": [
+                                                null,
+                                                null
+                                            ]
+                                        },
+                                        "contentType": {
+                                            "label": "Empty"
+                                        },
+                                        "shareCookies": {
+                                            "mode": "chose"
+                                        },
+                                        "parseResponse": {
+                                            "mode": "chose"
+                                        },
+                                        "allowRedirects": {
+                                            "mode": "chose"
+                                        },
+                                        "paginationType": {
+                                            "label": "Empty"
+                                        },
+                                        "queryParameters": {
+                                            "mode": "chose"
+                                        },
+                                        "stopOnHttpError": {
+                                            "mode": "chose"
+                                        },
+                                        "requestCompressedContent": {
+                                            "mode": "chose"
+                                        }
+                                    },
+                                    "parameters": {
+                                        "tlsType": {
+                                            "label": "Empty"
+                                        },
+                                        "proxyKeychain": {
+                                            "label": "Choose a key"
+                                        },
+                                        "authenticationType": {
+                                            "label": "No authenticationUse when no credentials are required for the request."
+                                        }
+                                    }
+                                },
+                                "parameters": [
+                                    {
+                                        "name": "authenticationType",
+                                        "type": "select",
+                                        "label": "Authentication type",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "noAuth",
+                                                "apiKey",
+                                                "basicAuth",
+                                                "oAuth"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "tlsType",
+                                        "type": "select",
+                                        "label": "Transport layer security (TLS)",
+                                        "validate": {
+                                            "enum": [
+                                                "mTls",
+                                                "tls"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "proxyKeychain",
+                                        "type": "keychain:proxy",
+                                        "label": "Proxy"
+                                    }
+                                ],
+                                "expect": [
+                                    {
+                                        "name": "url",
+                                        "type": "url",
+                                        "label": "URL",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "method",
+                                        "type": "select",
+                                        "label": "Method",
+                                        "required": true,
+                                        "validate": {
+                                            "enum": [
+                                                "get",
+                                                "head",
+                                                "post",
+                                                "put",
+                                                "patch",
+                                                "delete",
+                                                "options"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "headers",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true,
+                                                    "validate": {
+                                                        "pattern": "^[-!#$%&'*+.^_`|~0-9A-Za-z]+$"
+                                                    }
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "text",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Header"
+                                        },
+                                        "type": "array",
+                                        "label": "Headers"
+                                    },
+                                    {
+                                        "name": "queryParameters",
+                                        "spec": {
+                                            "name": "value",
+                                            "spec": [
+                                                {
+                                                    "name": "name",
+                                                    "type": "text",
+                                                    "label": "Name",
+                                                    "required": true
+                                                },
+                                                {
+                                                    "name": "value",
+                                                    "type": "text",
+                                                    "label": "Value"
+                                                }
+                                            ],
+                                            "type": "collection",
+                                            "label": "Parameter"
+                                        },
+                                        "type": "array",
+                                        "label": "Query parameters"
+                                    },
+                                    {
+                                        "name": "contentType",
+                                        "type": "select",
+                                        "label": "Body content type",
+                                        "validate": {
+                                            "enum": [
+                                                "json",
+                                                "multipart",
+                                                "urlEncoded",
+                                                "custom"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "name": "parseResponse",
+                                        "type": "boolean",
+                                        "label": "Parse response",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "stopOnHttpError",
+                                        "type": "boolean",
+                                        "label": "Return error if HTTP request fails",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "timeout",
+                                        "type": "uinteger",
+                                        "label": "Timeout",
+                                        "validate": {
+                                            "max": 300,
+                                            "min": 1
+                                        }
+                                    },
+                                    {
+                                        "name": "allowRedirects",
+                                        "type": "boolean",
+                                        "label": "Allow redirects",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "shareCookies",
+                                        "type": "boolean",
+                                        "label": "Share cookies with other HTTP modules",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "requestCompressedContent",
+                                        "type": "boolean",
+                                        "label": "Request compressed content",
+                                        "required": true
+                                    },
+                                    {
+                                        "name": "paginationType",
+                                        "type": "select",
+                                        "label": "Pagination type",
+                                        "validate": {
+                                            "enum": [
+                                                "offsetBased",
+                                                "pageBased",
+                                                "urlBased",
+                                                "tokenBased"
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "interface": [
+                                    {
+                                        "name": "data",
+                                        "type": "any",
+                                        "label": "Data"
+                                    },
+                                    {
+                                        "name": "statusCode",
+                                        "type": "number",
+                                        "label": "Status Code"
+                                    },
+                                    {
+                                        "name": "headers",
+                                        "spec": [
+                                            {
+                                                "name": "content-length",
+                                                "type": "text",
+                                                "label": "Content-Length"
+                                            },
+                                            {
+                                                "name": "content-encoding",
+                                                "type": "text",
+                                                "label": "Content-Encoding"
+                                            },
+                                            {
+                                                "name": "content-type",
+                                                "type": "text",
+                                                "label": "Content-Type"
+                                            },
+                                            {
+                                                "name": "server",
+                                                "type": "text",
+                                                "label": "Server"
+                                            },
+                                            {
+                                                "name": "cache-control",
+                                                "type": "text",
+                                                "label": "Cache-Control"
+                                            },
+                                            {
+                                                "name": "set-cookie",
+                                                "spec": {
+                                                    "type": "text"
+                                                },
+                                                "type": "array",
+                                                "label": "Set-Cookie"
+                                            }
+                                        ],
+                                        "type": "collection",
+                                        "label": "Headers"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "instant": true,
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "slots": null,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false,
+            "freshVariables": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "zone": "eu1.make.com",
+        "notes": []
+    }
+}

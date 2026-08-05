@@ -220,8 +220,8 @@ export function transformRecord(record: GHLRecord) {
   // Folder link
   const folderLink = p.folder_link || '';
 
-  // PDF link
-  const pdfLink = p.pdf_link || '';
+  // PDF link (populated from Redis in the API route, not from GHL)
+  const pdfLink = '';
 
   // Portal link (only when QA approved)
   let portalLink = '';
@@ -268,5 +268,6 @@ export function transformRecord(record: GHLRecord) {
     folderLink,
     pdfLink,
     portalLink,
+    createdAt: record.createdAt || '',
   };
 }

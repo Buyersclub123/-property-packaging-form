@@ -383,6 +383,12 @@ export interface FormData {
     year10?: string;
   };
   
+  // Project fields
+  projectIdentifier?: string; // Shared identifier across project lots (e.g., "PROJ-20260703-154554")
+  projectAddress?: string; // Project-level address (e.g., "Bloom Estate Nikenbah QLD 4655")
+  isParentRecord?: string; // "Yes" or "No" — only one parent per project
+  projectParentId?: string; // Record ID of the parent record in this project
+  
   // Workflow
   messageForBA?: string;
   noBodyCorpDialogueNeeded?: boolean;

@@ -1,0 +1,170 @@
+﻿=== 3-WAY DEAL SHEET COMPARISON ===
+Old Deal Sheet records: 1462
+GHL records:            911
+New Deal Sheet records: 911
+
+Unique IDs - Old: 467 | GHL: 911 | New: 911
+
+=== GHL STATUS DISTRIBUTION ===
+
+Status                                                                                                                                               Count
+------                                                                                                                                               -----
+'07 Test Record'                                                                                                                                       496
+'06 Remove lost'                                                                                                                                       119
+'02 EOI'                                                                                                                                               111
+'01 Available'                                                                                                                                          83
+'05 Remove no interest'                                                                                                                                 78
+'tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023'      10
+'03 Contr' Exchanged'                                                                                                                                    4
+'Little Learners Childcare Centre\n40.2 km (36 mins)'                                                                                                    3
+'the largest single warehouse by site footprint in Australia\n$135 million Woolworths food distribution centre in Truganina'                             2
+'$500 - 700k'                                                                                                                                            1
+'780000'                                                                                                                                                 1
+(blank)                                                                                                                                                  1
+'tripling production capacity and creating 900 construction jobs.\r\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023'     1
+'Drakes Davoren Park\n1.4 km (4 mins)'                                                                                                                   1
+
+
+=== GHL DEAL TYPE DISTRIBUTION ===
+
+Deal Type                Count
+---------                -----
+'05 Established'           465
+'01 H&L Comms'             234
+(blank)                     93
+'02 Single Comms'           78
+'03 Internal with Comms'    40
+'04 Internal No-Comms'       1
+
+
+============================================================
+=== 1. OLD DEAL SHEET vs GHL (Status comparison) ===
+============================================================
+Matched: 359 | Mismatches: 24 | Test skipped: 84 | Old not in GHL: 0
+
+MISMATCHES (Old vs GHL):
+
+RecordID                 OldStatus             GHLStatus                                                                                                                                         
+--------                 ---------             ---------                                                                                                                                         
+69f45124e4296183acc375d4 02 EOI                tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+6a05635254f1a87d4a538a6e 01 Available          the largest single warehouse by site footprint in Australia\n$135 million Woolworths food distribution centre in Truganina                        
+69f451212ee90465a1cd1a64 02 EOI                tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+69bb63aef891cea5156c4489 06 Remove lost        01 Available                                                                                                                                      
+69d5bff09957023eb4570807 02 EOI                tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+69f4512c54702528adac8752 02 EOI                tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+69d71bcd1d2031f55a81b710 05 Remove no interest 01 Available                                                                                                                                      
+69b235fd4ae9ca217954f38f 05 Remove no interest tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+69fae85bb6a20ce21cf39a41 02 EOI                01 Available                                                                                                                                      
+69fc2c54372b666b59704295 06 Remove lost        01 Available                                                                                                                                      
+69a65013b07a1b666870344b 06 Remove Lost        05 Remove no interest                                                                                                                             
+69f42cd88250f61370bac067 02 EOI                tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+6a0ff5e15b83ab8004571086 06 Remove lost        01 Available                                                                                                                                      
+69f834fb545830a6f18c4f99 06 Remove lost        01 Available                                                                                                                                      
+6a06ab334ea3b99528bf40c9 05 Remove no interest the largest single warehouse by site footprint in Australia\n$135 million Woolworths food distribution centre in Truganina                        
+69b36936ee5ca5a9ff0a28ec 06 Remove lost        02 EOI                                                                                                                                            
+69c0c1e3f4305e3bea62cd5b 05 Remove no interest tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+69f4512892e18f55ecd22b61 02 EOI                tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+69fa9e7d2f11427a8362ce08 05 Remove no interest 01 Available                                                                                                                                      
+69a7af18dd5fc97259d79beb 02 EOI                tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+6a043233636c90f286e2373a 02 EOI                01 Available                                                                                                                                      
+69e019c2bb84dbc37e4839f0 05 Remove no interest 01 Available                                                                                                                                      
+69eb1c839a062d1197c23645 06 Remove lost        tripling production capacity and creating 900 construction jobs.\r\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023
+699511fa79e9990a8aa744f6 02 EOI                tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023  
+
+
+============================================================
+=== 2. GHL vs NEW DEAL SHEET (Status comparison) ===
+============================================================
+Matched: 396 | Mismatches: 19 | Test skipped: 496 | GHL not in New: 0
+
+MISMATCHES (GHL vs New):
+
+RecordID                 GHLStatus                                                                                                                                          NewStatus            
+--------                 ---------                                                                                                                                          ---------            
+69a7af18dd5fc97259d79beb tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   02 Eoi               
+6a05635254f1a87d4a538a6e the largest single warehouse by site footprint in Australia\n$135 million Woolworths food distribution centre in Truganina                         01 Available         
+69649266d98ca1020b728245 780000                                                                                                                                             07 Test Record       
+69f45124e4296183acc375d4 tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   02 Eoi               
+696490bec45e248593adc5cf Little Learners Childcare Centre\n40.2 km (36 mins)                                                                                                07 Test Record       
+6a06ab334ea3b99528bf40c9 the largest single warehouse by site footprint in Australia\n$135 million Woolworths food distribution centre in Truganina                         05 Remove No Interest
+69649214c45e240e8dadc904 Little Learners Childcare Centre\n40.2 km (36 mins)                                                                                                07 Test Record       
+6964888c4a5e7ad5e9c56d10 Little Learners Childcare Centre\n40.2 km (36 mins)                                                                                                07 Test Record       
+69c0c1e3f4305e3bea62cd5b tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   05 Remove No Interest
+69f451212ee90465a1cd1a64 tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   02 Eoi               
+69eb1c839a062d1197c23645 tripling production capacity and creating 900 construction jobs.\r\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023 06 Remove Lost       
+69b235fd4ae9ca217954f38f tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   05 Remove No Interest
+69f4512c54702528adac8752 tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   02 Eoi               
+69f4512892e18f55ecd22b61 tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   02 Eoi               
+69f42cd88250f61370bac067 tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   02 Eoi               
+69649e9d1178d0fedd064e40 $500 - 700k                                                                                                                                        07 Test Record       
+69d5bff09957023eb4570807 tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   02 Eoi               
+696485151178d02e4a05eb08 Drakes Davoren Park\n1.4 km (4 mins)                                                                                                               07 Test Record       
+699511fa79e9990a8aa744f6 tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023   02 Eoi               
+
+
+============================================================
+=== 3. OLD vs NEW DEAL SHEET (Status comparison) ===
+============================================================
+Matched: 372 | Mismatches: 11 | Test skipped: 84
+
+MISMATCHES (Old vs New, with GHL reference):
+
+RecordID                 OldStatus             NewStatus             GHLStatus            
+--------                 ---------             ---------             ---------            
+69bb63aef891cea5156c4489 06 Remove lost        01 Available          01 Available         
+69d71bcd1d2031f55a81b710 05 Remove no interest 01 Available          01 Available         
+69fae85bb6a20ce21cf39a41 02 EOI                01 Available          01 Available         
+69fc2c54372b666b59704295 06 Remove lost        01 Available          01 Available         
+69a65013b07a1b666870344b 06 Remove Lost        05 Remove No Interest 05 Remove no interest
+6a0ff5e15b83ab8004571086 06 Remove lost        01 Available          01 Available         
+69f834fb545830a6f18c4f99 06 Remove lost        01 Available          01 Available         
+69b36936ee5ca5a9ff0a28ec 06 Remove lost        02 Eoi                02 EOI               
+69fa9e7d2f11427a8362ce08 05 Remove no interest 01 Available          01 Available         
+6a043233636c90f286e2373a 02 EOI                01 Available          01 Available         
+69e019c2bb84dbc37e4839f0 05 Remove no interest 01 Available          01 Available         
+
+
+============================================================
+=== STATUS DISTRIBUTION (Non-test only) ===
+============================================================
+
+OLD SHEET:
+
+Name                  Count
+----                  -----
+01 Available             61
+02 EOI                  119
+03 Contr' Exchanged       4
+05 Remove no interest    83
+06 Remove lost          124
+
+
+GHL:
+
+Name                                                                                                                                               Count
+----                                                                                                                                               -----
+$500 - 700k                                                                                                                                            1
+01 Available                                                                                                                                          83
+02 EOI                                                                                                                                               111
+03 Contr' Exchanged                                                                                                                                    4
+05 Remove no interest                                                                                                                                 78
+06 Remove lost                                                                                                                                       119
+780000                                                                                                                                                 1
+Drakes Davoren Park\n1.4 km (4 mins)                                                                                                                   1
+Little Learners Childcare Centre\n40.2 km (36 mins)                                                                                                    3
+the largest single warehouse by site footprint in Australia\n$135 million Woolworths food distribution centre in Truganina                             2
+tripling production capacity and creating 900 construction jobs.\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023      10
+tripling production capacity and creating 900 construction jobs.\r\n$15 million freeze-drying facility at SSS Strawberries opened in December 2023     1
+
+
+NEW SHEET:
+
+Name                  Count
+----                  -----
+01 Available             84
+02 Eoi                  119
+03 Contr Exchanged        4
+05 Remove No Interest    81
+06 Remove Lost          120
+
+

@@ -1,0 +1,454 @@
+Old sheet (reference)
+
+Pre-tax (weekly, Low)
+=Z16-$Z$11+Z12
+- Z16: Low rent weekly
+- Z11: Total costs weekly
+- Z12: SMSF contributions weekly
+
+Post-tax (annual, Low)
+=U16-(AD16+K19+K15)*K12
+- U16: Low annual pre-tax
+- AD16: Low rent annual
+- K19: Estimated tax deductible expenses
+- K15: Estimated depreciation (Yr1)
+- K12: Tax bracket / tax rate
+
+New sheet (current mapping)
+
+Year selector
+- 'SMSF contribution 80% SMSF workings'!H8: year index (1..10)
+- '80% SMSF workings'!H7: Year-1 visibility toggle for low/high
+
+Rent inputs
+- Z17: Medium rent weekly
+- Z18: High rent weekly
+- AD16: Low rent annual
+
+Costs
+- AD11: Annual costs total (excludes SMSF) =SUM(AD4:AE8)+AD10
+
+Tax / deductions
+- I9: tax rate
+- K20: deductible expenses
+- K12: depreciation (Yr1)
+
+SMSF contributions (annual)
+- AD12: front-sheet SMSF annual (Year-1 low-based; Years 2-10 from workings AP)
+
+Workings sheet
+- AP13:AP42: SMSF annual per year (medium-based for years 2-10)
+- W13:W42: Medium pre-tax annual BEFORE SMSF
+- AR13:AR42: Medium pre-tax annual INCLUDING SMSF = W + AP
+
+Front-sheet pre-tax annual
+- U16: Low pre-tax annual (Year 1 only)
+- U17: Medium pre-tax annual (years 2-10 via INDEX to workings AR)
+- U18: High pre-tax annual (Year 1 only)
+
+Front-sheet post-tax annual
+- I16: Low post-tax annual
+- I17: Medium post-tax annual
+- I18: High post-tax annual
+
+
+
+INFO FROM JT
+
+Old Sheet (calcs are done on weekly numbers), pre tax: 
+Lowe rent: =Z16-$Z$11+Z12
+Z16= Low weekly rent
+Z11= Total Weekly Expenses
+Z12= Weekly SMSF contributions
+
+NEW Sheet Annual Low to High formulas
+
+=IF('80% SMSF workings'!$H$7=1,
+  (AD16*(1-$Z$19) - AD11) + INDEX('SMSF contribution 80% SMSF workings'!AP$13:AP$42,'SMSF contribution 80% SMSF workings'!$H$8),
+  ""
+)
+=INDEX('SMSF contribution 80% SMSF workings'!AR$13:AR$42,'SMSF contribution 80% SMSF workings'!$H$8)
+=IF('80% SMSF workings'!$H$7=1,
+  (AD18*(1-$Z$19) - $AD$11) + INDEX('SMSF contribution 80% SMSF workings'!AP$13:AP$42,'SMSF contribution 80% SMSF workings'!$H$8),
+  ""
+)
+
+
+i17: =IF('SMSF contribution 80% SMSF workings'!$H$8=1,
+  (((Z17*52)*(1-$Z$19) - $AD$11) + $AD$12) - ((Z17*52) + $K$20 + $K$12) * $I$9,
+  INDEX('SMSF contribution 80% SMSF workings'!$Z$13:$Z$42,'SMSF contribution 80% SMSF workings'!$H$8)
+)
+i18: =IF('SMSF contribution 80% SMSF workings'!$H$8=1,
+  (((Z18*52)*(1-$Z$19) - $AD$11) + $AD$12) - ((Z18*52) + $K$20 + $K$12) * $I$9,
+  ""
+)
+
+Annual Maintenance goes into field AD10.  ANd the Toal expenses field AD11 has this formula =SUM(AD4:AE8)+AD10
+
+
+
+SMSF 80% Red
+SMSF 70$ green
+MSF Custom green
+
+SMSF 80$
+Range: D16:D18,F16:F18,H16:H17,E18,G18
+Less than
+0
+Custom (red)
+Range: D16:D18,F16:F18,H16:H17,E18,G18
+Greater than 
+0
+Custom (Green)
+
+SMSF 70$
+Range: D16:D18,F16:F18,H16:H17,E18,G18
+Less than
+0
+Custom (Red)
+Range: D16:D18,F16:F18,H16:H17,E18,G18
+Greater than
+0
+Custom (Green)
+
+APP SCRIPT
+// ============================================================================
+// KATA WEEKLY REPORT - Weekly Opportunity Export from Staging
+// ============================================================================
+
+/**
+ * Weekly export of opportunities from Construction Pipeline to Kata Weekly Report
+ * Reads from "Staging" tab (populated by Make.com)
+ * Creates a new sheet with date naming (YYYY-MM-DD format)
+ * Maps data to columns: Opportunity Name, stage, Registered Address, Agent/Builder Details, Pipeline Stage ID, Pipeline Stage Name
+ * Uses STAGE_LOOKUP tab to map Pipeline Stage IDs to names
+ */
+function exportWeeklyOpportunities() {
+  // Open the Kata Weekly Report spreadsheet
+  const spreadsheetName = 'Kata Weekly Report';
+  const folderName = 'contracts';
+  
+  let spreadsheet;
+  try {
+    // Find spreadsheet in the contracts folder
+    const folders = DriveApp.getFoldersByName(folderName);
+    if (!folders.hasNext()) {
+      Logger.log('ERROR: Folder "contracts" not found in My Drive');
+      return;
+    }
+    const folder = folders.next();
+    const files = folder.getFilesByName(spreadsheetName);
+    if (!files.hasNext()) {
+      Logger.log('ERROR: Spreadsheet "Kata Weekly Report" not found in contracts folder');
+    return;
+    }
+    spreadsheet = SpreadsheetApp.open(files.next());
+  } catch (error) {
+    Logger.log('ERROR finding spreadsheet: ' + error.toString());
+    return;
+  }
+  
+  // Get or create STAGE_LOOKUP sheet
+  let lookupSheet = spreadsheet.getSheetByName('STAGE_LOOKUP');
+  if (!lookupSheet) {
+    lookupSheet = spreadsheet.insertSheet('STAGE_LOOKUP');
+    lookupSheet.getRange(1, 1).setValue('Pipeline Stage ID');
+    lookupSheet.getRange(1, 2).setValue('Pipeline Stage Name');
+    Logger.log('Created STAGE_LOOKUP sheet. Please populate it with Pipeline Stage IDs in column A and names in column B.');
+  }
+  
+  // Build lookup map: Stage ID -> Stage Name
+  const stageLookup = {};
+  const lookupData = lookupSheet.getDataRange().getValues();
+  for (let i = 1; i < lookupData.length; i++) { // Skip header row
+    const stageId = String(lookupData[i][0] || '').trim();
+    const stageName = String(lookupData[i][1] || '').trim();
+    if (stageId && stageName) {
+      stageLookup[stageId] = stageName;
+    }
+  }
+  
+  Logger.log('Loaded ' + Object.keys(stageLookup).length + ' stage mappings from STAGE_LOOKUP');
+  
+  // Get or create Staging sheet
+  let stagingSheet = spreadsheet.getSheetByName('Staging');
+  if (!stagingSheet) {
+    Logger.log('ERROR: Staging sheet not found. Make.com should populate this sheet.');
+    return;
+  }
+  
+  // Read data from Staging sheet
+  // Expected columns: Opportunity Name, stage, Registered Address, Agent/Builder Details, Pipeline Stage ID, Opportunity ID
+  const stagingData = stagingSheet.getDataRange().getValues();
+  
+  if (stagingData.length <= 1) {
+    Logger.log('No data found in Staging sheet (only header or empty)');
+    return;
+  }
+  
+  // Get headers (first row)
+  const headers = stagingData[0];
+  
+  // Find column indices (handle different header formats)
+  const getColumnIndex = (possibleNames) => {
+    for (let i = 0; i < headers.length; i++) {
+      const header = String(headers[i] || '').toLowerCase().trim();
+      for (let j = 0; j < possibleNames.length; j++) {
+        if (header.includes(possibleNames[j].toLowerCase())) {
+          return i;
+        }
+      }
+    }
+    return -1;
+  };
+  
+  const oppNameCol = getColumnIndex(['opportunityname', 'opportunity name', 'name', 'title']);
+  const stageCol = getColumnIndex(['stage', 'status']);
+  const addressCol = getColumnIndex(['registeredaddress', 'registered address', 'address']);
+  const agentCol = getColumnIndex(['agentbuilderdetails', 'agent builder details', 'agentdetails', 'agent details']);
+  const stageIdCol = getColumnIndex(['pipelinestageid', 'pipeline stage id', 'stageid', 'stage id']);
+  
+  if (oppNameCol === -1 || stageIdCol === -1) {
+    Logger.log('ERROR: Could not find required columns in Staging sheet. Found headers: ' + headers.join(', '));
+    return;
+  }
+  
+  // Create new sheet with today's date (YYYY-MM-DD format)
+  const today = new Date();
+  const dateString = Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  let newSheet = spreadsheet.getSheetByName(dateString);
+  if (newSheet) {
+    // Sheet already exists, clear it
+    newSheet.clear();
+  } else {
+    newSheet = spreadsheet.insertSheet(dateString);
+  }
+  
+  // Set headers
+  const reportHeaders = ['Opportunity Name', 'Registered Address', 'Pipeline Stage Name', 'Builder'];
+  newSheet.getRange(1, 1, 1, reportHeaders.length).setValues([reportHeaders]);
+  newSheet.getRange(1, 1, 1, reportHeaders.length).setFontWeight('bold');
+  
+  // Set column widths: A=515, B=100, C=425, D=425, E=425, F=425
+  newSheet.setColumnWidth(1, 515); // Column A
+  newSheet.setColumnWidth(2, 425); // Column B
+  newSheet.setColumnWidth(3, 425); // Column C
+  newSheet.setColumnWidth(4, 425); // Column D
+  newSheet.setColumnWidth(5, 50); // Column E
+  newSheet.setColumnWidth(6, 50); // Column F
+  
+  // Process each row from staging (skip header row)
+  const rows = [];
+  for (let i = 1; i < stagingData.length; i++) {
+    const row = stagingData[i];
+    
+    const opportunityName = String(row[oppNameCol] || '').trim();
+    const stage = String(row[stageCol] || '').trim();
+    const registeredAddress = String(row[addressCol] || '').trim();
+    const agentBuilderDetails = String(row[agentCol] || '').trim();
+    const pipelineStageId = String(row[stageIdCol] || '').trim();
+    const pipelineStageName = stageLookup[pipelineStageId] || '';
+    
+    // Only add rows that have at least an opportunity name and stage ID
+    if (opportunityName || pipelineStageId) {
+      rows.push([
+        opportunityName,
+        registeredAddress,
+        pipelineStageName,
+        agentBuilderDetails
+      ]);
+    }
+  }
+  
+  // Write data to sheet
+  if (rows.length > 0) {
+    newSheet.getRange(2, 1, rows.length, reportHeaders.length).setValues(rows);
+    Logger.log('Exported ' + rows.length + ' opportunities to sheet: ' + dateString);
+    
+    // Clear staging sheet after successful export to prevent old records from appearing in next week's export
+    stagingSheet.clear();
+    stagingSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  } else {
+    Logger.log('No data rows to export');
+    newSheet.getRange(2, 1).setValue('No opportunities found in Staging sheet');
+  }
+}
+
+/**
+ * Trigger Make.com scenario via webhook
+ * 
+ * SETUP REQUIRED:
+ * 1. In Make.com, add a "Webhooks" → "Custom webhook" module as the FIRST module
+ * 2. Copy the webhook URL from Make.com
+ * 3. Replace WEBHOOK_URL_HERE below with your actual webhook URL
+ * 
+ * USAGE:
+ * - Call this function to trigger Make.com scenario
+ * - Then call exportWeeklyOpportunities() after Make.com finishes
+ */
+function triggerMakeComScenario() {
+  // ⚠️ REPLACE THIS WITH YOUR ACTUAL MAKE.COM WEBHOOK URL
+  const WEBHOOK_URL = 'https://hook.eu1.make.com/2nuvpt2llbxz9mnvg1yibvcsgoqrzxj5'; // Get this from Make.com webhook module
+  
+  if (WEBHOOK_URL === 'WEBHOOK_URL_HERE') {
+    Logger.log('ERROR: Please set your Make.com webhook URL in the triggerMakeComScenario function');
+    return false;
+  }
+  
+  try {
+    const response = UrlFetchApp.fetch(WEBHOOK_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ triggered: true, timestamp: new Date().toISOString() })
+    });
+    
+    if (response.getResponseCode() === 200) {
+      Logger.log('✅ Make.com scenario triggered successfully');
+      return true;
+    } else {
+      Logger.log('⚠️ Make.com scenario returned status: ' + response.getResponseCode());
+      return false;
+    }
+  } catch (error) {
+    Logger.log('ERROR triggering Make.com scenario: ' + error.toString());
+    return false;
+  }
+}
+
+/**
+ * Wait for Make.com to populate Staging sheet, then export
+ * 
+ * This function:
+ * 1. Waits for data to appear in Staging sheet (checks every 10 seconds)
+ * 2. Once data appears, calls exportWeeklyOpportunities()
+ * 
+ * USAGE:
+ * - Run this if you've manually triggered Make.com or it's running on schedule
+ * - It will wait up to 5 minutes for data to appear
+ */
+function waitForStagingDataAndExport() {
+  const MAX_WAIT_TIME = 5 * 60 * 1000; // 5 minutes in milliseconds
+  const CHECK_INTERVAL = 10 * 1000; // Check every 10 seconds
+  const startTime = new Date().getTime();
+  
+  // Open the Kata Weekly Report spreadsheet
+  const spreadsheetName = 'Kata Weekly Report';
+  const folderName = 'contracts';
+  
+  let spreadsheet;
+  try {
+    const folders = DriveApp.getFoldersByName(folderName);
+    if (!folders.hasNext()) {
+      Logger.log('ERROR: Folder "contracts" not found in My Drive');
+      return;
+    }
+    const folder = folders.next();
+    const files = folder.getFilesByName(spreadsheetName);
+    if (!files.hasNext()) {
+      Logger.log('ERROR: Spreadsheet "Kata Weekly Report" not found in contracts folder');
+      return;
+    }
+    spreadsheet = SpreadsheetApp.open(files.next());
+  } catch (error) {
+    Logger.log('ERROR finding spreadsheet: ' + error.toString());
+    return;
+  }
+  
+  // Wait for data in Staging sheet
+  Logger.log('Waiting for Make.com to populate Staging sheet...');
+  
+  while (true) {
+    const elapsed = new Date().getTime() - startTime;
+    
+    if (elapsed > MAX_WAIT_TIME) {
+      Logger.log('⏱️ Timeout: No data appeared in Staging sheet after 5 minutes');
+      Logger.log('Make sure Make.com scenario has run and populated the Staging sheet');
+      return;
+    }
+    
+    try {
+      const stagingSheet = spreadsheet.getSheetByName('Staging');
+      if (stagingSheet) {
+        const stagingData = stagingSheet.getDataRange().getValues();
+        // Check if we have data (more than just headers)
+        if (stagingData.length > 1) {
+          Logger.log('✅ Data found in Staging sheet! Proceeding with export...');
+          // Now run the export
+          exportWeeklyOpportunities();
+          return;
+        }
+      }
+    } catch (error) {
+      Logger.log('Error checking Staging sheet: ' + error.toString());
+    }
+    
+    // Wait before checking again
+    Utilities.sleep(CHECK_INTERVAL);
+    Logger.log('Still waiting... (' + Math.round(elapsed / 1000) + ' seconds elapsed)');
+  }
+}
+
+/**
+ * Complete workflow: Trigger Make.com, wait for data, then export
+ * 
+ * This function:
+ * 1. Triggers Make.com scenario via webhook
+ * 2. Waits for data to appear in Staging sheet
+ * 3. Exports the data to a dated sheet
+ * 
+ * USAGE:
+ * - Run this function to do everything in one go
+ * - Requires webhook URL to be set in triggerMakeComScenario()
+ */
+function triggerMakeComAndExport() {
+  Logger.log('🚀 Starting complete workflow: Trigger Make.com → Wait for data → Export');
+  
+  // Step 1: Trigger Make.com
+  const triggered = triggerMakeComScenario();
+  if (!triggered) {
+    Logger.log('⚠️ Could not trigger Make.com. You may need to run it manually.');
+    Logger.log('Continuing to wait for data anyway...');
+  }
+  
+  // Step 2: Wait for data and export
+  waitForStagingDataAndExport();
+  
+  Logger.log('✅ Complete workflow finished');
+}
+
+/**
+ * Set up weekly trigger to run exportWeeklyOpportunities every Thursday at 9 AM
+ * Run this function ONCE to set up the automation
+ */
+function setupWeeklyExportTrigger() {
+  // Delete existing triggers for this function
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'exportWeeklyOpportunities') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  
+  // Create new weekly trigger for Thursday at 9 AM
+  ScriptApp.newTrigger('exportWeeklyOpportunities')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.THURSDAY)
+    .atHour(9)
+    .create();
+  
+  Logger.log('Weekly trigger set up: exportWeeklyOpportunities will run every Thursday at 9 AM');
+}
+
+/**
+ * Creates a custom menu in the Google Sheet when it opens
+ * Users can trigger functions from the menu without opening Apps Script
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('📊 Weekly Report')
+    .addItem('🚀 Trigger Make.com & Export', 'triggerMakeComAndExport')
+    .addSeparator()
+    .addItem('📥 Export from Staging (Manual)', 'exportWeeklyOpportunities')
+    .addItem('⏳ Wait for Data & Export', 'waitForStagingDataAndExport')
+    .addToUi();
+}
