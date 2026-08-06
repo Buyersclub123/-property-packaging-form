@@ -1325,6 +1325,7 @@ export default function DealSheetPage() {
                         rel="noopener noreferrer"
                         className="text-red-400 hover:text-red-300"
                         title="Open PDF"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         PDF
                       </a>
