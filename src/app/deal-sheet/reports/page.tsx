@@ -168,8 +168,16 @@ export default function ReportsPage() {
 
   // Date range — default to last 4 weeks up to current week
   const [weeksToShow, setWeeksToShow] = useState(4);
-  const [activeTab, setActiveTab] = useState<'packager' | 'team'>('packager');
-  const [period, setPeriod] = useState<'weekly' | 'monthly' | 'ytd'>('weekly');
+  const [activeTab, setActiveTab] = useState<'packager' | 'sourcer' | 'team' | 'conversion'>('packager');
+  const [period, setPeriod] = useState<'weekly' | 'monthly' | 'ytd' | 'lifetime'>('weekly');
+
+  // Conversion report controls
+  const [conversionSort, setConversionSort] = useState<{ col: 'name' | 'won' | 'lost' | 'noInterest' | 'total' | 'pct'; dir: 'asc' | 'desc' }>({ col: 'total', dir: 'desc' });
+  const [hiddenPackagers, setHiddenPackagers] = useState<Set<string>>(new Set());
+  const [hiddenSourcers, setHiddenSourcers] = useState<Set<string>>(new Set());
+  const [showPkgFilter, setShowPkgFilter] = useState(false);
+  const [showSrcFilter, setShowSrcFilter] = useState(false);
+  const [statsOrder, setStatsOrder] = useState<'total' | 'alpha'>('total');
 
   useEffect(() => {
     if (typeof document !== 'undefined') document.title = 'Reports — Deal Sheet';
@@ -246,6 +254,76 @@ export default function ReportsPage() {
     return stats;
   }, [records, months, packagers]);
 
+  // Get all unique sourcers
+  const sourcers = useMemo(() => {
+    const names = new Set<string>();
+    records.forEach((r) => {
+      if (r.sourcer && r.sourcer.trim()) names.add(r.sourcer.trim());
+    });
+    return Array.from(names).sort();
+  }, [records]);
+
+  // Monthly sourcer stats — per month, per sourcer, per week-of-month
+  const monthlySourcerStats = useMemo(() => {
+    const stats: Record<string, Record<string, { hlSingle: number[]; other: number[] }>> = {};
+
+    months.forEach((month) => {
+      stats[month.monthKey] = {};
+      sourcers.forEach((name) => {
+        stats[month.monthKey][name] = {
+          hlSingle: new Array(month.weekCount).fill(0),
+          other: new Array(month.weekCount).fill(0),
+        };
+      });
+    });
+
+    records.forEach((r) => {
+      const reviewDate = parseRecordDate(r.reviewDate);
+      if (!reviewDate || !r.sourcer || !r.sourcer.trim()) return;
+      const sourcer = r.sourcer.trim();
+      const rMonth = `${reviewDate.getFullYear()}-${String(reviewDate.getMonth() + 1).padStart(2, '0')}`;
+
+      if (!stats[rMonth] || !stats[rMonth][sourcer]) return;
+      const wIdx = getWeekOfMonth(reviewDate);
+      if (isHLOrSingle(r.type)) {
+        stats[rMonth][sourcer].hlSingle[wIdx]++;
+      } else {
+        stats[rMonth][sourcer].other[wIdx]++;
+      }
+    });
+
+    return stats;
+  }, [records, months, sourcers]);
+
+  // YTD sourcer stats — one total per month, Jan to current month
+  const ytdSourcerStats = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const monthLabels: string[] = [];
+    for (let m = 0; m <= currentMonth; m++) {
+      monthLabels.push(new Date(year, m, 1).toLocaleDateString('en-AU', { month: 'short' }));
+    }
+
+    const stats: Record<string, number[]> = {};
+    sourcers.forEach((name) => {
+      stats[name] = new Array(currentMonth + 1).fill(0);
+    });
+
+    records.forEach((r) => {
+      const reviewDate = parseRecordDate(r.reviewDate);
+      if (!reviewDate || !r.sourcer || !r.sourcer.trim()) return;
+      if (reviewDate.getFullYear() !== year) return;
+      const m = reviewDate.getMonth();
+      const sourcer = r.sourcer.trim();
+      if (stats[sourcer]) {
+        stats[sourcer][m]++;
+      }
+    });
+
+    return { stats, monthLabels, year };
+  }, [records, sourcers]);
+
   // YTD packager stats — one total per month, Jan to current month
   const ytdPackagerStats = useMemo(() => {
     const now = new Date();
@@ -274,6 +352,40 @@ export default function ReportsPage() {
 
     return { stats, monthLabels, year };
   }, [records, packagers]);
+
+  // Lifetime packager stats — single total per person across all time
+  const lifetimePackagerStats = useMemo(() => {
+    const stats: Record<string, { hlSingle: number; other: number }> = {};
+    packagers.forEach((name) => { stats[name] = { hlSingle: 0, other: 0 }; });
+
+    records.forEach((r) => {
+      const reviewDate = parseRecordDate(r.reviewDate);
+      if (!reviewDate || !r.packager || !r.packager.trim()) return;
+      const packager = r.packager.trim();
+      if (!stats[packager]) return;
+      if (isHLOrSingle(r.type)) stats[packager].hlSingle++;
+      else stats[packager].other++;
+    });
+
+    return stats;
+  }, [records, packagers]);
+
+  // Lifetime sourcer stats — single total per person across all time
+  const lifetimeSourcerStats = useMemo(() => {
+    const stats: Record<string, { hlSingle: number; other: number }> = {};
+    sourcers.forEach((name) => { stats[name] = { hlSingle: 0, other: 0 }; });
+
+    records.forEach((r) => {
+      const reviewDate = parseRecordDate(r.reviewDate);
+      if (!reviewDate || !r.sourcer || !r.sourcer.trim()) return;
+      const sourcer = r.sourcer.trim();
+      if (!stats[sourcer]) return;
+      if (isHLOrSingle(r.type)) stats[sourcer].hlSingle++;
+      else stats[sourcer].other++;
+    });
+
+    return stats;
+  }, [records, sourcers]);
 
   // YTD team stats
   const ytdTeamStats = useMemo(() => {
@@ -306,6 +418,151 @@ export default function ReportsPage() {
 
     return { propertiesReviewed, clientsClosed, cashbackClosed, monthLabels, year };
   }, [records]);
+
+  // Conversion stats helper — categorise records by outcome
+  const nonTestRecords = useMemo(() => records.filter((r) => !r.status.startsWith('07')), [records]);
+
+  function isWon(status: string): boolean {
+    return status.startsWith('02') || status.startsWith('03');
+  }
+  function isRemovedLost(status: string): boolean {
+    return status.startsWith('06');
+  }
+  function isRemovedNoInterest(status: string): boolean {
+    return status.startsWith('05');
+  }
+
+  // Lifetime conversion stats
+  const lifetimeConversion = useMemo(() => {
+    const packagerMap: Record<string, { won: number; lost: number; noInterest: number }> = {};
+    const sourcerMap: Record<string, { won: number; lost: number; noInterest: number }> = {};
+
+    nonTestRecords.forEach((r) => {
+      if (!isWon(r.status) && !isRemovedLost(r.status) && !isRemovedNoInterest(r.status)) return;
+
+      // Packager
+      const pkg = (r.packager || '').trim();
+      if (pkg) {
+        if (!packagerMap[pkg]) packagerMap[pkg] = { won: 0, lost: 0, noInterest: 0 };
+        if (isWon(r.status)) packagerMap[pkg].won++;
+        else if (isRemovedLost(r.status)) packagerMap[pkg].lost++;
+        else if (isRemovedNoInterest(r.status)) packagerMap[pkg].noInterest++;
+      }
+
+      // Sourcer
+      const src = (r.sourcer || '').trim();
+      if (src) {
+        if (!sourcerMap[src]) sourcerMap[src] = { won: 0, lost: 0, noInterest: 0 };
+        if (isWon(r.status)) sourcerMap[src].won++;
+        else if (isRemovedLost(r.status)) sourcerMap[src].lost++;
+        else if (isRemovedNoInterest(r.status)) sourcerMap[src].noInterest++;
+      }
+    });
+
+    return { packagerMap, sourcerMap };
+  }, [nonTestRecords]);
+
+  // YTD conversion stats
+  const ytdConversion = useMemo(() => {
+    const year = new Date().getFullYear();
+    const packagerMap: Record<string, { won: number; lost: number; noInterest: number }> = {};
+    const sourcerMap: Record<string, { won: number; lost: number; noInterest: number }> = {};
+
+    nonTestRecords.forEach((r) => {
+      if (!isWon(r.status) && !isRemovedLost(r.status) && !isRemovedNoInterest(r.status)) return;
+      const d = parseRecordDate(r.reviewDate);
+      if (!d || d.getFullYear() !== year) return;
+
+      const pkg = (r.packager || '').trim();
+      if (pkg) {
+        if (!packagerMap[pkg]) packagerMap[pkg] = { won: 0, lost: 0, noInterest: 0 };
+        if (isWon(r.status)) packagerMap[pkg].won++;
+        else if (isRemovedLost(r.status)) packagerMap[pkg].lost++;
+        else if (isRemovedNoInterest(r.status)) packagerMap[pkg].noInterest++;
+      }
+
+      const src = (r.sourcer || '').trim();
+      if (src) {
+        if (!sourcerMap[src]) sourcerMap[src] = { won: 0, lost: 0, noInterest: 0 };
+        if (isWon(r.status)) sourcerMap[src].won++;
+        else if (isRemovedLost(r.status)) sourcerMap[src].lost++;
+        else if (isRemovedNoInterest(r.status)) sourcerMap[src].noInterest++;
+      }
+    });
+
+    return { packagerMap, sourcerMap };
+  }, [nonTestRecords]);
+
+  // Monthly/weekly conversion stats
+  const weeklyConversion = useMemo(() => {
+    const result: Record<string, { packagerMap: Record<string, { won: number; lost: number; noInterest: number }>; sourcerMap: Record<string, { won: number; lost: number; noInterest: number }> }> = {};
+
+    weeks.forEach((week) => {
+      const key = week.weekStart.toISOString();
+      result[key] = { packagerMap: {}, sourcerMap: {} };
+    });
+
+    nonTestRecords.forEach((r) => {
+      if (!isWon(r.status) && !isRemovedLost(r.status) && !isRemovedNoInterest(r.status)) return;
+      const d = parseRecordDate(r.reviewDate);
+      if (!d) return;
+
+      weeks.forEach((week) => {
+        if (d >= week.weekStart && d <= week.weekEnd) {
+          const key = week.weekStart.toISOString();
+          const pkg = (r.packager || '').trim();
+          if (pkg) {
+            if (!result[key].packagerMap[pkg]) result[key].packagerMap[pkg] = { won: 0, lost: 0, noInterest: 0 };
+            if (isWon(r.status)) result[key].packagerMap[pkg].won++;
+            else if (isRemovedLost(r.status)) result[key].packagerMap[pkg].lost++;
+            else if (isRemovedNoInterest(r.status)) result[key].packagerMap[pkg].noInterest++;
+          }
+          const src = (r.sourcer || '').trim();
+          if (src) {
+            if (!result[key].sourcerMap[src]) result[key].sourcerMap[src] = { won: 0, lost: 0, noInterest: 0 };
+            if (isWon(r.status)) result[key].sourcerMap[src].won++;
+            else if (isRemovedLost(r.status)) result[key].sourcerMap[src].lost++;
+            else if (isRemovedNoInterest(r.status)) result[key].sourcerMap[src].noInterest++;
+          }
+        }
+      });
+    });
+
+    return result;
+  }, [nonTestRecords, weeks]);
+
+  const monthlyConversion = useMemo(() => {
+    const result: Record<string, { packagerMap: Record<string, { won: number; lost: number; noInterest: number }>; sourcerMap: Record<string, { won: number; lost: number; noInterest: number }> }> = {};
+
+    months.forEach((month) => {
+      result[month.monthKey] = { packagerMap: {}, sourcerMap: {} };
+    });
+
+    nonTestRecords.forEach((r) => {
+      if (!isWon(r.status) && !isRemovedLost(r.status) && !isRemovedNoInterest(r.status)) return;
+      const d = parseRecordDate(r.reviewDate);
+      if (!d) return;
+      const rMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!result[rMonth]) return;
+
+      const pkg = (r.packager || '').trim();
+      if (pkg) {
+        if (!result[rMonth].packagerMap[pkg]) result[rMonth].packagerMap[pkg] = { won: 0, lost: 0, noInterest: 0 };
+        if (isWon(r.status)) result[rMonth].packagerMap[pkg].won++;
+        else if (isRemovedLost(r.status)) result[rMonth].packagerMap[pkg].lost++;
+        else if (isRemovedNoInterest(r.status)) result[rMonth].packagerMap[pkg].noInterest++;
+      }
+      const src = (r.sourcer || '').trim();
+      if (src) {
+        if (!result[rMonth].sourcerMap[src]) result[rMonth].sourcerMap[src] = { won: 0, lost: 0, noInterest: 0 };
+        if (isWon(r.status)) result[rMonth].sourcerMap[src].won++;
+        else if (isRemovedLost(r.status)) result[rMonth].sourcerMap[src].lost++;
+        else if (isRemovedNoInterest(r.status)) result[rMonth].sourcerMap[src].noInterest++;
+      }
+    });
+
+    return result;
+  }, [nonTestRecords, months]);
 
   // Monthly team stats
   const monthlyTeamStats = useMemo(() => {
@@ -384,6 +641,42 @@ export default function ReportsPage() {
     return stats;
   }, [records, weeks, packagers]);
 
+  // Weekly Sourcer Stats
+  const sourcerStats = useMemo(() => {
+    const stats: Record<string, Record<string, { hlSingle: number[]; other: number[] }>> = {};
+
+    weeks.forEach((week) => {
+      const weekKey = week.weekStart.toISOString();
+      stats[weekKey] = {};
+      sourcers.forEach((name) => {
+        stats[weekKey][name] = {
+          hlSingle: [0, 0, 0, 0, 0, 0, 0],
+          other: [0, 0, 0, 0, 0, 0, 0],
+        };
+      });
+    });
+
+    records.forEach((r) => {
+      const reviewDate = parseRecordDate(r.reviewDate);
+      if (!reviewDate || !r.sourcer || !r.sourcer.trim()) return;
+
+      const weekMonday = getMonday(reviewDate);
+      const weekKey = weekMonday.toISOString();
+      const sourcer = r.sourcer.trim();
+      const dayIdx = getDayOfWeekIndex(reviewDate);
+
+      if (stats[weekKey] && stats[weekKey][sourcer]) {
+        if (isHLOrSingle(r.type)) {
+          stats[weekKey][sourcer].hlSingle[dayIdx]++;
+        } else {
+          stats[weekKey][sourcer].other[dayIdx]++;
+        }
+      }
+    });
+
+    return stats;
+  }, [records, weeks, sourcers]);
+
   // ============================================================================
   // REPORT 2: Weekly Team Stats
   // ============================================================================
@@ -461,7 +754,7 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <a href="/deal-sheet" className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors">← Deal Sheet</a>
-          <h1 className="text-lg font-semibold text-white">{period === 'weekly' ? 'Weekly' : period === 'monthly' ? 'Monthly' : 'Year to Date'} Reports</h1>
+          <h1 className="text-lg font-semibold text-white">{period === 'weekly' ? 'Weekly' : period === 'monthly' ? 'Monthly' : period === 'ytd' ? 'Year to Date' : 'Lifetime'} Reports</h1>
           <div className="flex items-center gap-1 bg-gray-900 rounded-md p-0.5">
             <button
               onClick={() => setActiveTab('packager')}
@@ -472,12 +765,28 @@ export default function ReportsPage() {
               Packager Stats
             </button>
             <button
+              onClick={() => setActiveTab('sourcer')}
+              className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+                activeTab === 'sourcer' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Sourcer Stats
+            </button>
+            <button
               onClick={() => setActiveTab('team')}
               className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
                 activeTab === 'team' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-200'
               }`}
             >
               Team Stats
+            </button>
+            <button
+              onClick={() => setActiveTab('conversion')}
+              className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+                activeTab === 'conversion' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Conversion
             </button>
           </div>
         </div>
@@ -508,8 +817,16 @@ export default function ReportsPage() {
             >
               YTD
             </button>
+            <button
+              onClick={() => setPeriod('lifetime')}
+              className={`px-2 py-1 text-[11px] rounded font-medium transition-colors ${
+                period === 'lifetime' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Lifetime
+            </button>
           </div>
-          {period !== 'ytd' && (
+          {period !== 'ytd' && period !== 'lifetime' && (
             <>
               <label className="text-xs text-gray-400">Range:</label>
               <select
@@ -525,9 +842,70 @@ export default function ReportsPage() {
               </select>
             </>
           )}
+          {/* Sort order for packager/sourcer stats */}
+          {(activeTab === 'packager' || activeTab === 'sourcer') && (
+            <button
+              onClick={() => setStatsOrder((prev) => prev === 'total' ? 'alpha' : 'total')}
+              className="text-[10px] px-2 py-1 rounded bg-gray-700 text-gray-300 hover:text-white"
+            >
+              {statsOrder === 'total' ? '# Total ▼' : 'A–Z ▼'}
+            </button>
+          )}
+
+          {/* Name filter for packager/sourcer stats */}
+          {(activeTab === 'packager' || activeTab === 'sourcer') && (() => {
+            const names = activeTab === 'packager' ? packagers : sourcers;
+            const hidden = activeTab === 'packager' ? hiddenPackagers : hiddenSourcers;
+            const setHidden = activeTab === 'packager' ? setHiddenPackagers : setHiddenSourcers;
+            const showFilter = activeTab === 'packager' ? showPkgFilter : showSrcFilter;
+            const setShowFilter = activeTab === 'packager' ? setShowPkgFilter : setShowSrcFilter;
+            return (
+              <div className="relative">
+                <button
+                  onClick={() => setShowFilter(!showFilter)}
+                  className={`text-[10px] px-2 py-1 rounded ${hidden.size > 0 ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}
+                >
+                  {hidden.size > 0 ? `${hidden.size} hidden` : 'Filter names'}
+                </button>
+                {showFilter && (
+                  <div className="absolute right-0 top-full mt-1 w-48 max-h-64 overflow-y-auto bg-gray-800 border border-gray-600 rounded shadow-lg z-50 p-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex gap-2 px-1 mb-1 border-b border-gray-600 pb-1">
+                      <button onClick={() => setHidden(new Set())} className="text-[9px] text-blue-400 hover:underline">Show All</button>
+                      <button onClick={() => setHidden(new Set(names))} className="text-[9px] text-red-400 hover:underline">Hide All</button>
+                    </div>
+                    {names.map((name) => (
+                      <label key={name} className="flex items-center gap-1 px-1 py-0.5 text-[10px] text-gray-300 cursor-pointer rounded hover:bg-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={!hidden.has(name)}
+                          onChange={() => {
+                            const next = new Set(hidden);
+                            if (next.has(name)) next.delete(name); else next.add(name);
+                            setHidden(next);
+                          }}
+                          className="w-2.5 h-2.5"
+                        />
+                        <span className="truncate">{name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <span className="text-xs text-gray-500">{records.length} records loaded</span>
         </div>
       </div>
+
+      {/* Note about date bucketing */}
+      {activeTab === 'conversion' && period !== 'lifetime' && (
+        <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2 mb-4">
+          <span className="text-xs text-gray-300">Note: Records are bucketed by their Review Date (date submitted), not the date they moved to their current status.</span>
+        </div>
+      )}
 
       {/* Report Content */}
       {activeTab === 'packager' && period === 'weekly' && (
@@ -562,7 +940,12 @@ export default function ReportsPage() {
                         <th className="text-center px-1 py-1 text-yellow-400 font-bold border-b border-gray-800 text-[11px] w-10">Total</th>
                       </tr>
                     </thead>
-                      {packagers.map((name, pIdx) => {
+                      {packagers.filter((n) => !hiddenPackagers.has(n)).sort((a, b) => {
+                        if (statsOrder === 'alpha') return a.localeCompare(b);
+                        const aTotal = weekStats[a] ? sumArr(weekStats[a].hlSingle) + sumArr(weekStats[a].other) : 0;
+                        const bTotal = weekStats[b] ? sumArr(weekStats[b].hlSingle) + sumArr(weekStats[b].other) : 0;
+                        return bTotal - aTotal;
+                      }).map((name, pIdx) => {
                         const pStats = weekStats[name];
                         if (!pStats) return null;
                         const hlTotal = sumArr(pStats.hlSingle);
@@ -753,7 +1136,13 @@ export default function ReportsPage() {
                         <th className="text-center px-1 py-1 text-yellow-400 font-bold border-b border-gray-800 text-[11px] w-10">Total</th>
                       </tr>
                     </thead>
-                    {packagers.map((name, pIdx) => {
+                    {packagers.filter((n) => !hiddenPackagers.has(n)).sort((a, b) => {
+                      if (statsOrder === 'alpha') return a.localeCompare(b);
+                      const aS = mStats[a]; const bS = mStats[b];
+                      const aT = aS ? sumArr(aS.hlSingle) + sumArr(aS.other) : 0;
+                      const bT = bS ? sumArr(bS.hlSingle) + sumArr(bS.other) : 0;
+                      return bT - aT;
+                    }).map((name, pIdx) => {
                       const pStats = mStats[name];
                       if (!pStats) return null;
                       const hlTotal = sumArr(pStats.hlSingle);
@@ -920,7 +1309,12 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {packagers.map((name, pIdx) => {
+                  {packagers.filter((n) => !hiddenPackagers.has(n)).sort((a, b) => {
+                    if (statsOrder === 'alpha') return a.localeCompare(b);
+                    const aT = ytdPackagerStats.stats[a] ? sumArr(ytdPackagerStats.stats[a]) : 0;
+                    const bT = ytdPackagerStats.stats[b] ? sumArr(ytdPackagerStats.stats[b]) : 0;
+                    return bT - aT;
+                  }).map((name, pIdx) => {
                     const data = ytdPackagerStats.stats[name];
                     if (!data) return null;
                     const total = sumArr(data);
@@ -957,6 +1351,406 @@ export default function ReportsPage() {
                         const data = ytdPackagerStats.stats[name];
                         return sum + (data ? sumArr(data) : 0);
                       }, 0) || '–'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====== WEEKLY SOURCER STATS ====== */}
+      {activeTab === 'sourcer' && period === 'weekly' && (
+        <div className="space-y-6">
+          {weeks.map((week) => {
+            const weekKey = week.weekStart.toISOString();
+            const weekStats = sourcerStats[weekKey];
+            if (!weekStats) return null;
+
+            return (
+              <div key={weekKey} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+                  <span className="text-xs font-semibold text-white">
+                    Weekly Sourcer Stats — {week.label}
+                  </span>
+                  <span className="text-xs text-gray-400">{week.monthLabel}</span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="text-xs">
+                    <thead>
+                      <tr className="bg-gray-850">
+                        <th className="text-left px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px]">Sourcer</th>
+                        <th className="text-left px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px]">Metric</th>
+                        {DAYS.map((day, i) => (
+                          <th key={day} className="text-center px-1 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px] w-10">
+                            <div>{DAY_SHORT[i]}</div>
+                            <div className="text-[9px] text-gray-600">{formatDate(addDays(week.weekStart, i))}</div>
+                          </th>
+                        ))}
+                        <th className="text-center px-1 py-1 text-yellow-400 font-bold border-b border-gray-800 text-[11px] w-10">Total</th>
+                      </tr>
+                    </thead>
+                      {sourcers.filter((n) => !hiddenSourcers.has(n)).sort((a, b) => {
+                        if (statsOrder === 'alpha') return a.localeCompare(b);
+                        const aTotal = weekStats[a] ? sumArr(weekStats[a].hlSingle) + sumArr(weekStats[a].other) : 0;
+                        const bTotal = weekStats[b] ? sumArr(weekStats[b].hlSingle) + sumArr(weekStats[b].other) : 0;
+                        return bTotal - aTotal;
+                      }).map((name, pIdx) => {
+                        const pStats = weekStats[name];
+                        if (!pStats) return null;
+                        const hlTotal = sumArr(pStats.hlSingle);
+                        const otherTotal = sumArr(pStats.other);
+                        const grandTotal = hlTotal + otherTotal;
+
+                        if (grandTotal === 0) return null;
+
+                        return (
+                          <tbody key={name}>
+                            <tr className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'} hover:bg-gray-800`}>
+                              <td className="px-2 py-1 text-white font-medium border-b border-gray-800 text-[11px]" rowSpan={3}>
+                                {name}
+                              </td>
+                              <td className="px-2 py-1 text-gray-300 border-b border-gray-800 text-[11px]">
+                                H&L / Single
+                              </td>
+                              {pStats.hlSingle.map((count, di) => (
+                                <td key={di} className="text-center px-1 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                                  {count > 0 ? count : <span className="text-gray-700">–</span>}
+                                </td>
+                              ))}
+                              <td className="text-center px-1 py-1 border-b border-gray-800 text-yellow-300 font-semibold text-[11px]">
+                                {hlTotal > 0 ? hlTotal : <span className="text-gray-700">–</span>}
+                              </td>
+                            </tr>
+                            <tr className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'} hover:bg-gray-800`}>
+                              <td className="px-2 py-1 text-gray-300 border-b border-gray-800 text-[11px]">
+                                Other
+                              </td>
+                              {pStats.other.map((count, di) => (
+                                <td key={di} className="text-center px-1 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                                  {count > 0 ? count : <span className="text-gray-700">–</span>}
+                                </td>
+                              ))}
+                              <td className="text-center px-1 py-1 border-b border-gray-800 text-yellow-300 font-semibold text-[11px]">
+                                {otherTotal > 0 ? otherTotal : <span className="text-gray-700">–</span>}
+                              </td>
+                            </tr>
+                            <tr className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'}`}>
+                              <td className="px-2 py-1 text-white font-semibold border-b-2 border-gray-700 text-[11px]">
+                                TOTAL
+                              </td>
+                              {pStats.hlSingle.map((_, di) => {
+                                const dayTotal = pStats.hlSingle[di] + pStats.other[di];
+                                return (
+                                  <td key={di} className="text-center px-1 py-1 border-b-2 border-gray-700 text-white font-semibold text-[11px]">
+                                    {dayTotal > 0 ? dayTotal : <span className="text-gray-700">–</span>}
+                                  </td>
+                                );
+                              })}
+                              <td className="text-center px-1 py-1 border-b-2 border-gray-700 text-yellow-400 font-bold text-[11px]">
+                                {grandTotal}
+                              </td>
+                            </tr>
+                          </tbody>
+                        );
+                      })}
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ====== MONTHLY SOURCER STATS ====== */}
+      {activeTab === 'sourcer' && period === 'monthly' && (
+        <div className="space-y-6">
+          {months.map((month) => {
+            const mStats = monthlySourcerStats[month.monthKey];
+            if (!mStats) return null;
+
+            return (
+              <div key={month.monthKey} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+                  <span className="text-xs font-semibold text-white">
+                    Monthly Sourcer Stats — {month.label}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="text-xs">
+                    <thead>
+                      <tr className="bg-gray-850">
+                        <th className="text-left px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px]">Sourcer</th>
+                        <th className="text-left px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px]">Metric</th>
+                        {Array.from({ length: month.weekCount }, (_, i) => (
+                          <th key={i} className="text-center px-1 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px] w-12">
+                            <div>Wk {i + 1}</div>
+                            <div className="text-[9px] text-gray-600">{i * 7 + 1}–{Math.min((i + 1) * 7, 31)}</div>
+                          </th>
+                        ))}
+                        <th className="text-center px-1 py-1 text-yellow-400 font-bold border-b border-gray-800 text-[11px] w-10">Total</th>
+                      </tr>
+                    </thead>
+                    {sourcers.filter((n) => !hiddenSourcers.has(n)).sort((a, b) => {
+                      if (statsOrder === 'alpha') return a.localeCompare(b);
+                      const aS = mStats[a]; const bS = mStats[b];
+                      const aT = aS ? sumArr(aS.hlSingle) + sumArr(aS.other) : 0;
+                      const bT = bS ? sumArr(bS.hlSingle) + sumArr(bS.other) : 0;
+                      return bT - aT;
+                    }).map((name, pIdx) => {
+                      const pStats = mStats[name];
+                      if (!pStats) return null;
+                      const hlTotal = sumArr(pStats.hlSingle);
+                      const otherTotal = sumArr(pStats.other);
+                      const grandTotal = hlTotal + otherTotal;
+
+                      if (grandTotal === 0) return null;
+
+                      return (
+                        <tbody key={name}>
+                          <tr className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'} hover:bg-gray-800`}>
+                            <td className="px-2 py-1 text-white font-medium border-b border-gray-800 text-[11px]" rowSpan={3}>
+                              {name}
+                            </td>
+                            <td className="px-2 py-1 text-gray-300 border-b border-gray-800 text-[11px]">
+                              H&L / Single
+                            </td>
+                            {pStats.hlSingle.map((count, wi) => (
+                              <td key={wi} className="text-center px-1 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                                {count > 0 ? count : <span className="text-gray-700">–</span>}
+                              </td>
+                            ))}
+                            <td className="text-center px-1 py-1 border-b border-gray-800 text-yellow-300 font-semibold text-[11px]">
+                              {hlTotal > 0 ? hlTotal : <span className="text-gray-700">–</span>}
+                            </td>
+                          </tr>
+                          <tr className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'} hover:bg-gray-800`}>
+                            <td className="px-2 py-1 text-gray-300 border-b border-gray-800 text-[11px]">
+                              Other
+                            </td>
+                            {pStats.other.map((count, wi) => (
+                              <td key={wi} className="text-center px-1 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                                {count > 0 ? count : <span className="text-gray-700">–</span>}
+                              </td>
+                            ))}
+                            <td className="text-center px-1 py-1 border-b border-gray-800 text-yellow-300 font-semibold text-[11px]">
+                              {otherTotal > 0 ? otherTotal : <span className="text-gray-700">–</span>}
+                            </td>
+                          </tr>
+                          <tr className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'}`}>
+                            <td className="px-2 py-1 text-white font-semibold border-b-2 border-gray-700 text-[11px]">
+                              TOTAL
+                            </td>
+                            {pStats.hlSingle.map((_, wi) => {
+                              const wTotal = pStats.hlSingle[wi] + pStats.other[wi];
+                              return (
+                                <td key={wi} className="text-center px-1 py-1 border-b-2 border-gray-700 text-white font-semibold text-[11px]">
+                                  {wTotal > 0 ? wTotal : <span className="text-gray-700">–</span>}
+                                </td>
+                              );
+                            })}
+                            <td className="text-center px-1 py-1 border-b-2 border-gray-700 text-yellow-400 font-bold text-[11px]">
+                              {grandTotal}
+                            </td>
+                          </tr>
+                        </tbody>
+                      );
+                    })}
+                  </table>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ====== YTD SOURCER STATS ====== */}
+      {activeTab === 'sourcer' && period === 'ytd' && (
+        <div className="space-y-6">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+              <span className="text-xs font-semibold text-white">
+                Year to Date Sourcer Stats — {ytdSourcerStats.year}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="text-xs">
+                <thead>
+                  <tr className="bg-gray-850">
+                    <th className="text-left px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px]">Sourcer</th>
+                    {ytdSourcerStats.monthLabels.map((label, i) => (
+                      <th key={i} className="text-center px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px] w-12">
+                        {label}
+                      </th>
+                    ))}
+                    <th className="text-center px-2 py-1 text-yellow-400 font-bold border-b border-gray-800 text-[11px] w-12">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourcers.filter((n) => !hiddenSourcers.has(n)).sort((a, b) => {
+                    if (statsOrder === 'alpha') return a.localeCompare(b);
+                    const aT = ytdSourcerStats.stats[a] ? sumArr(ytdSourcerStats.stats[a]) : 0;
+                    const bT = ytdSourcerStats.stats[b] ? sumArr(ytdSourcerStats.stats[b]) : 0;
+                    return bT - aT;
+                  }).map((name, pIdx) => {
+                    const data = ytdSourcerStats.stats[name];
+                    if (!data) return null;
+                    const total = sumArr(data);
+                    if (total === 0) return null;
+                    return (
+                      <tr key={name} className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'} hover:bg-gray-800`}>
+                        <td className="px-2 py-1 text-white font-medium border-b border-gray-800 text-[11px]">{name}</td>
+                        {data.map((count, mi) => (
+                          <td key={mi} className="text-center px-2 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                            {count > 0 ? count : <span className="text-gray-700">–</span>}
+                          </td>
+                        ))}
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-yellow-300 font-semibold text-[11px]">{total}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="bg-gray-800">
+                    <td className="px-2 py-1 text-yellow-400 font-bold text-[11px]">Total</td>
+                    {ytdSourcerStats.monthLabels.map((_, mi) => {
+                      const mTotal = sourcers.reduce((sum, name) => {
+                        const data = ytdSourcerStats.stats[name];
+                        return sum + (data ? data[mi] : 0);
+                      }, 0);
+                      return (
+                        <td key={mi} className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                          {mTotal > 0 ? mTotal : <span className="text-gray-700">–</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                      {sourcers.reduce((sum, name) => {
+                        const data = ytdSourcerStats.stats[name];
+                        return sum + (data ? sumArr(data) : 0);
+                      }, 0) || '–'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====== LIFETIME PACKAGER STATS ====== */}
+      {activeTab === 'packager' && period === 'lifetime' && (
+        <div className="space-y-6">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+              <span className="text-xs font-semibold text-white">Lifetime Packager Stats</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="text-xs">
+                <thead>
+                  <tr className="bg-gray-850">
+                    <th className="text-left px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px]">Packager</th>
+                    <th className="text-center px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px] w-16">H&L / Single</th>
+                    <th className="text-center px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px] w-14">Other</th>
+                    <th className="text-center px-2 py-1 text-yellow-400 font-bold border-b border-gray-800 text-[11px] w-14">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packagers.filter((n) => !hiddenPackagers.has(n)).sort((a, b) => {
+                    if (statsOrder === 'alpha') return a.localeCompare(b);
+                    const aT = lifetimePackagerStats[a] ? lifetimePackagerStats[a].hlSingle + lifetimePackagerStats[a].other : 0;
+                    const bT = lifetimePackagerStats[b] ? lifetimePackagerStats[b].hlSingle + lifetimePackagerStats[b].other : 0;
+                    return bT - aT;
+                  }).map((name, pIdx) => {
+                    const s = lifetimePackagerStats[name];
+                    if (!s) return null;
+                    const total = s.hlSingle + s.other;
+                    if (total === 0) return null;
+                    return (
+                      <tr key={name} className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'} hover:bg-gray-800`}>
+                        <td className="px-2 py-1 text-white font-medium border-b border-gray-800 text-[11px]">{name}</td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                          {s.hlSingle > 0 ? s.hlSingle : <span className="text-gray-700">–</span>}
+                        </td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                          {s.other > 0 ? s.other : <span className="text-gray-700">–</span>}
+                        </td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-yellow-300 font-semibold text-[11px]">{total}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="bg-gray-800">
+                    <td className="px-2 py-1 text-yellow-400 font-bold text-[11px]">Total</td>
+                    <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                      {packagers.reduce((sum, n) => sum + (lifetimePackagerStats[n]?.hlSingle || 0), 0) || '–'}
+                    </td>
+                    <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                      {packagers.reduce((sum, n) => sum + (lifetimePackagerStats[n]?.other || 0), 0) || '–'}
+                    </td>
+                    <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                      {packagers.reduce((sum, n) => sum + (lifetimePackagerStats[n]?.hlSingle || 0) + (lifetimePackagerStats[n]?.other || 0), 0) || '–'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====== LIFETIME SOURCER STATS ====== */}
+      {activeTab === 'sourcer' && period === 'lifetime' && (
+        <div className="space-y-6">
+          <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+              <span className="text-xs font-semibold text-white">Lifetime Sourcer Stats</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="text-xs">
+                <thead>
+                  <tr className="bg-gray-850">
+                    <th className="text-left px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px]">Sourcer</th>
+                    <th className="text-center px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px] w-16">H&L / Single</th>
+                    <th className="text-center px-2 py-1 text-gray-400 font-medium border-b border-gray-800 text-[11px] w-14">Other</th>
+                    <th className="text-center px-2 py-1 text-yellow-400 font-bold border-b border-gray-800 text-[11px] w-14">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourcers.filter((n) => !hiddenSourcers.has(n)).sort((a, b) => {
+                    if (statsOrder === 'alpha') return a.localeCompare(b);
+                    const aT = lifetimeSourcerStats[a] ? lifetimeSourcerStats[a].hlSingle + lifetimeSourcerStats[a].other : 0;
+                    const bT = lifetimeSourcerStats[b] ? lifetimeSourcerStats[b].hlSingle + lifetimeSourcerStats[b].other : 0;
+                    return bT - aT;
+                  }).map((name, pIdx) => {
+                    const s = lifetimeSourcerStats[name];
+                    if (!s) return null;
+                    const total = s.hlSingle + s.other;
+                    if (total === 0) return null;
+                    return (
+                      <tr key={name} className={`${pIdx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'} hover:bg-gray-800`}>
+                        <td className="px-2 py-1 text-white font-medium border-b border-gray-800 text-[11px]">{name}</td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                          {s.hlSingle > 0 ? s.hlSingle : <span className="text-gray-700">–</span>}
+                        </td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-gray-300 text-[11px]">
+                          {s.other > 0 ? s.other : <span className="text-gray-700">–</span>}
+                        </td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-yellow-300 font-semibold text-[11px]">{total}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="bg-gray-800">
+                    <td className="px-2 py-1 text-yellow-400 font-bold text-[11px]">Total</td>
+                    <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                      {sourcers.reduce((sum, n) => sum + (lifetimeSourcerStats[n]?.hlSingle || 0), 0) || '–'}
+                    </td>
+                    <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                      {sourcers.reduce((sum, n) => sum + (lifetimeSourcerStats[n]?.other || 0), 0) || '–'}
+                    </td>
+                    <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                      {sourcers.reduce((sum, n) => sum + (lifetimeSourcerStats[n]?.hlSingle || 0) + (lifetimeSourcerStats[n]?.other || 0), 0) || '–'}
                     </td>
                   </tr>
                 </tbody>
@@ -1018,6 +1812,200 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+
+      {/* ====== CONVERSION REPORT ====== */}
+      {activeTab === 'conversion' && (() => {
+        const toggleSort = (col: typeof conversionSort.col) => {
+          setConversionSort((prev) =>
+            prev.col === col ? { col, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: 'desc' },
+          );
+        };
+        const sortArrow = (col: typeof conversionSort.col) =>
+          conversionSort.col === col ? (conversionSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+
+        // Helper to render a conversion table
+        const renderConversionTable = (
+          title: string,
+          dataMap: Record<string, { won: number; lost: number; noInterest: number }>,
+          type: 'packager' | 'sourcer',
+        ) => {
+          const hidden = type === 'packager' ? hiddenPackagers : hiddenSourcers;
+          const setHidden = type === 'packager' ? setHiddenPackagers : setHiddenSourcers;
+          const showFilter = type === 'packager' ? showPkgFilter : showSrcFilter;
+          const setShowFilter = type === 'packager' ? setShowPkgFilter : setShowSrcFilter;
+
+          const allEntries = Object.entries(dataMap)
+            .map(([name, d]) => ({ name, ...d, total: d.won + d.lost + d.noInterest, pct: d.won + d.lost + d.noInterest > 0 ? Math.round((d.won / (d.won + d.lost + d.noInterest)) * 100) : 0 }))
+            .filter((e) => e.total > 0);
+
+          const entries = allEntries
+            .filter((e) => !hidden.has(e.name))
+            .sort((a, b) => {
+              const { col, dir } = conversionSort;
+              let cmp = 0;
+              if (col === 'name') cmp = a.name.localeCompare(b.name);
+              else cmp = (a[col] as number) - (b[col] as number);
+              return dir === 'asc' ? cmp : -cmp;
+            });
+
+          if (allEntries.length === 0) return null;
+
+          const totals = entries.reduce(
+            (acc, e) => ({ won: acc.won + e.won, lost: acc.lost + e.lost, noInterest: acc.noInterest + e.noInterest, total: acc.total + e.total }),
+            { won: 0, lost: 0, noInterest: 0, total: 0 },
+          );
+
+          const thClass = 'px-2 py-1 font-medium border-b border-gray-800 text-[11px] cursor-pointer hover:text-white select-none';
+
+          return (
+            <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+                <span className="text-xs font-semibold text-white">{title}</span>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowFilter(!showFilter)}
+                    className={`text-[10px] px-2 py-0.5 rounded ${hidden.size > 0 ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}
+                  >
+                    {hidden.size > 0 ? `${hidden.size} hidden` : 'Filter names'}
+                  </button>
+                  {showFilter && (
+                    <div className="absolute right-0 top-full mt-1 w-48 max-h-64 overflow-y-auto bg-gray-800 border border-gray-600 rounded shadow-lg z-50 p-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex gap-2 px-1 mb-1 border-b border-gray-600 pb-1">
+                        <button onClick={() => setHidden(new Set())} className="text-[9px] text-blue-400 hover:underline">Show All</button>
+                        <button onClick={() => setHidden(new Set(allEntries.map((e) => e.name)))} className="text-[9px] text-red-400 hover:underline">Hide All</button>
+                      </div>
+                      {allEntries.sort((a, b) => a.name.localeCompare(b.name)).map((e) => (
+                        <label key={e.name} className="flex items-center gap-1 px-1 py-0.5 text-[10px] text-gray-300 cursor-pointer rounded hover:bg-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={!hidden.has(e.name)}
+                            onChange={() => {
+                              const next = new Set(hidden);
+                              if (next.has(e.name)) next.delete(e.name); else next.add(e.name);
+                              setHidden(next);
+                            }}
+                            className="w-2.5 h-2.5"
+                          />
+                          <span className="truncate">{e.name} ({e.total})</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="text-xs">
+                  <thead>
+                    <tr className="bg-gray-850">
+                      <th className={`text-left ${thClass} text-gray-400`} onClick={() => toggleSort('name')}>Name{sortArrow('name')}</th>
+                      <th className={`text-center ${thClass} text-green-400 w-20`} onClick={() => toggleSort('won')}>EOI / Exchanged{sortArrow('won')}</th>
+                      <th className={`text-center ${thClass} text-red-400 w-16`} onClick={() => toggleSort('lost')}>Removed Lost{sortArrow('lost')}</th>
+                      <th className={`text-center ${thClass} text-orange-400 w-16`} onClick={() => toggleSort('noInterest')}>No Interest{sortArrow('noInterest')}</th>
+                      <th className={`text-center ${thClass} text-gray-400 w-14`} onClick={() => toggleSort('total')}>Total{sortArrow('total')}</th>
+                      <th className={`text-center ${thClass} text-yellow-400 font-bold w-14`} onClick={() => toggleSort('pct')}>Win %{sortArrow('pct')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map((e, idx) => (
+                      <tr key={e.name} className={`${idx % 2 === 0 ? 'bg-gray-900' : 'bg-gray-850'} hover:bg-gray-800`}>
+                        <td className="px-2 py-1 text-white font-medium border-b border-gray-800 text-[11px]">{e.name}</td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-green-300 text-[11px]">
+                          {e.won > 0 ? e.won : <span className="text-gray-700">–</span>}
+                        </td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-red-300 text-[11px]">
+                          {e.lost > 0 ? e.lost : <span className="text-gray-700">–</span>}
+                        </td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-orange-300 text-[11px]">
+                          {e.noInterest > 0 ? e.noInterest : <span className="text-gray-700">–</span>}
+                        </td>
+                        <td className="text-center px-2 py-1 border-b border-gray-800 text-gray-300 text-[11px]">{e.total}</td>
+                        <td className={`text-center px-2 py-1 border-b border-gray-800 font-semibold text-[11px] ${e.pct >= 50 ? 'text-green-400' : 'text-red-400'}`}>
+                          {e.pct}%
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="bg-gray-800">
+                      <td className="px-2 py-1 text-yellow-400 font-bold text-[11px]">Total</td>
+                      <td className="text-center px-2 py-1 text-green-400 font-bold text-[11px]">{totals.won}</td>
+                      <td className="text-center px-2 py-1 text-red-400 font-bold text-[11px]">{totals.lost}</td>
+                      <td className="text-center px-2 py-1 text-orange-400 font-bold text-[11px]">{totals.noInterest}</td>
+                      <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">{totals.total}</td>
+                      <td className="text-center px-2 py-1 text-yellow-400 font-bold text-[11px]">
+                        {totals.total > 0 ? `${Math.round((totals.won / totals.total) * 100)}%` : '–'}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        };
+
+        // Determine which data to show based on period
+        if (period === 'lifetime') {
+          return (
+            <div className="space-y-6">
+              {renderConversionTable('Packager Conversion — Lifetime', lifetimeConversion.packagerMap, 'packager')}
+              {renderConversionTable('Sourcer Conversion — Lifetime', lifetimeConversion.sourcerMap, 'sourcer')}
+            </div>
+          );
+        }
+
+        if (period === 'ytd') {
+          return (
+            <div className="space-y-6">
+              {renderConversionTable(`Packager Conversion — YTD ${new Date().getFullYear()}`, ytdConversion.packagerMap, 'packager')}
+              {renderConversionTable(`Sourcer Conversion — YTD ${new Date().getFullYear()}`, ytdConversion.sourcerMap, 'sourcer')}
+            </div>
+          );
+        }
+
+        if (period === 'weekly') {
+          return (
+            <div className="space-y-6">
+              {weeks.map((week) => {
+                const key = week.weekStart.toISOString();
+                const data = weeklyConversion[key];
+                if (!data) return null;
+                const hasPkgData = Object.values(data.packagerMap).some((d) => d.won + d.lost + d.noInterest > 0);
+                const hasSrcData = Object.values(data.sourcerMap).some((d) => d.won + d.lost + d.noInterest > 0);
+                if (!hasPkgData && !hasSrcData) return null;
+                return (
+                  <div key={key} className="space-y-4">
+                    {renderConversionTable(`Packager Conversion — ${week.label}`, data.packagerMap, 'packager')}
+                    {renderConversionTable(`Sourcer Conversion — ${week.label}`, data.sourcerMap, 'sourcer')}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        }
+
+        if (period === 'monthly') {
+          return (
+            <div className="space-y-6">
+              {months.map((month) => {
+                const data = monthlyConversion[month.monthKey];
+                if (!data) return null;
+                const hasPkgData = Object.values(data.packagerMap).some((d) => d.won + d.lost + d.noInterest > 0);
+                const hasSrcData = Object.values(data.sourcerMap).some((d) => d.won + d.lost + d.noInterest > 0);
+                if (!hasPkgData && !hasSrcData) return null;
+                return (
+                  <div key={month.monthKey} className="space-y-4">
+                    {renderConversionTable(`Packager Conversion — ${month.label}`, data.packagerMap, 'packager')}
+                    {renderConversionTable(`Sourcer Conversion — ${month.label}`, data.sourcerMap, 'sourcer')}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        }
+
+        return null;
+      })()}
+
     </div>
   );
 }
