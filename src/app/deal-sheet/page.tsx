@@ -721,6 +721,14 @@ export default function DealSheetPage() {
           <span className="text-xs opacity-60">
             {sortedRecords.length} records
           </span>
+          <a
+            href="/deal-sheet/reports"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2 py-1 text-[10px] font-medium rounded bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+          >
+            Reports
+          </a>
         </div>
 
         {/* Live Records */}
@@ -1172,6 +1180,53 @@ export default function DealSheetPage() {
                             Z→A
                           </button>
                         </div>
+                        {/* Month/Year quick select for date columns */}
+                        {(col.key === 'reviewDate' || col.key === 'closingDate' || col.key === 'lastUpdate') && (() => {
+                          const allVals = getUniqueValues(col.key);
+                          const monthSet = new Set<string>();
+                          const parseDateYM = (v: string): { y: string; m: string } => {
+                            if (/^\d{4}-\d{2}/.test(v)) return { y: v.slice(0, 4), m: v.slice(5, 7) };
+                            if (/^\d{2}\/\d{2}\/\d{4}/.test(v)) return { y: v.slice(6, 10), m: v.slice(3, 5) };
+                            if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(v)) {
+                              const parts = v.split('/');
+                              return { y: parts[2], m: parts[1].padStart(2, '0') };
+                            }
+                            return { y: '', m: '' };
+                          };
+                          allVals.forEach((v) => {
+                            if (v === '(blank)') return;
+                            const { y, m } = parseDateYM(v);
+                            if (y && m) monthSet.add(`${y}-${m}`);
+                          });
+                          const monthOptions = Array.from(monthSet).sort().reverse();
+                          if (monthOptions.length === 0) return null;
+                          return (
+                            <div className="mb-1 px-1 border-b border-gray-600 pb-1">
+                              <select
+                                className={`w-full px-1 py-0.5 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText}`}
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const selected = e.target.value;
+                                  if (!selected) { selectAllFilter(col.key); return; }
+                                  const [sy, sm] = selected.split('-');
+                                  const toExclude = new Set<string>();
+                                  allVals.forEach((v) => {
+                                    const { y: vy, m: vm } = parseDateYM(v);
+                                    if (vy !== sy || vm !== sm) toExclude.add(v);
+                                  });
+                                  setExcludedFilters((prev) => ({ ...prev, [col.key]: toExclude }));
+                                }}
+                              >
+                                <option value="">— Select Month —</option>
+                                {monthOptions.map((mo) => {
+                                  const [yy, mm] = mo.split('-');
+                                  const label = new Date(parseInt(yy), parseInt(mm) - 1, 1).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });
+                                  return <option key={mo} value={mo}>{label}</option>;
+                                })}
+                              </select>
+                            </div>
+                          );
+                        })()}
                         {/* Text search within dropdown */}
                         <input
                           type="text"
