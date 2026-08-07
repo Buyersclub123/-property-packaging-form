@@ -213,7 +213,7 @@ export function transformRecord(record: GHLRecord) {
 
   // Closing fields
   const closingBA = p.closing_ba || '';
-  const closingPrice = p.closing_price || '';
+  const closingPrice = formatCurrency(p.closing_price);
   const clientClosed = p.client_closed || '';
   const closingDate = p.closing_date || '';
 
