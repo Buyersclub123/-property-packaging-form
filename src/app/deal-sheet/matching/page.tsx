@@ -245,6 +245,12 @@ export default function MatchingPage() {
 
   async function handleLink(opportunity: Opportunity, record: DealRecord) {
     const status = statuses[opportunity.id] || '02_eoi';
+
+    setLinkedIds((prev) => new Set([...prev, opportunity.id]));
+    setLinked((prev) => [...prev, { opportunity, record, status, linkedAt: new Date().toISOString() }]);
+    setManualOpportunity(null);
+    setManualSearch('');
+
     try {
       const response = await fetch('/api/deal-sheet/link-opportunity', {
         method: 'POST',
@@ -268,12 +274,10 @@ export default function MatchingPage() {
       setRecords((prev) =>
         prev.map((r) => (r.id === record.id ? { ...r, clientClosed: opportunity.name, status } : r))
       );
-      setLinkedIds((prev) => new Set([...prev, opportunity.id]));
-      setLinked((prev) => [...prev, { opportunity, record, status, linkedAt: new Date().toISOString() }]);
-      setManualOpportunity(null);
-      setManualSearch('');
     } catch (err) {
       console.error('Link opportunity error:', err);
+      setLinkedIds((prev) => { const next = new Set(prev); next.delete(opportunity.id); return next; });
+      setLinked((prev) => prev.filter((l) => l.opportunity.id !== opportunity.id));
       setError(err instanceof Error ? err.message : 'Failed to link opportunity');
     }
   }
