@@ -214,20 +214,24 @@ export default function MatchingPage() {
     loadData(tier);
   }, [tier]);
 
-  const activeOpportunities = useMemo(
-    () => opportunities.filter((o) => !stagedIds.has(o.id) && !(o.id in skipped)),
-    [opportunities, stagedIds, skipped]
+  const allResults = useMemo(
+    () => computeMatches(opportunities, records),
+    [opportunities, records]
   );
 
-  const { matches, exceptions } = useMemo(
-    () => computeMatches(activeOpportunities, records),
-    [activeOpportunities, records]
+  const matches = useMemo(
+    () => allResults.matches.filter((m) => !stagedIds.has(m.opportunity.id) && !(m.opportunity.id in skipped)),
+    [allResults.matches, stagedIds, skipped]
+  );
+  const exceptions = useMemo(
+    () => allResults.exceptions.filter((e) => !stagedIds.has(e.opportunity.id) && !(e.opportunity.id in skipped)),
+    [allResults.exceptions, stagedIds, skipped]
   );
 
   useEffect(() => {
     setStatuses((prev) => {
       const next = { ...prev };
-      [...matches, ...exceptions].forEach(({ opportunity }) => {
+      [...allResults.matches, ...allResults.exceptions].forEach(({ opportunity }) => {
         if (!next[opportunity.id]) {
           next[opportunity.id] = '02_eoi';
         }
@@ -236,14 +240,14 @@ export default function MatchingPage() {
     });
     setClosingDates((prev) => {
       const next = { ...prev };
-      [...matches, ...exceptions].forEach(({ opportunity }) => {
+      [...allResults.matches, ...allResults.exceptions].forEach(({ opportunity }) => {
         if (!next[opportunity.id]) {
           next[opportunity.id] = tier === 2 ? (opportunity.lastStageChangeAt || '') : '';
         }
       });
       return next;
     });
-  }, [matches, exceptions]);
+  }, [allResults]);
 
   function handleStage(opportunity: Opportunity, record: DealRecord) {
     const status = statuses[opportunity.id] || '02_eoi';
