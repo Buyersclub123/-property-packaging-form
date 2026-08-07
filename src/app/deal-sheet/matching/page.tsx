@@ -147,8 +147,10 @@ export default function MatchingPage() {
   const [error, setError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [closingDates, setClosingDates] = useState<Record<string, string>>({});
-  const [linked, setLinked] = useState<LinkedItem[]>([]);
-  const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set());
+  const [staged, setStaged] = useState<LinkedItem[]>([]);
+  const [stagedIds, setStagedIds] = useState<Set<string>>(new Set());
+  const [submitted, setSubmitted] = useState<LinkedItem[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const [skipped, setSkipped] = useState<Record<string, string>>(() => {
     if (typeof window === 'undefined') return {};
     try { return JSON.parse(localStorage.getItem('matching_skipped') || '{}'); } catch { return {}; }
@@ -157,7 +159,6 @@ export default function MatchingPage() {
     if (typeof window === 'undefined') return {};
     try { return JSON.parse(localStorage.getItem('matching_comments') || '{}'); } catch { return {}; }
   });
-  const [showLinked, setShowLinked] = useState(false);
   const [manualOpportunity, setManualOpportunity] = useState<Opportunity | null>(null);
   const [manualSearch, setManualSearch] = useState('');
   const [matchPage, setMatchPage] = useState(0);
@@ -195,11 +196,12 @@ export default function MatchingPage() {
       setRecords(recData.records || []);
       setStatuses({});
       setClosingDates({});
-      setLinkedIds(new Set());
+      setStagedIds(new Set());
       // Keep skipped & comments from localStorage — don't reset on tier change
       setMatchPage(0);
       setExceptionPage(0);
-      setLinked([]);
+      setStaged([]);
+      setSubmitted([]);
     } catch (err) {
       console.error('Load data error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -213,8 +215,8 @@ export default function MatchingPage() {
   }, [tier]);
 
   const activeOpportunities = useMemo(
-    () => opportunities.filter((o) => !linkedIds.has(o.id) && !(o.id in skipped)),
-    [opportunities, linkedIds, skipped]
+    () => opportunities.filter((o) => !stagedIds.has(o.id) && !(o.id in skipped)),
+    [opportunities, stagedIds, skipped]
   );
 
   const { matches, exceptions } = useMemo(
@@ -243,43 +245,64 @@ export default function MatchingPage() {
     });
   }, [matches, exceptions]);
 
-  async function handleLink(opportunity: Opportunity, record: DealRecord) {
+  function handleStage(opportunity: Opportunity, record: DealRecord) {
     const status = statuses[opportunity.id] || '02_eoi';
-
-    setLinkedIds((prev) => new Set([...prev, opportunity.id]));
-    setLinked((prev) => [...prev, { opportunity, record, status, linkedAt: new Date().toISOString() }]);
+    setStagedIds((prev) => new Set([...prev, opportunity.id]));
+    setStaged((prev) => [...prev, { opportunity, record, status, linkedAt: '' }]);
     setManualOpportunity(null);
     setManualSearch('');
+  }
 
-    try {
-      const response = await fetch('/api/deal-sheet/link-opportunity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recordId: record.id,
-          opportunityId: opportunity.id,
-          opportunityName: opportunity.name,
-          assignedBA: opportunity.assignedBA,
-          totalPurchasePrice: opportunity.totalPurchasePrice,
-          closingDate: closingDates[opportunity.id] || '',
-          status,
-        }),
-      });
+  function handleUnstage(opportunityId: string) {
+    setStagedIds((prev) => { const next = new Set(prev); next.delete(opportunityId); return next; });
+    setStaged((prev) => prev.filter((s) => s.opportunity.id !== opportunityId));
+  }
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Link failed: ${response.status} ${text}`);
+  async function handleSubmitAll() {
+    if (staged.length === 0) return;
+    setSubmitting(true);
+    setError(null);
+    const successes: LinkedItem[] = [];
+    const failures: string[] = [];
+
+    for (const item of staged) {
+      try {
+        const response = await fetch('/api/deal-sheet/link-opportunity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId: item.record.id,
+            opportunityId: item.opportunity.id,
+            opportunityName: item.opportunity.name,
+            assignedBA: item.opportunity.assignedBA,
+            totalPurchasePrice: item.opportunity.totalPurchasePrice,
+            closingDate: closingDates[item.opportunity.id] || '',
+            status: item.status,
+          }),
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`${response.status} ${text}`);
+        }
+        successes.push({ ...item, linkedAt: new Date().toISOString() });
+      } catch (err) {
+        failures.push(`${item.opportunity.name}: ${err instanceof Error ? err.message : 'Failed'}`);
       }
-
-      setRecords((prev) =>
-        prev.map((r) => (r.id === record.id ? { ...r, clientClosed: opportunity.name, status } : r))
-      );
-    } catch (err) {
-      console.error('Link opportunity error:', err);
-      setLinkedIds((prev) => { const next = new Set(prev); next.delete(opportunity.id); return next; });
-      setLinked((prev) => prev.filter((l) => l.opportunity.id !== opportunity.id));
-      setError(err instanceof Error ? err.message : 'Failed to link opportunity');
     }
+
+    setSubmitted((prev) => [...prev, ...successes]);
+    const successIds = new Set(successes.map((s) => s.opportunity.id));
+    setStaged((prev) => prev.filter((s) => !successIds.has(s.opportunity.id)));
+    setStagedIds((prev) => {
+      const next = new Set(prev);
+      successIds.forEach((id) => next.delete(id));
+      return next;
+    });
+
+    if (failures.length > 0) {
+      setError(`Failed to link ${failures.length}: ${failures.join('; ')}`);
+    }
+    setSubmitting(false);
   }
 
   function handleSkip(opportunity: Opportunity) {
@@ -421,10 +444,10 @@ export default function MatchingPage() {
                               Skip
                             </button>
                             <button
-                              onClick={() => handleLink(opportunity, record)}
+                              onClick={() => handleStage(opportunity, record)}
                               className="rounded bg-green-600 px-3 py-1 text-white hover:bg-green-700"
                             >
-                              Confirm Link
+                              Stage Link
                             </button>
                           </div>
                         </td>
@@ -592,36 +615,76 @@ export default function MatchingPage() {
           </section>
         )}
 
-        <section className="mb-8">
-          <button
-            onClick={() => setShowLinked((s) => !s)}
-            className="mb-2 flex items-center gap-2 text-lg font-semibold text-blue-700 hover:underline"
-          >
-            Linked ({linked.length}) {showLinked ? '−' : '+'}
-          </button>
-          {showLinked && (
+        {staged.length > 0 && (
+          <section className="mb-8 rounded border-2 border-blue-300 bg-blue-50 p-4">
+            <h2 className="mb-2 text-lg font-semibold text-blue-800">Staged for Linking ({staged.length})</h2>
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="bg-gray-100 text-left">
+                <tr className="bg-blue-100 text-left">
                   <th className="border p-2">Opportunity Name</th>
                   <th className="border p-2">Property Address</th>
+                  <th className="border p-2">Price</th>
+                  <th className="border p-2">Closing Date</th>
                   <th className="border p-2">Status</th>
-                  <th className="border p-2">Linked At</th>
+                  <th className="border p-2">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {linked.map((item) => (
+                {staged.map((item) => (
                   <tr key={item.opportunity.id} className="border-b">
                     <td className="border p-2">{item.opportunity.name}</td>
                     <td className="border p-2">{item.record.propertyAddress}</td>
+                    <td className="border p-2">{formatPrice(item.opportunity.totalPurchasePrice)}</td>
+                    <td className="border p-2">{closingDates[item.opportunity.id] || '(none)'}</td>
                     <td className="border p-2">{item.status}</td>
-                    <td className="border p-2">{new Date(item.linkedAt).toLocaleString('en-AU')}</td>
+                    <td className="border p-2">
+                      <button
+                        onClick={() => handleUnstage(item.opportunity.id)}
+                        className="rounded bg-red-100 px-3 py-1 text-red-700 hover:bg-red-200"
+                      >
+                        Unstage
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
-        </section>
+            <div className="mt-4 flex items-center gap-4">
+              <button
+                onClick={handleSubmitAll}
+                disabled={submitting}
+                className="rounded bg-green-600 px-6 py-2 font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {submitting ? 'Submitting...' : `Submit All (${staged.length})`}
+              </button>
+              {submitting && <span className="text-sm text-gray-500">Processing...</span>}
+            </div>
+          </section>
+        )}
+
+        {submitted.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-2 text-lg font-semibold text-green-700">Submitted ({submitted.length})</h2>
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-green-50 text-left">
+                  <th className="border p-2">Opportunity Name</th>
+                  <th className="border p-2">Property Address</th>
+                  <th className="border p-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {submitted.map((item) => (
+                  <tr key={item.opportunity.id} className="border-b">
+                    <td className="border p-2">{item.opportunity.name}</td>
+                    <td className="border p-2">{item.record.propertyAddress}</td>
+                    <td className="border p-2">{item.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         {manualOpportunity && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -668,7 +731,7 @@ export default function MatchingPage() {
                           <td className="p-2">{record.status}</td>
                           <td className="p-2">
                             <button
-                              onClick={() => handleLink(manualOpportunity, record)}
+                              onClick={() => handleStage(manualOpportunity, record)}
                               className="rounded bg-green-600 px-3 py-1 text-white hover:bg-green-700"
                             >
                               Select
