@@ -154,6 +154,9 @@ export default function MatchingPage() {
   const [showLinked, setShowLinked] = useState(false);
   const [manualOpportunity, setManualOpportunity] = useState<Opportunity | null>(null);
   const [manualSearch, setManualSearch] = useState('');
+  const [matchPage, setMatchPage] = useState(0);
+  const [exceptionPage, setExceptionPage] = useState(0);
+  const PAGE_SIZE = 100;
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -189,6 +192,8 @@ export default function MatchingPage() {
       setLinkedIds(new Set());
       setSkipped({});
       setComments({});
+      setMatchPage(0);
+      setExceptionPage(0);
       setLinked([]);
     } catch (err) {
       console.error('Load data error:', err);
@@ -320,10 +325,11 @@ export default function MatchingPage() {
         {!loading && (
           <>
             <section className="mb-8">
-              <h2 className="mb-2 text-lg font-semibold">Clean Matches</h2>
+              <h2 className="mb-2 text-lg font-semibold">Clean Matches ({matches.length})</h2>
               {matches.length === 0 ? (
                 <p className="text-gray-500">No clean matches found.</p>
               ) : (
+                <>
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-gray-100 text-left">
@@ -342,7 +348,7 @@ export default function MatchingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {matches.map(({ opportunity, record, similarity }) => (
+                    {matches.slice(matchPage * PAGE_SIZE, (matchPage + 1) * PAGE_SIZE).map(({ opportunity, record, similarity }) => (
                       <tr key={opportunity.id} className="border-b hover:bg-gray-50">
                         <td className="border p-2">{opportunity.name}</td>
                         <td className="border p-2">{opportunity.registeredAddress}</td>
@@ -408,14 +414,35 @@ export default function MatchingPage() {
                     ))}
                   </tbody>
                 </table>
+                {matches.length > PAGE_SIZE && (
+                  <div className="mt-2 flex items-center gap-4 text-sm">
+                    <button
+                      onClick={() => setMatchPage((p) => Math.max(0, p - 1))}
+                      disabled={matchPage === 0}
+                      className="rounded bg-gray-200 px-3 py-1 disabled:opacity-40"
+                    >
+                      ← Prev
+                    </button>
+                    <span>Page {matchPage + 1} of {Math.ceil(matches.length / PAGE_SIZE)}</span>
+                    <button
+                      onClick={() => setMatchPage((p) => Math.min(Math.ceil(matches.length / PAGE_SIZE) - 1, p + 1))}
+                      disabled={(matchPage + 1) * PAGE_SIZE >= matches.length}
+                      className="rounded bg-gray-200 px-3 py-1 disabled:opacity-40"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+                </>
               )}
             </section>
 
             <section className="mb-8">
-              <h2 className="mb-2 text-lg font-semibold">Exceptions</h2>
+              <h2 className="mb-2 text-lg font-semibold">Exceptions ({exceptions.length})</h2>
               {exceptions.length === 0 ? (
                 <p className="text-gray-500">No exceptions.</p>
               ) : (
+                <>
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-gray-100 text-left">
@@ -431,7 +458,7 @@ export default function MatchingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {exceptions.map(({ opportunity, issue, record, similarity }) => (
+                    {exceptions.slice(exceptionPage * PAGE_SIZE, (exceptionPage + 1) * PAGE_SIZE).map(({ opportunity, issue, record, similarity }) => (
                       <tr key={opportunity.id} className="border-b hover:bg-gray-50">
                         <td className="border p-2">{opportunity.name}</td>
                         <td className="border p-2">{opportunity.registeredAddress || '(empty)'}</td>
@@ -495,6 +522,26 @@ export default function MatchingPage() {
                     ))}
                   </tbody>
                 </table>
+                {exceptions.length > PAGE_SIZE && (
+                  <div className="mt-2 flex items-center gap-4 text-sm">
+                    <button
+                      onClick={() => setExceptionPage((p) => Math.max(0, p - 1))}
+                      disabled={exceptionPage === 0}
+                      className="rounded bg-gray-200 px-3 py-1 disabled:opacity-40"
+                    >
+                      ← Prev
+                    </button>
+                    <span>Page {exceptionPage + 1} of {Math.ceil(exceptions.length / PAGE_SIZE)}</span>
+                    <button
+                      onClick={() => setExceptionPage((p) => Math.min(Math.ceil(exceptions.length / PAGE_SIZE) - 1, p + 1))}
+                      disabled={(exceptionPage + 1) * PAGE_SIZE >= exceptions.length}
+                      className="rounded bg-gray-200 px-3 py-1 disabled:opacity-40"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+                </>
               )}
             </section>
           </>
