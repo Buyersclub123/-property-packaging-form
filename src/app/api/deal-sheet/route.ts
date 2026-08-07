@@ -99,6 +99,12 @@ export async function GET(request: Request) {
       records: dealSheetRows,
       total: dealSheetRows.length,
       fetchedAt: new Date().toISOString(),
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
     });
   } catch (error) {
     console.error('Deal sheet fetch error:', error);

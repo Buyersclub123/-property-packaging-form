@@ -378,7 +378,7 @@ export default function DealSheetPage() {
     try {
       const params = new URLSearchParams();
       params.set('statuses', statusParam);
-      const res = await fetch(`/api/deal-sheet?${params.toString()}`);
+      const res = await fetch(`/api/deal-sheet?${params.toString()}&_t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Failed to fetch');
