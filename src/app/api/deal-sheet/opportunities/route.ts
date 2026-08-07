@@ -207,6 +207,7 @@ async function fetchPipelineOpportunities(
     const opportunities = data.opportunities || [];
 
     for (const opp of opportunities) {
+      if (opp.pipelineId && opp.pipelineId !== pipelineId) continue;
       if (allowedStageIds && !allowedStageIds.includes(opp.pipelineStageId || '')) {
         continue;
       }
