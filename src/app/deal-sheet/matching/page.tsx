@@ -118,7 +118,7 @@ function computeMatches(opportunities: Opportunity[], records: DealRecord[]) {
     } else {
       const { record, similarity: sim } = candidates[0];
       if (record.clientClosed && record.clientClosed.trim()) {
-        exceptions.push({ opportunity: opp, issue: 'Already linked', record, similarity: sim });
+        continue;
       } else if (!opp.assignedBA.trim()) {
         exceptions.push({ opportunity: opp, issue: 'Missing BA', record, similarity: sim });
       } else if (!opp.totalPurchasePrice.trim()) {
@@ -150,6 +150,7 @@ export default function MatchingPage() {
   const [staged, setStaged] = useState<LinkedItem[]>([]);
   const [stagedIds, setStagedIds] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState<LinkedItem[]>([]);
+  const [submittedIds, setSubmittedIds] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [skipped, setSkipped] = useState<Record<string, string>>(() => {
     if (typeof window === 'undefined') return {};
@@ -220,12 +221,12 @@ export default function MatchingPage() {
   );
 
   const matches = useMemo(
-    () => allResults.matches.filter((m) => !stagedIds.has(m.opportunity.id) && !(m.opportunity.id in skipped)),
-    [allResults.matches, stagedIds, skipped]
+    () => allResults.matches.filter((m) => !stagedIds.has(m.opportunity.id) && !submittedIds.has(m.opportunity.id) && !(m.opportunity.id in skipped)),
+    [allResults.matches, stagedIds, submittedIds, skipped]
   );
   const exceptions = useMemo(
-    () => allResults.exceptions.filter((e) => !stagedIds.has(e.opportunity.id) && !(e.opportunity.id in skipped)),
-    [allResults.exceptions, stagedIds, skipped]
+    () => allResults.exceptions.filter((e) => !stagedIds.has(e.opportunity.id) && !submittedIds.has(e.opportunity.id) && !(e.opportunity.id in skipped)),
+    [allResults.exceptions, stagedIds, submittedIds, skipped]
   );
 
   useEffect(() => {
@@ -296,6 +297,7 @@ export default function MatchingPage() {
 
     setSubmitted((prev) => [...prev, ...successes]);
     const successIds = new Set(successes.map((s) => s.opportunity.id));
+    setSubmittedIds((prev) => new Set([...prev, ...successIds]));
     setStaged((prev) => prev.filter((s) => !successIds.has(s.opportunity.id)));
     setStagedIds((prev) => {
       const next = new Set(prev);
