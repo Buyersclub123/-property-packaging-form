@@ -149,8 +149,14 @@ export default function MatchingPage() {
   const [closingDates, setClosingDates] = useState<Record<string, string>>({});
   const [linked, setLinked] = useState<LinkedItem[]>([]);
   const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set());
-  const [skipped, setSkipped] = useState<Record<string, string>>({});
-  const [comments, setComments] = useState<Record<string, string>>({});
+  const [skipped, setSkipped] = useState<Record<string, string>>(() => {
+    if (typeof window === 'undefined') return {};
+    try { return JSON.parse(localStorage.getItem('matching_skipped') || '{}'); } catch { return {}; }
+  });
+  const [comments, setComments] = useState<Record<string, string>>(() => {
+    if (typeof window === 'undefined') return {};
+    try { return JSON.parse(localStorage.getItem('matching_comments') || '{}'); } catch { return {}; }
+  });
   const [showLinked, setShowLinked] = useState(false);
   const [manualOpportunity, setManualOpportunity] = useState<Opportunity | null>(null);
   const [manualSearch, setManualSearch] = useState('');
@@ -190,8 +196,7 @@ export default function MatchingPage() {
       setStatuses({});
       setClosingDates({});
       setLinkedIds(new Set());
-      setSkipped({});
-      setComments({});
+      // Keep skipped & comments from localStorage — don't reset on tier change
       setMatchPage(0);
       setExceptionPage(0);
       setLinked([]);
@@ -274,7 +279,16 @@ export default function MatchingPage() {
   }
 
   function handleSkip(opportunity: Opportunity) {
-    setSkipped((prev) => ({ ...prev, [opportunity.id]: comments[opportunity.id] || '' }));
+    setSkipped((prev) => {
+      const next = { ...prev, [opportunity.id]: comments[opportunity.id] || '' };
+      localStorage.setItem('matching_skipped', JSON.stringify(next));
+      return next;
+    });
+    setComments((prev) => {
+      const next = { ...prev };
+      localStorage.setItem('matching_comments', JSON.stringify(next));
+      return next;
+    });
   }
 
   const filteredRecordsForManual = useMemo(() => {
