@@ -162,9 +162,7 @@ export default function MatchingPage() {
   });
   const [manualOpportunity, setManualOpportunity] = useState<Opportunity | null>(null);
   const [manualSearch, setManualSearch] = useState('');
-  const [matchPage, setMatchPage] = useState(0);
-  const [exceptionPage, setExceptionPage] = useState(0);
-  const PAGE_SIZE = 100;
+  const [exceptionSearch, setExceptionSearch] = useState('');
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -199,8 +197,7 @@ export default function MatchingPage() {
       setClosingDates({});
       setStagedIds(new Set());
       // Keep skipped & comments from localStorage — don't reset on tier change
-      setMatchPage(0);
-      setExceptionPage(0);
+      setExceptionSearch('');
       setStaged([]);
       setSubmitted([]);
     } catch (err) {
@@ -395,7 +392,7 @@ export default function MatchingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {matches.slice(matchPage * PAGE_SIZE, (matchPage + 1) * PAGE_SIZE).map(({ opportunity, record, similarity }) => (
+                    {matches.map(({ opportunity, record, similarity }) => (
                       <tr key={opportunity.id} className="border-b hover:bg-gray-50">
                         <td className="border p-2">{opportunity.name}</td>
                         <td className="border p-2">{opportunity.registeredAddress}</td>
@@ -461,25 +458,6 @@ export default function MatchingPage() {
                     ))}
                   </tbody>
                 </table>
-                {matches.length > PAGE_SIZE && (
-                  <div className="mt-2 flex items-center gap-4 text-sm">
-                    <button
-                      onClick={() => setMatchPage((p) => Math.max(0, p - 1))}
-                      disabled={matchPage === 0}
-                      className="rounded bg-gray-200 px-3 py-1 disabled:opacity-40"
-                    >
-                      ← Prev
-                    </button>
-                    <span>Page {matchPage + 1} of {Math.ceil(matches.length / PAGE_SIZE)}</span>
-                    <button
-                      onClick={() => setMatchPage((p) => Math.min(Math.ceil(matches.length / PAGE_SIZE) - 1, p + 1))}
-                      disabled={(matchPage + 1) * PAGE_SIZE >= matches.length}
-                      className="rounded bg-gray-200 px-3 py-1 disabled:opacity-40"
-                    >
-                      Next →
-                    </button>
-                  </div>
-                )}
                 </>
               )}
             </section>
@@ -490,6 +468,23 @@ export default function MatchingPage() {
                 <p className="text-gray-500">No exceptions.</p>
               ) : (
                 <>
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    value={exceptionSearch}
+                    onChange={(e) => setExceptionSearch(e.target.value)}
+                    placeholder="Search by name or address..."
+                    className="w-96 rounded border p-2"
+                  />
+                  {exceptionSearch && (
+                    <button
+                      onClick={() => setExceptionSearch('')}
+                      className="ml-2 rounded bg-gray-200 px-3 py-1 hover:bg-gray-300"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
                 <table className="w-full border-collapse text-sm">
                   <thead>
                     <tr className="bg-gray-100 text-left">
@@ -505,7 +500,17 @@ export default function MatchingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {exceptions.slice(exceptionPage * PAGE_SIZE, (exceptionPage + 1) * PAGE_SIZE).map(({ opportunity, issue, record, similarity }) => (
+                    {exceptions
+                      .filter((e) => {
+                        if (!exceptionSearch.trim()) return true;
+                        const term = exceptionSearch.toLowerCase();
+                        return (
+                          e.opportunity.name.toLowerCase().includes(term) ||
+                          e.opportunity.registeredAddress.toLowerCase().includes(term) ||
+                          (e.record?.propertyAddress || '').toLowerCase().includes(term)
+                        );
+                      })
+                      .map(({ opportunity, issue, record, similarity }) => (
                       <tr key={opportunity.id} className="border-b hover:bg-gray-50">
                         <td className="border p-2">{opportunity.name}</td>
                         <td className="border p-2">{opportunity.registeredAddress || '(empty)'}</td>
@@ -569,25 +574,6 @@ export default function MatchingPage() {
                     ))}
                   </tbody>
                 </table>
-                {exceptions.length > PAGE_SIZE && (
-                  <div className="mt-2 flex items-center gap-4 text-sm">
-                    <button
-                      onClick={() => setExceptionPage((p) => Math.max(0, p - 1))}
-                      disabled={exceptionPage === 0}
-                      className="rounded bg-gray-200 px-3 py-1 disabled:opacity-40"
-                    >
-                      ← Prev
-                    </button>
-                    <span>Page {exceptionPage + 1} of {Math.ceil(exceptions.length / PAGE_SIZE)}</span>
-                    <button
-                      onClick={() => setExceptionPage((p) => Math.min(Math.ceil(exceptions.length / PAGE_SIZE) - 1, p + 1))}
-                      disabled={(exceptionPage + 1) * PAGE_SIZE >= exceptions.length}
-                      className="rounded bg-gray-200 px-3 py-1 disabled:opacity-40"
-                    >
-                      Next →
-                    </button>
-                  </div>
-                )}
                 </>
               )}
             </section>
