@@ -251,6 +251,7 @@ export default function DealSheetPage() {
   // Polling state
   const lastPollTimestamp = useRef<number>(0);
   const [syncMessage, setSyncMessage] = useState<string>('');
+  const recentlyUpdatedIds = useRef<Map<string, number>>(new Map());
 
   // Valid status values
   const STATUS_OPTIONS = [
@@ -350,9 +351,16 @@ export default function DealSheetPage() {
         }
 
         if (updated.length > 0) {
+          const now = Date.now();
+          // Skip records the user updated in the last 30s
+          const safeUpdated = updated.filter((rec) => {
+            const ts = recentlyUpdatedIds.current.get(rec.id);
+            return !ts || now - ts > 30000;
+          });
+          if (safeUpdated.length === 0) return;
           setRecords((prev) => {
             const map = new Map(prev.map((r) => [r.id, r]));
-            for (const rec of updated) {
+            for (const rec of safeUpdated) {
               map.set(rec.id, rec);
             }
             return Array.from(map.values());
@@ -546,6 +554,8 @@ export default function DealSheetPage() {
         alert(`Failed to update: ${data.error}`);
         return;
       }
+      // Protect this record from poller overwrites for 30s
+      recentlyUpdatedIds.current.set(recordId, Date.now());
       // Update local state
       setRecords((prev) =>
         prev.map((r) =>
