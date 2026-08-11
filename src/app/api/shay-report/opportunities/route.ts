@@ -129,7 +129,7 @@ export async function GET(request: Request) {
     // Map to flat structure
     const records = filtered.map((opp) => ({
       id: opp.id,
-      ghlLink: `https://app.gohighlevel.com/v2/location/${LOCATION_ID}/opportunities/${opp.id}`,
+      ghlLink: `https://app.gohighlevel.com/v2/location/${LOCATION_ID}/opportunities/list?opportunityId=${opp.id}&pipelineId=${FINANCE_PIPELINE_ID}`,
       name: opp.name || '',
       pipelineStage: STAGE_NAME_MAP[opp.pipelineStageId || ''] || opp.pipelineStageId || '',
       registeredAddress: getCustomFieldValue(opp.customFields || [], FIELD_IDS.registeredAddress),

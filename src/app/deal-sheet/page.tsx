@@ -238,8 +238,22 @@ export default function DealSheetPage() {
   });
 
 
-  // Max cell height (in px, 0 = unlimited)
-  const [maxCellHeight, setMaxCellHeight] = useState(60);
+  // Row height setting
+  type RowHeight = '1-line' | '2-line' | '3-line' | 'auto';
+  const [rowHeight, setRowHeight] = useState<RowHeight>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dealsheet-row-height');
+      if (saved === '1-line' || saved === '2-line' || saved === '3-line' || saved === 'auto') return saved;
+    }
+    return '3-line';
+  });
+  const [showSettings, setShowSettings] = useState(false);
+
+  const maxCellHeight = rowHeight === '1-line' ? 20 : rowHeight === '2-line' ? 40 : rowHeight === '3-line' ? 60 : 0;
+
+  useEffect(() => {
+    localStorage.setItem('dealsheet-row-height', rowHeight);
+  }, [rowHeight]);
 
   // Expanded cell popup
   const [expandedCell, setExpandedCell] = useState<{ recordId: string; colKey: string; value: string; x: number; y: number } | null>(null);
@@ -272,8 +286,6 @@ export default function DealSheetPage() {
     }
     const savedTheme = localStorage.getItem('dealsheet-theme') as Theme;
     if (savedTheme && THEMES[savedTheme]) setTheme(savedTheme);
-    const savedMaxHeight = localStorage.getItem('dealsheet-max-cell-height');
-    if (savedMaxHeight) setMaxCellHeight(parseInt(savedMaxHeight, 10));
   }, []);
 
   // Persist theme
@@ -282,10 +294,6 @@ export default function DealSheetPage() {
   }, [theme]);
 
 
-  // Persist max cell height
-  useEffect(() => {
-    localStorage.setItem('dealsheet-max-cell-height', String(maxCellHeight));
-  }, [maxCellHeight]);
 
   // Save custom views to localStorage
   useEffect(() => {
@@ -302,6 +310,7 @@ export default function DealSheetPage() {
         setShowViewMenu(false);
         setShowNewMenu(false);
         setShowColumnMenu(false);
+        setShowSettings(false);
         setExpandedCell(null);
         setOpenFilterDropdown(null);
       }
@@ -1078,6 +1087,38 @@ export default function DealSheetPage() {
             {theme === 'dark' ? 'Light' : 'Dark'}
           </button>
 
+          {/* Settings */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`px-2 py-1 rounded text-xs ${showSettings ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`}`}
+            >
+              ⚙
+            </button>
+            {showSettings && (
+              <div className={`absolute top-full right-0 mt-1 w-56 ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-3`}>
+                <div className={`text-xs font-bold ${t.headerText} mb-2`}>SETTINGS</div>
+                <div className="mb-2">
+                  <label className={`text-[10px] ${t.headerText} font-medium`}>Row Height</label>
+                  <div className="flex flex-col gap-1 mt-1">
+                    {([['1-line', '1 Line (compact)'], ['2-line', '2 Lines'], ['3-line', '3 Lines (default)'], ['auto', 'Auto (wrap all)']] as const).map(([value, label]) => (
+                      <label key={value} className={`flex items-center gap-2 px-1 py-0.5 text-[10px] ${t.headerText} cursor-pointer rounded ${t.hoverBg}`}>
+                        <input
+                          type="radio"
+                          name="dealsheetRowHeight"
+                          checked={rowHeight === value}
+                          onChange={() => setRowHeight(value)}
+                          className="w-3 h-3 accent-blue-500"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
@@ -1245,7 +1286,7 @@ export default function DealSheetPage() {
                           onChange={(e) => handleFilterChange(col.key, e.target.value)}
                           className={`w-full px-1.5 py-0.5 mb-1 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
                         />
-                        {/* Select All / Clear */}
+                        {/* Select All / Only / Clear */}
                         <div className="flex gap-1 mb-1 px-1">
                           <button
                             onClick={() => selectAllFilter(col.key)}
@@ -1253,6 +1294,23 @@ export default function DealSheetPage() {
                           >
                             Select All
                           </button>
+                          {filters[col.key] && (
+                            <button
+                              onClick={() => {
+                                const search = (filters[col.key] || '').toLowerCase();
+                                const toExclude = new Set<string>();
+                                getUniqueValues(col.key).forEach((v) => {
+                                  if (!v.toLowerCase().includes(search)) {
+                                    toExclude.add(v);
+                                  }
+                                });
+                                setExcludedFilters((prev) => ({ ...prev, [col.key]: toExclude }));
+                              }}
+                              className="text-[9px] text-green-400 hover:underline font-medium"
+                            >
+                              Only
+                            </button>
+                          )}
                           <button
                             onClick={() => clearAllFilter(col.key)}
                             className="text-[9px] text-red-400 hover:underline"
@@ -1439,7 +1497,7 @@ export default function DealSheetPage() {
                       }}
                       title={value}
                       onClick={(e) => {
-                        if (value && value.length > 30) {
+                        if (value) {
                           setExpandedCell({ recordId: record.id, colKey: col.key, value, x: e.clientX, y: e.clientY });
                         }
                       }}
@@ -1473,7 +1531,16 @@ export default function DealSheetPage() {
         >
           <div className="flex justify-between items-start gap-2 mb-1">
             <span className="font-bold text-gray-400 text-[10px] uppercase">{columns.find(c => c.key === expandedCell.colKey)?.label}</span>
-            <button onClick={() => setExpandedCell(null)} className="text-gray-500 hover:text-white text-sm leading-none">✕</button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => { navigator.clipboard.writeText(expandedCell.value); }}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-500"
+                title="Copy to clipboard"
+              >
+                Copy
+              </button>
+              <button onClick={() => setExpandedCell(null)} className="text-gray-500 hover:text-white text-sm leading-none">✕</button>
+            </div>
           </div>
           <div>{expandedCell.value}</div>
         </div>

@@ -198,8 +198,27 @@ export default function BPFinancePage() {
     return 'dark';
   });
 
-  // Max cell height
-  const [maxCellHeight, setMaxCellHeight] = useState(60);
+  // Settings panel
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Row height: '1-line' | '2-line' | '3-line' | 'auto'
+  type RowHeight = '1-line' | '2-line' | '3-line' | 'auto';
+  const [rowHeight, setRowHeight] = useState<RowHeight>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bp-finance-row-height');
+      if (saved === '1-line' || saved === '2-line' || saved === '3-line' || saved === 'auto') return saved;
+    }
+    return '1-line';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('bp-finance-row-height', rowHeight);
+  }, [rowHeight]);
+
+  const rowHeightStyle = rowHeight === '1-line' ? { maxHeight: '20px', overflow: 'hidden' as const }
+    : rowHeight === '2-line' ? { maxHeight: '40px', overflow: 'hidden' as const }
+    : rowHeight === '3-line' ? { maxHeight: '60px', overflow: 'hidden' as const }
+    : {};
 
   // Expanded cell popup
   const [expandedCell, setExpandedCell] = useState<{ recordId: string; colKey: string; value: string; x: number; y: number } | null>(null);
@@ -207,10 +226,6 @@ export default function BPFinancePage() {
   // Text editor modal (for large text fields in edit mode)
   const [textEditorModal, setTextEditorModal] = useState<{ recordId: string; colKey: keyof OpportunityRecord; label: string } | null>(null);
 
-  // Exclusions
-  const [exclusions, setExclusions] = useState<string[]>([]);
-  const [showExclusions, setShowExclusions] = useState(false);
-  const [newExclusion, setNewExclusion] = useState('');
 
   // View (default = Established only, all = full pipeline)
   const [currentView, setCurrentView] = useState<'default' | 'all'>('default');
@@ -259,15 +274,6 @@ export default function BPFinancePage() {
     }
   }, [currentView]);
 
-  const fetchExclusions = useCallback(async () => {
-    try {
-      const res = await fetch('/api/shay-report/exclusions');
-      if (res.ok) {
-        const data = await res.json();
-        setExclusions(data.exclusions || []);
-      }
-    } catch {}
-  }, []);
 
   // Track last change check timestamp for webhook-driven updates
   const lastChangeCheck = useRef<number>(Date.now());
@@ -314,7 +320,6 @@ export default function BPFinancePage() {
 
   useEffect(() => {
     fetchData();
-    fetchExclusions();
     // Full refresh every 60s (as fallback), webhook changes every 5s
     intervalRef.current = setInterval(fetchData, 60000);
     const changeInterval = setInterval(pollChanges, 5000);
@@ -322,50 +327,8 @@ export default function BPFinancePage() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       clearInterval(changeInterval);
     };
-  }, [fetchData, fetchExclusions, pollChanges]);
+  }, [fetchData, pollChanges]);
 
-  // ============================================================================
-  // EXCLUSIONS
-  // ============================================================================
-
-  async function excludeRecord(name: string) {
-    if (!confirm(`Exclude "${name}" from this report?`)) return;
-    const res = await fetch('/api/shay-report/exclusions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setExclusions(data.exclusions);
-      setRecords((prev) => prev.filter((r) => r.name !== name));
-    }
-  }
-
-  async function removeExclusion(name: string) {
-    const res = await fetch('/api/shay-report/exclusions', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setExclusions(data.exclusions);
-      fetchData();
-    }
-  }
-
-  async function addManualExclusion() {
-    if (!newExclusion.trim()) return;
-    const res = await fetch('/api/shay-report/exclusions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newExclusion.trim() }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setExclusions(data.exclusions);
-      setNewExclusion('');
-      fetchData();
-    }
-  }
 
   // ============================================================================
   // EDIT MODE
@@ -778,16 +741,6 @@ export default function BPFinancePage() {
 
         <div className="flex items-center gap-2">
 
-          {/* Exclusions */}
-          <button
-            onClick={() => setShowExclusions(!showExclusions)}
-            className={`px-2 py-1 rounded text-xs ${
-              showExclusions ? 'bg-orange-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`
-            }`}
-          >
-            Exclusions ({exclusions.length})
-          </button>
-
           {/* Other Records */}
           <div className="relative dropdown-container">
             <button
@@ -910,43 +863,51 @@ export default function BPFinancePage() {
           >
             {theme === 'dark' ? 'Light' : 'Dark'}
           </button>
+
+          {/* Settings */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`px-2 py-1 rounded text-xs ${showSettings ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`}`}
+            >
+              ⚙
+            </button>
+            {showSettings && (
+              <div className={`absolute top-full right-0 mt-1 w-56 ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-3`}>
+                <div className={`text-xs font-bold ${t.headerText} mb-2`}>SETTINGS</div>
+
+                {/* Row Height */}
+                <div className="mb-2">
+                  <label className={`text-[10px] ${t.headerText} font-medium`}>Row Height</label>
+                  <div className="flex flex-col gap-1 mt-1">
+                    {([['1-line', '1 Line (compact)'], ['2-line', '2 Lines'], ['3-line', '3 Lines'], ['auto', 'Auto (wrap all)']] as const).map(([value, label]) => (
+                      <label key={value} className={`flex items-center gap-2 px-1 py-0.5 text-[10px] ${t.headerText} cursor-pointer rounded ${t.hoverBg}`}>
+                        <input
+                          type="radio"
+                          name="rowHeight"
+                          checked={rowHeight === value}
+                          onChange={() => setRowHeight(value)}
+                          className="w-3 h-3 accent-blue-500"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Logged in as */}
+                {userEmail && (
+                  <div className={`border-t ${t.inputBorder} pt-2 mt-2`}>
+                    <div className={`text-[10px] ${t.headerText}`}>
+                      Logged in as: <span className="font-medium">{userEmail}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Exclusions panel */}
-      {showExclusions && (
-        <div className={`px-4 py-3 border-b ${t.cellBorder} ${t.headerBg}`}>
-          <h3 className={`text-xs font-semibold mb-2 ${t.headerText}`}>Excluded Opportunities</h3>
-          <div className="flex gap-2 mb-2">
-            <input
-              type="text"
-              value={newExclusion}
-              onChange={(e) => setNewExclusion(e.target.value)}
-              placeholder="Add opportunity name to exclude..."
-              className={`flex-1 text-xs ${t.inputBg} border ${t.inputBorder} rounded px-2 py-1 ${t.text}`}
-              onKeyDown={(e) => e.key === 'Enter' && addManualExclusion()}
-            />
-            <button onClick={addManualExclusion} className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700">Add</button>
-          </div>
-          {exclusions.length === 0 ? (
-            <p className={`text-xs ${t.headerText}`}>No exclusions set</p>
-          ) : (
-            <ul className="space-y-1 max-h-[200px] overflow-y-auto">
-              {exclusions.map((name) => (
-                <li key={name} className={`flex items-center justify-between px-2 py-1 text-xs rounded border ${t.inputBorder} ${t.inputBg}`}>
-                  <span>{name}</span>
-                  <button
-                    onClick={() => removeExclusion(name)}
-                    className="text-red-400 hover:text-red-300 ml-2 text-xs whitespace-nowrap"
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
@@ -960,10 +921,6 @@ export default function BPFinancePage() {
                 </th>
               )}
 
-              {/* GHL Link column (fixed) */}
-              <th className={`${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} whitespace-nowrap`} style={{ width: 40, minWidth: 40 }}>
-                <span className="text-[11px]">Link</span>
-              </th>
 
               {columns.map((col, idx) => (
                 <th
@@ -1076,9 +1033,27 @@ export default function BPFinancePage() {
                           onChange={(e) => setFilterSearch((prev) => ({ ...prev, [col.key]: e.target.value }))}
                           className={`w-full px-1.5 py-0.5 mb-1 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
                         />
-                        {/* Select All / Clear */}
+                        {/* Select All / Only (search match) / Clear */}
                         <div className="flex gap-1 mb-1 px-1">
                           <button onClick={() => selectAllFilter(col.key)} className="text-[9px] text-blue-400 hover:underline">Select All</button>
+                          {filterSearch[col.key] && (
+                            <button
+                              onClick={() => {
+                                const search = (filterSearch[col.key] || '').toLowerCase();
+                                const toExclude = new Set<string>();
+                                records.forEach((r) => {
+                                  const val = getDisplayValue(r, col.key) || '(blank)';
+                                  if (!val.toLowerCase().includes(search)) {
+                                    toExclude.add(val);
+                                  }
+                                });
+                                setExcludedFilters((prev) => ({ ...prev, [col.key]: toExclude }));
+                              }}
+                              className="text-[9px] text-green-400 hover:underline font-medium"
+                            >
+                              Only
+                            </button>
+                          )}
                           <button onClick={() => clearAllFilter(col.key)} className="text-[9px] text-red-400 hover:underline">Clear</button>
                         </div>
                         {/* Checkboxes */}
@@ -1146,12 +1121,6 @@ export default function BPFinancePage() {
                     </td>
                   )}
 
-                  {/* GHL Link */}
-                  <td className={`border ${t.cellBorder} px-1.5 py-1 text-center`} style={{ width: 40 }}>
-                    <a href={record.ghlLink} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-[10px]">
-                      Open
-                    </a>
-                  </td>
 
                   {columns.map((col) => {
                     const rawValue = record[col.key] || '';
@@ -1246,12 +1215,12 @@ export default function BPFinancePage() {
                         style={{ width: col.width, minWidth: col.width, maxWidth: col.width }}
                         title={displayValue}
                         onClick={(e) => {
-                          if (!isEditable && displayValue && displayValue.length > 30) {
+                          if (!isEditable && displayValue && displayValue.length > 15) {
                             setExpandedCell({ recordId: record.id, colKey: col.key, value: displayValue, x: e.clientX, y: e.clientY });
                           }
                         }}
                       >
-                        <div style={{ maxHeight: maxCellHeight > 0 ? maxCellHeight : undefined, overflow: maxCellHeight > 0 ? 'hidden' : undefined }}>
+                        <div style={rowHeightStyle}>
                           {cellContent}
                         </div>
                       </td>
@@ -1284,7 +1253,18 @@ export default function BPFinancePage() {
             <span className={`font-bold text-[10px] uppercase ${t.headerText}`}>
               {columns.find((c) => c.key === expandedCell.colKey)?.label || expandedCell.colKey}
             </span>
-            <button onClick={() => setExpandedCell(null)} className={`${t.headerText} hover:${t.text} text-sm leading-none`}>x</button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(expandedCell.value);
+                }}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-500"
+                title="Copy to clipboard"
+              >
+                Copy
+              </button>
+              <button onClick={() => setExpandedCell(null)} className={`${t.headerText} hover:${t.text} text-sm leading-none`}>x</button>
+            </div>
           </div>
           <div>{expandedCell.value}</div>
         </div>
