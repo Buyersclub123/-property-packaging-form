@@ -73,6 +73,7 @@ interface OpportunityRecord {
   id: string;
   ghlLink: string;
   name: string;
+  pipelineStage: string;
   registeredAddress: string;
   typeOfProperty: string;
   bpRequested: string;
@@ -111,6 +112,7 @@ const THEMES: Record<Theme, { bg: string; headerBg: string; cellBorder: string; 
 
 const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'name', label: 'Opportunity Name', width: 200 },
+  { key: 'pipelineStage', label: 'Pipeline Stage', width: 130 },
   { key: 'registeredAddress', label: 'Registered Address', width: 200 },
   { key: 'typeOfProperty', label: 'Type of Property', width: 110 },
   { key: 'bpRequested', label: 'B&P Requested?', width: 70 },
@@ -141,9 +143,11 @@ export default function BPFinancePage() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Edit mode (single row selection)
+  // Edit mode (single row selection by default, multi-select via hidden shortcut)
   const [editMode, setEditMode] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [editedRows, setEditedRows] = useState<Record<string, Partial<OpportunityRecord>>>({});
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
 
@@ -712,7 +716,7 @@ export default function BPFinancePage() {
           <h1 className="text-lg font-bold">B&P & Finance Tool</h1>
           <span className="text-xs opacity-60">{sortedRecords.length} records</span>
 
-          {/* Edit Mode toggle */}
+          {/* Edit Mode toggle (Shift+double-click to unlock multi-select) */}
           <button
             onClick={() => {
               if (editMode) {
@@ -722,24 +726,52 @@ export default function BPFinancePage() {
                 }
                 setEditMode(false);
                 setSelectedRowId(null);
+                setMultiSelectMode(false);
+                setSelectedRowIds(new Set());
               } else {
                 setEditMode(true);
+              }
+            }}
+            onDoubleClick={(e) => {
+              if (e.shiftKey && editMode) {
+                setMultiSelectMode((prev) => !prev);
+                if (!multiSelectMode) {
+                  // Entering multi-select: carry over current single selection
+                  if (selectedRowId) {
+                    setSelectedRowIds(new Set([selectedRowId]));
+                    setSelectedRowId(null);
+                  }
+                } else {
+                  // Exiting multi-select: clear multi selections
+                  setSelectedRowIds(new Set());
+                }
               }
             }}
             className={`px-2 py-1 rounded text-xs font-medium ${
               editMode ? 'bg-yellow-500 text-black' : `${t.inputBg} ${t.headerText} hover:opacity-80`
             }`}
           >
-            {editMode ? 'Exit Edit Mode' : 'Edit Mode'}
+            {editMode ? (multiSelectMode ? '⚡ Multi-Edit' : 'Exit Edit Mode') : 'Edit Mode'}
           </button>
 
-          {/* Save (visible when selected row has edits) */}
-          {editMode && selectedRowId && hasEdits(selectedRowId) && (
+          {/* Save (visible when selected row(s) have edits) */}
+          {editMode && !multiSelectMode && selectedRowId && hasEdits(selectedRowId) && (
             <button
               onClick={() => saveRow(selectedRowId)}
               className="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700"
             >
               Save
+            </button>
+          )}
+          {editMode && multiSelectMode && Array.from(selectedRowIds).some(id => hasEdits(id)) && (
+            <button
+              onClick={() => {
+                const toSave = Array.from(selectedRowIds).filter(id => hasEdits(id));
+                toSave.forEach(id => saveRow(id));
+              }}
+              className="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700"
+            >
+              Save All ({Array.from(selectedRowIds).filter(id => hasEdits(id)).length})
             </button>
           )}
         </div>
@@ -1076,7 +1108,9 @@ export default function BPFinancePage() {
           </thead>
           <tbody>
             {sortedRecords.map((record) => {
-              const isSelected = selectedRowId === record.id;
+              const isSelected = multiSelectMode
+                ? selectedRowIds.has(record.id)
+                : selectedRowId === record.id;
               const rowEdited = hasEdits(record.id);
               const rowSaving = savingIds.has(record.id);
 
@@ -1089,14 +1123,22 @@ export default function BPFinancePage() {
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => {
-                          if (isSelected) {
-                            setSelectedRowId(null);
+                          if (multiSelectMode) {
+                            setSelectedRowIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(record.id)) { next.delete(record.id); } else { next.add(record.id); }
+                              return next;
+                            });
                           } else {
-                            if (selectedRowId && hasEdits(selectedRowId)) {
-                              if (!confirm('You have unsaved changes on the current row. Discard?')) return;
-                              setEditedRows((prev) => { const n = { ...prev }; delete n[selectedRowId!]; return n; });
+                            if (isSelected) {
+                              setSelectedRowId(null);
+                            } else {
+                              if (selectedRowId && hasEdits(selectedRowId)) {
+                                if (!confirm('You have unsaved changes on the current row. Discard?')) return;
+                                setEditedRows((prev) => { const n = { ...prev }; delete n[selectedRowId!]; return n; });
+                              }
+                              setSelectedRowId(record.id);
                             }
-                            setSelectedRowId(record.id);
                           }
                         }}
                         className="w-3.5 h-3.5 accent-blue-500"

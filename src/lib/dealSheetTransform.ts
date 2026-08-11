@@ -216,6 +216,7 @@ export function transformRecord(record: GHLRecord) {
   const closingPrice = formatCurrency(p.closing_price);
   const clientClosed = p.client_closed || '';
   const closingDate = p.closing_date || '';
+  const linkedOpportunityId = p.linked_opportunity_id || '';
 
   // Folder link
   const folderLink = p.folder_link || '';
@@ -264,10 +265,64 @@ export function transformRecord(record: GHLRecord) {
     closingPrice,
     clientClosed,
     closingDate,
+    linkedOpportunityId,
     sortKey,
     folderLink,
     pdfLink,
     portalLink,
     createdAt: record.createdAt || '',
   };
+}
+
+/**
+ * Resolve linked opportunity IDs to current opportunity names from GHL.
+ * Updates the clientClosed field with the live opportunity name.
+ */
+export async function resolveLinkedOpportunityNames(
+  records: ReturnType<typeof transformRecord>[],
+  bearerToken: string,
+  locationId: string
+): Promise<void> {
+  const idsToResolve = records
+    .filter((r) => r.linkedOpportunityId)
+    .map((r) => r.linkedOpportunityId);
+
+  if (idsToResolve.length === 0) return;
+
+  const uniqueIds = [...new Set(idsToResolve)];
+  const nameMap = new Map<string, string>();
+
+  // Fetch opportunity names in parallel (batches of 10 to avoid rate limits)
+  for (let i = 0; i < uniqueIds.length; i += 10) {
+    const batch = uniqueIds.slice(i, i + 10);
+    const results = await Promise.allSettled(
+      batch.map(async (oppId) => {
+        const res = await fetch(
+          `https://services.leadconnectorhq.com/opportunities/${oppId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${bearerToken}`,
+              Version: '2021-07-28',
+              Accept: 'application/json',
+            },
+          }
+        );
+        if (!res.ok) return null;
+        const data = await res.json();
+        return { id: oppId, name: data.opportunity?.name || data.name || null };
+      })
+    );
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value && result.value.name) {
+        nameMap.set(result.value.id, result.value.name);
+      }
+    }
+  }
+
+  // Update records with live names
+  for (const record of records) {
+    if (record.linkedOpportunityId && nameMap.has(record.linkedOpportunityId)) {
+      record.clientClosed = nameMap.get(record.linkedOpportunityId)!;
+    }
+  }
 }

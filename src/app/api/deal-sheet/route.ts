@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GHLRecord, GHLSearchResponse, transformRecord } from '@/lib/dealSheetTransform';
+import { GHLRecord, GHLSearchResponse, transformRecord, resolveLinkedOpportunityNames } from '@/lib/dealSheetTransform';
 import { getRedisClient } from '@/lib/redis';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
@@ -93,6 +93,13 @@ export async function GET(request: Request) {
       }
     } catch (redisErr) {
       console.error('Redis pdf_link lookup failed (non-fatal):', redisErr);
+    }
+
+    // Resolve linked opportunity names (live from GHL)
+    try {
+      await resolveLinkedOpportunityNames(dealSheetRows, GHL_API_TOKEN, GHL_LOCATION_ID);
+    } catch (resolveErr) {
+      console.error('Resolve linked opportunity names failed (non-fatal):', resolveErr);
     }
 
     return NextResponse.json({

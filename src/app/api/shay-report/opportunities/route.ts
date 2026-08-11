@@ -10,6 +10,18 @@ const SETTLED_STAGE_ID = '8c6fd147-88ac-4991-aa94-c5b13bce7e4f';
 
 const EXCLUSIONS_FILE = path.join(process.cwd(), 'data', 'shay-report-exclusions.json');
 
+const STAGE_NAME_MAP: Record<string, string> = {
+  '8fc931f4-4694-42aa-a56e-cb80ff314460': 'Unregistered | Pending Finance',
+  '5a5c4474-150b-48bc-ba3c-a172c415ea1a': 'SMSF / SINGLE CONTRACT',
+  '30daaf81-e148-4217-a121-d624cc565ced': 'No val access',
+  'ab0ee0bb-9b05-4cfc-975a-749d565f03fc': 'Pending Finance',
+  'e6db59ed-b1c4-48cc-9ec3-587d23336691': 'Valuation Ordered',
+  'c99d0135-cd6a-467a-bb47-eac2f6d494b5': 'Application Lodged',
+  '2befdf02-7a80-4e9f-8766-8052a6f6cd93': 'Formal Approval/unregistered',
+  '22a44a98-f33b-4e18-a50d-325e47106419': 'Formal Approval',
+  '8c6fd147-88ac-4991-aa94-c5b13bce7e4f': 'Settled',
+};
+
 function loadExclusions(): string[] {
   try {
     if (fs.existsSync(EXCLUSIONS_FILE)) {
@@ -22,6 +34,7 @@ function loadExclusions(): string[] {
 // Field IDs for the report columns
 const FIELD_IDS = {
   registeredAddress: 'PlNx1851lV5PSAotT4FT',
+  assignedBA: 'NXqFwEzo28k6lOkbyT5N',
   bpRequested: 'lI4xRPFaeTDbXhiGIUFN',
   bpDueDate: 'es2ElmYbC2UHlSWT5iCo',
   bpRequestedExtensionDate: 'ipSQQfga7SErZTfwVAaw',
@@ -118,10 +131,11 @@ export async function GET(request: Request) {
       id: opp.id,
       ghlLink: `https://app.gohighlevel.com/v2/location/${LOCATION_ID}/opportunities/${opp.id}`,
       name: opp.name || '',
+      pipelineStage: STAGE_NAME_MAP[opp.pipelineStageId || ''] || opp.pipelineStageId || '',
       registeredAddress: getCustomFieldValue(opp.customFields || [], FIELD_IDS.registeredAddress),
       typeOfProperty: getCustomFieldValue(opp.customFields || [], TYPE_OF_PROPERTY_FIELD_ID),
       bpRequested: getCustomFieldValue(opp.customFields || [], FIELD_IDS.bpRequested),
-      assignedTo: opp.assignedTo || '',
+      assignedTo: getCustomFieldValue(opp.customFields || [], FIELD_IDS.assignedBA),
       bpDueDate: getCustomFieldValue(opp.customFields || [], FIELD_IDS.bpDueDate),
       bpRequestedExtensionDate: getCustomFieldValue(opp.customFields || [], FIELD_IDS.bpRequestedExtensionDate),
       bpExtensionStatus: getCustomFieldValue(opp.customFields || [], FIELD_IDS.bpExtensionStatus),
