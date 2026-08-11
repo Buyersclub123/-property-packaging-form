@@ -113,20 +113,20 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'name', label: 'Opportunity Name', width: 200 },
   { key: 'registeredAddress', label: 'Registered Address', width: 200 },
   { key: 'typeOfProperty', label: 'Type of Property', width: 110 },
-  { key: 'bpRequested', label: 'B&P Req?', width: 70 },
+  { key: 'bpRequested', label: 'B&P Requested?', width: 70 },
   { key: 'assignedTo', label: 'Assigned BA', width: 120 },
-  { key: 'bpDueDate', label: 'B&P Due', width: 95 },
-  { key: 'bpRequestedExtensionDate', label: 'B&P Ext Date', width: 95 },
-  { key: 'bpExtensionStatus', label: 'B&P Ext Status', width: 110 },
-  { key: 'bpScheduledDate', label: 'B&P Scheduled', width: 95 },
-  { key: 'bpConditionStatus', label: 'B&P Condition', width: 120 },
-  { key: 'bpNegotiationDetail', label: 'B&P Negotiation', width: 160 },
-  { key: 'financeFormalApproval', label: 'Finance Approved', width: 80 },
-  { key: 'confirmedSettlementDate', label: 'Settlement Date', width: 100 },
-  { key: 'insuranceStatus', label: 'Insurance', width: 130 },
-  { key: 'preSettlementInspectionDate', label: 'Pre-settle Date', width: 100 },
-  { key: 'preSettlementInspectionStatus', label: 'Pre-settle Status', width: 110 },
-  { key: 'latestStatusUpdate', label: 'Latest Update', width: 180 },
+  { key: 'bpDueDate', label: 'B&P Due Date', width: 95 },
+  { key: 'bpRequestedExtensionDate', label: 'B&P Requested Extension Date', width: 95 },
+  { key: 'bpExtensionStatus', label: 'B&P Extension Status', width: 110 },
+  { key: 'bpScheduledDate', label: 'B&P Scheduled Date', width: 95 },
+  { key: 'bpConditionStatus', label: 'B&P Condition Status', width: 120 },
+  { key: 'bpNegotiationDetail', label: 'B&P Negotiation Detail', width: 160 },
+  { key: 'financeFormalApproval', label: 'Finance Formal Approval Received', width: 80 },
+  { key: 'confirmedSettlementDate', label: 'Confirmed Settlement Date', width: 130 },
+  { key: 'insuranceStatus', label: 'Insurance Status', width: 130 },
+  { key: 'preSettlementInspectionDate', label: 'Pre-settlement Inspection Date', width: 100 },
+  { key: 'preSettlementInspectionStatus', label: 'Pre-settlement Inspection Status', width: 110 },
+  { key: 'latestStatusUpdate', label: 'Latest Status Update', width: 180 },
   { key: 'id', label: 'Record ID', width: 120 },
 ];
 
@@ -580,7 +580,26 @@ export default function BPFinancePage() {
     return [...filteredRecords].sort((a, b) => {
       const aVal = getDisplayValue(a, sortColumn);
       const bVal = getDisplayValue(b, sortColumn);
-      const compare = aVal.localeCompare(bVal);
+
+      // Empty values always sort to the bottom
+      if (!aVal && !bVal) return 0;
+      if (!aVal) return 1;
+      if (!bVal) return -1;
+
+      let compare: number;
+      if (DATE_FIELDS.has(sortColumn)) {
+        // Parse DD/MM/YYYY or YYYY-MM-DD
+        const parseDate = (v: string) => {
+          if (v.includes('/')) {
+            const [d, m, y] = v.split('/');
+            return new Date(`${y}-${m}-${d}`).getTime() || 0;
+          }
+          return new Date(v).getTime() || 0;
+        };
+        compare = parseDate(aVal) - parseDate(bVal);
+      } else {
+        compare = aVal.localeCompare(bVal);
+      }
       return sortDirection === 'asc' ? compare : -compare;
     });
   }, [filteredRecords, sortColumn, sortDirection]);
@@ -921,11 +940,11 @@ export default function BPFinancePage() {
                   onDragStart={() => handleDragStart(idx)}
                   onDragOver={(e) => handleDragOver(e, idx)}
                   onDragEnd={handleDragEnd}
-                  className={`relative ${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} cursor-move select-none whitespace-nowrap`}
+                  className={`relative ${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} cursor-move select-none`}
                   style={{ width: col.width, minWidth: col.width, maxWidth: col.width }}
                 >
                   <div className="flex items-center gap-0.5 cursor-pointer overflow-hidden" onClick={() => handleSort(col.key)}>
-                    <span className="truncate text-[11px]">{col.label}</span>
+                    <span className="text-[11px] leading-tight">{col.label}</span>
                     {sortColumn === col.key && (
                       <span className="text-blue-400 text-[10px]">
                         {sortDirection === 'asc' ? '▲' : sortDirection === 'desc' ? '▼' : ''}
