@@ -46,8 +46,11 @@ function getCustomFieldValue(customFields: any[], fieldId: string): string {
   return '';
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const view = searchParams.get('view') || 'default';
+
     const allOpps: any[] = [];
     let startAfter = '';
     let startAfterId = '';
@@ -80,28 +83,35 @@ export async function GET() {
       if (page > 20) break;
     }
 
-    // Load exclusions from file
-    const excludedNames = new Set(loadExclusions());
+    // Apply filters based on view
+    let filtered: any[];
 
-    // Filter: Established type, not Settled stage, no "LOT" in address, not excluded
-    const filtered = allOpps.filter((opp) => {
-      // Must be Established type
-      const typeField = opp.customFields?.find((f: any) => f.id === TYPE_OF_PROPERTY_FIELD_ID);
-      if (typeField?.fieldValueString !== 'Established') return false;
+    if (view === 'all') {
+      // No filters — return everything in the Finance pipeline
+      filtered = allOpps;
+    } else {
+      // Default view: Established type, not Settled, no LOT, not excluded
+      const excludedNames = new Set(loadExclusions());
 
-      // Exclude Settled stage
-      if (opp.pipelineStageId === SETTLED_STAGE_ID) return false;
+      filtered = allOpps.filter((opp) => {
+        // Must be Established type
+        const typeField = opp.customFields?.find((f: any) => f.id === TYPE_OF_PROPERTY_FIELD_ID);
+        if (typeField?.fieldValueString !== 'Established') return false;
 
-      // Exclude if address contains "LOT"
-      const addrField = opp.customFields?.find((f: any) => f.id === FIELD_IDS.registeredAddress);
-      const addr = (addrField?.fieldValueString || '').toUpperCase();
-      if (addr.includes('LOT')) return false;
+        // Exclude Settled stage
+        if (opp.pipelineStageId === SETTLED_STAGE_ID) return false;
 
-      // Exclude by name
-      if (excludedNames.has(opp.name || '')) return false;
+        // Exclude if address contains "LOT"
+        const addrField = opp.customFields?.find((f: any) => f.id === FIELD_IDS.registeredAddress);
+        const addr = (addrField?.fieldValueString || '').toUpperCase();
+        if (addr.includes('LOT')) return false;
 
-      return true;
-    });
+        // Exclude by name
+        if (excludedNames.has(opp.name || '')) return false;
+
+        return true;
+      });
+    }
 
     // Map to flat structure
     const records = filtered.map((opp) => ({
@@ -109,6 +119,7 @@ export async function GET() {
       ghlLink: `https://app.gohighlevel.com/v2/location/${LOCATION_ID}/opportunities/${opp.id}`,
       name: opp.name || '',
       registeredAddress: getCustomFieldValue(opp.customFields || [], FIELD_IDS.registeredAddress),
+      typeOfProperty: getCustomFieldValue(opp.customFields || [], TYPE_OF_PROPERTY_FIELD_ID),
       bpRequested: getCustomFieldValue(opp.customFields || [], FIELD_IDS.bpRequested),
       assignedTo: opp.assignedTo || '',
       bpDueDate: getCustomFieldValue(opp.customFields || [], FIELD_IDS.bpDueDate),

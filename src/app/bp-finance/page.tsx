@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 
 if (typeof document !== 'undefined') document.title = 'B&P & Finance Tool';
 
@@ -46,6 +47,7 @@ const BP_EXTENSION_STATUS_OPTIONS = ['', 'Requested', 'Accepted', 'Rejected'];
 const BP_CONDITION_STATUS_OPTIONS = ['', 'Sent for review', 'In negotiation', 'Satisfied', 'Satisfied subject to', 'Not satisfied'];
 const INSURANCE_STATUS_OPTIONS = ['', 'Quote requested', 'Strata report requested', 'Sent to client', 'Invoiced', 'Paid', 'CoC issued', 'Client organising'];
 const PRE_SETTLEMENT_STATUS_OPTIONS = ['', 'Not satisfied', 'Satisfied'];
+const TYPE_OF_PROPERTY_OPTIONS = ['', 'Established', 'House & Land', 'Land Only', 'SMSF'];
 
 // Map field key → dropdown options (for edit mode)
 const FIELD_OPTIONS: Record<string, string[]> = {
@@ -53,12 +55,15 @@ const FIELD_OPTIONS: Record<string, string[]> = {
   bpConditionStatus: BP_CONDITION_STATUS_OPTIONS,
   insuranceStatus: INSURANCE_STATUS_OPTIONS,
   preSettlementInspectionStatus: PRE_SETTLEMENT_STATUS_OPTIONS,
+  typeOfProperty: TYPE_OF_PROPERTY_OPTIONS,
 };
 
 // Fields that are checkboxes
 const CHECKBOX_FIELDS = new Set(['bpRequested', 'financeFormalApproval']);
 // Fields that are dates
 const DATE_FIELDS = new Set(['bpDueDate', 'bpRequestedExtensionDate', 'bpScheduledDate', 'confirmedSettlementDate', 'preSettlementInspectionDate']);
+// Fields that are large text (get expand button in edit mode)
+const LARGE_TEXT_FIELDS = new Set(['latestStatusUpdate', 'bpNegotiationDetail', 'registeredAddress']);
 
 // ============================================================================
 // TYPES
@@ -69,6 +74,7 @@ interface OpportunityRecord {
   ghlLink: string;
   name: string;
   registeredAddress: string;
+  typeOfProperty: string;
   bpRequested: string;
   assignedTo: string;
   bpDueDate: string;
@@ -106,6 +112,7 @@ const THEMES: Record<Theme, { bg: string; headerBg: string; cellBorder: string; 
 const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'name', label: 'Opportunity Name', width: 200 },
   { key: 'registeredAddress', label: 'Registered Address', width: 200 },
+  { key: 'typeOfProperty', label: 'Type of Property', width: 110 },
   { key: 'bpRequested', label: 'B&P Req?', width: 70 },
   { key: 'assignedTo', label: 'Assigned BA', width: 120 },
   { key: 'bpDueDate', label: 'B&P Due', width: 95 },
@@ -134,17 +141,39 @@ export default function BPFinancePage() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Edit mode (global toggle)
+  // Edit mode (single row selection)
   const [editMode, setEditMode] = useState(false);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [editedRows, setEditedRows] = useState<Record<string, Partial<OpportunityRecord>>>({});
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
 
+  // User identity (email-based)
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailChecked, setEmailChecked] = useState(false);
+
+  useEffect(() => {
+    const stored = getUserEmail();
+    if (stored && hasValidUserEmail()) {
+      setUserEmail(stored);
+    }
+    setEmailChecked(true);
+  }, []);
+
+  const userInitials = useMemo(() => {
+    if (!userEmail) return '';
+    const username = userEmail.split('@')[0] || '';
+    return username.split('.').map(w => w[0]?.toUpperCase() || '').join('');
+  }, [userEmail]);
+
   // Sort state
-  const [sortColumn, setSortColumn] = useState<keyof OpportunityRecord>('name');
+  const [sortColumn, setSortColumn] = useState<keyof OpportunityRecord>('confirmedSettlementDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   // Filter state (Excel-style excluded values)
   const [excludedFilters, setExcludedFilters] = useState<Partial<Record<keyof OpportunityRecord, Set<string>>>>({});
+  const [textExcludeFilters, setTextExcludeFilters] = useState<Partial<Record<keyof OpportunityRecord, string[]>>>({});
   const [filterSearch, setFilterSearch] = useState<Partial<Record<keyof OpportunityRecord, string>>>({});
   const [openFilterDropdown, setOpenFilterDropdown] = useState<keyof OpportunityRecord | null>(null);
 
@@ -171,10 +200,17 @@ export default function BPFinancePage() {
   // Expanded cell popup
   const [expandedCell, setExpandedCell] = useState<{ recordId: string; colKey: string; value: string; x: number; y: number } | null>(null);
 
+  // Text editor modal (for large text fields in edit mode)
+  const [textEditorModal, setTextEditorModal] = useState<{ recordId: string; colKey: keyof OpportunityRecord; label: string } | null>(null);
+
   // Exclusions
   const [exclusions, setExclusions] = useState<string[]>([]);
   const [showExclusions, setShowExclusions] = useState(false);
   const [newExclusion, setNewExclusion] = useState('');
+
+  // View (default = Established only, all = full pipeline)
+  const [currentView, setCurrentView] = useState<'default' | 'all'>('default');
+  const [showViewMenu, setShowViewMenu] = useState(false);
 
   // Export
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -192,6 +228,7 @@ export default function BPFinancePage() {
         setOpenFilterDropdown(null);
         setShowColumnMenu(false);
         setShowExportMenu(false);
+        setShowViewMenu(false);
         setExpandedCell(null);
       }
     };
@@ -202,7 +239,10 @@ export default function BPFinancePage() {
   // Fetch data
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/shay-report/opportunities');
+      const url = currentView === 'all'
+        ? '/api/shay-report/opportunities?view=all'
+        : '/api/shay-report/opportunities';
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRecords(data.records || []);
@@ -213,7 +253,7 @@ export default function BPFinancePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentView]);
 
   const fetchExclusions = useCallback(async () => {
     try {
@@ -516,13 +556,23 @@ export default function BPFinancePage() {
   // Apply filters
   const filteredRecords = useMemo(() => {
     return records.filter((record) => {
-      return Object.entries(excludedFilters).every(([key, excludedSet]) => {
+      // Check excluded value filters
+      const passesExcluded = Object.entries(excludedFilters).every(([key, excludedSet]) => {
         if (!excludedSet || (excludedSet as Set<string>).size === 0) return true;
         const displayValue = getDisplayValue(record, key as keyof OpportunityRecord) || '(blank)';
         return !(excludedSet as Set<string>).has(displayValue);
       });
+      if (!passesExcluded) return false;
+
+      // Check text exclude filters (does not contain)
+      const passesTextExclude = Object.entries(textExcludeFilters).every(([key, patterns]) => {
+        if (!patterns || patterns.length === 0) return true;
+        const displayValue = getDisplayValue(record, key as keyof OpportunityRecord).toLowerCase();
+        return patterns.every((p) => !displayValue.includes(p.toLowerCase()));
+      });
+      return passesTextExclude;
     });
-  }, [records, excludedFilters]);
+  }, [records, excludedFilters, textExcludeFilters]);
 
   // Apply sort
   const sortedRecords = useMemo(() => {
@@ -564,6 +614,52 @@ export default function BPFinancePage() {
   // RENDER
   // ============================================================================
 
+  // Email gate — must verify before using the tool
+  if (emailChecked && !userEmail) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="w-[400px] bg-gray-800 border border-gray-600 rounded-lg shadow-2xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <img src="/logo.jpg" alt="Buyers Club" className="h-8 w-auto" />
+            <h1 className="text-lg font-bold text-gray-100">B&P & Finance Tool</h1>
+          </div>
+          <p className="text-sm text-gray-400 mb-4">
+            Please enter your individual @buyersclub.com.au email address to continue.
+            Shared email accounts (Properties@, Packaging@) are not allowed.
+          </p>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            setEmailError(null);
+            const validation = validateUserEmail(emailInput);
+            if (!validation.isValid) {
+              setEmailError(validation.error || 'Invalid email');
+              return;
+            }
+            if (saveUserEmail(validation.email!)) {
+              setUserEmail(validation.email!);
+            } else {
+              setEmailError('Failed to save email');
+            }
+          }}>
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => { setEmailInput(e.target.value); setEmailError(null); }}
+              placeholder="your.name@buyersclub.com.au"
+              className="w-full px-3 py-2 mb-2 text-sm bg-gray-900 border border-gray-600 rounded text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              autoFocus
+              required
+            />
+            {emailError && <p className="text-red-400 text-xs mb-2">{emailError}</p>}
+            <button type="submit" className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 text-sm font-medium">
+              Continue
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900">
@@ -596,17 +692,20 @@ export default function BPFinancePage() {
           <img src="/logo.jpg" alt="Buyers Club" className="h-7 w-auto" />
           <h1 className="text-lg font-bold">B&P & Finance Tool</h1>
           <span className="text-xs opacity-60">{sortedRecords.length} records</span>
-        </div>
 
-        <div className="flex items-center gap-2">
           {/* Edit Mode toggle */}
           <button
             onClick={() => {
-              if (editMode && editedCount > 0) {
-                if (!confirm(`You have ${editedCount} unsaved changes. Discard?`)) return;
-                discardAllEdits();
+              if (editMode) {
+                if (editedCount > 0) {
+                  if (!confirm(`You have ${editedCount} unsaved changes. Discard?`)) return;
+                  discardAllEdits();
+                }
+                setEditMode(false);
+                setSelectedRowId(null);
+              } else {
+                setEditMode(true);
               }
-              setEditMode(!editMode);
             }}
             className={`px-2 py-1 rounded text-xs font-medium ${
               editMode ? 'bg-yellow-500 text-black' : `${t.inputBg} ${t.headerText} hover:opacity-80`
@@ -615,15 +714,18 @@ export default function BPFinancePage() {
             {editMode ? 'Exit Edit Mode' : 'Edit Mode'}
           </button>
 
-          {/* Save All (visible in edit mode with changes) */}
-          {editMode && editedCount > 0 && (
+          {/* Save (visible when selected row has edits) */}
+          {editMode && selectedRowId && hasEdits(selectedRowId) && (
             <button
-              onClick={saveAllEdits}
+              onClick={() => saveRow(selectedRowId)}
               className="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700"
             >
-              Save All ({editedCount})
+              Save
             </button>
           )}
+        </div>
+
+        <div className="flex items-center gap-2">
 
           {/* Exclusions */}
           <button
@@ -635,11 +737,39 @@ export default function BPFinancePage() {
             Exclusions ({exclusions.length})
           </button>
 
+          {/* Other Records */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowViewMenu(!showViewMenu)}
+              className={`px-2 py-1 rounded text-xs ${
+                currentView !== 'default' ? 'bg-purple-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`
+              }`}
+            >
+              {currentView === 'all' ? 'All Records' : 'Other Records'} ▼
+            </button>
+            {showViewMenu && (
+              <div className={`absolute top-full left-0 mt-1 w-52 ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
+                <button
+                  onClick={() => { setCurrentView('default'); setShowViewMenu(false); setLoading(true); }}
+                  className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg} ${currentView === 'default' ? 'font-bold' : ''}`}
+                >
+                  Established Only (Default)
+                </button>
+                <button
+                  onClick={() => { setCurrentView('all'); setShowViewMenu(false); setLoading(true); }}
+                  className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg} ${currentView === 'all' ? 'font-bold' : ''}`}
+                >
+                  All Finance Pipeline Records
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Clear Filters */}
           <button
-            onClick={() => { setExcludedFilters({}); setFilterSearch({}); }}
+            onClick={() => { setExcludedFilters({}); setTextExcludeFilters({}); setFilterSearch({}); }}
             className={`px-2 py-1 rounded text-xs hover:opacity-80 border ${
-              Object.keys(excludedFilters).length > 0
+              Object.keys(excludedFilters).length > 0 || Object.keys(textExcludeFilters).length > 0
                 ? 'bg-amber-600 text-white border-amber-700'
                 : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
             }`}
@@ -772,6 +902,13 @@ export default function BPFinancePage() {
         <table className="border-collapse text-xs" style={{ userSelect: resizingCol !== null ? 'none' : 'auto' }}>
           <thead className="sticky top-0 z-10">
             <tr>
+              {/* Select column (in edit mode) */}
+              {editMode && (
+                <th className={`${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-center font-medium ${t.headerText} whitespace-nowrap`} style={{ width: 40, minWidth: 40 }}>
+                  <span className="text-[11px]">Edit</span>
+                </th>
+              )}
+
               {/* GHL Link column (fixed) */}
               <th className={`${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} whitespace-nowrap`} style={{ width: 40, minWidth: 40 }}>
                 <span className="text-[11px]">Link</span>
@@ -801,17 +938,17 @@ export default function BPFinancePage() {
                     <button
                       onClick={(e) => { e.stopPropagation(); setOpenFilterDropdown(openFilterDropdown === col.key ? null : col.key); }}
                       className={`w-full px-1 py-0 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} text-left truncate ${
-                        excludedFilters[col.key] && excludedFilters[col.key]!.size > 0 ? 'border-blue-500 text-blue-400' : ''
+                        (excludedFilters[col.key] && excludedFilters[col.key]!.size > 0) || (textExcludeFilters[col.key] && textExcludeFilters[col.key]!.length > 0) ? 'border-blue-500 text-blue-400' : ''
                       }`}
                     >
-                      {excludedFilters[col.key] && excludedFilters[col.key]!.size > 0
-                        ? `▼ ${excludedFilters[col.key]!.size} hidden`
+                      {(excludedFilters[col.key] && excludedFilters[col.key]!.size > 0) || (textExcludeFilters[col.key] && textExcludeFilters[col.key]!.length > 0)
+                        ? `▼ Filtered`
                         : '▼ Filter'}
                     </button>
 
                     {openFilterDropdown === col.key && (
                       <div
-                        className={`absolute top-full left-0 mt-1 w-48 max-h-64 overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-1 dropdown-container`}
+                        className={`absolute top-full left-0 mt-1 w-56 max-h-80 overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-1 dropdown-container`}
                         onClick={(e) => e.stopPropagation()}
                       >
                         {/* Sort A-Z / Z-A */}
@@ -819,10 +956,71 @@ export default function BPFinancePage() {
                           <button onClick={() => { handleSort(col.key); setSortDirection('asc'); }} className={`text-[9px] ${t.headerText} hover:text-blue-400`}>A→Z</button>
                           <button onClick={() => { handleSort(col.key); setSortDirection('desc'); }} className={`text-[9px] ${t.headerText} hover:text-blue-400`}>Z→A</button>
                         </div>
+
+                        {/* Text exclude (does not contain) */}
+                        <div className={`mb-1 px-1 border-b ${t.inputBorder} pb-1`}>
+                          <div className={`text-[9px] ${t.headerText} mb-0.5 font-medium`}>Exclude text containing:</div>
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              placeholder="e.g. Lot"
+                              id={`text-exclude-${col.key}`}
+                              className={`flex-1 px-1.5 py-0.5 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.text} placeholder-gray-500 focus:outline-none`}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const input = e.target as HTMLInputElement;
+                                  const val = input.value.trim();
+                                  if (val) {
+                                    setTextExcludeFilters((prev) => ({
+                                      ...prev,
+                                      [col.key]: [...(prev[col.key] || []), val],
+                                    }));
+                                    input.value = '';
+                                  }
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={() => {
+                                const input = document.getElementById(`text-exclude-${col.key}`) as HTMLInputElement;
+                                const val = input?.value.trim();
+                                if (val) {
+                                  setTextExcludeFilters((prev) => ({
+                                    ...prev,
+                                    [col.key]: [...(prev[col.key] || []), val],
+                                  }));
+                                  input.value = '';
+                                }
+                              }}
+                              className="text-[9px] px-1.5 py-0.5 bg-red-600 text-white rounded hover:bg-red-700"
+                            >
+                              Add
+                            </button>
+                          </div>
+                          {(textExcludeFilters[col.key] || []).length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {(textExcludeFilters[col.key] || []).map((pattern, i) => (
+                                <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] bg-red-900/40 text-red-300 rounded">
+                                  &ldquo;{pattern}&rdquo;
+                                  <button
+                                    onClick={() => setTextExcludeFilters((prev) => ({
+                                      ...prev,
+                                      [col.key]: (prev[col.key] || []).filter((_, idx) => idx !== i),
+                                    }))}
+                                    className="ml-0.5 text-red-400 hover:text-red-200"
+                                  >
+                                    x
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
                         {/* Search */}
                         <input
                           type="text"
-                          placeholder="Search..."
+                          placeholder="Search values..."
                           value={filterSearch[col.key] || ''}
                           onChange={(e) => setFilterSearch((prev) => ({ ...prev, [col.key]: e.target.value }))}
                           className={`w-full px-1.5 py-0.5 mb-1 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
@@ -855,21 +1053,38 @@ export default function BPFinancePage() {
                 </th>
               ))}
 
-              {/* Hide column (in edit mode) */}
-              {editMode && (
-                <th className={`${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} whitespace-nowrap`} style={{ width: 50, minWidth: 50 }}>
-                  <span className="text-[11px]">Hide</span>
-                </th>
-              )}
             </tr>
           </thead>
           <tbody>
             {sortedRecords.map((record) => {
+              const isSelected = selectedRowId === record.id;
               const rowEdited = hasEdits(record.id);
               const rowSaving = savingIds.has(record.id);
 
               return (
-                <tr key={record.id} className={`${t.hoverBg} ${rowEdited ? (theme === 'dark' ? 'bg-yellow-900/30' : 'bg-yellow-50') : ''}`}>
+                <tr key={record.id} className={`${t.hoverBg} ${isSelected ? (theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-50') : ''} ${rowEdited ? (theme === 'dark' ? 'bg-yellow-900/30' : 'bg-yellow-50') : ''}`}>
+                  {/* Select checkbox (edit mode) */}
+                  {editMode && (
+                    <td className={`border ${t.cellBorder} px-1 py-1 text-center`} style={{ width: 40 }}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          if (isSelected) {
+                            setSelectedRowId(null);
+                          } else {
+                            if (selectedRowId && hasEdits(selectedRowId)) {
+                              if (!confirm('You have unsaved changes on the current row. Discard?')) return;
+                              setEditedRows((prev) => { const n = { ...prev }; delete n[selectedRowId!]; return n; });
+                            }
+                            setSelectedRowId(record.id);
+                          }
+                        }}
+                        className="w-3.5 h-3.5 accent-blue-500"
+                      />
+                    </td>
+                  )}
+
                   {/* GHL Link */}
                   <td className={`border ${t.cellBorder} px-1.5 py-1 text-center`} style={{ width: 40 }}>
                     <a href={record.ghlLink} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 text-[10px]">
@@ -880,8 +1095,8 @@ export default function BPFinancePage() {
                   {columns.map((col) => {
                     const rawValue = record[col.key] || '';
                     const displayValue = getDisplayValue(record, col.key);
-                    const isEditable = editMode && col.key !== 'id' && col.key !== 'name';
-                    const currentValue = editMode ? getEditValue(record.id, col.key) : rawValue;
+                    const isEditable = editMode && isSelected && col.key !== 'id' && col.key !== 'name';
+                    const currentValue = isEditable ? getEditValue(record.id, col.key) : rawValue;
                     let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;
 
                     // Render cell
@@ -931,6 +1146,24 @@ export default function BPFinancePage() {
                             className={`w-full text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-0.5 py-0 ${t.text}`}
                           />
                         );
+                      } else if (LARGE_TEXT_FIELDS.has(col.key)) {
+                        cellContent = (
+                          <div className="flex items-center gap-0.5">
+                            <input
+                              type="text"
+                              value={currentValue}
+                              onChange={(e) => setEditValue(record.id, col.key, e.target.value)}
+                              className={`flex-1 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-0.5 py-0 ${t.text}`}
+                            />
+                            <button
+                              onClick={() => setTextEditorModal({ recordId: record.id, colKey: col.key, label: col.label })}
+                              className="px-1 py-0 text-[9px] bg-blue-600 text-white rounded hover:bg-blue-500 shrink-0"
+                              title="Expand editor"
+                            >
+                              ↗
+                            </button>
+                          </div>
+                        );
                       } else {
                         cellContent = (
                           <input
@@ -964,18 +1197,6 @@ export default function BPFinancePage() {
                     );
                   })}
 
-                  {/* Hide button (edit mode) */}
-                  {editMode && (
-                    <td className={`border ${t.cellBorder} px-1 py-1 text-center`} style={{ width: 50 }}>
-                      {rowSaving ? (
-                        <span className="text-[10px] opacity-50">...</span>
-                      ) : rowEdited ? (
-                        <button onClick={() => saveRow(record.id)} className="px-1.5 py-0.5 text-[10px] bg-green-600 text-white rounded hover:bg-green-700">Save</button>
-                      ) : (
-                        <button onClick={() => excludeRecord(record.name)} className="text-orange-400 hover:text-orange-300 text-[10px]" title="Hide from report">x</button>
-                      )}
-                    </td>
-                  )}
                 </tr>
               );
             })}
@@ -1005,6 +1226,56 @@ export default function BPFinancePage() {
             <button onClick={() => setExpandedCell(null)} className={`${t.headerText} hover:${t.text} text-sm leading-none`}>x</button>
           </div>
           <div>{expandedCell.value}</div>
+        </div>
+      )}
+
+      {/* Text editor modal (for large text fields) */}
+      {textEditorModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={() => setTextEditorModal(null)}>
+          <div
+            className={`w-[700px] max-w-[90vw] rounded-lg shadow-2xl border ${
+              theme === 'dark' ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'
+            } p-5`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-3">
+              <h3 className={`text-sm font-bold ${t.text}`}>{textEditorModal.label}</h3>
+              <button onClick={() => setTextEditorModal(null)} className={`${t.headerText} hover:${t.text} text-lg leading-none px-1`}>x</button>
+            </div>
+            <textarea
+              id="text-editor-textarea"
+              value={getEditValue(textEditorModal.recordId, textEditorModal.colKey)}
+              onChange={(e) => setEditValue(textEditorModal.recordId, textEditorModal.colKey, e.target.value)}
+              className={`w-full h-80 text-sm ${t.inputBg} border ${t.inputBorder} rounded p-3 ${t.text} resize-y focus:outline-none focus:border-blue-500`}
+              autoFocus
+            />
+            <div className="flex justify-between items-center mt-2">
+              <button
+                onClick={() => {
+                  const now = new Date();
+                  const dd = String(now.getDate()).padStart(2, '0');
+                  const mm = String(now.getMonth() + 1).padStart(2, '0');
+                  const prefix = `${dd}/${mm} ${userInitials} - `;
+                  const current = getEditValue(textEditorModal.recordId, textEditorModal.colKey);
+                  const newVal = current ? `${prefix}\n${current}` : prefix;
+                  setEditValue(textEditorModal.recordId, textEditorModal.colKey, newVal);
+                  setTimeout(() => {
+                    const ta = document.getElementById('text-editor-textarea') as HTMLTextAreaElement;
+                    if (ta) { ta.focus(); ta.setSelectionRange(prefix.length, prefix.length); }
+                  }, 50);
+                }}
+                className={`px-3 py-1.5 text-xs ${theme === 'dark' ? 'bg-gray-600 text-gray-200 hover:bg-gray-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} rounded`}
+              >
+                + Next Comment ({userInitials})
+              </button>
+              <button
+                onClick={() => setTextEditorModal(null)}
+                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-500"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

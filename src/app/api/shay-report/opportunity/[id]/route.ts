@@ -88,6 +88,7 @@ export async function GET(
       ghlLink: `https://app.gohighlevel.com/v2/location/${LOCATION_ID}/opportunities/${opp.id}`,
       name: opp.name || '',
       registeredAddress: getCustomFieldValue(opp.customFields || [], FIELD_IDS.registeredAddress),
+      typeOfProperty: getCustomFieldValue(opp.customFields || [], TYPE_OF_PROPERTY_FIELD_ID),
       bpRequested: getCustomFieldValue(opp.customFields || [], FIELD_IDS.bpRequested),
       assignedTo: opp.assignedTo || '',
       bpDueDate: getCustomFieldValue(opp.customFields || [], FIELD_IDS.bpDueDate),

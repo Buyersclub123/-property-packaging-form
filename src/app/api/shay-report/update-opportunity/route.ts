@@ -6,6 +6,7 @@ const LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 // Map our field keys to GHL custom field IDs
 const FIELD_TO_GHL_ID: Record<string, string> = {
   registeredAddress: 'PlNx1851lV5PSAotT4FT',
+  typeOfProperty: 'p1IK7Zi8w1q2tLBwTrIE',
   bpRequested: 'lI4xRPFaeTDbXhiGIUFN',
   bpDueDate: 'es2ElmYbC2UHlSWT5iCo',
   bpRequestedExtensionDate: 'ipSQQfga7SErZTfwVAaw',
