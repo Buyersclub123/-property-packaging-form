@@ -4,10 +4,12 @@ import { FIELD_MAP, ARRAY_FIELDS } from './fields';
 const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 
-// Pipeline IDs for Finance and Construction
+// Pipeline IDs — all 4 pipelines
 const PIPELINE_IDS = [
   'zgBRaMnACpskyf1wHCEV', // 06. FINANCE Pipeline
   'XMKCHlqekS7IU87PNLKB', // 07. CONSTRUCTION Pipeline
+  'RDd4Kczt5mEuUhHfRr7C', // 05. CONTRACTS Pipeline
+  'zrb34FRmPnbIyAGFDeXJ', // 04. PROPERTY TEAM Pipeline
 ];
 
 interface GHLCustomField {
@@ -26,6 +28,8 @@ interface GHLOpportunity {
   status: string;
   pipelineId: string;
   pipelineStageId: string;
+  assignedTo?: string;
+  followers?: string[];
   contact?: {
     id?: string;
     name?: string;
@@ -107,12 +111,59 @@ interface TransformedRecord {
   bpRequestedExtensionDate: string;
   financeRequestedExtensionDate: string;
   valuationExpectedAccessDate: string;
+  typeOfProperty: string;
+  brokerEmail: string;
+  brokerPhone: string;
+  solicitorCompany: string;
+  solicitorEmail: string;
+  solicitorPhone: string;
+  partnerName: string;
+  partnerEmail: string;
+  partnerPhone: string;
+  owner: string;
+  followers: string;
 }
 
-// Pipeline name and stage name caches
+// Fallback map for deactivated users no longer returned by GHL Users API
+const FALLBACK_USER_MAP: Record<string, string> = {
+  ZTfbfK0bOGIDsla2JJ2d: 'Will Eaton',
+};
+
+// Dynamic user map — fetched from GHL Users API
+let userMapCache: Record<string, string> = {};
+
+async function fetchUsers(): Promise<void> {
+  try {
+    const response = await fetch(
+      `https://services.leadconnectorhq.com/users/?locationId=${GHL_LOCATION_ID}`,
+      {
+        headers: {
+          Authorization: `Bearer ${GHL_API_TOKEN}`,
+          Version: '2021-07-28',
+          Accept: 'application/json',
+        },
+      }
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    const users = data.users || [];
+    const map: Record<string, string> = {};
+    for (const user of users) {
+      if (user.id && (user.name || user.firstName || user.lastName)) {
+        map[user.id] = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
+      }
+    }
+    userMapCache = { ...FALLBACK_USER_MAP, ...map };
+  } catch (e) {
+    console.error('Failed to fetch GHL users:', e);
+  }
+}
+
 const PIPELINE_NAMES: Record<string, string> = {
   'zgBRaMnACpskyf1wHCEV': 'Finance',
   'XMKCHlqekS7IU87PNLKB': 'Construction',
+  'RDd4Kczt5mEuUhHfRr7C': 'Contracts',
+  'zrb34FRmPnbIyAGFDeXJ': 'Property Team',
 };
 let stageNameCache: Record<string, string> = {};
 
@@ -230,6 +281,17 @@ function transformOpportunity(opp: GHLOpportunity): TransformedRecord {
     bpRequestedExtensionDate: customFieldValues['bpRequestedExtensionDate'] || '',
     financeRequestedExtensionDate: customFieldValues['financeRequestedExtensionDate'] || '',
     valuationExpectedAccessDate: customFieldValues['valuationExpectedAccessDate'] || '',
+    typeOfProperty: customFieldValues['typeOfProperty'] || '',
+    brokerEmail: customFieldValues['brokerEmail'] || '',
+    brokerPhone: customFieldValues['brokerPhone'] || '',
+    solicitorCompany: customFieldValues['solicitorCompany'] || '',
+    solicitorEmail: customFieldValues['solicitorEmail'] || '',
+    solicitorPhone: customFieldValues['solicitorPhone'] || '',
+    partnerName: customFieldValues['partnerName'] || '',
+    partnerEmail: customFieldValues['partnerEmail'] || '',
+    partnerPhone: customFieldValues['partnerPhone'] || '',
+    owner: userMapCache[opp.assignedTo || ''] || (opp.assignedTo ? 'Unknown User' : ''),
+    followers: (opp.followers || []).map((id) => userMapCache[id] || 'Unknown User').join(', '),
   };
 }
 
@@ -242,8 +304,8 @@ export async function GET() {
       );
     }
 
-    // Fetch pipeline stage names first
-    await fetchPipelineStages();
+    // Fetch pipeline stage names and users in parallel
+    await Promise.all([fetchPipelineStages(), fetchUsers()]);
 
     // Fetch opportunities from Finance + Construction pipelines (cursor-based pagination)
     const allOpportunities: GHLOpportunity[] = [];
@@ -312,10 +374,15 @@ export async function GET() {
       }
     }
 
-    // Transform and sort by Confirmed Settlement Date ascending
+    // Transform, apply global filter (exclude Finance→Settled, Construction→Handover)
     const records = allOpportunities
-      .filter((opp) => opp.status === 'open') // Only open opportunities
+      .filter((opp) => opp.status === 'open')
       .map(transformOpportunity)
+      .filter((r) => {
+        if (r.pipelineId === 'zgBRaMnACpskyf1wHCEV' && r.stage.toLowerCase() === 'settled') return false;
+        if (r.pipelineId === 'XMKCHlqekS7IU87PNLKB' && r.stage.toLowerCase() === 'handover') return false;
+        return true;
+      })
       .sort((a, b) => {
         const dateA = a.confirmedSettlementDate || '9999-12-31';
         const dateB = b.confirmedSettlementDate || '9999-12-31';
