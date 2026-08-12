@@ -63,7 +63,8 @@ const CHECKBOX_FIELDS = new Set(['bpRequested', 'financeFormalApproval']);
 // Fields that are dates
 const DATE_FIELDS = new Set(['bpDueDate', 'bpRequestedExtensionDate', 'bpScheduledDate', 'confirmedSettlementDate', 'preSettlementInspectionDate']);
 // Fields that are large text (get expand button in edit mode)
-const LARGE_TEXT_FIELDS = new Set(['latestStatusUpdate', 'bpNegotiationDetail', 'registeredAddress']);
+const LARGE_TEXT_FIELDS = new Set(['latestStatusUpdate', 'bpNegotiationDetail']);
+const READ_ONLY_FIELDS = new Set(['id', 'name', 'pipelineStage', 'registeredAddress', 'assignedTo']);
 
 // ============================================================================
 // TYPES
@@ -98,8 +99,58 @@ interface ColumnDef {
   width: number;
 }
 
+interface ColumnSettings {
+  color?: string;           // hex colour for the column group
+  endStateValues?: string[]; // dropdown values that are "end states" (green highlight)
+  isFYI?: boolean;          // mark as informational column (muted colour)
+}
+
 type SortDirection = 'asc' | 'desc' | null;
 type Theme = 'dark' | 'light';
+
+// Column colour palette (translucent so they work on both themes)
+const COLUMN_COLOURS = [
+  { name: 'None', header: '', cell: '' },
+  { name: 'Blue', header: 'rgba(59,130,246,0.25)', cell: 'rgba(59,130,246,0.1)' },
+  { name: 'Green', header: 'rgba(34,197,94,0.25)', cell: 'rgba(34,197,94,0.1)' },
+  { name: 'Purple', header: 'rgba(168,85,247,0.25)', cell: 'rgba(168,85,247,0.1)' },
+  { name: 'Orange', header: 'rgba(249,115,22,0.25)', cell: 'rgba(249,115,22,0.1)' },
+  { name: 'Pink', header: 'rgba(236,72,153,0.25)', cell: 'rgba(236,72,153,0.1)' },
+  { name: 'Yellow', header: 'rgba(234,179,8,0.25)', cell: 'rgba(234,179,8,0.1)' },
+];
+const FYI_COLOUR = { header: 'rgba(148,163,184,0.25)', cell: 'rgba(148,163,184,0.1)' };
+const END_STATE_BG = 'rgba(34,197,94,0.3)';
+
+// Fields that have dropdown options (for end state configuration)
+const DROPDOWN_FIELD_OPTIONS: Record<string, string[]> = {
+  bpRequested: ['Yes'],
+  bpExtensionStatus: ['Requested', 'Accepted', 'Rejected'],
+  bpConditionStatus: ['Sent for review', 'In negotiation', 'Satisfied', 'Satisfied subject to', 'Not satisfied'],
+  financeFormalApproval: ['Yes'],
+  insuranceStatus: ['Quote requested', 'Strata report requested', 'Sent to client', 'Invoiced', 'Paid', 'CoC issued', 'Client organising'],
+  preSettlementInspectionStatus: ['Scheduled', 'Satisfied', 'Not satisfied'],
+  typeOfProperty: ['Established', 'House & Land', 'Land Only', 'SMSF'],
+};
+
+// Baked-in default column settings (colours, end states, FYI)
+const DEFAULT_COLUMN_SETTINGS: Record<string, ColumnSettings> = {
+  name: { isFYI: true },
+  pipelineStage: { isFYI: true },
+  registeredAddress: { isFYI: true },
+  assignedTo: { isFYI: true },
+  bpRequested: { color: 'Yellow', endStateValues: ['Yes'] },
+  bpDueDate: { color: 'Yellow' },
+  bpRequestedExtensionDate: { color: 'Yellow' },
+  bpExtensionStatus: { color: 'Yellow' },
+  bpScheduledDate: { color: 'Yellow' },
+  bpConditionStatus: { color: 'Yellow', endStateValues: ['Satisfied', 'Satisfied subject to'] },
+  bpNegotiationDetail: { color: 'Yellow' },
+  financeFormalApproval: { isFYI: true, endStateValues: ['Yes'] },
+  insuranceStatus: { color: 'Pink', endStateValues: ['CoC issued'] },
+  preSettlementInspectionDate: { color: 'Blue' },
+  preSettlementInspectionStatus: { color: 'Blue', endStateValues: ['Satisfied'] },
+  id: { isFYI: true },
+};
 
 const THEMES: Record<Theme, { bg: string; headerBg: string; cellBorder: string; text: string; headerText: string; hoverBg: string; inputBg: string; inputBorder: string }> = {
   dark: { bg: 'bg-gray-900', headerBg: 'bg-gray-800', cellBorder: 'border-gray-800', text: 'text-gray-100', headerText: 'text-gray-300', hoverBg: 'hover:bg-gray-800/50', inputBg: 'bg-gray-900', inputBorder: 'border-gray-600' },
@@ -114,9 +165,9 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'name', label: 'Opportunity Name', width: 200 },
   { key: 'pipelineStage', label: 'Pipeline Stage', width: 130 },
   { key: 'registeredAddress', label: 'Registered Address', width: 200 },
+  { key: 'assignedTo', label: 'Assigned BA', width: 120 },
   { key: 'typeOfProperty', label: 'Type of Property', width: 110 },
   { key: 'bpRequested', label: 'B&P Requested?', width: 70 },
-  { key: 'assignedTo', label: 'Assigned BA', width: 120 },
   { key: 'bpDueDate', label: 'B&P Due Date', width: 95 },
   { key: 'bpRequestedExtensionDate', label: 'B&P Requested Extension Date', width: 95 },
   { key: 'bpExtensionStatus', label: 'B&P Extension Status', width: 110 },
@@ -143,7 +194,8 @@ export default function BPFinancePage() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Edit mode (single row selection by default, multi-select via hidden shortcut)
+  // Edit mode (hidden by default — Shift+double-click logo to reveal)
+  const [showEditButton, setShowEditButton] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -172,8 +224,12 @@ export default function BPFinancePage() {
   }, [userEmail]);
 
   // Sort state
-  const [sortColumn, setSortColumn] = useState<keyof OpportunityRecord>('confirmedSettlementDate');
+  const [sortColumn, setSortColumn] = useState<keyof OpportunityRecord>('bpDueDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Preset filter
+  type PresetFilter = 'none' | 'blankPropertyType' | 'blankBpDueDate' | 'blankBpRequested' | 'bpDueNext5' | 'settlementNext5';
+  const [activePreset, setActivePreset] = useState<PresetFilter>('none');
 
   // Filter state (Excel-style excluded values)
   const [excludedFilters, setExcludedFilters] = useState<Partial<Record<keyof OpportunityRecord, Set<string>>>>({});
@@ -188,6 +244,40 @@ export default function BPFinancePage() {
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(0);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const [expandedSettingsCol, setExpandedSettingsCol] = useState<keyof OpportunityRecord | null>(null);
+
+  // Column settings — always use baked-in defaults (no localStorage)
+  const columnSettings = DEFAULT_COLUMN_SETTINGS;
+
+  function getColumnBg(colKey: string, isHeader: boolean): string {
+    const s = columnSettings[colKey];
+    if (!s) return '';
+    if (s.isFYI) return isHeader ? FYI_COLOUR.header : FYI_COLOUR.cell;
+    if (s.color) {
+      const c = COLUMN_COLOURS.find((cc) => cc.name === s.color);
+      if (c) return isHeader ? c.header : c.cell;
+    }
+    return '';
+  }
+
+  // Columns that cascade green when B&P Condition Status hits certain end states
+  const BP_CASCADE_SATISFIED_SUBJECT_TO: Set<string> = new Set(['bpDueDate', 'bpRequestedExtensionDate', 'bpExtensionStatus', 'bpScheduledDate']);
+  const BP_CASCADE_SATISFIED: Set<string> = new Set(['bpDueDate', 'bpRequestedExtensionDate', 'bpExtensionStatus', 'bpScheduledDate', 'bpNegotiationDetail']);
+
+  function getCellBg(colKey: string, value: string, record?: OpportunityRecord): string {
+    const s = columnSettings[colKey];
+    // Direct end state match
+    if (s?.endStateValues?.length && s.endStateValues.includes(value)) return END_STATE_BG;
+    // Cross-column cascade: B&P Condition Status → related B&P columns
+    if (record) {
+      const bpStatus = record.bpConditionStatus || '';
+      if (bpStatus === 'Satisfied' && BP_CASCADE_SATISFIED.has(colKey)) return END_STATE_BG;
+      if (bpStatus === 'Satisfied subject to' && BP_CASCADE_SATISFIED_SUBJECT_TO.has(colKey)) return END_STATE_BG;
+      // Pre-settlement Inspection Status → Pre-settlement Inspection Date + B&P Negotiation Detail
+      if (record.preSettlementInspectionStatus === 'Satisfied' && (colKey === 'preSettlementInspectionDate' || colKey === 'bpNegotiationDetail')) return END_STATE_BG;
+    }
+    return getColumnBg(colKey, false);
+  }
 
   // Theme
   const [theme, setTheme] = useState<Theme>(() => {
@@ -256,7 +346,10 @@ export default function BPFinancePage() {
   }, []);
 
   // Fetch data
-  const fetchData = useCallback(async () => {
+  const [refreshing, setRefreshing] = useState(false);
+  const fetchData = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
+    setRefreshing(true);
     try {
       const url = currentView === 'all'
         ? '/api/shay-report/opportunities?view=all'
@@ -271,12 +364,15 @@ export default function BPFinancePage() {
       setError(err.message || 'Failed to load');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [currentView]);
 
 
   // Track last change check timestamp for webhook-driven updates
   const lastChangeCheck = useRef<number>(Date.now());
+  // Grace period: don't remove records we just saved (prevents flicker from GHL indexing delay)
+  const recentlySaved = useRef<Map<string, number>>(new Map());
 
   const pollChanges = useCallback(async () => {
     try {
@@ -309,8 +405,13 @@ export default function BPFinancePage() {
               return [...prev, oppData.record];
             });
           } else {
-            // Record no longer meets criteria — remove it
-            setRecords((prev) => prev.filter((r) => r.id !== change.opportunityId));
+            // Record no longer meets criteria — but skip removal if we recently saved it (GHL indexing delay)
+            const savedAt = recentlySaved.current.get(change.opportunityId);
+            if (savedAt && Date.now() - savedAt < 30000) {
+              // Grace period: skip removal
+            } else {
+              setRecords((prev) => prev.filter((r) => r.id !== change.opportunityId));
+            }
           }
         } catch {}
       }
@@ -321,7 +422,7 @@ export default function BPFinancePage() {
   useEffect(() => {
     fetchData();
     // Full refresh every 60s (as fallback), webhook changes every 5s
-    intervalRef.current = setInterval(fetchData, 60000);
+    intervalRef.current = setInterval(() => fetchData(true), 60000);
     const changeInterval = setInterval(pollChanges, 5000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -361,7 +462,7 @@ export default function BPFinancePage() {
 
     const changes: Record<string, any> = {};
     const editableKeys: (keyof OpportunityRecord)[] = [
-      'registeredAddress', 'bpRequested', 'bpDueDate', 'bpRequestedExtensionDate',
+      'typeOfProperty', 'bpRequested', 'bpDueDate', 'bpRequestedExtensionDate',
       'bpExtensionStatus', 'bpScheduledDate', 'bpConditionStatus', 'bpNegotiationDetail',
       'financeFormalApproval', 'confirmedSettlementDate', 'insuranceStatus',
       'preSettlementInspectionDate', 'preSettlementInspectionStatus', 'latestStatusUpdate',
@@ -393,6 +494,7 @@ export default function BPFinancePage() {
         const data = await res.json();
         alert(`Save failed: ${data.error || res.status}`);
       } else {
+        recentlySaved.current.set(recordId, Date.now());
         setRecords((prev) =>
           prev.map((r) => (r.id === recordId ? { ...r, ...edits } : r))
         );
@@ -523,6 +625,34 @@ export default function BPFinancePage() {
   // Apply filters
   const filteredRecords = useMemo(() => {
     return records.filter((record) => {
+      // Preset filter logic
+      if (activePreset === 'blankPropertyType') {
+        if (record.pipelineStage === 'Settled') return false;
+        if ((record.typeOfProperty || '').trim() !== '') return false;
+      } else if (activePreset === 'blankBpDueDate') {
+        if ((record.bpDueDate || '').trim() !== '') return false;
+      } else if (activePreset === 'blankBpRequested') {
+        if ((record.bpRequested || '').trim() !== '') return false;
+      } else if (activePreset === 'bpDueNext5') {
+        const raw = record.bpDueDate;
+        if (!raw) return false;
+        const d = new Date(raw);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const in5 = new Date(now);
+        in5.setDate(in5.getDate() + 5);
+        if (d < now || d > in5) return false;
+      } else if (activePreset === 'settlementNext5') {
+        const raw = record.confirmedSettlementDate;
+        if (!raw) return false;
+        const d = new Date(raw);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const in5 = new Date(now);
+        in5.setDate(in5.getDate() + 5);
+        if (d < now || d > in5) return false;
+      }
+
       // Check excluded value filters
       const passesExcluded = Object.entries(excludedFilters).every(([key, excludedSet]) => {
         if (!excludedSet || (excludedSet as Set<string>).size === 0) return true;
@@ -539,7 +669,7 @@ export default function BPFinancePage() {
       });
       return passesTextExclude;
     });
-  }, [records, excludedFilters, textExcludeFilters]);
+  }, [records, excludedFilters, textExcludeFilters, activePreset]);
 
   // Apply sort
   const sortedRecords = useMemo(() => {
@@ -662,7 +792,7 @@ export default function BPFinancePage() {
       <div className="flex items-center justify-center h-screen bg-gray-900">
         <div className="text-center">
           <p className="text-red-400 text-lg mb-4">Error: {error}</p>
-          <button onClick={fetchData} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry</button>
+          <button onClick={() => fetchData()} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry</button>
         </div>
       </div>
     );
@@ -675,68 +805,105 @@ export default function BPFinancePage() {
       {/* Header */}
       <div className={`flex items-center justify-between px-4 py-2 ${t.headerBg} border-b ${t.cellBorder}`}>
         <div className="flex items-center gap-4">
-          <img src="/logo.jpg" alt="Buyers Club" className="h-7 w-auto" />
+          <img
+            src="/logo.jpg"
+            alt="Buyers Club"
+            className="h-7 w-auto cursor-default select-none"
+            onDoubleClick={(e) => { if (e.shiftKey) setShowEditButton((prev) => !prev); }}
+          />
           <h1 className="text-lg font-bold">B&P & Finance Tool</h1>
           <span className="text-xs opacity-60">{sortedRecords.length} records</span>
 
-          {/* Edit Mode toggle (Shift+double-click to unlock multi-select) */}
-          <button
-            onClick={() => {
-              if (editMode) {
-                if (editedCount > 0) {
-                  if (!confirm(`You have ${editedCount} unsaved changes. Discard?`)) return;
-                  discardAllEdits();
-                }
-                setEditMode(false);
-                setSelectedRowId(null);
-                setMultiSelectMode(false);
-                setSelectedRowIds(new Set());
-              } else {
-                setEditMode(true);
-              }
-            }}
-            onDoubleClick={(e) => {
-              if (e.shiftKey && editMode) {
-                setMultiSelectMode((prev) => !prev);
-                if (!multiSelectMode) {
-                  // Entering multi-select: carry over current single selection
-                  if (selectedRowId) {
-                    setSelectedRowIds(new Set([selectedRowId]));
+          {/* Edit Mode toggle (hidden — Shift+double-click logo to reveal) */}
+          {showEditButton && (
+            <>
+              <button
+                onClick={() => {
+                  if (editMode) {
+                    if (editedCount > 0) {
+                      if (!confirm(`You have ${editedCount} unsaved changes. Discard?`)) return;
+                      discardAllEdits();
+                    }
+                    setEditMode(false);
                     setSelectedRowId(null);
+                    setMultiSelectMode(false);
+                    setSelectedRowIds(new Set());
+                  } else {
+                    setEditMode(true);
                   }
-                } else {
-                  // Exiting multi-select: clear multi selections
-                  setSelectedRowIds(new Set());
-                }
-              }
-            }}
-            className={`px-2 py-1 rounded text-xs font-medium ${
-              editMode ? 'bg-yellow-500 text-black' : `${t.inputBg} ${t.headerText} hover:opacity-80`
-            }`}
-          >
-            {editMode ? (multiSelectMode ? '⚡ Multi-Edit' : 'Exit Edit Mode') : 'Edit Mode'}
-          </button>
+                }}
+                onDoubleClick={(e) => {
+                  if (e.shiftKey && editMode) {
+                    setMultiSelectMode((prev) => !prev);
+                    if (!multiSelectMode) {
+                      if (selectedRowId) {
+                        setSelectedRowIds(new Set([selectedRowId]));
+                        setSelectedRowId(null);
+                      }
+                    } else {
+                      setSelectedRowIds(new Set());
+                    }
+                  }
+                }}
+                className={`px-2 py-1 rounded text-xs font-medium ${
+                  editMode ? 'bg-yellow-500 text-black' : `${t.inputBg} ${t.headerText} hover:opacity-80`
+                }`}
+              >
+                {editMode ? (multiSelectMode ? '⚡ Multi-Edit' : 'Exit Edit Mode') : 'Edit Mode'}
+              </button>
 
-          {/* Save (visible when selected row(s) have edits) */}
-          {editMode && !multiSelectMode && selectedRowId && hasEdits(selectedRowId) && (
-            <button
-              onClick={() => saveRow(selectedRowId)}
-              className="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700"
-            >
-              Save
-            </button>
+              {/* Save (visible when selected row(s) have edits) */}
+              {editMode && !multiSelectMode && selectedRowId && hasEdits(selectedRowId) && (
+                <button
+                  onClick={() => saveRow(selectedRowId)}
+                  className="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700"
+                >
+                  Save
+                </button>
+              )}
+              {editMode && multiSelectMode && Array.from(selectedRowIds).some(id => hasEdits(id)) && (
+                <button
+                  onClick={() => {
+                    const toSave = Array.from(selectedRowIds).filter(id => hasEdits(id));
+                    toSave.forEach(id => saveRow(id));
+                  }}
+                  className="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700"
+                >
+                  Save All ({Array.from(selectedRowIds).filter(id => hasEdits(id)).length})
+                </button>
+              )}
+            </>
           )}
-          {editMode && multiSelectMode && Array.from(selectedRowIds).some(id => hasEdits(id)) && (
-            <button
-              onClick={() => {
-                const toSave = Array.from(selectedRowIds).filter(id => hasEdits(id));
-                toSave.forEach(id => saveRow(id));
-              }}
-              className="px-2 py-1 rounded text-xs bg-green-600 text-white hover:bg-green-700"
-            >
-              Save All ({Array.from(selectedRowIds).filter(id => hasEdits(id)).length})
-            </button>
-          )}
+          {/* Preset filter buttons */}
+          {(['none', 'blankPropertyType', 'blankBpDueDate', 'blankBpRequested', 'bpDueNext5', 'settlementNext5'] as PresetFilter[]).map((preset) => {
+            const labels: Record<PresetFilter, string> = {
+              none: 'All',
+              blankPropertyType: 'Blank P-type',
+              blankBpDueDate: 'No B&P Date',
+              blankBpRequested: 'No B&P Req',
+              bpDueNext5: 'B&P Due 5d',
+              settlementNext5: 'Settle 5d',
+            };
+            const isActive = activePreset === preset;
+            return (
+              <button
+                key={preset}
+                onClick={() => {
+                  setActivePreset(preset);
+                  if (preset === 'blankPropertyType' && currentView !== 'all') {
+                    setCurrentView('all');
+                  } else if (preset !== 'blankPropertyType' && preset !== 'none' && currentView !== 'default') {
+                    setCurrentView('default');
+                  }
+                }}
+                className={`px-2 py-1 rounded text-xs ${
+                  isActive ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`
+                }`}
+              >
+                {labels[preset]}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flex items-center gap-2">
@@ -771,9 +938,9 @@ export default function BPFinancePage() {
 
           {/* Clear Filters */}
           <button
-            onClick={() => { setExcludedFilters({}); setTextExcludeFilters({}); setFilterSearch({}); }}
+            onClick={() => { setExcludedFilters({}); setTextExcludeFilters({}); setFilterSearch({}); setActivePreset('none'); }}
             className={`px-2 py-1 rounded text-xs hover:opacity-80 border ${
-              Object.keys(excludedFilters).length > 0 || Object.keys(textExcludeFilters).length > 0
+              Object.keys(excludedFilters).length > 0 || Object.keys(textExcludeFilters).length > 0 || activePreset !== 'none'
                 ? 'bg-amber-600 text-white border-amber-700'
                 : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
             }`}
@@ -801,59 +968,11 @@ export default function BPFinancePage() {
             )}
           </div>
 
-          {/* Column toggle */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => setShowColumnMenu(!showColumnMenu)}
-              className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
-            >
-              Columns
-            </button>
-            {showColumnMenu && (
-              <div className={`absolute top-full right-0 mt-1 w-52 ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-2 max-h-80 overflow-y-auto`}>
-                <div className={`text-xs font-bold ${t.headerText} mb-2`}>SHOW / HIDE COLUMNS</div>
-                {DEFAULT_COLUMNS.map((col) => {
-                  const isVisible = columns.some((c) => c.key === col.key);
-                  return (
-                    <label key={col.key} className={`flex items-center gap-2 px-2 py-1 text-xs ${t.headerText} ${t.hoverBg} rounded cursor-pointer`}>
-                      <input
-                        type="checkbox"
-                        checked={isVisible}
-                        onChange={() => {
-                          if (isVisible) { setColumns((prev) => prev.filter((c) => c.key !== col.key)); }
-                          else {
-                            const defIdx = DEFAULT_COLUMNS.findIndex((c) => c.key === col.key);
-                            setColumns((prev) => {
-                              const next = [...prev];
-                              let insertAt = next.length;
-                              for (let i = defIdx + 1; i < DEFAULT_COLUMNS.length; i++) {
-                                const idx = next.findIndex((c) => c.key === DEFAULT_COLUMNS[i].key);
-                                if (idx !== -1) { insertAt = idx; break; }
-                              }
-                              next.splice(insertAt, 0, col);
-                              return next;
-                            });
-                          }
-                        }}
-                        className="accent-blue-500"
-                      />
-                      {col.label}
-                    </label>
-                  );
-                })}
-                <div className={`border-t ${t.inputBorder} mt-2 pt-2`}>
-                  <button onClick={() => setColumns([...DEFAULT_COLUMNS])} className={`block w-full text-left px-2 py-1 text-xs ${t.headerText} ${t.hoverBg} rounded`}>
-                    Show All
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
 
           {lastRefresh && <span className="text-xs opacity-50">{lastRefresh.toLocaleTimeString()}</span>}
 
-          <button onClick={fetchData} className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}>
-            Refresh
+          <button onClick={() => fetchData()} className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}>
+            {refreshing ? '...' : 'Refresh'}
           </button>
 
           {/* Theme toggle */}
@@ -930,7 +1049,7 @@ export default function BPFinancePage() {
                   onDragOver={(e) => handleDragOver(e, idx)}
                   onDragEnd={handleDragEnd}
                   className={`relative ${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} cursor-move select-none`}
-                  style={{ width: col.width, minWidth: col.width, maxWidth: col.width }}
+                  style={{ width: col.width, minWidth: col.width, maxWidth: col.width, backgroundColor: getColumnBg(col.key, true) || undefined }}
                 >
                   <div className="flex items-center gap-0.5 cursor-pointer overflow-hidden" onClick={() => handleSort(col.key)}>
                     <span className="text-[11px] leading-tight">{col.label}</span>
@@ -1125,7 +1244,7 @@ export default function BPFinancePage() {
                   {columns.map((col) => {
                     const rawValue = record[col.key] || '';
                     const displayValue = getDisplayValue(record, col.key);
-                    const isEditable = editMode && isSelected && col.key !== 'id' && col.key !== 'name';
+                    const isEditable = editMode && isSelected && !READ_ONLY_FIELDS.has(col.key);
                     const currentValue = isEditable ? getEditValue(record.id, col.key) : rawValue;
                     let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;
 
@@ -1212,7 +1331,7 @@ export default function BPFinancePage() {
                       <td
                         key={col.key}
                         className={`${cellClass} ${!isEditable ? 'cursor-pointer' : ''}`}
-                        style={{ width: col.width, minWidth: col.width, maxWidth: col.width }}
+                        style={{ width: col.width, minWidth: col.width, maxWidth: col.width, backgroundColor: getCellBg(col.key, rawValue, record) || undefined }}
                         title={displayValue}
                         onClick={(e) => {
                           if (!isEditable && displayValue && displayValue.length > 15) {
