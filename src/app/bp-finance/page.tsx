@@ -135,7 +135,7 @@ const DROPDOWN_FIELD_OPTIONS: Record<string, string[]> = {
 // Baked-in default column settings (colours, end states, FYI)
 const DEFAULT_COLUMN_SETTINGS: Record<string, ColumnSettings> = {
   name: { isFYI: true },
-  pipelineStage: { isFYI: true },
+  pipelineStage: { isFYI: true, endStateValues: ['Formal Approval'] },
   registeredAddress: { isFYI: true },
   assignedTo: { isFYI: true },
   bpRequested: { color: 'Yellow', endStateValues: ['Yes'] },
@@ -195,13 +195,17 @@ export default function BPFinancePage() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Edit mode (hidden by default — Shift+double-click logo to reveal)
-  const [showEditButton, setShowEditButton] = useState(false);
+  const [showEditButton, setShowEditButton] = useState(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('bp-finance-edit-visible') === 'true';
+    return false;
+  });
   const [editMode, setEditMode] = useState(false);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [editedRows, setEditedRows] = useState<Record<string, Partial<OpportunityRecord>>>({});
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
 
   // User identity (email-based)
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -321,6 +325,7 @@ export default function BPFinancePage() {
   const [currentView, setCurrentView] = useState<'default' | 'all'>('default');
   const [showViewMenu, setShowViewMenu] = useState(false);
 
+
   // Export
   const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -351,7 +356,8 @@ export default function BPFinancePage() {
     if (!isBackground) setLoading(true);
     setRefreshing(true);
     try {
-      const url = currentView === 'all'
+      const needsAll = currentView === 'all' || activePreset === 'blankPropertyType';
+      const url = needsAll
         ? '/api/shay-report/opportunities?view=all'
         : '/api/shay-report/opportunities';
       const res = await fetch(url);
@@ -366,7 +372,7 @@ export default function BPFinancePage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currentView]);
+  }, [currentView, activePreset]);
 
 
   // Track last change check timestamp for webhook-driven updates
@@ -809,7 +815,7 @@ export default function BPFinancePage() {
             src="/logo.jpg"
             alt="Buyers Club"
             className="h-7 w-auto cursor-default select-none"
-            onDoubleClick={(e) => { if (e.shiftKey) setShowEditButton((prev) => !prev); }}
+            onDoubleClick={(e) => { if (e.shiftKey) setShowEditButton((prev) => { const next = !prev; localStorage.setItem('bp-finance-edit-visible', String(next)); return next; }); }}
           />
           <h1 className="text-lg font-bold">B&P & Finance Tool</h1>
           <span className="text-xs opacity-60">{sortedRecords.length} records</span>
@@ -877,7 +883,7 @@ export default function BPFinancePage() {
           {/* Preset filter buttons */}
           {(['none', 'blankPropertyType', 'blankBpDueDate', 'blankBpRequested', 'bpDueNext5', 'settlementNext5'] as PresetFilter[]).map((preset) => {
             const labels: Record<PresetFilter, string> = {
-              none: 'All',
+              none: 'All *',
               blankPropertyType: 'Blank P-type',
               blankBpDueDate: 'No B&P Date',
               blankBpRequested: 'No B&P Req',
@@ -890,11 +896,6 @@ export default function BPFinancePage() {
                 key={preset}
                 onClick={() => {
                   setActivePreset(preset);
-                  if (preset === 'blankPropertyType' && currentView !== 'all') {
-                    setCurrentView('all');
-                  } else if (preset !== 'blankPropertyType' && preset !== 'none' && currentView !== 'default') {
-                    setCurrentView('default');
-                  }
                 }}
                 className={`px-2 py-1 rounded text-xs ${
                   isActive ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`
@@ -1028,10 +1029,29 @@ export default function BPFinancePage() {
         </div>
       </div>
 
+
+      {/* View description */}
+      <div className={`px-4 py-0.5 text-[10px] ${t.headerText} opacity-70 border-b ${t.cellBorder}`}>
+        <span className="font-medium">View: </span>
+        {activePreset === 'blankPropertyType'
+          ? 'Pipeline: Finance | Stage: ≠ Settled | Type of Property: blank'
+          : activePreset === 'blankBpDueDate'
+          ? 'Pipeline: Finance | Type: Established | Stage: ≠ Settled | B&P Due Date: blank'
+          : activePreset === 'blankBpRequested'
+          ? 'Pipeline: Finance | Type: Established | Stage: ≠ Settled | B&P Requested: blank'
+          : activePreset === 'bpDueNext5'
+          ? 'Pipeline: Finance | Type: Established | Stage: ≠ Settled | B&P Due Date: within 5 days'
+          : activePreset === 'settlementNext5'
+          ? 'Pipeline: Finance | Type: Established | Stage: ≠ Settled | Settlement Date: within 5 days'
+          : currentView === 'all'
+          ? 'Pipeline: Finance | All records (no type/stage filter)'
+          : 'Pipeline: Finance | Type: Established | Stage: ≠ Settled'}
+      </div>
+
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="border-collapse text-xs" style={{ userSelect: resizingCol !== null ? 'none' : 'auto' }}>
-          <thead className="sticky top-0 z-10">
+          <thead className="sticky top-0 z-10" style={{ backgroundColor: theme === 'dark' ? '#1f2937' : '#f3f4f6' }}>
             <tr>
               {/* Select column (in edit mode) */}
               {editMode && (
@@ -1048,8 +1068,8 @@ export default function BPFinancePage() {
                   onDragStart={() => handleDragStart(idx)}
                   onDragOver={(e) => handleDragOver(e, idx)}
                   onDragEnd={handleDragEnd}
-                  className={`relative ${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} cursor-move select-none`}
-                  style={{ width: col.width, minWidth: col.width, maxWidth: col.width, backgroundColor: getColumnBg(col.key, true) || undefined }}
+                  className={`relative border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} cursor-move select-none`}
+                  style={{ width: col.width, minWidth: col.width, maxWidth: col.width, backgroundColor: getColumnBg(col.key, true) || (theme === 'dark' ? '#1f2937' : '#f3f4f6') }}
                 >
                   <div className="flex items-center gap-0.5 cursor-pointer overflow-hidden" onClick={() => handleSort(col.key)}>
                     <span className="text-[11px] leading-tight">{col.label}</span>
@@ -1065,10 +1085,10 @@ export default function BPFinancePage() {
                     <button
                       onClick={(e) => { e.stopPropagation(); setOpenFilterDropdown(openFilterDropdown === col.key ? null : col.key); }}
                       className={`w-full px-1 py-0 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} text-left truncate ${
-                        (excludedFilters[col.key] && excludedFilters[col.key]!.size > 0) || (textExcludeFilters[col.key] && textExcludeFilters[col.key]!.length > 0) ? 'border-blue-500 text-blue-400' : ''
+                        (excludedFilters[col.key] && excludedFilters[col.key]!.size > 0) ? 'border-blue-500 text-blue-400' : ''
                       }`}
                     >
-                      {(excludedFilters[col.key] && excludedFilters[col.key]!.size > 0) || (textExcludeFilters[col.key] && textExcludeFilters[col.key]!.length > 0)
+                      {(excludedFilters[col.key] && excludedFilters[col.key]!.size > 0)
                         ? `▼ Filtered`
                         : '▼ Filter'}
                     </button>
@@ -1084,65 +1104,6 @@ export default function BPFinancePage() {
                           <button onClick={() => { handleSort(col.key); setSortDirection('desc'); }} className={`text-[9px] ${t.headerText} hover:text-blue-400`}>Z→A</button>
                         </div>
 
-                        {/* Text exclude (does not contain) */}
-                        <div className={`mb-1 px-1 border-b ${t.inputBorder} pb-1`}>
-                          <div className={`text-[9px] ${t.headerText} mb-0.5 font-medium`}>Exclude text containing:</div>
-                          <div className="flex gap-1">
-                            <input
-                              type="text"
-                              placeholder="e.g. Lot"
-                              id={`text-exclude-${col.key}`}
-                              className={`flex-1 px-1.5 py-0.5 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.text} placeholder-gray-500 focus:outline-none`}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const input = e.target as HTMLInputElement;
-                                  const val = input.value.trim();
-                                  if (val) {
-                                    setTextExcludeFilters((prev) => ({
-                                      ...prev,
-                                      [col.key]: [...(prev[col.key] || []), val],
-                                    }));
-                                    input.value = '';
-                                  }
-                                }
-                              }}
-                            />
-                            <button
-                              onClick={() => {
-                                const input = document.getElementById(`text-exclude-${col.key}`) as HTMLInputElement;
-                                const val = input?.value.trim();
-                                if (val) {
-                                  setTextExcludeFilters((prev) => ({
-                                    ...prev,
-                                    [col.key]: [...(prev[col.key] || []), val],
-                                  }));
-                                  input.value = '';
-                                }
-                              }}
-                              className="text-[9px] px-1.5 py-0.5 bg-red-600 text-white rounded hover:bg-red-700"
-                            >
-                              Add
-                            </button>
-                          </div>
-                          {(textExcludeFilters[col.key] || []).length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {(textExcludeFilters[col.key] || []).map((pattern, i) => (
-                                <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] bg-red-900/40 text-red-300 rounded">
-                                  &ldquo;{pattern}&rdquo;
-                                  <button
-                                    onClick={() => setTextExcludeFilters((prev) => ({
-                                      ...prev,
-                                      [col.key]: (prev[col.key] || []).filter((_, idx) => idx !== i),
-                                    }))}
-                                    className="ml-0.5 text-red-400 hover:text-red-200"
-                                  >
-                                    x
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
 
                         {/* Search */}
                         <input
@@ -1209,7 +1170,12 @@ export default function BPFinancePage() {
               const rowSaving = savingIds.has(record.id);
 
               return (
-                <tr key={record.id} className={`${t.hoverBg} ${isSelected ? (theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-50') : ''} ${rowEdited ? (theme === 'dark' ? 'bg-yellow-900/30' : 'bg-yellow-50') : ''}`}>
+                <tr
+                  key={record.id}
+                  className={`${t.hoverBg} ${isSelected ? (theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-50') : ''} ${rowEdited ? (theme === 'dark' ? 'bg-yellow-900/30' : 'bg-yellow-50') : ''}`}
+                  style={!editMode && highlightedRowId === record.id ? { backgroundColor: theme === 'dark' ? 'rgba(67, 56, 202, 0.35)' : 'rgba(199, 210, 254, 0.8)' } : undefined}
+                  onClick={() => { if (!editMode) setHighlightedRowId(highlightedRowId === record.id ? null : record.id); }}
+                >
                   {/* Select checkbox (edit mode) */}
                   {editMode && (
                     <td className={`border ${t.cellBorder} px-1 py-1 text-center`} style={{ width: 40 }}>
@@ -1241,7 +1207,7 @@ export default function BPFinancePage() {
                   )}
 
 
-                  {columns.map((col) => {
+                  {columns.map((col, colIdx) => {
                     const rawValue = record[col.key] || '';
                     const displayValue = getDisplayValue(record, col.key);
                     const isEditable = editMode && isSelected && !READ_ONLY_FIELDS.has(col.key);
