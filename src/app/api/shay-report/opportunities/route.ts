@@ -1,14 +1,10 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 
 const BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const FINANCE_PIPELINE_ID = 'zgBRaMnACpskyf1wHCEV';
 const TYPE_OF_PROPERTY_FIELD_ID = 'p1IK7Zi8w1q2tLBwTrIE';
 const SETTLED_STAGE_ID = '8c6fd147-88ac-4991-aa94-c5b13bce7e4f';
-
-const EXCLUSIONS_FILE = path.join(process.cwd(), 'data', 'shay-report-exclusions.json');
 
 const STAGE_NAME_MAP: Record<string, string> = {
   '8fc931f4-4694-42aa-a56e-cb80ff314460': 'Unregistered | Pending Finance',
@@ -21,15 +17,6 @@ const STAGE_NAME_MAP: Record<string, string> = {
   '22a44a98-f33b-4e18-a50d-325e47106419': 'Formal Approval',
   '8c6fd147-88ac-4991-aa94-c5b13bce7e4f': 'Settled',
 };
-
-function loadExclusions(): string[] {
-  try {
-    if (fs.existsSync(EXCLUSIONS_FILE)) {
-      return JSON.parse(fs.readFileSync(EXCLUSIONS_FILE, 'utf8'));
-    }
-  } catch {}
-  return [];
-}
 
 // Field IDs for the report columns
 const FIELD_IDS = {
@@ -103,9 +90,7 @@ export async function GET(request: Request) {
       // No filters — return everything in the Finance pipeline
       filtered = allOpps;
     } else {
-      // Default view: Established type, not Settled, no LOT, not excluded
-      const excludedNames = new Set(loadExclusions());
-
+      // Default view: Established type, not Settled
       filtered = allOpps.filter((opp) => {
         // Must be Established type
         const typeField = opp.customFields?.find((f: any) => f.id === TYPE_OF_PROPERTY_FIELD_ID);
@@ -113,14 +98,6 @@ export async function GET(request: Request) {
 
         // Exclude Settled stage
         if (opp.pipelineStageId === SETTLED_STAGE_ID) return false;
-
-        // Exclude if address contains "LOT"
-        const addrField = opp.customFields?.find((f: any) => f.id === FIELD_IDS.registeredAddress);
-        const addr = (addrField?.fieldValueString || '').toUpperCase();
-        if (addr.includes('LOT')) return false;
-
-        // Exclude by name
-        if (excludedNames.has(opp.name || '')) return false;
 
         return true;
       });
