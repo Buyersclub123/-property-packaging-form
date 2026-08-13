@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
+import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX } from '@/app/api/contract-team-reporting/fields';
 
 if (typeof document !== 'undefined') document.title = 'Contract Team Reporting Tool';
@@ -1014,15 +1015,40 @@ export default function ContractTeamReportingPage() {
     return filters;
   }
 
-  async function saveCurrentView() {
+  // Persist a view definition to the right store (public = Redis, personal = localStorage)
+  async function persistView(view: ViewDef, scope: 'public' | 'personal'): Promise<boolean> {
+    if (scope === 'public') {
+      const res = await fetch('/api/contract-team-reporting/views', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: { ...view, updatedBy: userEmail || '' } }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(`Save failed: ${data.error || res.status}`);
+        return false;
+      }
+      await fetchPublicViews();
+      return true;
+    }
+    setPersonalViews((prev) => {
+      const idx = prev.findIndex((v) => v.id === view.id);
+      if (idx >= 0) { const next = [...prev]; next[idx] = view; return next; }
+      return [...prev, view];
+    });
+    return true;
+  }
+
+  // "Save as NEW view" — always creates a new view with the entered name
+  async function saveAsNewView() {
     const name = builderName.trim();
     if (!name) { alert('Please enter a view name.'); return; }
+    const clash = allViews.find((v) => v.name.toLowerCase() === name.toLowerCase());
+    if (clash && !confirm(`A view called "${clash.name}" already exists. Create another view with the same name?`)) return;
     setBuilderSaving(true);
     try {
-      // Re-use the id when updating an existing saved view of the same scope+name
-      const existing = (builderScope === 'public' ? publicViews : personalViews).find((v) => v.name === name);
       const view: ViewDef = {
-        id: existing?.id || `${builderScope}-${Date.now()}`,
+        id: `${builderScope}-${Date.now()}`,
         name,
         section: builderSection,
         filters: buildFiltersFromBuilder(),
@@ -1030,31 +1056,46 @@ export default function ContractTeamReportingPage() {
         sortBy: sortColumn,
         sortDir: sortDirection,
       };
-      if (builderScope === 'public') {
-        const res = await fetch('/api/contract-team-reporting/views', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ view: { ...view, updatedBy: userEmail || '' } }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          alert(`Save failed: ${data.error || res.status}`);
-          return;
-        }
-        await fetchPublicViews();
-      } else {
-        setPersonalViews((prev) => {
-          const idx = prev.findIndex((v) => v.id === view.id);
-          if (idx >= 0) { const next = [...prev]; next[idx] = view; return next; }
-          return [...prev, view];
-        });
+      if (await persistView(view, builderScope)) {
+        setActiveViewId(view.id);
+        localStorage.setItem('ctr-view-id', view.id);
+        setShowViewBuilder(false);
       }
-      setActiveViewId(view.id);
-      localStorage.setItem('ctr-view-id', view.id);
     } finally {
       setBuilderSaving(false);
     }
   }
+
+  // "Update <current view>" — overwrites the active saved view in place
+  async function updateActiveView() {
+    if (activeView.builtin) return; // built-in views cannot be overwritten
+    setBuilderSaving(true);
+    try {
+      const scope: 'public' | 'personal' = activeView.id.startsWith('public-') ? 'public' : 'personal';
+      const view: ViewDef = {
+        ...activeView,
+        name: builderName.trim() || activeView.name,
+        section: builderSection,
+        filters: buildFiltersFromBuilder(),
+        columns,
+        sortBy: sortColumn,
+        sortDir: sortDirection,
+      };
+      if (await persistView(view, scope)) {
+        setShowViewBuilder(false);
+      }
+    } finally {
+      setBuilderSaving(false);
+    }
+  }
+
+  // Unsaved-changes indicator: does the current layout differ from the active view?
+  const hasUnsavedViewChanges = useMemo(() => {
+    const stripWidths = (cols: ColumnDef[]) => cols.map((c) => ({ key: c.key, color: c.color || '', end: (c.endStateValues || []).join('|') }));
+    return JSON.stringify(stripWidths(columns)) !== JSON.stringify(stripWidths(activeView.columns))
+      || sortColumn !== activeView.sortBy
+      || sortDirection !== activeView.sortDir;
+  }, [columns, sortColumn, sortDirection, activeView]);
 
   async function deleteSavedView(view: ViewDef) {
     if (view.builtin) return;
@@ -1190,10 +1231,19 @@ export default function ContractTeamReportingPage() {
     }
   }, []);
 
+  // Pause auto-refresh when the tab is hidden or the user is idle 30+ min
+  // (saves Vercel compute / GHL rate limit overnight). Resuming triggers a
+  // fresh load so nobody works from stale data.
+  const { isPaused, pausedByIdle } = useAutoRefreshPause(() => fetchData(true));
+  const isPausedRef = useRef(isPaused);
+  isPausedRef.current = isPaused;
+
   useEffect(() => {
     fetchData();
-    // Full refresh every 60s
-    intervalRef.current = setInterval(() => fetchData(true), 60000);
+    // Full refresh every 60s (skipped while paused)
+    intervalRef.current = setInterval(() => {
+      if (!isPausedRef.current) fetchData(true);
+    }, 60000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -1227,7 +1277,9 @@ export default function ContractTeamReportingPage() {
 
   useEffect(() => {
     fetchSchema();
-    const schemaInterval = setInterval(fetchSchema, 60 * 60 * 1000);
+    const schemaInterval = setInterval(() => {
+      if (!isPausedRef.current) fetchSchema();
+    }, 60 * 60 * 1000);
     return () => clearInterval(schemaInterval);
   }, [fetchSchema]);
 
@@ -1738,7 +1790,11 @@ export default function ContractTeamReportingPage() {
               onClick={() => setShowViewMenu(!showViewMenu)}
               className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
             >
-              View: {activeView.name} ▼
+              View: {activeView.name}
+              {showColumnBuilder && hasUnsavedViewChanges && (
+                <span className="ml-1 text-amber-400" title="This view has unsaved layout changes — open the View Builder to save or update">●</span>
+              )}
+              {' '}▼
             </button>
             {showViewMenu && (
               <div className={`absolute top-full left-0 mt-1 w-64 max-h-[70vh] overflow-y-auto ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
@@ -1798,18 +1854,25 @@ export default function ContractTeamReportingPage() {
             )}
           </div>
 
-          {/* Columns (report builder) — hidden; Shift+double-click ⚙ to reveal */}
+          {/* View Builder (single panel: columns, pipelines, colours, save)
+              — hidden; Shift+double-click ⚙ to reveal */}
           {showColumnBuilder && (
           <div className="relative dropdown-container">
             <button
-              onClick={() => setShowColumnMenu(!showColumnMenu)}
-              className={`px-2 py-1 rounded text-xs ${showColumnMenu ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`}`}
+              onClick={() => setShowViewBuilder(!showViewBuilder)}
+              className={`px-2 py-1 rounded text-xs ${showViewBuilder ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`}`}
             >
-              Columns ▼
+              View Builder{hasUnsavedViewChanges ? ' ●' : ''} ▼
             </button>
-            {showColumnMenu && (
-              <div className={`absolute top-full left-0 mt-1 w-72 max-h-96 overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-2`}>
-                <div className={`text-[10px] font-bold ${t.headerText} mb-1`}>REPORT COLUMNS ({columns.length} shown)</div>
+            {showViewBuilder && (
+              <div className={`absolute top-full left-0 mt-1 w-[420px] max-h-[80vh] overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-3`}>
+                <div className={`text-[9px] ${t.headerText} opacity-70 mb-2`}>
+                  Editing layout of: <span className="font-bold">{activeView.name}</span>
+                  {hasUnsavedViewChanges && <span className="text-amber-400 font-bold"> — unsaved changes</span>}
+                </div>
+
+                {/* 1. Columns */}
+                <div className={`text-[10px] font-bold ${t.headerText} mb-1`}>1. REPORT COLUMNS ({columns.length} shown)</div>
                 <input
                   type="text"
                   placeholder="Search fields..."
@@ -1831,6 +1894,7 @@ export default function ContractTeamReportingPage() {
                     Clear all
                   </button>
                 </div>
+                <div className="max-h-48 overflow-y-auto mb-1 border-b border-gray-600/40 pb-1">
                 {([
                   ['opportunity', 'OPPORTUNITY FIELDS', 'text-blue-400'],
                   ['custom-object', 'CUSTOM OBJECT FIELDS', 'text-green-400'],
@@ -1865,24 +1929,10 @@ export default function ContractTeamReportingPage() {
                     </div>
                   );
                 })}
-              </div>
-            )}
-          </div>
-          )}
+                </div>
 
-          {/* View Builder — hidden; Shift+double-click ⚙ to reveal */}
-          {showColumnBuilder && (
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => setShowViewBuilder(!showViewBuilder)}
-              className={`px-2 py-1 rounded text-xs ${showViewBuilder ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`}`}
-            >
-              View Builder ▼
-            </button>
-            {showViewBuilder && (
-              <div className={`absolute top-full left-0 mt-1 w-96 max-h-[75vh] overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-3`}>
-                {/* Pipelines & stages */}
-                <div className={`text-[10px] font-bold ${t.headerText} mb-1`}>PIPELINES & STAGES</div>
+                {/* 2. Pipelines & stages */}
+                <div className={`text-[10px] font-bold ${t.headerText} mb-1`}>2. PIPELINES & STAGES</div>
                 <div className={`text-[9px] ${t.headerText} opacity-60 mb-1`}>Nothing ticked = all pipelines / all stages</div>
                 {ghlPipelines.length === 0 && <div className={`text-[10px] ${t.headerText}`}>Loading pipelines…</div>}
                 {ghlPipelines.map((p) => (
@@ -1935,7 +1985,7 @@ export default function ContractTeamReportingPage() {
                 ))}
 
                 {/* Column colours & end states */}
-                <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>COLUMN COLOURS & END STATES</div>
+                <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>3. COLUMN COLOURS & END STATES</div>
                 {columns.map((col) => (
                   <div key={col.key} className="mb-0.5">
                     <div className="flex items-center gap-1.5">
@@ -1981,9 +2031,9 @@ export default function ContractTeamReportingPage() {
                   </div>
                 ))}
 
-                {/* Save */}
+                {/* 4. Save — explicit choice: new view vs overwrite current */}
                 <div className={`mt-3 border-t ${t.inputBorder} pt-2`}>
-                  <div className={`text-[10px] font-bold ${t.headerText} mb-1`}>SAVE VIEW</div>
+                  <div className={`text-[10px] font-bold ${t.headerText} mb-1`}>4. SAVE (captures current columns, pipelines/stages, colours & sort)</div>
                   <input
                     type="text"
                     placeholder="View name..."
@@ -1991,7 +2041,7 @@ export default function ContractTeamReportingPage() {
                     onChange={(e) => setBuilderName(e.target.value)}
                     className={`w-full px-1.5 py-0.5 mb-1 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
                   />
-                  <div className="flex items-center gap-3 mb-1">
+                  <div className="flex items-center gap-3 mb-2">
                     <select
                       value={builderSection}
                       onChange={(e) => setBuilderSection(e.target.value as ViewSection)}
@@ -2005,16 +2055,31 @@ export default function ContractTeamReportingPage() {
                     </label>
                     <label className={`flex items-center gap-1 text-[10px] ${t.headerText} cursor-pointer`}>
                       <input type="radio" name="builderScope" checked={builderScope === 'public'} onChange={() => setBuilderScope('public')} className="w-2.5 h-2.5" />
-                      Public
+                      Public (everyone)
                     </label>
                   </div>
-                  <button
-                    onClick={saveCurrentView}
-                    disabled={builderSaving}
-                    className="w-full px-2 py-1 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-50"
-                  >
-                    {builderSaving ? 'Saving…' : 'Save View (captures current columns, filters, sort)'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveAsNewView}
+                      disabled={builderSaving}
+                      className="flex-1 px-2 py-1.5 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-50 font-medium"
+                    >
+                      {builderSaving ? 'Saving…' : '+ Save as NEW view'}
+                    </button>
+                    <button
+                      onClick={updateActiveView}
+                      disabled={builderSaving || activeView.builtin}
+                      title={activeView.builtin ? 'Built-in views cannot be overwritten — use Save as NEW view instead' : `Overwrite "${activeView.name}" with the current layout`}
+                      className="flex-1 px-2 py-1.5 text-[10px] bg-green-700 text-white rounded hover:bg-green-600 disabled:opacity-40 font-medium"
+                    >
+                      {builderSaving ? 'Saving…' : `Update "${activeView.name}"`}
+                    </button>
+                  </div>
+                  {activeView.builtin && (
+                    <div className={`text-[9px] ${t.headerText} opacity-60 mt-1`}>
+                      &quot;{activeView.name}&quot; is a built-in view and cannot be overwritten — save your changes as a new view.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2054,6 +2119,11 @@ export default function ContractTeamReportingPage() {
           </div>
 
 
+          {pausedByIdle && (
+            <span className="px-2 py-1 rounded text-xs bg-amber-600 text-white" title="No activity for 30 minutes. Move the mouse or press a key to resume.">
+              Auto-refresh paused — click to resume
+            </span>
+          )}
           {lastRefresh && <span className="text-xs opacity-50">{lastRefresh.toLocaleTimeString()}</span>}
 
           <button onClick={() => fetchData()} className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}>

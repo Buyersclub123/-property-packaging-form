@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 
 // Set page title
 if (typeof document !== 'undefined') document.title = 'Deal Sheet';
@@ -324,6 +325,14 @@ export default function DealSheetPage() {
     fetchData();
   }, []);
 
+  // Pause polling when the tab is hidden or the user is idle 30+ min
+  // (saves Vercel compute / GHL rate limit from tabs left open overnight).
+  // On resume the poll uses its old timestamp, so it naturally catches up on
+  // any changes that happened while paused.
+  const { isPaused: pollPaused } = useAutoRefreshPause(() => {});
+  const pollPausedRef = useRef(pollPaused);
+  pollPausedRef.current = pollPaused;
+
   // Polling for real-time sync (every 15s after initial load)
   useEffect(() => {
     if (loading || error) return;
@@ -334,6 +343,7 @@ export default function DealSheetPage() {
     }
 
     const interval = setInterval(async () => {
+      if (pollPausedRef.current) return;
       try {
         const res = await fetch(`/api/deal-sheet/changes?since=${lastPollTimestamp.current}`);
         if (!res.ok) return;
