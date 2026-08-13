@@ -4,6 +4,9 @@ import { getRedisClient } from '@/lib/redis';
 import { FIELD_MAP, PROPERTY_FIELD_MAP } from '../fields';
 import { sendCtrAlert, CTR_ALERT_RECIPIENTS } from '../alerts';
 
+// Always run at request time, never pre-render at build (data must be live)
+export const dynamic = 'force-dynamic';
+
 const GHL_BASE_URL = process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com';
 const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';

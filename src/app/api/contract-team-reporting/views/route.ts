@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 
+// Always run at request time, never pre-render at build (data must be live)
+export const dynamic = 'force-dynamic';
+
 const VIEWS_KEY = 'ctr:public-views';
 
 interface SavedViewFilter {
