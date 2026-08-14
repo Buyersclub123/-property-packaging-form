@@ -136,7 +136,45 @@ interface OpportunityResult {
   assignedBA: string;
   pipelineStageId: string;
   stageName: string;
+  pipelineName: string;
   lastStageChangeAt: string;
+}
+
+// Pipeline + stage names resolved live from GHL (programme rule: no hardcoded
+// lists). STAGE_NAME_MAP above stays only as a fallback if the fetch fails.
+// Same pattern as the reporting tool's fetchPipelineStages().
+let stageNameCache: Record<string, string> = {};
+let pipelineNameByStageId: Record<string, string> = {};
+let pipelineCacheAt = 0;
+const PIPELINE_CACHE_MS = 60 * 60 * 1000;
+
+async function loadPipelineNames(): Promise<void> {
+  if (Date.now() - pipelineCacheAt < PIPELINE_CACHE_MS && Object.keys(stageNameCache).length > 0) {
+    return;
+  }
+  try {
+    const res = await fetch(`${GHL_API_BASE}/opportunities/pipelines?locationId=${LOCATION_ID}`, {
+      headers: { Authorization: `Bearer ${BEARER_TOKEN}`, Version: '2021-07-28' },
+      cache: 'no-store',
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const stages: Record<string, string> = {};
+    const pipelines: Record<string, string> = {};
+    for (const pipeline of data.pipelines || []) {
+      for (const stage of pipeline.stages || []) {
+        stages[stage.id] = (stage.name || '').trim();
+        pipelines[stage.id] = (pipeline.name || '').trim();
+      }
+    }
+    if (Object.keys(stages).length > 0) {
+      stageNameCache = stages;
+      pipelineNameByStageId = pipelines;
+      pipelineCacheAt = Date.now();
+    }
+  } catch (err) {
+    console.error('Pipeline name fetch failed (falling back to STAGE_NAME_MAP):', err);
+  }
 }
 
 function getCustomFieldValue(
@@ -170,7 +208,11 @@ function mapOpportunity(opp: GHLOpportunity): OpportunityResult {
     totalPurchasePrice: getCustomFieldValue(opp.customFields, TOTAL_PURCHASE_PRICE_FIELD_ID),
     assignedBA: getCustomFieldValue(opp.customFields, ASSIGNED_BA_FIELD_ID),
     pipelineStageId: opp.pipelineStageId || '',
-    stageName: STAGE_NAME_MAP[opp.pipelineStageId || ''] || '',
+    stageName:
+      stageNameCache[opp.pipelineStageId || ''] ||
+      STAGE_NAME_MAP[opp.pipelineStageId || ''] ||
+      '',
+    pipelineName: pipelineNameByStageId[opp.pipelineStageId || ''] || '',
     lastStageChangeAt: formatDateDDMMYYYY(opp.lastStageChangeAt),
   };
 }
@@ -239,6 +281,40 @@ const V2_TIER_3_PIPELINE_IDS = ['zgBRaMnACpskyf1wHCEV', 'XMKCHlqekS7IU87PNLKB'];
 
 export async function GET(request: NextRequest) {
   try {
+    await loadPipelineNames();
+
+    // Single-opportunity lookup by id. The EOI edit modal needs the linked
+    // opportunity regardless of which pipeline it now sits in — searching a
+    // single tier misses anything that has moved on to Contracts/Finance/
+    // Construction, which left the modal with no selection and a permanently
+    // disabled Confirm button.
+    const oppId = request.nextUrl.searchParams.get('id');
+    if (oppId) {
+      const res = await fetch(`${GHL_API_BASE}/opportunities/${oppId}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${BEARER_TOKEN}`,
+          Version: '2021-07-28',
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('GHL single opportunity fetch failed:', res.status, errorText);
+        return NextResponse.json(
+          { error: `GHL API error: ${res.status}` },
+          { status: res.status }
+        );
+      }
+      const data = await res.json();
+      const opp: GHLOpportunity | undefined = data.opportunity || data;
+      if (!opp || !opp.id) {
+        return NextResponse.json({ opportunities: [], total: 0 });
+      }
+      return NextResponse.json({ opportunities: [mapOpportunity(opp)], total: 1 });
+    }
+
     const tierParam = request.nextUrl.searchParams.get('tier') || '1';
     const tier = parseInt(tierParam, 10);
     const isV2 = request.nextUrl.searchParams.get('v') === '2';

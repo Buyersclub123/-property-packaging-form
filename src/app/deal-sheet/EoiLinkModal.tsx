@@ -30,6 +30,7 @@ export interface EoiOpportunity {
   assignedBA: string;
   pipelineStageId: string;
   stageName: string;
+  pipelineName: string;
   lastStageChangeAt: string;
 }
 
@@ -58,6 +59,9 @@ interface EoiLinkModalProps {
   record: DealRecord;
   mode: ModalMode;
   theme: 'dark' | 'light';
+  // opportunityId -> other property records already linked to it. Used to stop
+  // the same opportunity being linked to two properties by accident.
+  existingLinks?: Record<string, { id: string; address: string; status: string }[]>;
   onLink: (payload: EoiLinkPayload) => Promise<boolean>;
   onUpdate: (payload: EoiUpdatePayload) => Promise<boolean>;
   onSpeculative: () => Promise<boolean>;
@@ -127,6 +131,7 @@ export default function EoiLinkModal({
   record,
   mode,
   theme,
+  existingLinks = {},
   onLink,
   onUpdate,
   onSpeculative,
@@ -170,6 +175,17 @@ export default function EoiLinkModal({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [copiedId, setCopiedId] = useState(false);
+  // Explicit acknowledgement when the chosen opportunity is already linked
+  // to a different property record.
+  const [dupeAcknowledged, setDupeAcknowledged] = useState(false);
+
+  // Edit-mode load outcome for the linked opportunity.
+  //   ok      = loaded from GHL, safe to confirm
+  //   missing = GHL says it does not exist -> the link is broken, block confirm
+  //   error   = could not reach GHL -> offer retry, allow record-only edits
+  const [linkLoad, setLinkLoad] = useState<'loading' | 'ok' | 'missing' | 'error'>(
+    mode === 'edit' ? 'loading' : 'ok'
+  );
 
   // ---- Assigned BA options (F6/F9) — live from the GHL schema, never hardcoded.
   const [baOptions, setBaOptions] = useState<string[]>([]);
@@ -198,25 +214,67 @@ export default function EoiLinkModal({
       setEditBA('');
       setEditPrice('');
       setEditDateIso(getTodayAESTIso());
+      setLinkLoad('ok');
       return;
     }
-    if (!record.linkedOpportunityId) return;
-    fetch(`/api/deal-sheet/opportunities?v=2&tier=1&_t=${Date.now()}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => {
-        const opp = (d.opportunities || [] as EoiOpportunity[]).find(
-          (o: EoiOpportunity) => o.id === record.linkedOpportunityId
-        );
-        if (opp) {
-          setSelected(opp);
-          setEditBA(record.closingBA || opp.assignedBA || '');
-          setEditPrice(currencyRaw(record.closingPrice));
-          setEditDateIso(ddmmyyyyToIso(record.closingDate) || getTodayAESTIso());
-        }
-      })
-      .catch(() => setSubmitError('Failed to load the current opportunity.'));
+    if (!record.linkedOpportunityId) {
+      setLinkLoad('ok');
+      return;
+    }
+    loadLinkedOpportunity();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Look the opportunity up by id — it may sit in any pipeline, so searching a
+  // single tier is not enough.
+  async function loadLinkedOpportunity() {
+    setLinkLoad('loading');
+    setSubmitError('');
+    try {
+      const res = await fetch(
+        `/api/deal-sheet/opportunities?v=2&id=${encodeURIComponent(record.linkedOpportunityId)}&_t=${Date.now()}`,
+        { cache: 'no-store' }
+      );
+      if (res.status === 404) {
+        setSelected(null);
+        setLinkLoad('missing');
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      const opp: EoiOpportunity | undefined = (d.opportunities || [])[0];
+      if (!opp) {
+        // GHL answered and the opportunity is not there — the link is broken.
+        setSelected(null);
+        setLinkLoad('missing');
+        return;
+      }
+      setSelected(opp);
+      setEditBA(record.closingBA || opp.assignedBA || '');
+      setEditPrice(currencyRaw(record.closingPrice));
+      setEditDateIso(ddmmyyyyToIso(record.closingDate) || getTodayAESTIso());
+      setLinkLoad('ok');
+    } catch {
+      // Could not reach GHL. Allow editing the property record's own fields,
+      // but the BA write-back is skipped because we cannot see the
+      // opportunity's real value to compare against.
+      setSelected({
+        id: record.linkedOpportunityId,
+        name: record.clientClosed || '(could not load from GHL)',
+        registeredAddress: '',
+        totalPurchasePrice: '',
+        assignedBA: record.closingBA || '',
+        pipelineStageId: '',
+        stageName: '',
+        pipelineName: '',
+        lastStageChangeAt: '',
+      });
+      setEditBA(record.closingBA || '');
+      setEditPrice(currencyRaw(record.closingPrice));
+      setEditDateIso(ddmmyyyyToIso(record.closingDate) || getTodayAESTIso());
+      setLinkLoad('error');
+    }
+  }
 
   // create-mode price prefill from record type
   useEffect(() => {
@@ -275,8 +333,17 @@ export default function EoiLinkModal({
   const maxLoadedTier = loadedTiers.length > 0 ? Math.max(...loadedTiers) : 0;
   const nextTier = maxLoadedTier < 3 ? maxLoadedTier + 1 : null;
 
+  // Other property records already linked to the chosen opportunity.
+  const duplicateLinks = useMemo(() => {
+    if (!selected) return [];
+    return (existingLinks[selected.id] || []).filter((r) => r.id !== record.id);
+  }, [selected, existingLinks, record.id]);
+
   function handleSelect(opp: EoiOpportunity) {
     setSelected(opp);
+    setDupeAcknowledged(false);
+    // Picking from the list supersedes any earlier load failure on the old link.
+    setLinkLoad('ok');
     setEditBA(opp.assignedBA || '');
     const typePrefix = (record.type || '').slice(0, 2);
     const prefillTypes = ['01', '02', '03'];
@@ -409,6 +476,7 @@ export default function EoiLinkModal({
                   <thead className={`sticky top-0 ${dark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
                     <tr>
                       <th className="px-3 py-1.5 text-left font-medium">Opportunity</th>
+                      <th className="px-3 py-1.5 text-left font-medium">Pipeline</th>
                       <th className="px-3 py-1.5 text-left font-medium">Stage</th>
                       <th className="px-3 py-1.5 text-left font-medium">Assigned BA</th>
                       <th className="px-3 py-1.5 text-left font-medium">Total Purchase $</th>
@@ -418,7 +486,21 @@ export default function EoiLinkModal({
                   <tbody>
                     {filteredOpps.map((opp) => (
                       <tr key={opp.id} className={cls.row} onClick={() => handleSelect(opp)}>
-                        <td className="px-3 py-1.5 font-medium">{opp.name}</td>
+                        <td className="px-3 py-1.5 font-medium">
+                          {opp.name}
+                          {(existingLinks[opp.id] || []).some((r) => r.id !== record.id) && (
+                            <span
+                              className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-amber-500/20 text-amber-500 border border-amber-500/40"
+                              title={`Already linked to: ${(existingLinks[opp.id] || [])
+                                .filter((r) => r.id !== record.id)
+                                .map((r) => r.address)
+                                .join(', ')}`}
+                            >
+                              LINKED
+                            </span>
+                          )}
+                        </td>
+                        <td className={`px-3 py-1.5 ${cls.sub}`}>{opp.pipelineName || '-'}</td>
                         <td className={`px-3 py-1.5 ${cls.sub}`}>{opp.stageName || '-'}</td>
                         <td className="px-3 py-1.5">{opp.assignedBA || '-'}</td>
                         <td className="px-3 py-1.5">{opp.totalPurchasePrice || '-'}</td>
@@ -427,7 +509,7 @@ export default function EoiLinkModal({
                     ))}
                     {filteredOpps.length === 0 && (
                       <tr>
-                        <td colSpan={5} className={`px-3 py-4 text-center ${cls.sub}`}>
+                        <td colSpan={6} className={`px-3 py-4 text-center ${cls.sub}`}>
                           No opportunities match{nextTier ? ' — try widening the search' : ''}.
                         </td>
                       </tr>
@@ -468,8 +550,59 @@ export default function EoiLinkModal({
                 <span className={cls.label}>Client (opportunity)</span>
                 <span className="font-medium">{selected?.name || record.clientClosed || '-'}</span>
 
-                <span className={cls.label}>Opportunity stage</span>
-                <span className={cls.sub}>{selected?.stageName || '-'}</span>
+                {linkLoad === 'missing' && (
+                  <div className="col-span-2 rounded border border-red-500 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">
+                    <strong>This link is broken.</strong> GHL has no opportunity with ID{' '}
+                    <span className="font-mono">{record.linkedOpportunityId}</span> — it has probably been
+                    deleted. Changes cannot be confirmed against it. Use <strong>← Reassign</strong> to link the
+                    correct opportunity, or <strong>Remove client / Speculative</strong> to clear it.
+                  </div>
+                )}
+
+                {duplicateLinks.length > 0 && (
+                  <div className="col-span-2 rounded border border-amber-500 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-300">
+                    <strong>This opportunity is already linked to another property:</strong>
+                    <ul className="list-disc ml-4 mt-1">
+                      {duplicateLinks.map((r) => (
+                        <li key={r.id}>
+                          {r.address || r.id}
+                          {r.status ? ` — ${r.status}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                    <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={dupeAcknowledged}
+                        onChange={(e) => setDupeAcknowledged(e.target.checked)}
+                      />
+                      <span>
+                        One client buying two properties normally means two opportunities. Tick to link it
+                        to this property as well.
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                {linkLoad === 'error' && (
+                  <div className="col-span-2 rounded border border-amber-500 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-300">
+                    <strong>Could not reach GHL</strong> to load the linked opportunity — often a temporary
+                    network problem. Try again in a few minutes.{' '}
+                    <button type="button" onClick={loadLinkedOpportunity} className="underline font-medium">
+                      Retry now
+                    </button>
+                    <br />
+                    You can still edit the values below (they save to the property record), but the Assigned BA
+                    will <strong>not</strong> be written back to the opportunity until it loads.
+                  </div>
+                )}
+
+                <span className={cls.label}>Pipeline / stage</span>
+                <span className={cls.sub}>
+                  {selected?.pipelineName || selected?.stageName
+                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' — ')
+                    : '-'}
+                </span>
 
                 <span className={cls.label}>Assigned BA *</span>
                 <div>
@@ -568,7 +701,7 @@ export default function EoiLinkModal({
                 )}
               </div>
               {submitError && <span className="text-[10px] text-red-400">{submitError}</span>}
-              <button onClick={handleConfirm} disabled={submitting || !editDateIso || baEmpty || (!selected && !isSpeculative)} className={cls.btnPrimary}>
+              <button onClick={handleConfirm} disabled={submitting || !editDateIso || baEmpty || linkLoad === 'loading' || linkLoad === 'missing' || (duplicateLinks.length > 0 && !dupeAcknowledged) || (!selected && !isSpeculative)} className={cls.btnPrimary}>
                 {submitting ? 'Saving...' : (isEdit ? 'Confirm changes' : 'Confirm & Link')}
               </button>
             </div>

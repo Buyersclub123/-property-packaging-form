@@ -207,6 +207,11 @@ export default function DealSheetPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string>('');
+  // Time of the last successful sync with GHL — updated by the full load AND by
+  // each successful 15s poll, so it means the same thing as the timestamp in
+  // the Contract Team Reporting tool.
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Sort state
   const [sortColumn, setSortColumn] = useState<keyof DealRecord>('sortKey');
@@ -336,7 +341,7 @@ export default function DealSheetPage() {
   // (saves Vercel compute / GHL rate limit from tabs left open overnight).
   // On resume the poll uses its old timestamp, so it naturally catches up on
   // any changes that happened while paused.
-  const { isPaused: pollPaused } = useAutoRefreshPause(() => {});
+  const { isPaused: pollPaused, pausedByIdle } = useAutoRefreshPause(() => {});
   const pollPausedRef = useRef(pollPaused);
   pollPausedRef.current = pollPaused;
 
@@ -354,6 +359,8 @@ export default function DealSheetPage() {
       try {
         const res = await fetch(`/api/deal-sheet/changes?since=${lastPollTimestamp.current}`);
         if (!res.ok) return;
+        // Successful round-trip to GHL's change feed, changes or not.
+        setLastRefresh(new Date());
         const data = await res.json();
         const changes: { recordId: string; timestamp: number }[] = data.changes || [];
         if (changes.length === 0) return;
@@ -407,6 +414,7 @@ export default function DealSheetPage() {
 
   const fetchData = async (statuses?: string) => {
     setLoading(true);
+    setRefreshing(true);
     setError(null);
     const statusParam = statuses ?? activeStatuses;
     try {
@@ -420,10 +428,12 @@ export default function DealSheetPage() {
       const data = await res.json();
       setRecords(data.records);
       setFetchedAt(data.fetchedAt);
+      setLastRefresh(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -866,6 +876,20 @@ export default function DealSheetPage() {
     const ids = idFilter.split(/[,\s\n]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
     return new Set(ids);
   }, [idFilter]);
+
+  // opportunityId -> property records already linked to it. Built from all
+  // loaded records (not the filtered view) so the EOI modal can warn when an
+  // opportunity is about to be linked to a second property.
+  const existingOpportunityLinks = useMemo(() => {
+    const map: Record<string, { id: string; address: string; status: string }[]> = {};
+    for (const rec of records) {
+      const oppId = rec.linkedOpportunityId;
+      if (!oppId) continue;
+      if (!map[oppId]) map[oppId] = [];
+      map[oppId].push({ id: rec.id, address: rec.propertyAddress || '', status: rec.status || '' });
+    }
+    return map;
+  }, [records]);
 
   // Apply column filters (text + multi-select + ID list)
   const filteredRecords = useMemo(() => {
@@ -1314,16 +1338,24 @@ export default function DealSheetPage() {
               {syncMessage}
             </span>
           )}
-          {fetchedAt && (
-            <span className="text-xs opacity-50">
-              {new Date(fetchedAt).toLocaleTimeString()}
+          {pausedByIdle && (
+            <span className="px-2 py-1 rounded text-xs bg-amber-600 text-white" title="No activity for 30 minutes. Move the mouse or press a key to resume.">
+              Auto-refresh paused — click to resume
+            </span>
+          )}
+          {(lastRefresh || fetchedAt) && (
+            <span
+              className="text-xs opacity-50"
+              title="Last successful sync with GHL (polls every 15s)"
+            >
+              {(lastRefresh || new Date(fetchedAt)).toLocaleTimeString()}
             </span>
           )}
           <button
             onClick={() => fetchData()}
             className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
           >
-            Refresh
+            {refreshing ? '...' : 'Refresh'}
           </button>
 
           {/* Theme toggle */}
@@ -1857,6 +1889,7 @@ export default function DealSheetPage() {
           record={eoiModalRecord}
           mode={eoiModalMode}
           theme={theme}
+          existingLinks={existingOpportunityLinks}
           onLink={handleEoiLink}
           onUpdate={handleEoiUpdate}
           onSpeculative={handleEoiSpeculative}
