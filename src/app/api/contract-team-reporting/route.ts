@@ -152,7 +152,7 @@ async function fetchPipelineStages(): Promise<void> {
       for (const pipeline of data.pipelines) {
         if (pipeline.stages) {
           for (const stage of pipeline.stages) {
-            stageNameCache[stage.id] = stage.name;
+            stageNameCache[stage.id] = (stage.name || '').trim();
           }
         }
       }
@@ -359,6 +359,8 @@ function transformOpportunity(
     partnerName: customFieldValues['partnerName'] || '',
     partnerEmail: customFieldValues['partnerEmail'] || '',
     partnerPhone: customFieldValues['partnerPhone'] || '',
+    smsfName: customFieldValues['smsfName'] || '',
+    trustName: customFieldValues['trustName'] || '',
     stage: stageName,
   };
 

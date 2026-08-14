@@ -38,7 +38,7 @@ export async function GET() {
       .map((p: { id: string; name: string; stages?: { id: string; name: string }[] }) => ({
         id: p.id,
         name: p.name,
-        stages: (p.stages || []).map((s) => ({ id: s.id, name: s.name })),
+        stages: (p.stages || []).map((s) => ({ id: s.id, name: (s.name || '').trim() })),
       }));
     return NextResponse.json({ pipelines });
   } catch (error) {

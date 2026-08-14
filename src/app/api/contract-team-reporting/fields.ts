@@ -59,6 +59,8 @@ export const FIELD_MAP: Record<string, string> = {
   'xFKbtz7Lt1X2nNTeFSSH': 'partnerName',
   'd0iUirsqy4kdUVMpHLfD': 'partnerEmail',
   'gpStrUSjZVHE4xyolRvH': 'partnerPhone',
+  'wWJMsF5GadaOEEVuPsGP': 'smsfName',
+  'EbDMmXJTBxkkWFBDChy5': 'trustName',
 };
 
 // Reverse map: friendly name → field ID
@@ -3070,6 +3072,8 @@ const OPPORTUNITY_FIELD_LABELS: Record<string, string> = {
   partnerName: 'Partner Name',
   partnerEmail: 'Partner Email',
   partnerPhone: 'Partner Phone',
+  smsfName: 'SMSF Name',
+  trustName: 'TRUST Name',
   contactEmail: 'Contact Email',
   contactPhone: 'Contact Phone',
   contactName: 'Contact Name',

@@ -334,6 +334,7 @@ const FULL_FC_COLUMNS: ColumnDef[] = [
   { key: 'pipelineName', label: 'Pipeline', width: 100 },
   { key: 'registeredAddress', label: 'Registered Address', width: 220 },
   { key: 'name', label: 'Opportunity Name', width: 220 },
+  { key: 'smsfName', label: 'SMSF Name', width: 140 },
   { key: 'owner', label: 'Owner', width: 120 },
   { key: 'followers', label: 'Followers', width: 160 },
   { key: 'assignedBA', label: 'Assigned BA', width: 120 },
@@ -372,6 +373,7 @@ const SETTLEMENT_COLUMNS: ColumnDef[] = [
   { key: 'pipelineName', label: 'Pipeline', width: 100 },
   { key: 'registeredAddress', label: 'Registered Address', width: 220 },
   { key: 'name', label: 'Opportunity Name', width: 220 },
+  { key: 'smsfName', label: 'SMSF Name', width: 140 },
   { key: 'confirmedSettlementDate', label: 'Confirmed Settlement Date', width: 120 },
   { key: 'owner', label: 'Owner', width: 120 },
   { key: 'followers', label: 'Followers', width: 160 },
@@ -725,8 +727,8 @@ function describeView(view: ViewDef): string {
 function applyViewFilters(records: OpportunityRecord[], filters: ViewFilter[]): OpportunityRecord[] {
   return records.filter((record) =>
     filters.every((f) => {
-      const cellValue = (record[f.field] || '').toLowerCase();
-      const filterValue = f.value.toLowerCase();
+      const cellValue = (record[f.field] || '').toLowerCase().trim();
+      const filterValue = f.value.toLowerCase().trim();
       switch (f.operator) {
         case 'equals':
           return cellValue === filterValue;
@@ -966,6 +968,36 @@ export default function ContractTeamReportingPage() {
   const [builderScope, setBuilderScope] = useState<'public' | 'personal'>('personal');
   const [builderSaving, setBuilderSaving] = useState(false);
   const [builderColorCol, setBuilderColorCol] = useState<string | null>(null);
+  // Field filters inherited from the view you started from (e.g. Type of
+  // Property = Established on the B&P view). Shown in the builder so they can
+  // be removed — otherwise they'd silently carry over into the new view.
+  const [builderExtraFilters, setBuilderExtraFilters] = useState<ViewFilter[]>([]);
+  // Draft mode: started from "+ New Report" — a clean slate not tied to any view
+  const [builderDraft, setBuilderDraft] = useState(false);
+
+  // Start a brand-new report from scratch: minimal columns, nothing inherited
+  const startNewReport = useCallback(() => {
+    setBuilderDraft(true);
+    setColumns([
+      { key: 'name', label: 'Opportunity Name', width: 200 },
+      { key: 'pipelineName', label: 'Pipeline', width: 100 },
+      { key: 'pipelineStage', label: 'Pipeline Stage', width: 130 },
+      { key: 'registeredAddress', label: 'Registered Address', width: 200 },
+      { key: 'assignedBA', label: 'Assigned BA', width: 120 },
+    ]);
+    setBuilderPipelines(new Set());
+    setBuilderStages(new Set());
+    setBuilderExtraFilters([]);
+    setBuilderName('');
+    setBuilderSection('Custom');
+    setExcludedFilters({});
+    setTextExcludeFilters({});
+    setFilterSearch({});
+    setActivePreset('none');
+    setSortColumn('name');
+    setSortDirection('asc');
+    setShowViewBuilder(true);
+  }, []);
 
   // Fetch pipelines + live stages when the builder opens
   useEffect(() => {
@@ -977,8 +1009,9 @@ export default function ContractTeamReportingPage() {
   }, [showViewBuilder, ghlPipelines.length]);
 
   // Initialise builder selections from the active view when opened
+  // (skipped in draft mode — "+ New Report" already set a clean slate)
   useEffect(() => {
-    if (!showViewBuilder) return;
+    if (!showViewBuilder || builderDraft) return;
     setBuilderName(activeView.builtin ? '' : activeView.name);
     setBuilderSection(activeView.builtin ? 'Custom' : activeView.section);
     const pipelineFilter = activeView.filters.find((f) => f.field === 'pipelineId');
@@ -988,18 +1021,17 @@ export default function ContractTeamReportingPage() {
       setBuilderPipelines(new Set());
     }
     const stageFilter = activeView.filters.find((f) => f.field === 'pipelineStage' && f.operator === 'in');
-    setBuilderStages(stageFilter ? new Set(stageFilter.value.split(',').map((s) => s.trim())) : new Set());
+    setBuilderStages(stageFilter ? new Set(stageFilter.value.split(',').map((s) => s.trim()).filter(Boolean)) : new Set());
+    // Inherited field filters (everything that isn't pipeline/stage selection)
+    setBuilderExtraFilters(
+      activeView.filters.filter((f) => f.field !== 'pipelineId' && !(f.field === 'pipelineStage' && f.operator === 'in'))
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showViewBuilder, activeViewId]);
 
   function buildFiltersFromBuilder(): ViewFilter[] {
-    const filters: ViewFilter[] = [];
-    // Keep non-pipeline/stage filters from the active view (e.g. address contains)
-    for (const f of activeView.filters) {
-      if (f.field === 'pipelineId') continue;
-      if (f.field === 'pipelineStage' && f.operator === 'in') continue;
-      filters.push(f);
-    }
+    // Inherited filters the user has NOT removed in the builder
+    const filters: ViewFilter[] = [...builderExtraFilters];
     const pipelineIds = Array.from(builderPipelines);
     if (pipelineIds.length > 0 && pipelineIds.length < 4) {
       filters.push(
@@ -1008,12 +1040,26 @@ export default function ContractTeamReportingPage() {
           : { field: 'pipelineId', operator: 'in', value: pipelineIds.join(', ') }
       );
     }
-    const stages = Array.from(builderStages);
+    // Trim + dedupe stage names (some GHL stage names carry trailing spaces)
+    const stages = Array.from(new Set(Array.from(builderStages).map((s) => s.trim()).filter(Boolean)));
     if (stages.length > 0) {
       filters.push({ field: 'pipelineStage', operator: 'in', value: stages.join(', ') });
     }
     return filters;
   }
+
+  // LIVE PREVIEW: while the builder is open (or building a new report from
+  // scratch) the grid reflects the builder's selections immediately — you see
+  // exactly what the view will show before saving it.
+  const effectiveView: ViewDef = useMemo(() => {
+    if (!showViewBuilder && !builderDraft) return activeView;
+    return {
+      ...activeView,
+      name: builderDraft ? (builderName.trim() || 'New Report (unsaved)') : activeView.name,
+      filters: buildFiltersFromBuilder(),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showViewBuilder, builderDraft, activeView, builderName, builderPipelines, builderStages, builderExtraFilters]);
 
   // Persist a view definition to the right store (public = Redis, personal = localStorage)
   async function persistView(view: ViewDef, scope: 'public' | 'personal'): Promise<boolean> {
@@ -1057,6 +1103,7 @@ export default function ContractTeamReportingPage() {
         sortDir: sortDirection,
       };
       if (await persistView(view, builderScope)) {
+        setBuilderDraft(false);
         setActiveViewId(view.id);
         localStorage.setItem('ctr-view-id', view.id);
         setShowViewBuilder(false);
@@ -1152,6 +1199,7 @@ export default function ContractTeamReportingPage() {
   const [draggedViewId, setDraggedViewId] = useState<string | null>(null);
 
   const selectView = useCallback((view: ViewDef) => {
+    setBuilderDraft(false);
     setActiveViewId(view.id);
     localStorage.setItem('ctr-view-id', view.id);
     setColumns(view.columns);
@@ -1288,11 +1336,20 @@ export default function ContractTeamReportingPage() {
     localStorage.setItem('ctr-columns', JSON.stringify(columns));
   }, [columns]);
 
+  // Internal duplicate keys hidden from the column chooser (the API returns
+  // these twice under different names for backwards compatibility):
+  //   opportunityName = duplicate of name ("Opportunity Name")
+  //   stage           = duplicate of pipelineStage
+  //   assignedTo      = duplicate of owner (both resolve to the opportunity owner)
+  const CHOOSER_HIDDEN_KEYS = new Set(['opportunityName', 'stage', 'assignedTo']);
+
   // All available fields for the report builder (union of record keys)
   const allAvailableKeys = useMemo(() => {
     const keys = new Set<string>();
     records.forEach((r) => Object.keys(r).forEach((k) => keys.add(k)));
+    CHOOSER_HIDDEN_KEYS.forEach((k) => keys.delete(k));
     return Array.from(keys).sort((a, b) => getReportFieldLabel(a).localeCompare(getReportFieldLabel(b)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [records]);
 
   const [columnMenuSearch, setColumnMenuSearch] = useState('');
@@ -1502,9 +1559,9 @@ export default function ContractTeamReportingPage() {
     return Array.from(values).sort();
   }, [records]);
 
-  // Apply filters
+  // Apply filters (effectiveView = live builder preview when it's open)
   const filteredRecords = useMemo(() => {
-    const viewFiltered = applyViewFilters(records, activeView.filters);
+    const viewFiltered = applyViewFilters(records, effectiveView.filters);
     return viewFiltered.filter((record) => {
       // Preset filter logic
       if (activePreset === 'blankPropertyType') {
@@ -1550,7 +1607,7 @@ export default function ContractTeamReportingPage() {
       });
       return passesTextExclude;
     });
-  }, [records, excludedFilters, textExcludeFilters, activePreset, activeView]);
+  }, [records, excludedFilters, textExcludeFilters, activePreset, effectiveView]);
 
   // Apply sort
   const sortedRecords = useMemo(() => {
@@ -1854,6 +1911,17 @@ export default function ContractTeamReportingPage() {
             )}
           </div>
 
+          {/* New Report — clean slate, nothing inherited */}
+          {showColumnBuilder && (
+            <button
+              onClick={startNewReport}
+              className={`px-2 py-1 rounded text-xs ${builderDraft ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-500'}`}
+              title="Start a brand-new report from scratch — no columns, filters or pipelines inherited from the current view"
+            >
+              + New Report
+            </button>
+          )}
+
           {/* View Builder (single panel: columns, pipelines, colours, save)
               — hidden; Shift+double-click ⚙ to reveal */}
           {showColumnBuilder && (
@@ -1867,8 +1935,10 @@ export default function ContractTeamReportingPage() {
             {showViewBuilder && (
               <div className={`absolute top-full left-0 mt-1 w-[420px] max-h-[80vh] overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-3`}>
                 <div className={`text-[9px] ${t.headerText} opacity-70 mb-2`}>
-                  Editing layout of: <span className="font-bold">{activeView.name}</span>
-                  {hasUnsavedViewChanges && <span className="text-amber-400 font-bold"> — unsaved changes</span>}
+                  {builderDraft
+                    ? <span className="font-bold text-amber-400">Building a NEW report (not saved yet)</span>
+                    : <>Editing layout of: <span className="font-bold">{activeView.name}</span>
+                      {hasUnsavedViewChanges && <span className="text-amber-400 font-bold"> — unsaved changes</span>}</>}
                 </div>
 
                 {/* 1. Columns */}
@@ -1984,6 +2054,32 @@ export default function ContractTeamReportingPage() {
                   </div>
                 ))}
 
+                {/* Inherited field filters (carried over from the starting view) */}
+                {builderExtraFilters.length > 0 && (
+                  <>
+                    <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>
+                      FIELD FILTERS (inherited from &quot;{activeView.name}&quot;)
+                    </div>
+                    <div className={`text-[9px] ${t.headerText} opacity-60 mb-1`}>
+                      These carried over from the view you started from — remove any that don&apos;t belong in the new view.
+                    </div>
+                    {builderExtraFilters.map((f, idx) => (
+                      <div key={idx} className={`flex items-center gap-1.5 text-[10px] ${t.headerText} py-0.5`}>
+                        <button
+                          onClick={() => setBuilderExtraFilters((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-red-400 hover:underline px-1"
+                          title="Remove this filter"
+                        >
+                          ✕
+                        </button>
+                        <span className="truncate">
+                          {getReportFieldLabel(f.field)} {f.operator} &quot;{f.value}&quot;
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
+
                 {/* Column colours & end states */}
                 <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>3. COLUMN COLOURS & END STATES</div>
                 {columns.map((col) => (
@@ -2068,11 +2164,11 @@ export default function ContractTeamReportingPage() {
                     </button>
                     <button
                       onClick={updateActiveView}
-                      disabled={builderSaving || activeView.builtin}
-                      title={activeView.builtin ? 'Built-in views cannot be overwritten — use Save as NEW view instead' : `Overwrite "${activeView.name}" with the current layout`}
+                      disabled={builderSaving || activeView.builtin || builderDraft}
+                      title={builderDraft ? 'This is a new report — use Save as NEW view' : activeView.builtin ? 'Built-in views cannot be overwritten — use Save as NEW view instead' : `Overwrite "${activeView.name}" with the current layout`}
                       className="flex-1 px-2 py-1.5 text-[10px] bg-green-700 text-white rounded hover:bg-green-600 disabled:opacity-40 font-medium"
                     >
-                      {builderSaving ? 'Saving…' : `Update "${activeView.name}"`}
+                      {builderSaving ? 'Saving…' : builderDraft ? 'Update (n/a — new report)' : `Update "${activeView.name}"`}
                     </button>
                   </div>
                   {activeView.builtin && (
@@ -2213,10 +2309,14 @@ export default function ContractTeamReportingPage() {
       </div>
 
 
-      {/* View description — computed 100% from the view config + API rules (never hardcoded per view) */}
+      {/* View description — computed 100% from the view config + API rules (never hardcoded per view).
+          Shows the LIVE builder preview while building. */}
       <div className={`px-4 py-0.5 text-[10px] ${t.headerText} opacity-70 border-b ${t.cellBorder}`}>
-        <span className="font-medium">View: {activeView.name}</span>
-        {' | '}{describeView(activeView)}
+        <span className="font-medium">
+          View: {effectiveView.name}
+          {(showViewBuilder || builderDraft) && <span className="text-amber-400"> (live preview)</span>}
+        </span>
+        {' | '}{describeView(effectiveView)}
         {activePreset !== 'none' && (
           <span>
             {' | Quick filter: '}
