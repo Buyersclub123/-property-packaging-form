@@ -31,7 +31,7 @@ export async function GET(
 
     // Fetch single record from GHL
     const response = await fetch(
-      `${GHL_API_BASE_URL}/${GHL_OBJECT_ID}/records/${id}?locationId=${GHL_LOCATION_ID}`,
+      `${GHL_API_BASE_URL}/${GHL_OBJECT_ID}/records/${id}?locationId=${GHL_LOCATION_ID}&_t=${Date.now()}`,
       {
         method: 'GET',
         headers: {

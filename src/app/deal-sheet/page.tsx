@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
+import EoiLinkModal, { EoiLinkPayload, EoiUpdatePayload } from './EoiLinkModal';
 
 // Set page title
 if (typeof document !== 'undefined') document.title = 'Deal Sheet';
@@ -25,6 +26,7 @@ interface DealRecord {
   priceGroup: string;
   baMessage: string;
   acceptAcqTotal: string;
+  closePrefill: string;
   config: string;
   currentRent: string;
   appraisedRent: string;
@@ -39,6 +41,7 @@ interface DealRecord {
   closingPrice: string;
   clientClosed: string;
   closingDate: string;
+  linkedOpportunityId: string;
   sortKey: string;
   folderLink: string;
   pdfLink: string;
@@ -157,6 +160,10 @@ const PRESET_VIEWS: SavedView[] = [
 // ============================================================================
 // COLOR CODING LOGIC
 // ============================================================================
+
+// Linked-client column group (Closing BA / Close $ / Client / Close Date) —
+// tinted light blue to mark them as one unit (D1 F7; edit button is D2).
+const LINKED_CLIENT_COLS = new Set<keyof DealRecord>(['closingBA', 'closingPrice', 'clientClosed', 'closingDate']);
 
 function getStatusColor(status: string): string {
   if (status.startsWith('01')) return 'bg-[#C7F8CB]';
@@ -559,8 +566,67 @@ export default function DealSheetPage() {
     setShowViewMenu(false);
   };
 
+  const SAFE_EOI_STATUSES = ['02_eoi', '03_contr_exchanged'];
+
+  function hasLinkedData(record: DealRecord): boolean {
+    return !!(
+      record.linkedOpportunityId ||
+      record.clientClosed ||
+      record.closingBA ||
+      record.closingPrice ||
+      record.closingDate
+    );
+  }
+
+  function rawStatus(display: string): string {
+    return display.toLowerCase().replace(/ /g, '_').replace(/'/g, '');
+  }
+
+  // Archive and clear linked fields when moving away from a linked/speculative EOI record.
+  // Safe transitions: 02 EOI <-> 03 Contr Exchanged retain the data (F11/F12 Option B).
+  const clearAndArchiveStatus = async (recordId: string, newStatus: string): Promise<boolean> => {
+    setUpdatingStatusId(recordId);
+    try {
+      const res = await fetch('/api/deal-sheet/clear-and-archive', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordId, toStatus: newStatus }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(`Failed to update: ${data.error}`);
+        return false;
+      }
+      const data = await res.json();
+      recentlyUpdatedIds.current.set(recordId, Date.now());
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.id === recordId
+            ? {
+                ...r,
+                status: newStatus.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+                clientClosed: '',
+                closingBA: '',
+                closingPrice: '',
+                closingDate: '',
+                linkedOpportunityId: '',
+              }
+            : r
+        )
+      );
+      setEditingStatusId(null);
+      if (data.warning) alert(data.warning);
+      return true;
+    } catch {
+      alert('Failed to archive and clear linked fields');
+      return false;
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  };
+
   // Update a single record's status in GHL
-  const updateRecordStatus = async (recordId: string, newStatus: string) => {
+  const updateRecordStatus = async (recordId: string, newStatus: string): Promise<boolean> => {
     setUpdatingStatusId(recordId);
     try {
       const res = await fetch('/api/deal-sheet/update-status', {
@@ -571,7 +637,7 @@ export default function DealSheetPage() {
       if (!res.ok) {
         const data = await res.json();
         alert(`Failed to update: ${data.error}`);
-        return;
+        return false;
       }
       // Protect this record from poller overwrites for 30s
       recentlyUpdatedIds.current.set(recordId, Date.now());
@@ -584,10 +650,172 @@ export default function DealSheetPage() {
         )
       );
       setEditingStatusId(null);
+      return true;
     } catch {
       alert('Failed to update status');
+      return false;
     } finally {
       setUpdatingStatusId(null);
+    }
+  };
+
+  // ---- EOI link / edit modal ----
+  const [eoiModalRecord, setEoiModalRecord] = useState<DealRecord | null>(null);
+  const [eoiModalMode, setEoiModalMode] = useState<'create' | 'edit'>('create');
+
+  const handleEoiLink = async (payload: EoiLinkPayload): Promise<boolean> => {
+    if (!eoiModalRecord) return false;
+    const recordId = eoiModalRecord.id;
+    try {
+      const res = await fetch('/api/deal-sheet/link-opportunity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId,
+          opportunityId: payload.opportunityId,
+          opportunityName: payload.opportunityName,
+          assignedBA: payload.assignedBA,
+          totalPurchasePrice: payload.totalPurchasePrice,
+          closingDate: payload.closingDate,
+          status: '02_eoi',
+          writeBaToOpportunity: payload.writeBaToOpportunity,
+        }),
+      });
+      if (!res.ok) return false;
+      const resData = await res.json();
+      if (resData.baWriteBackOk !== true) {
+        alert('Linked OK, but writing the Assigned BA back to the opportunity failed — update it in GHL manually.');
+      }
+      // Protect this record from poller overwrites for 30s
+      recentlyUpdatedIds.current.set(recordId, Date.now());
+      const priceNum = parseFloat(payload.totalPurchasePrice);
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.id === recordId
+            ? {
+                ...r,
+                status: '02 Eoi',
+                clientClosed: payload.opportunityName,
+                closingBA: payload.assignedBA,
+                closingPrice: isNaN(priceNum) ? payload.totalPurchasePrice : '$' + priceNum.toLocaleString('en-AU'),
+                closingDate: payload.closingDate,
+                linkedOpportunityId: payload.opportunityId,
+              }
+            : r
+        )
+      );
+      setEoiModalRecord(null);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Speculative EOI (F4): sets the status AND flags the Client field with
+  // "SPECULATIVE EOI" so the sheet and the unlinked-EOI view both show it.
+  const handleEoiSpeculative = async (): Promise<boolean> => {
+    if (!eoiModalRecord) return false;
+    const recordId = eoiModalRecord.id;
+    try {
+      if (eoiModalMode === 'edit') {
+        // F13 — linked/speculative record being removed to speculative (status unchanged)
+        const res = await fetch('/api/deal-sheet/update-client', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId,
+            transitionType: eoiModalRecord.linkedOpportunityId ? 'reverted_to_speculative' : 'client_removed',
+            opportunityId: '',
+            opportunityName: '',
+            assignedBA: '',
+            totalPurchasePrice: '',
+            closingDate: '',
+          }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        recentlyUpdatedIds.current.set(recordId, Date.now());
+        setRecords((prev) =>
+          prev.map((r) =>
+            r.id === recordId
+              ? {
+                  ...r,
+                  clientClosed: 'SPECULATIVE EOI',
+                  closingBA: '',
+                  closingPrice: '',
+                  closingDate: '',
+                  linkedOpportunityId: '',
+                }
+              : r
+          )
+        );
+        if (data.baWriteBackOk === false || data.archiveOk === false) {
+          alert('Client removed, but the opportunity/archive write-back reported a non-fatal issue.');
+        }
+        setEoiModalRecord(null);
+        return true;
+      }
+      const res = await fetch('/api/deal-sheet/update-status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordId, status: '02_eoi', clientClosed: 'SPECULATIVE EOI' }),
+      });
+      if (!res.ok) return false;
+      recentlyUpdatedIds.current.set(recordId, Date.now());
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.id === recordId ? { ...r, status: '02 Eoi', clientClosed: 'SPECULATIVE EOI' } : r
+        )
+      );
+      setEoiModalRecord(null);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // F13 — update an existing link (edit, reassign, remove client)
+  const handleEoiUpdate = async (payload: EoiUpdatePayload): Promise<boolean> => {
+    if (!eoiModalRecord) return false;
+    const recordId = eoiModalRecord.id;
+    try {
+      const res = await fetch('/api/deal-sheet/update-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId,
+          ...payload,
+        }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      recentlyUpdatedIds.current.set(recordId, Date.now());
+      const priceNum = parseFloat(payload.totalPurchasePrice);
+      const priceDisplay = isNaN(priceNum) ? payload.totalPurchasePrice : '$' + priceNum.toLocaleString('en-AU');
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.id === recordId
+            ? {
+                ...r,
+                clientClosed: payload.opportunityName,
+                closingBA: payload.assignedBA,
+                closingPrice: priceDisplay,
+                closingDate: payload.closingDate,
+                linkedOpportunityId: payload.opportunityId,
+              }
+            : r
+        )
+      );
+      if (data.baWriteBackOk === false) {
+        alert('Updated the property record, but writing the Assigned BA back to the opportunity failed.');
+      }
+      if (data.archiveOk === false) {
+        alert('Updated the property record, but the client-change archive could not be saved.');
+      }
+      setEoiModalRecord(null);
+      return true;
+    } catch {
+      return false;
     }
   };
 
@@ -757,6 +985,15 @@ export default function DealSheetPage() {
             className="px-2 py-1 text-[10px] font-medium rounded bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
           >
             Reports
+          </a>
+          <a
+            href="/deal-sheet/unlinked-eoi"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2 py-1 text-[10px] font-medium rounded bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+            title="EOI/Exchanged records with no linked opportunity"
+          >
+            Unlinked EOI
           </a>
         </div>
 
@@ -1144,7 +1381,7 @@ export default function DealSheetPage() {
                   onDragStart={() => handleDragStart(idx)}
                   onDragOver={(e) => handleDragOver(e, idx)}
                   onDragEnd={handleDragEnd}
-                  className={`relative ${t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} cursor-move select-none whitespace-nowrap`}
+                  className={`relative ${LINKED_CLIENT_COLS.has(col.key) ? (theme === 'dark' ? 'bg-blue-950' : 'bg-blue-100') : t.headerBg} border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} cursor-move select-none whitespace-nowrap`}
                   style={{ width: col.width, minWidth: col.width, maxWidth: col.width }}
                 >
                   <div
@@ -1375,6 +1612,7 @@ export default function DealSheetPage() {
                   if (col.key === 'type') cellClass += ` ${getTypeColor(value)}`;
                   if (col.key === 'asking') cellClass += ` ${getAskingColor(value)}`;
                   if (col.key === 'packagerApproved' || col.key === 'qaApproved') cellClass += ` ${getApprovedColor(value)}`;
+                  if (LINKED_CLIENT_COLS.has(col.key)) cellClass += theme === 'dark' ? ' bg-blue-900/30' : ' bg-blue-50';
 
                   // TBC red highlighting
                   const tbcStyle = isTBC(value) ? { backgroundColor: '#FFCCCC', color: '#000000' } : undefined;
@@ -1398,7 +1636,38 @@ export default function DealSheetPage() {
                         <select
                           autoFocus
                           defaultValue={value.toLowerCase().replace(/ /g, '_').replace(/'/g, '')}
-                          onChange={(e) => updateRecordStatus(record.id, e.target.value)}
+                          onChange={(e) => {
+                            const newStatus = e.target.value;
+                            const fromStatus = rawStatus(record.status);
+                            const linked = hasLinkedData(record);
+                            const safe = SAFE_EOI_STATUSES.includes(fromStatus) && SAFE_EOI_STATUSES.includes(newStatus);
+
+                            // Moving to 02 EOI on an unlinked record → open the
+                            // opportunity picker instead of saving immediately.
+                            if (newStatus === '02_eoi' && !record.linkedOpportunityId) {
+                              setEditingStatusId(null);
+                              setEoiModalMode('create');
+                              setEoiModalRecord(record);
+                              return;
+                            }
+
+                            // Moving away from a linked/speculative record:
+                            // warn, archive the stripped data, and clear fields (F11/F12).
+                            if (!safe && linked && fromStatus !== newStatus) {
+                              const label = newStatus.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+                              const confirmed = window.confirm(
+                                `Changing this record to ${label} will remove the linked opportunity information. Do you want to continue?`
+                              );
+                              if (confirmed) {
+                                clearAndArchiveStatus(record.id, newStatus);
+                              } else {
+                                setEditingStatusId(null);
+                              }
+                              return;
+                            }
+
+                            updateRecordStatus(record.id, newStatus);
+                          }}
                           onBlur={() => setEditingStatusId(null)}
                           className="w-full text-[10px] bg-white text-black border rounded px-0.5"
                           disabled={updatingStatusId === record.id}
@@ -1423,6 +1692,31 @@ export default function DealSheetPage() {
                         </span>
                       );
                     }
+                  }
+
+                  // F13 — Client / Close $ / Closing BA cells on linked/speculative
+                  // rows: permanently visible pencil icon, double-click opens the
+                  // edit/reassign modal.
+                  if (
+                    (col.key === 'clientClosed' || col.key === 'closingPrice' || col.key === 'closingBA') &&
+                    (record.linkedOpportunityId || record.clientClosed)
+                  ) {
+                    const canEdit = !updatingStatusId;
+                    cellContent = (
+                      <div
+                        className="flex items-center justify-between gap-1 min-w-0 cursor-pointer"
+                        title="Double-click to change client, price, BA or make speculative"
+                        onClick={(e) => e.stopPropagation()}
+                        onDoubleClick={() => {
+                          if (!canEdit) return;
+                          setEoiModalMode('edit');
+                          setEoiModalRecord(record);
+                        }}
+                      >
+                        <span className="truncate">{value}</span>
+                        <span className="shrink-0 text-[10px] select-none">✎</span>
+                      </div>
+                    );
                   }
 
                   // Property Address → Portal link (when QA approved)
@@ -1507,7 +1801,8 @@ export default function DealSheetPage() {
                       }}
                       title={value}
                       onClick={(e) => {
-                        if (value) {
+                        // Status cells are edit-only (double-click) — no text popup (F2)
+                        if (value && col.key !== 'status') {
                           setExpandedCell({ recordId: record.id, colKey: col.key, value, x: e.clientX, y: e.clientY });
                         }
                       }}
@@ -1554,6 +1849,19 @@ export default function DealSheetPage() {
           </div>
           <div>{expandedCell.value}</div>
         </div>
+      )}
+
+      {/* EOI link / edit modal */}
+      {eoiModalRecord && (
+        <EoiLinkModal
+          record={eoiModalRecord}
+          mode={eoiModalMode}
+          theme={theme}
+          onLink={handleEoiLink}
+          onUpdate={handleEoiUpdate}
+          onSpeculative={handleEoiSpeculative}
+          onCancel={() => { setEoiModalRecord(null); setEoiModalMode('create'); }}
+        />
       )}
     </div>
   );

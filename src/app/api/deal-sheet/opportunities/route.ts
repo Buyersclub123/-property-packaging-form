@@ -35,6 +35,11 @@ const TIER_3_PIPELINE_IDS = [
 ];
 
 const STAGE_NAME_MAP: Record<string, string> = {
+  // Property Team - early stages (included by the v=2 Tier 1 whole-pipeline fetch)
+  'cd731ab3-ef71-4889-ad1b-4990da46eefd': 'On Hold',
+  'a4161b5f-9c79-4883-82fd-80efb6cb09e8': 'Sent to Property Team',
+  'eb93cb17-3ff1-49ed-83c3-d81d37510d1e': 'Buyer Brief Scheduled',
+  '1231b977-0f9c-4120-9f7e-631cb5111a6a': 'Buyer Brief sent for signature',
   // Property Team - Tier 1
   '5178d032-35d5-4b8e-8694-48a1afb0145a': '$300k-$400k | PERSONAL',
   '09e08409-928f-4a37-89a0-9b8b20fb58dc': '$300k-$400k | SMSF',
@@ -225,10 +230,18 @@ async function fetchPipelineOpportunities(
   return results;
 }
 
+// Two tier schemes coexist (do NOT "clean up" — see docs/deal-sheet-eoi-d1-brief.md):
+// default (no v param) = legacy scheme used by /deal-sheet/matching (T1 PT price brackets,
+// T2 PT later stages, T3 Contracts+Finance+Construction); v=2 = EOI-link-modal scheme
+// (T1 entire Property Team pipeline, T2 Contracts, T3 Finance+Construction).
+const CONTRACTS_PIPELINE_ID = 'RDd4Kczt5mEuUhHfRr7C';
+const V2_TIER_3_PIPELINE_IDS = ['zgBRaMnACpskyf1wHCEV', 'XMKCHlqekS7IU87PNLKB'];
+
 export async function GET(request: NextRequest) {
   try {
     const tierParam = request.nextUrl.searchParams.get('tier') || '1';
     const tier = parseInt(tierParam, 10);
+    const isV2 = request.nextUrl.searchParams.get('v') === '2';
 
     if (![1, 2, 3].includes(tier)) {
       return NextResponse.json(
@@ -239,7 +252,18 @@ export async function GET(request: NextRequest) {
 
     let opportunities: OpportunityResult[] = [];
 
-    if (tier === 1) {
+    if (isV2) {
+      if (tier === 1) {
+        opportunities = await fetchPipelineOpportunities(PROPERTY_TEAM_PIPELINE_ID);
+      } else if (tier === 2) {
+        opportunities = await fetchPipelineOpportunities(CONTRACTS_PIPELINE_ID);
+      } else {
+        const allResults = await Promise.all(
+          V2_TIER_3_PIPELINE_IDS.map((id) => fetchPipelineOpportunities(id))
+        );
+        opportunities = allResults.flat();
+      }
+    } else if (tier === 1) {
       opportunities = await fetchPipelineOpportunities(
         PROPERTY_TEAM_PIPELINE_ID,
         TIER_1_STAGE_IDS

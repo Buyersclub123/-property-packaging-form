@@ -17,7 +17,9 @@ const VALID_STATUSES = [
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { recordId, status } = body;
+    // clientClosed is optional — used by the speculative-EOI path to flag the
+    // record visibly (e.g. "SPECULATIVE EOI") in the Client field (D1 F4).
+    const { recordId, status, clientClosed } = body;
 
     if (!recordId || !status) {
       return NextResponse.json(
@@ -45,6 +47,7 @@ export async function PUT(request: NextRequest) {
       body: JSON.stringify({
         properties: {
           status: status,
+          ...(typeof clientClosed === 'string' ? { client_closed: clientClosed } : {}),
         },
       }),
     });

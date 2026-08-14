@@ -7,6 +7,11 @@ const LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 
 const VALID_STATUSES = ['02_eoi', '03_contr_exchanged'];
 
+// Opportunity "Assigned BA" custom field — written back when the user edits
+// the BA in the EOI link modal (the one deliberate opportunity write in D1;
+// general data push is D3). See docs/deal-sheet-eoi-d1-brief.md F6/F9.
+const ASSIGNED_BA_FIELD_ID = 'NXqFwEzo28k6lOkbyT5N';
+
 function getTodayAEST(): string {
   const now = new Date();
   const offsetMs = 10 * 60 * 60 * 1000;
@@ -28,6 +33,7 @@ export async function POST(request: NextRequest) {
       totalPurchasePrice,
       closingDate,
       status,
+      writeBaToOpportunity,
     } = body;
 
     if (!recordId || !opportunityId || !opportunityName || !status) {
@@ -85,6 +91,35 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
 
+    // Write the edited BA back to the opportunity's Assigned BA field (F6/F9).
+    // The CO write above already succeeded — a failure here is reported to the
+    // client as a warning, not a failed link.
+    let baWriteBackOk = true;
+    if (writeBaToOpportunity === true && assignedBA) {
+      try {
+        const oppUrl = `https://services.leadconnectorhq.com/opportunities/${opportunityId}?locationId=${LOCATION_ID}`;
+        const oppRes = await fetch(oppUrl, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${BEARER_TOKEN}`,
+            Version: '2021-07-28',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            customFields: [{ id: ASSIGNED_BA_FIELD_ID, field_value: assignedBA }],
+          }),
+        });
+        if (!oppRes.ok) {
+          const errorText = await oppRes.text();
+          console.error('Opportunity BA write-back failed:', oppRes.status, errorText);
+          baWriteBackOk = false;
+        }
+      } catch (oppErr) {
+        console.error('Opportunity BA write-back error:', oppErr);
+        baWriteBackOk = false;
+      }
+    }
+
     try {
       const redis = await getRedisClient();
       await redis.zAdd('recent_changes', { score: Date.now(), value: recordId });
@@ -92,7 +127,7 @@ export async function POST(request: NextRequest) {
       console.error('Redis recent_changes push failed (non-fatal):', redisErr);
     }
 
-    return NextResponse.json({ success: true, record: data });
+    return NextResponse.json({ success: true, baWriteBackOk, record: data });
   } catch (error) {
     console.error('Link opportunity error:', error);
     return NextResponse.json(

@@ -114,6 +114,10 @@ export function transformRecord(record: GHLRecord) {
 
   // Acceptable Acquisition / Total Price
   let acceptAcqTotal = '';
+  // Raw numeric CO total (unformatted) — used by the EOI link modal to prefill
+  // Close $ for fixed-price deal types (01/02/03). Empty for established
+  // (range, not a fixed price) — see D1 brief F3.
+  let closePrefill = '';
   const isEstablished =
     p.property_type && p.property_type.toLowerCase().includes('established');
 
@@ -132,8 +136,10 @@ export function transformRecord(record: GHLRecord) {
     if (hasValue(landPrice) && hasValue(buildPrice)) {
       const calculatedTotal = hasValue(total) ? total : String(parseFloat(landPrice || '0') + parseFloat(buildPrice || '0'));
       acceptAcqTotal = `Land: ${formatCurrency(landPrice)} | Build: ${formatCurrency(buildPrice)} | Total: ${formatCurrency(calculatedTotal)}`;
+      closePrefill = calculatedTotal;
     } else if (hasValue(total)) {
       acceptAcqTotal = `Total: ${formatCurrency(total)}`;
+      closePrefill = total || '';
     }
   }
 
@@ -251,6 +257,7 @@ export function transformRecord(record: GHLRecord) {
     priceGroup,
     baMessage,
     acceptAcqTotal,
+    closePrefill,
     config,
     currentRent,
     appraisedRent,
