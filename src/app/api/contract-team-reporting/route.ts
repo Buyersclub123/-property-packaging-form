@@ -431,7 +431,9 @@ export async function GET() {
       .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys))
       .filter((r) => {
         if (r.pipelineId === 'zgBRaMnACpskyf1wHCEV' && r.pipelineStage.toLowerCase() === 'settled') return false;
-        if (r.pipelineId === 'XMKCHlqekS7IU87PNLKB' && r.pipelineStage.toLowerCase() === 'handover') return false;
+        // Construction HANDOVER is NOT excluded here: Build Deposit Status has to
+        // include it to match the original report. Views that should leave it out
+        // (PM Intro Tracking, Full F&C) carry their own stage filter.
         return true;
       })
       .sort((a, b) => {

@@ -211,6 +211,12 @@ interface ColumnSettings {
 }
 
 type SortDirection = 'asc' | 'desc' | null;
+
+// One level of an Excel-style layered sort: "sort by A, then by D, then by G".
+interface SortLevel {
+  column: RecordKey;
+  dir: 'asc' | 'desc';
+}
 type Theme = 'dark' | 'light';
 
 // Column colour palette (translucent so they work on both themes)
@@ -320,9 +326,19 @@ interface ViewDef {
   section: ViewSection;
   filters: ViewFilter[];
   columns: ColumnDef[];
+  // sortBy/sortDir are the level-1 sort. They stay for backwards compatibility:
+  // views saved before layered sorting existed only have these two.
   sortBy: RecordKey;
   sortDir: SortDirection;
+  // Full layered sort, level 1 first. When present this wins over sortBy/sortDir.
+  sorts?: SortLevel[];
   builtin?: boolean;
+}
+
+// Read a view's sort as levels, falling back to the legacy single-column pair.
+function viewSortLevels(v: ViewDef): SortLevel[] {
+  if (v.sorts && v.sorts.length > 0) return v.sorts;
+  return v.sortDir ? [{ column: v.sortBy, dir: v.sortDir }] : [];
 }
 
 const FINANCE_PIPELINE_ID = 'zgBRaMnACpskyf1wHCEV';
@@ -530,6 +546,8 @@ const PRESET_VIEWS: ViewDef[] = [
       { field: 'typeOfProperty', operator: 'equals', value: 'Established' },
       { field: 'pipelineStage', operator: 'not equals', value: 'Settled' },
     ],
+    // Sorted by B&P Due Date at the contract team's request. This deliberately
+    // differs from the old config sheet, which sorted by Confirmed Settlement Date.
     sortBy: 'bpDueDate',
     sortDir: 'asc',
   },
@@ -539,7 +557,11 @@ const PRESET_VIEWS: ViewDef[] = [
     section: 'Standard' as ViewSection,
     builtin: true,
     columns: FULL_FC_COLUMNS,
-    filters: [],
+    // Full F&C = Finance + Construction. Matches the old extract: Settled is
+    // dropped API-side, HANDOVER is included.
+    filters: [
+      { field: 'pipelineId', operator: 'in', value: `${CONSTRUCTION_PIPELINE_ID},${FINANCE_PIPELINE_ID}` },
+    ],
     sortBy: 'confirmedSettlementDate',
     sortDir: 'asc',
   },
@@ -552,8 +574,13 @@ const PRESET_VIEWS: ViewDef[] = [
     filters: [
       { field: 'pipelineId', operator: 'equals', value: FINANCE_PIPELINE_ID },
     ],
+    // Two-level sort, as per the original config sheet.
     sortBy: 'confirmedSettlementDate',
     sortDir: 'asc',
+    sorts: [
+      { column: 'confirmedSettlementDate', dir: 'asc' },
+      { column: 'daysSinceStageChange', dir: 'asc' },
+    ],
   },
   {
     id: 'builtin-ocean-rise',
@@ -573,7 +600,10 @@ const PRESET_VIEWS: ViewDef[] = [
     section: 'Standard' as ViewSection,
     builtin: true,
     columns: BUILD_DEPOSIT_COLUMNS,
-    filters: [],
+    // Original report = Construction (incl. HANDOVER) + Finance (excl. Settled).
+    filters: [
+      { field: 'pipelineId', operator: 'in', value: `${CONSTRUCTION_PIPELINE_ID},${FINANCE_PIPELINE_ID}` },
+    ],
     sortBy: 'confirmedSettlementDate',
     sortDir: 'asc',
   },
@@ -595,12 +625,18 @@ const PRESET_VIEWS: ViewDef[] = [
     section: 'Standard' as ViewSection,
     builtin: true,
     columns: PM_INTRO_COLUMNS,
+    // Per the original config sheet: Construction pipeline, minus HANDOVER.
     filters: [
       { field: 'pipelineId', operator: 'equals', value: CONSTRUCTION_PIPELINE_ID },
-      { field: 'pipelineStage', operator: 'in', value: 'TILING, PLASTERING, PRACTICAL COMPLETION' },
+      { field: 'pipelineStage', operator: 'not contains', value: 'Handover' },
     ],
+    // Two-level sort, as per the original config sheet.
     sortBy: 'pipelineStage',
     sortDir: 'desc',
+    sorts: [
+      { column: 'pipelineStage', dir: 'desc' },
+      { column: 'daysSinceStageChange', dir: 'desc' },
+    ],
   },
   {
     id: 'builtin-huntly',
@@ -669,7 +705,6 @@ const ALL_PIPELINES: { id: string; name: string }[] = [
 // Stage exclusions baked into the API (route.ts) — keyed by pipeline id.
 const API_STAGE_EXCLUSIONS: Record<string, string> = {
   [FINANCE_PIPELINE_ID]: 'Settled',
-  [CONSTRUCTION_PIPELINE_ID]: 'Handover',
 };
 
 function describeView(view: ViewDef): string {
@@ -801,9 +836,11 @@ export default function ContractTeamReportingPage() {
     return username.split('.').map(w => w[0]?.toUpperCase() || '').join('');
   }, [userEmail]);
 
-  // Sort state
-  const [sortColumn, setSortColumn] = useState<RecordKey>('bpDueDate');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  // Sort state — layered, level 1 first (Excel-style "sort by A, then D, then G").
+  const [sortLevels, setSortLevels] = useState<SortLevel[]>([{ column: 'bpDueDate', dir: 'asc' }]);
+  // Level 1, for the places that only care about the primary sort.
+  const sortColumn: RecordKey | null = sortLevels[0]?.column ?? null;
+  const sortDirection: SortDirection = sortLevels[0]?.dir ?? null;
 
   // Preset filter
   type PresetFilter = 'none' | 'blankPropertyType' | 'blankBpDueDate' | 'blankBpRequested' | 'bpDueNext5' | 'settlementNext5';
@@ -812,6 +849,10 @@ export default function ContractTeamReportingPage() {
   // Filter state (Excel-style excluded values)
   const [excludedFilters, setExcludedFilters] = useState<Partial<Record<RecordKey, Set<string>>>>({});
   const [textExcludeFilters, setTextExcludeFilters] = useState<Partial<Record<RecordKey, string[]>>>({});
+  // "Show only rows containing" per column. Unlike the checkbox exclusions this
+  // states an intent rather than a list of values, so it survives new data and
+  // can be saved into a view.
+  const [textIncludeFilters, setTextIncludeFilters] = useState<Partial<Record<RecordKey, string>>>({});
   const [filterSearch, setFilterSearch] = useState<Partial<Record<RecordKey, string>>>({});
   const [openFilterDropdown, setOpenFilterDropdown] = useState<RecordKey | null>(null);
 
@@ -992,10 +1033,10 @@ export default function ContractTeamReportingPage() {
     setBuilderSection('Custom');
     setExcludedFilters({});
     setTextExcludeFilters({});
+    setTextIncludeFilters({});
     setFilterSearch({});
     setActivePreset('none');
-    setSortColumn('name');
-    setSortDirection('asc');
+    setSortLevels([{ column: 'name', dir: 'asc' }]);
     setShowViewBuilder(true);
   }, []);
 
@@ -1007,6 +1048,27 @@ export default function ContractTeamReportingPage() {
       .then((data) => { if (Array.isArray(data.pipelines)) setGhlPipelines(data.pipelines); })
       .catch(() => {});
   }, [showViewBuilder, ghlPipelines.length]);
+
+  // Turn the ad-hoc grid filters into view filters, so filtering from the column
+  // headers can be saved. Note: excluded-value lists are snapshots of the values
+  // present today, and a '(blank)' exclusion can't be expressed as a filter, so
+  // 'contains' is the more durable way to narrow a view.
+  const gridFiltersToViewFilters = useCallback((): ViewFilter[] => {
+    const out: ViewFilter[] = [];
+    for (const [key, pattern] of Object.entries(textIncludeFilters)) {
+      if (pattern && pattern.trim()) out.push({ field: key as RecordKey, operator: 'contains', value: pattern.trim() });
+    }
+    for (const [key, patterns] of Object.entries(textExcludeFilters)) {
+      for (const p of patterns || []) {
+        if (p && p.trim()) out.push({ field: key as RecordKey, operator: 'not contains', value: p.trim() });
+      }
+    }
+    for (const [key, set] of Object.entries(excludedFilters)) {
+      const values = Array.from((set as Set<string>) || []).filter((v) => v && v !== '(blank)');
+      if (values.length > 0) out.push({ field: key as RecordKey, operator: 'not in', value: values.join(', ') });
+    }
+    return out;
+  }, [textIncludeFilters, textExcludeFilters, excludedFilters]);
 
   // Initialise builder selections from the active view when opened
   // (skipped in draft mode — "+ New Report" already set a clean slate)
@@ -1022,16 +1084,27 @@ export default function ContractTeamReportingPage() {
     }
     const stageFilter = activeView.filters.find((f) => f.field === 'pipelineStage' && f.operator === 'in');
     setBuilderStages(stageFilter ? new Set(stageFilter.value.split(',').map((s) => s.trim()).filter(Boolean)) : new Set());
-    // Inherited field filters (everything that isn't pipeline/stage selection)
-    setBuilderExtraFilters(
-      activeView.filters.filter((f) => f.field !== 'pipelineId' && !(f.field === 'pipelineStage' && f.operator === 'in'))
-    );
+    // Inherited field filters (everything that isn't pipeline/stage selection),
+    // plus anything the user filtered on the grid — promoted here so it can be
+    // reviewed, edited and saved. The grid state is then cleared to avoid
+    // filtering twice by two different mechanisms.
+    const inherited = activeView.filters.filter((f) => f.field !== 'pipelineId' && !(f.field === 'pipelineStage' && f.operator === 'in'));
+    const promoted = gridFiltersToViewFilters();
+    setBuilderExtraFilters([...inherited, ...promoted]);
+    if (promoted.length > 0) {
+      setExcludedFilters({});
+      setTextExcludeFilters({});
+      setTextIncludeFilters({});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showViewBuilder, activeViewId]);
 
   function buildFiltersFromBuilder(): ViewFilter[] {
-    // Inherited filters the user has NOT removed in the builder
-    const filters: ViewFilter[] = [...builderExtraFilters];
+    // Field filters: inherited, promoted from the grid, or added in the builder.
+    // Rows with no value are dropped so a half-finished row can't filter anything out.
+    const filters: ViewFilter[] = builderExtraFilters.filter(
+      (f) => f.operator === 'is blank' || f.operator === 'not blank' || f.value.trim() !== ''
+    );
     const pipelineIds = Array.from(builderPipelines);
     if (pipelineIds.length > 0 && pipelineIds.length < 4) {
       filters.push(
@@ -1099,8 +1172,9 @@ export default function ContractTeamReportingPage() {
         section: builderSection,
         filters: buildFiltersFromBuilder(),
         columns,
-        sortBy: sortColumn,
-        sortDir: sortDirection,
+        sortBy: sortLevels[0]?.column ?? 'name',
+        sortDir: sortLevels[0]?.dir ?? null,
+        sorts: sortLevels,
       };
       if (await persistView(view, builderScope)) {
         setBuilderDraft(false);
@@ -1125,8 +1199,9 @@ export default function ContractTeamReportingPage() {
         section: builderSection,
         filters: buildFiltersFromBuilder(),
         columns,
-        sortBy: sortColumn,
-        sortDir: sortDirection,
+        sortBy: sortLevels[0]?.column ?? 'name',
+        sortDir: sortLevels[0]?.dir ?? null,
+        sorts: sortLevels,
       };
       if (await persistView(view, scope)) {
         setShowViewBuilder(false);
@@ -1140,9 +1215,8 @@ export default function ContractTeamReportingPage() {
   const hasUnsavedViewChanges = useMemo(() => {
     const stripWidths = (cols: ColumnDef[]) => cols.map((c) => ({ key: c.key, color: c.color || '', end: (c.endStateValues || []).join('|') }));
     return JSON.stringify(stripWidths(columns)) !== JSON.stringify(stripWidths(activeView.columns))
-      || sortColumn !== activeView.sortBy
-      || sortDirection !== activeView.sortDir;
-  }, [columns, sortColumn, sortDirection, activeView]);
+      || JSON.stringify(sortLevels) !== JSON.stringify(viewSortLevels(activeView));
+  }, [columns, sortLevels, activeView]);
 
   async function deleteSavedView(view: ViewDef) {
     if (view.builtin) return;
@@ -1203,10 +1277,10 @@ export default function ContractTeamReportingPage() {
     setActiveViewId(view.id);
     localStorage.setItem('ctr-view-id', view.id);
     setColumns(view.columns);
-    setSortColumn(view.sortBy);
-    setSortDirection(view.sortDir);
+    setSortLevels(viewSortLevels(view));
     setExcludedFilters({});
     setTextExcludeFilters({});
+    setTextIncludeFilters({});
     setFilterSearch({});
     setActivePreset('none');
     setShowViewMenu(false);
@@ -1215,6 +1289,70 @@ export default function ContractTeamReportingPage() {
 
   // Export
   const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // Sort dialog (Excel-style, reachable any time from the toolbar).
+  // It floats and can be dragged anywhere, so it never covers the column
+  // headers you are trying to read while building the sort.
+  const [showSortDialog, setShowSortDialog] = useState(false);
+  const SORT_DIALOG_WIDTH = 520;
+  const [sortDialogPos, setSortDialogPos] = useState<{ x: number; y: number } | null>(null);
+  const sortBtnRef = useRef<HTMLButtonElement | null>(null);
+  const sortDragOffset = useRef<{ dx: number; dy: number } | null>(null);
+
+  // Restore the last position the user dragged it to
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ctr-sort-dialog-pos');
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p?.x === 'number' && typeof p?.y === 'number') setSortDialogPos(p);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const clampToViewport = useCallback((x: number, y: number) => ({
+    x: Math.max(4, Math.min(x, window.innerWidth - SORT_DIALOG_WIDTH - 4)),
+    // Keep at least the drag bar on screen
+    y: Math.max(4, Math.min(y, window.innerHeight - 40)),
+  }), []);
+
+  const openSortDialog = useCallback(() => {
+    setShowSortDialog((open) => {
+      if (open) return false;
+      // First open: drop it just under the Sort button, then it stays where the
+      // user last dragged it.
+      setSortDialogPos((pos) => {
+        if (pos) return pos;
+        const r = sortBtnRef.current?.getBoundingClientRect();
+        return clampToViewport(r ? r.left : 100, r ? r.bottom + 6 : 100);
+      });
+      return true;
+    });
+  }, [clampToViewport]);
+
+  const startSortDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const panel = (e.currentTarget.closest('[data-sort-dialog]') as HTMLElement | null);
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    sortDragOffset.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+
+    const onMove = (ev: PointerEvent) => {
+      const off = sortDragOffset.current;
+      if (!off) return;
+      setSortDialogPos(clampToViewport(ev.clientX - off.dx, ev.clientY - off.dy));
+    };
+    const onUp = () => {
+      sortDragOffset.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setSortDialogPos((pos) => {
+        if (pos) localStorage.setItem('ctr-sort-dialog-pos', JSON.stringify(pos));
+        return pos;
+      });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [clampToViewport]);
 
   const t = THEMES[theme];
 
@@ -1461,16 +1599,131 @@ export default function ContractTeamReportingPage() {
   // SORT
   // ============================================================================
 
-  const handleSort = useCallback((column: RecordKey) => {
-    setSortColumn((prev) => {
-      if (prev === column) {
-        setSortDirection((d) => (d === 'asc' ? 'desc' : d === 'desc' ? null : 'asc'));
-        return column;
+  // Plain click = set/cycle the primary sort and drop the other levels.
+  // Shift-click = add the column as the next level, or flip/remove it if it is
+  // already one. Mirrors Excel's "sort by A, then by D".
+  const handleSort = useCallback((column: RecordKey, additive = false) => {
+    setSortLevels((prev) => {
+      const at = prev.findIndex((l) => l.column === column);
+
+      if (additive) {
+        if (at === -1) return [...prev, { column, dir: 'asc' }];
+        const next = [...prev];
+        // asc -> desc -> remove this level
+        if (next[at].dir === 'asc') { next[at] = { column, dir: 'desc' }; return next; }
+        next.splice(at, 1);
+        return next;
       }
-      setSortDirection('asc');
-      return column;
+
+      // asc -> desc -> unsorted, same as before layered sorting existed
+      if (at === 0 && prev.length === 1) {
+        if (prev[0].dir === 'asc') return [{ column, dir: 'desc' }];
+        return [];
+      }
+      return [{ column, dir: 'asc' }];
     });
   }, []);
+
+  const setPrimarySort = useCallback((column: RecordKey, dir: 'asc' | 'desc') => {
+    setSortLevels([{ column, dir }]);
+  }, []);
+
+  const moveSortLevel = useCallback((from: number, to: number) => {
+    setSortLevels((prev) => {
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
+  // Order labels follow the column type, the way Excel's Sort dialog does.
+  function orderLabels(column: RecordKey): { asc: string; desc: string } {
+    if (isDateField(column)) return { asc: 'Oldest to Newest', desc: 'Newest to Oldest' };
+    return { asc: 'A to Z', desc: 'Z to A' };
+  }
+
+  // Excel's Sort dialog, minus the parts that don't apply to us: there is no
+  // "Sort On" (we only ever sort on the value) and no "My data has headers".
+  // Add / copy / delete / reorder sit on each row instead of acting on a
+  // selected row, which removes a hidden bit of state.
+  function renderSortLevelEditor() {
+    const btn = `text-[11px] px-1 ${t.headerText} hover:text-blue-400 disabled:opacity-25 disabled:hover:text-current`;
+    return (
+      <>
+        <div className={`grid grid-cols-[auto_1fr_auto_auto] gap-1 items-center text-[9px] ${t.headerText} opacity-60 mb-0.5`}>
+          <span />
+          <span>Column</span>
+          <span>Order</span>
+          <span />
+        </div>
+
+        {sortLevels.length === 0 && (
+          <div className={`text-[10px] ${t.headerText} opacity-60 mb-1`}>
+            No sort — records appear in the order GHL returns them.
+          </div>
+        )}
+
+        {sortLevels.map((level, i) => {
+          const labels = orderLabels(level.column);
+          return (
+            <div key={`sort-level-${i}`} className="grid grid-cols-[auto_1fr_auto_auto] gap-1 items-center mb-1">
+              <span className={`text-[9px] ${t.headerText} w-12 shrink-0`}>{i === 0 ? 'Sort by' : 'Then by'}</span>
+
+              <select
+                value={level.column}
+                onChange={(e) => setSortLevels((prev) => prev.map((l, idx) => (idx === i ? { ...l, column: e.target.value as RecordKey } : l)))}
+                className={`min-w-0 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
+              >
+                {allAvailableKeys.map((k) => (
+                  <option key={k} value={k}>{getReportFieldLabel(k)}</option>
+                ))}
+              </select>
+
+              <select
+                value={level.dir}
+                onChange={(e) => setSortLevels((prev) => prev.map((l, idx) => (idx === i ? { ...l, dir: e.target.value as 'asc' | 'desc' } : l)))}
+                className={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
+              >
+                <option value="asc">{labels.asc}</option>
+                <option value="desc">{labels.desc}</option>
+              </select>
+
+              <span className="flex items-center">
+                <button onClick={() => moveSortLevel(i, i - 1)} disabled={i === 0} title="Move level up" className={btn}>↑</button>
+                <button onClick={() => moveSortLevel(i, i + 1)} disabled={i === sortLevels.length - 1} title="Move level down" className={btn}>↓</button>
+                <button
+                  onClick={() => setSortLevels((prev) => [...prev.slice(0, i + 1), { ...prev[i] }, ...prev.slice(i + 1)])}
+                  title="Copy level"
+                  className={btn}
+                >
+                  ⧉
+                </button>
+                <button
+                  onClick={() => setSortLevels((prev) => prev.filter((_, idx) => idx !== i))}
+                  title="Delete level"
+                  className="text-[11px] px-1 text-red-400 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </span>
+            </div>
+          );
+        })}
+
+        <button
+          onClick={() => setSortLevels((prev) => [
+            ...prev,
+            { column: (columns.find((c) => !prev.some((l) => l.column === c.key))?.key || columns[0]?.key || 'name') as RecordKey, dir: 'asc' },
+          ])}
+          className={`text-[10px] ${t.headerText} hover:text-blue-400 mt-0.5`}
+        >
+          + Add level
+        </button>
+      </>
+    );
+  }
 
   // ============================================================================
   // FILTERS
@@ -1605,16 +1858,31 @@ export default function ContractTeamReportingPage() {
         const displayValue = getDisplayValue(record, key as RecordKey).toLowerCase();
         return patterns.every((p) => !displayValue.includes(p.toLowerCase()));
       });
-      return passesTextExclude;
-    });
-  }, [records, excludedFilters, textExcludeFilters, activePreset, effectiveView]);
+      if (!passesTextExclude) return false;
 
-  // Apply sort
+      // Check text include filters (contains)
+      return Object.entries(textIncludeFilters).every(([key, pattern]) => {
+        if (!pattern || !pattern.trim()) return true;
+        return getDisplayValue(record, key as RecordKey).toLowerCase().includes(pattern.toLowerCase().trim());
+      });
+    });
+  }, [records, excludedFilters, textExcludeFilters, textIncludeFilters, activePreset, effectiveView]);
+
+  // Apply sort — every level in turn, so level 2 breaks ties on level 1, etc.
   const sortedRecords = useMemo(() => {
-    if (!sortColumn || !sortDirection) return filteredRecords;
+    if (sortLevels.length === 0) return filteredRecords;
     return [...filteredRecords].sort((a, b) => {
-      const aVal = getDisplayValue(a, sortColumn);
-      const bVal = getDisplayValue(b, sortColumn);
+      for (const level of sortLevels) {
+        const result = compareOnColumn(a, b, level);
+        if (result !== 0) return result;
+      }
+      return 0;
+    });
+
+    function compareOnColumn(a: Record<string, unknown>, b: Record<string, unknown>, level: SortLevel): number {
+      const sortColumn = level.column;
+      const aVal = getDisplayValue(a as never, sortColumn);
+      const bVal = getDisplayValue(b as never, sortColumn);
 
       // Empty values always sort to the bottom
       if (!aVal && !bVal) return 0;
@@ -1635,9 +1903,9 @@ export default function ContractTeamReportingPage() {
       } else {
         compare = aVal.localeCompare(bVal);
       }
-      return sortDirection === 'asc' ? compare : -compare;
-    });
-  }, [filteredRecords, sortColumn, sortDirection]);
+      return level.dir === 'asc' ? compare : -compare;
+    }
+  }, [filteredRecords, sortLevels]);
 
   // ============================================================================
   // EXPORT
@@ -2054,34 +2322,62 @@ export default function ContractTeamReportingPage() {
                   </div>
                 ))}
 
-                {/* Inherited field filters (carried over from the starting view) */}
-                {builderExtraFilters.length > 0 && (
-                  <>
-                    <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>
-                      FIELD FILTERS (inherited from &quot;{activeView.name}&quot;)
-                    </div>
-                    <div className={`text-[9px] ${t.headerText} opacity-60 mb-1`}>
-                      These carried over from the view you started from — remove any that don&apos;t belong in the new view.
-                    </div>
-                    {builderExtraFilters.map((f, idx) => (
-                      <div key={idx} className={`flex items-center gap-1.5 text-[10px] ${t.headerText} py-0.5`}>
-                        <button
-                          onClick={() => setBuilderExtraFilters((prev) => prev.filter((_, i) => i !== idx))}
-                          className="text-red-400 hover:underline px-1"
-                          title="Remove this filter"
-                        >
-                          ✕
-                        </button>
-                        <span className="truncate">
-                          {getReportFieldLabel(f.field)} {f.operator} &quot;{f.value}&quot;
-                        </span>
-                      </div>
-                    ))}
-                  </>
+                {/* 3. Field filters — inherited, promoted from the grid, or added here */}
+                <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>3. FIELD FILTERS</div>
+                <div className={`text-[9px] ${t.headerText} opacity-60 mb-1`}>
+                  Anything you filtered from the column headers appears here and is saved with the view.
+                  Filters inherited from &quot;{activeView.name}&quot; are listed too — remove what doesn&apos;t belong.
+                </div>
+                {builderExtraFilters.length === 0 && (
+                  <div className={`text-[10px] ${t.headerText} opacity-60 mb-1`}>No field filters.</div>
                 )}
+                {builderExtraFilters.map((f, idx) => (
+                  <div key={`filter-${idx}`} className="flex items-center gap-1 mb-1">
+                    <select
+                      value={f.field}
+                      onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, field: e.target.value as RecordKey } : x)))}
+                      className={`flex-1 min-w-0 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
+                    >
+                      {allAvailableKeys.map((k) => (
+                        <option key={k} value={k}>{getReportFieldLabel(k)}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={f.operator}
+                      onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, operator: e.target.value as ViewFilter['operator'] } : x)))}
+                      className={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
+                    >
+                      {(['contains', 'not contains', 'equals', 'not equals', 'in', 'not in', 'is blank', 'not blank'] as ViewFilter['operator'][]).map((op) => (
+                        <option key={op} value={op}>{op}</option>
+                      ))}
+                    </select>
+                    {f.operator !== 'is blank' && f.operator !== 'not blank' && (
+                      <input
+                        type="text"
+                        value={f.value}
+                        placeholder={f.operator === 'in' || f.operator === 'not in' ? 'a, b, c' : 'value'}
+                        onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, value: e.target.value } : x)))}
+                        className={`w-28 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText} placeholder-gray-500 focus:outline-none`}
+                      />
+                    )}
+                    <button
+                      onClick={() => setBuilderExtraFilters((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-[11px] px-1 text-red-400 hover:text-red-300"
+                      title="Remove this filter"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setBuilderExtraFilters((prev) => [...prev, { field: (columns[0]?.key || 'name') as RecordKey, operator: 'contains', value: '' }])}
+                  className={`text-[10px] ${t.headerText} hover:text-blue-400 mt-0.5`}
+                >
+                  + Add filter
+                </button>
 
                 {/* Column colours & end states */}
-                <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>3. COLUMN COLOURS & END STATES</div>
+                <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>4. COLUMN COLOURS & END STATES</div>
                 {columns.map((col) => (
                   <div key={col.key} className="mb-0.5">
                     <div className="flex items-center gap-1.5">
@@ -2127,9 +2423,17 @@ export default function ContractTeamReportingPage() {
                   </div>
                 ))}
 
-                {/* 4. Save — explicit choice: new view vs overwrite current */}
+                {/* 5. Sort — layered, like Excel's Sort dialog */}
+                <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>5. SORT</div>
+                <div className={`text-[9px] ${t.headerText} opacity-60 mb-1`}>
+                  Sorted by the first row, then ties broken by the next, and so on. You can also
+                  shift-click a column header in the grid to add a level.
+                </div>
+                {renderSortLevelEditor()}
+
+                {/* 6. Save — explicit choice: new view vs overwrite current */}
                 <div className={`mt-3 border-t ${t.inputBorder} pt-2`}>
-                  <div className={`text-[10px] font-bold ${t.headerText} mb-1`}>4. SAVE (captures current columns, pipelines/stages, colours & sort)</div>
+                  <div className={`text-[10px] font-bold ${t.headerText} mb-1`}>6. SAVE (captures current columns, pipelines/stages, filters, colours & sort)</div>
                   <input
                     type="text"
                     placeholder="View name..."
@@ -2182,11 +2486,26 @@ export default function ContractTeamReportingPage() {
           </div>
           )}
 
+          {/* Sort — same editor as the view builder, available without opening it.
+              The panel itself is rendered outside the toolbar so it can float. */}
+          <button
+            ref={sortBtnRef}
+            onClick={openSortDialog}
+            className={`px-2 py-1 rounded text-xs hover:opacity-80 border ${
+              sortLevels.length > 1
+                ? 'bg-blue-600 text-white border-blue-700'
+                : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
+            }`}
+            title="Sort by one or more columns"
+          >
+            Sort{sortLevels.length > 1 ? ` (${sortLevels.length})` : ''} ▼
+          </button>
+
           {/* Clear Filters */}
           <button
-            onClick={() => { setExcludedFilters({}); setTextExcludeFilters({}); setFilterSearch({}); setActivePreset('none'); }}
+            onClick={() => { setExcludedFilters({}); setTextExcludeFilters({}); setTextIncludeFilters({}); setFilterSearch({}); setActivePreset('none'); }}
             className={`px-2 py-1 rounded text-xs hover:opacity-80 border ${
-              Object.keys(excludedFilters).length > 0 || Object.keys(textExcludeFilters).length > 0 || activePreset !== 'none'
+              Object.keys(excludedFilters).length > 0 || Object.keys(textExcludeFilters).length > 0 || Object.values(textIncludeFilters).some((v) => v && v.trim()) || activePreset !== 'none'
                 ? 'bg-amber-600 text-white border-amber-700'
                 : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
             }`}
@@ -2359,13 +2678,24 @@ export default function ContractTeamReportingPage() {
                   >
                     {getFieldSource(col.key) === 'opportunity' ? 'opp' : 'co'}
                   </span>
-                  <div className="flex items-center gap-0.5 cursor-pointer overflow-hidden" onClick={() => handleSort(col.key)}>
+                  <div
+                    className="flex items-center gap-0.5 cursor-pointer overflow-hidden"
+                    title="Click to sort. Shift-click to add this column as another sort level."
+                    onClick={(e) => handleSort(col.key, e.shiftKey)}
+                  >
                     <span className="text-[11px] leading-tight">{col.label}</span>
-                    {sortColumn === col.key && (
-                      <span className="text-blue-400 text-[10px]">
-                        {sortDirection === 'asc' ? '▲' : sortDirection === 'desc' ? '▼' : ''}
-                      </span>
-                    )}
+                    {(() => {
+                      const at = sortLevels.findIndex((l) => l.column === col.key);
+                      if (at === -1) return null;
+                      return (
+                        <span className="text-blue-400 text-[10px] whitespace-nowrap">
+                          {sortLevels[at].dir === 'asc' ? '▲' : '▼'}
+                          {sortLevels.length > 1 && (
+                            <span className="text-[8px] align-super">{at + 1}</span>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Filter dropdown */}
@@ -2388,10 +2718,24 @@ export default function ContractTeamReportingPage() {
                       >
                         {/* Sort A-Z / Z-A */}
                         <div className={`flex gap-1 mb-1 px-1 border-b ${t.inputBorder} pb-1`}>
-                          <button onClick={() => { handleSort(col.key); setSortDirection('asc'); }} className={`text-[9px] ${t.headerText} hover:text-blue-400`}>A→Z</button>
-                          <button onClick={() => { handleSort(col.key); setSortDirection('desc'); }} className={`text-[9px] ${t.headerText} hover:text-blue-400`}>Z→A</button>
+                          <button onClick={() => setPrimarySort(col.key, 'asc')} className={`text-[9px] ${t.headerText} hover:text-blue-400`}>A→Z</button>
+                          <button onClick={() => setPrimarySort(col.key, 'desc')} className={`text-[9px] ${t.headerText} hover:text-blue-400`}>Z→A</button>
+                          <button onClick={() => handleSort(col.key, true)} title="Add this column as another sort level (same as shift-clicking the header)" className={`text-[9px] ${t.headerText} hover:text-blue-400 ml-auto`}>+ sort level</button>
                         </div>
 
+
+                        {/* Contains — the filter that can be saved into a view */}
+                        <div className={`mb-1 px-1 pb-1 border-b ${t.inputBorder}`}>
+                          <input
+                            type="text"
+                            placeholder="Contains... (saveable)"
+                            value={textIncludeFilters[col.key] || ''}
+                            onChange={(e) => setTextIncludeFilters((prev) => ({ ...prev, [col.key]: e.target.value }))}
+                            className={`w-full px-1.5 py-0.5 text-[10px] ${t.inputBg} border ${
+                              textIncludeFilters[col.key] ? 'border-blue-500' : t.inputBorder
+                            } rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
+                          />
+                        </div>
 
                         {/* Search */}
                         <input
@@ -2623,6 +2967,54 @@ export default function ContractTeamReportingPage() {
           <div className={`text-center py-12 ${t.headerText}`}>No records match the current filters.</div>
         )}
       </div>
+
+      {/* Floating Sort panel — draggable, so it can be parked away from the
+          column headers you are reading while setting the levels up. */}
+      {showSortDialog && sortDialogPos && (
+        <div
+          data-sort-dialog
+          className={`fixed z-[90] ${t.bg} border ${t.inputBorder} rounded shadow-2xl dropdown-container`}
+          style={{ left: sortDialogPos.x, top: sortDialogPos.y, width: SORT_DIALOG_WIDTH }}
+        >
+          {/* Drag bar */}
+          <div
+            onPointerDown={startSortDrag}
+            className={`flex items-center justify-between px-2 py-1 border-b ${t.inputBorder} cursor-move select-none rounded-t ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'}`}
+            title="Drag to move"
+          >
+            <span className={`text-[11px] font-bold ${t.text}`}>∷ Sort</span>
+            <button
+              onClick={() => setShowSortDialog(false)}
+              className={`text-[11px] ${t.headerText} hover:text-red-400 px-1`}
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="p-2">
+            <div className={`text-[9px] ${t.headerText} opacity-60 mb-1.5`}>
+              Records are ordered by the first row, then ties are broken by the next, and so on.
+              Shift-click a column header to add a level without opening this.
+            </div>
+            {renderSortLevelEditor()}
+            <div className={`flex justify-between items-center mt-2 pt-1.5 border-t ${t.inputBorder}`}>
+              <button
+                onClick={() => setSortLevels([])}
+                className={`text-[10px] ${t.headerText} hover:text-blue-400`}
+              >
+                Clear sort
+              </button>
+              <button
+                onClick={() => setShowSortDialog(false)}
+                className="px-3 py-1 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Expanded cell popup */}
       {expandedCell && (

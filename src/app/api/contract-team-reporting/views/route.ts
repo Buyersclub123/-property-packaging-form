@@ -26,8 +26,11 @@ interface SavedView {
   section: 'Standard' | 'Custom' | 'Exception';
   filters: SavedViewFilter[];
   columns: SavedColumnDef[];
+  // Level-1 sort. Kept for views saved before layered sorting existed.
   sortBy: string;
   sortDir: 'asc' | 'desc' | null;
+  // Layered sort, level 1 first. Wins over sortBy/sortDir when present.
+  sorts?: { column: string; dir: 'asc' | 'desc' }[];
   updatedAt: string;
   updatedBy?: string;
 }
