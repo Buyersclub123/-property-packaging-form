@@ -759,6 +759,14 @@ function describeView(view: ViewDef): string {
   return parts.join(' | ');
 }
 
+// Only the original Standard/Exception reports are locked. The project views in
+// the Custom section are meant to be maintained by the team, so a built-in one
+// can be overwritten — which saves a public view under the same id. Deleting that
+// override brings the code version back.
+function isViewProtected(view: ViewDef): boolean {
+  return !!view.builtin && view.section !== 'Custom';
+}
+
 function applyViewFilters(records: OpportunityRecord[], filters: ViewFilter[]): OpportunityRecord[] {
   return records.filter((record) =>
     filters.every((f) => {
@@ -984,7 +992,11 @@ export default function ContractTeamReportingPage() {
     }
     return [];
   });
-  const allViews = useMemo(() => [...PRESET_VIEWS, ...publicViews, ...personalViews], [publicViews, personalViews]);
+  const allViews = useMemo(() => {
+    // A saved public view with the same id as a preset replaces it.
+    const overridden = new Set(publicViews.map((v) => v.id));
+    return [...PRESET_VIEWS.filter((p) => !overridden.has(p.id)), ...publicViews, ...personalViews];
+  }, [publicViews, personalViews]);
 
   const [activeViewId, setActiveViewId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -1189,12 +1201,14 @@ export default function ContractTeamReportingPage() {
 
   // "Update <current view>" — overwrites the active saved view in place
   async function updateActiveView() {
-    if (activeView.builtin) return; // built-in views cannot be overwritten
+    if (isViewProtected(activeView)) return; // Standard reports are locked
     setBuilderSaving(true);
     try {
-      const scope: 'public' | 'personal' = activeView.id.startsWith('public-') ? 'public' : 'personal';
+      // Overriding a built-in Custom view saves it publicly, since those views are shared.
+      const scope: 'public' | 'personal' = activeView.builtin || activeView.id.startsWith('public-') ? 'public' : 'personal';
       const view: ViewDef = {
         ...activeView,
+        builtin: false,
         name: builderName.trim() || activeView.name,
         section: builderSection,
         filters: buildFiltersFromBuilder(),
@@ -1805,17 +1819,46 @@ export default function ContractTeamReportingPage() {
     return raw;
   }
 
-  // Get unique values for filter dropdown
+  // Records the active view actually shows, before any ad-hoc grid filtering.
+  const viewScopedRecords = useMemo(
+    () => applyViewFilters(records, effectiveView.filters),
+    [records, effectiveView]
+  );
+
+  // Values offered in a column's filter dropdown. Scoped to the view's own data —
+  // Full F&C only lists Construction/Finance stages, not every stage in GHL — and
+  // narrowed further by filters on OTHER columns, but never by this column's own
+  // filter, so you can still widen your selection (same as Excel).
   const getUniqueValues = useCallback((column: RecordKey): string[] => {
     const values = new Set<string>();
-    records.forEach((r) => { values.add(getDisplayValue(r, column) || '(blank)'); });
+    for (const r of viewScopedRecords) {
+      let passesOthers = true;
+      for (const [key, set] of Object.entries(excludedFilters)) {
+        if (key === column || !set || (set as Set<string>).size === 0) continue;
+        if ((set as Set<string>).has(getDisplayValue(r, key as RecordKey) || '(blank)')) { passesOthers = false; break; }
+      }
+      if (passesOthers) {
+        for (const [key, patterns] of Object.entries(textExcludeFilters)) {
+          if (key === column || !patterns || patterns.length === 0) continue;
+          const dv = getDisplayValue(r, key as RecordKey).toLowerCase();
+          if (patterns.some((p) => p && dv.includes(p.toLowerCase()))) { passesOthers = false; break; }
+        }
+      }
+      if (passesOthers) {
+        for (const [key, pattern] of Object.entries(textIncludeFilters)) {
+          if (key === column || !pattern || !pattern.trim()) continue;
+          if (!getDisplayValue(r, key as RecordKey).toLowerCase().includes(pattern.toLowerCase().trim())) { passesOthers = false; break; }
+        }
+      }
+      if (passesOthers) values.add(getDisplayValue(r, column) || '(blank)');
+    }
     return Array.from(values).sort();
-  }, [records]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewScopedRecords, excludedFilters, textExcludeFilters, textIncludeFilters]);
 
   // Apply filters (effectiveView = live builder preview when it's open)
   const filteredRecords = useMemo(() => {
-    const viewFiltered = applyViewFilters(records, effectiveView.filters);
-    return viewFiltered.filter((record) => {
+    return viewScopedRecords.filter((record) => {
       // Preset filter logic
       if (activePreset === 'blankPropertyType') {
         if (record.pipelineStage === 'Settled') return false;
@@ -1866,7 +1909,7 @@ export default function ContractTeamReportingPage() {
         return getDisplayValue(record, key as RecordKey).toLowerCase().includes(pattern.toLowerCase().trim());
       });
     });
-  }, [records, excludedFilters, textExcludeFilters, textIncludeFilters, activePreset, effectiveView]);
+  }, [viewScopedRecords, excludedFilters, textExcludeFilters, textIncludeFilters, activePreset]);
 
   // Apply sort — every level in turn, so level 2 breaks ties on level 1, etc.
   const sortedRecords = useMemo(() => {
@@ -2468,16 +2511,22 @@ export default function ContractTeamReportingPage() {
                     </button>
                     <button
                       onClick={updateActiveView}
-                      disabled={builderSaving || activeView.builtin || builderDraft}
-                      title={builderDraft ? 'This is a new report — use Save as NEW view' : activeView.builtin ? 'Built-in views cannot be overwritten — use Save as NEW view instead' : `Overwrite "${activeView.name}" with the current layout`}
+                      disabled={builderSaving || isViewProtected(activeView) || builderDraft}
+                      title={builderDraft ? 'This is a new report — use Save as NEW view' : isViewProtected(activeView) ? 'Standard reports cannot be overwritten — use Save as NEW view instead' : `Overwrite "${activeView.name}" with the current layout`}
                       className="flex-1 px-2 py-1.5 text-[10px] bg-green-700 text-white rounded hover:bg-green-600 disabled:opacity-40 font-medium"
                     >
                       {builderSaving ? 'Saving…' : builderDraft ? 'Update (n/a — new report)' : `Update "${activeView.name}"`}
                     </button>
                   </div>
-                  {activeView.builtin && (
+                  {isViewProtected(activeView) && (
                     <div className={`text-[9px] ${t.headerText} opacity-60 mt-1`}>
-                      &quot;{activeView.name}&quot; is a built-in view and cannot be overwritten — save your changes as a new view.
+                      &quot;{activeView.name}&quot; is a Standard report and cannot be overwritten — save your changes as a new view.
+                    </div>
+                  )}
+                  {activeView.builtin && !isViewProtected(activeView) && (
+                    <div className={`text-[9px] ${t.headerText} opacity-60 mt-1`}>
+                      &quot;{activeView.name}&quot; is a built-in Custom view. Updating it saves a shared copy that everyone sees;
+                      deleting that copy restores the original.
                     </div>
                   )}
                 </div>
@@ -2752,13 +2801,9 @@ export default function ContractTeamReportingPage() {
                             <button
                               onClick={() => {
                                 const search = (filterSearch[col.key] || '').toLowerCase();
-                                const toExclude = new Set<string>();
-                                records.forEach((r) => {
-                                  const val = getDisplayValue(r, col.key) || '(blank)';
-                                  if (!val.toLowerCase().includes(search)) {
-                                    toExclude.add(val);
-                                  }
-                                });
+                                const toExclude = new Set(
+                                  getUniqueValues(col.key).filter((val) => !val.toLowerCase().includes(search))
+                                );
                                 setExcludedFilters((prev) => ({ ...prev, [col.key]: toExclude }));
                               }}
                               className="text-[9px] text-green-400 hover:underline font-medium"
