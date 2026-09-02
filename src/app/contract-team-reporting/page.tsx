@@ -162,7 +162,7 @@ const LARGE_TEXT_FIELDS = new Set(['latestStatusUpdate', 'bpNegotiationDetail', 
 const CO_FIELDS_READ_ONLY = true;
 
 // Standard across all views (feedback item 7) + contact fields (item 23)
-const READ_ONLY_FIELDS = new Set(['id', 'name', 'opportunityName', 'pipelineStage', 'pipelineName', 'registeredAddress', 'assignedTo', 'assignedBA', 'owner', 'followers', 'daysSinceStageChange', 'stage', 'ghlLink', 'contactName', 'contactEmail', 'contactPhone', 'status', 'monetaryValue', 'createdAt', 'updatedAt', 'lastStageChangeAt', 'pipelineId', 'pipelineStageId', 'co_record_id', 'co_linked_opportunity_id', 'partnerName', 'partnerEmail', 'partnerPhone']);
+const READ_ONLY_FIELDS = new Set(['id', 'name', 'opportunityName', 'pipelineStage', 'pipelineName', 'assignedTo', 'assignedBA', 'owner', 'followers', 'daysSinceStageChange', 'stage', 'ghlLink', 'contactName', 'contactEmail', 'contactPhone', 'status', 'monetaryValue', 'createdAt', 'updatedAt', 'lastStageChangeAt', 'pipelineId', 'pipelineStageId', 'co_record_id', 'co_linked_opportunity_id', 'partnerName', 'partnerEmail', 'partnerPhone']);
 
 // ============================================================================
 // TYPES
@@ -254,7 +254,6 @@ const DROPDOWN_FIELD_OPTIONS: Record<string, string[]> = {
 const DEFAULT_COLUMN_SETTINGS: Record<string, ColumnSettings> = {
   name: { isFYI: true },
   pipelineStage: { isFYI: true, endStateValues: ['Formal Approval'] },
-  registeredAddress: { isFYI: true },
   assignedTo: { isFYI: true },
   assignedBA: { isFYI: true },
   owner: { isFYI: true },
