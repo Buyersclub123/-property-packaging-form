@@ -62,9 +62,31 @@ interface SavedView {
   filters: Partial<Record<keyof DealRecord, string>>;
   sortColumn: keyof DealRecord;
   sortDirection: SortDirection;
+  sortLevels?: SortLevel[];
 }
 
 type SortDirection = 'asc' | 'desc' | null;
+
+// One level of an Excel-style layered sort: "sort by A, then by D, then by G".
+interface SortLevel {
+  column: keyof DealRecord;
+  dir: 'asc' | 'desc';
+}
+
+const DATE_FIELD_KEYS = new Set<keyof DealRecord>(['reviewDate', 'lastUpdate', 'closingDate']);
+function isDateField(key: keyof DealRecord): boolean { return DATE_FIELD_KEYS.has(key); }
+
+// Default sort for each quick filter — used when switching filters or resetting sort.
+const DEFAULT_SORT: SortLevel[] = [{ column: 'sortKey', dir: 'asc' }];
+const QUICK_FILTER_SORT: Record<string, SortLevel[]> = {
+  all: DEFAULT_SORT,
+  available: DEFAULT_SORT,
+  eoi: DEFAULT_SORT,
+  awaiting_packager: DEFAULT_SORT,
+  awaiting_qa: DEFAULT_SORT,
+  new_24h: DEFAULT_SORT,
+};
+
 type Theme = 'dark' | 'light';
 
 const THEMES: Record<Theme, { bg: string; headerBg: string; cellBorder: string; text: string; headerText: string; hoverBg: string; inputBg: string; inputBorder: string }> = {
@@ -213,9 +235,11 @@ export default function DealSheetPage() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Sort state
-  const [sortColumn, setSortColumn] = useState<keyof DealRecord>('sortKey');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  // Sort state — layered, level 1 first (Excel-style "sort by A, then D, then G").
+  const [sortLevels, setSortLevels] = useState<SortLevel[]>([{ column: 'sortKey', dir: 'asc' }]);
+  // Derived for backward compat (column header indicators, dropdown A→Z/Z→A)
+  const sortColumn: keyof DealRecord | null = sortLevels[0]?.column ?? null;
+  const sortDirection: SortDirection = sortLevels[0]?.dir ?? null;
 
   // Filter state — Excel-style: stores EXCLUDED values per column (all shown by default)
   const [filters, setFilters] = useState<Partial<Record<keyof DealRecord, string>>>({});
@@ -437,15 +461,36 @@ export default function DealSheetPage() {
     }
   };
 
-  // Sort handler
-  const handleSort = useCallback((column: keyof DealRecord) => {
-    setSortColumn((prev) => {
-      if (prev === column) {
-        setSortDirection((d) => (d === 'asc' ? 'desc' : d === 'desc' ? null : 'asc'));
-        return column;
+  // Sort handler — plain click sets primary sort, shift-click adds a level
+  const handleSort = useCallback((column: keyof DealRecord, additive = false) => {
+    setSortLevels((prev) => {
+      const at = prev.findIndex((l) => l.column === column);
+      if (additive) {
+        if (at === -1) return [...prev, { column, dir: 'asc' as const }];
+        const next = [...prev];
+        if (next[at].dir === 'asc') { next[at] = { column, dir: 'desc' }; return next; }
+        next.splice(at, 1);
+        return next;
       }
-      setSortDirection('asc');
-      return column;
+      if (at === 0 && prev.length === 1) {
+        if (prev[0].dir === 'asc') return [{ column, dir: 'desc' as const }];
+        return [];
+      }
+      return [{ column, dir: 'asc' as const }];
+    });
+  }, []);
+
+  const setPrimarySort = useCallback((column: keyof DealRecord, dir: 'asc' | 'desc') => {
+    setSortLevels([{ column, dir }]);
+  }, []);
+
+  const moveSortLevel = useCallback((from: number, to: number) => {
+    setSortLevels((prev) => {
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
     });
   }, []);
 
@@ -544,8 +589,9 @@ export default function DealSheetPage() {
       columns: [...columns],
       quickFilter,
       filters: { ...filters },
-      sortColumn,
-      sortDirection,
+      sortColumn: sortLevels[0]?.column ?? 'sortKey',
+      sortDirection: sortLevels[0]?.dir ?? 'asc',
+      sortLevels: [...sortLevels],
     };
     setSavedViews((prev) => [...prev, view]);
     setNewViewName('');
@@ -556,8 +602,8 @@ export default function DealSheetPage() {
     setColumns(view.columns);
     setQuickFilter(view.quickFilter);
     setFilters(view.filters);
-    setSortColumn(view.sortColumn);
-    setSortDirection(view.sortDirection);
+    // Load multi-level sort if available, else fall back to legacy single-column
+    setSortLevels((view as any).sortLevels?.length ? (view as any).sortLevels : (view.sortDirection ? [{ column: view.sortColumn, dir: view.sortDirection }] : []));
     setShowViewMenu(false);
   };
 
@@ -571,8 +617,7 @@ export default function DealSheetPage() {
     setFilters({});
     setExcludedFilters({});
     setIdFilter('');
-    setSortColumn('sortKey');
-    setSortDirection('asc');
+    setSortLevels([{ column: 'sortKey', dir: 'asc' }]);
     setShowViewMenu(false);
   };
 
@@ -916,16 +961,174 @@ export default function DealSheetPage() {
     });
   }, [quickFilteredRecords, filters, excludedFilters, idFilterSet]);
 
-  // Apply sort
+  // Apply sort — every level in turn, so level 2 breaks ties on level 1, etc.
   const sortedRecords = useMemo(() => {
-    if (!sortColumn || !sortDirection) return filteredRecords;
+    if (sortLevels.length === 0) return filteredRecords;
     return [...filteredRecords].sort((a, b) => {
-      const aVal = a[sortColumn] || '';
-      const bVal = b[sortColumn] || '';
-      const compare = aVal.localeCompare(bVal);
-      return sortDirection === 'asc' ? compare : -compare;
+      for (const level of sortLevels) {
+        const result = compareOnColumn(a, b, level);
+        if (result !== 0) return result;
+      }
+      return 0;
     });
-  }, [filteredRecords, sortColumn, sortDirection]);
+
+    function compareOnColumn(a: DealRecord, b: DealRecord, level: SortLevel): number {
+      const col = level.column;
+      const aVal = a[col] || '';
+      const bVal = b[col] || '';
+      // Empty values always sort to the bottom
+      if (!aVal && !bVal) return 0;
+      if (!aVal) return 1;
+      if (!bVal) return -1;
+      let compare: number;
+      if (isDateField(col)) {
+        const parseDate = (v: string) => {
+          if (v.includes('/')) {
+            const [d, m, y] = v.split('/');
+            return new Date(`${y}-${m}-${d}`).getTime() || 0;
+          }
+          return new Date(v).getTime() || 0;
+        };
+        compare = parseDate(aVal) - parseDate(bVal);
+      } else {
+        compare = aVal.localeCompare(bVal);
+      }
+      return level.dir === 'asc' ? compare : -compare;
+    }
+  }, [filteredRecords, sortLevels]);
+
+  // Sort dialog (Excel-style, reachable from toolbar — matches Contract Team Reporting)
+  const [showSortDialog, setShowSortDialog] = useState(false);
+  const SORT_DIALOG_WIDTH = 520;
+  const [sortDialogPos, setSortDialogPos] = useState<{ x: number; y: number } | null>(null);
+  const sortBtnRef = useRef<HTMLButtonElement | null>(null);
+  const sortDragOffset = useRef<{ dx: number; dy: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ds-sort-dialog-pos');
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p?.x === 'number' && typeof p?.y === 'number') setSortDialogPos(p);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const clampToViewport = useCallback((x: number, y: number) => ({
+    x: Math.max(4, Math.min(x, window.innerWidth - SORT_DIALOG_WIDTH - 4)),
+    y: Math.max(4, Math.min(y, window.innerHeight - 40)),
+  }), []);
+
+  const openSortDialog = useCallback(() => {
+    setShowSortDialog((open) => {
+      if (open) return false;
+      setSortDialogPos((pos) => {
+        if (pos) return pos;
+        const r = sortBtnRef.current?.getBoundingClientRect();
+        return clampToViewport(r ? r.left : 100, r ? r.bottom + 6 : 100);
+      });
+      return true;
+    });
+  }, [clampToViewport]);
+
+  const startSortDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const panel = (e.currentTarget.closest('[data-sort-dialog]') as HTMLElement | null);
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    sortDragOffset.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    const onMove = (ev: PointerEvent) => {
+      const off = sortDragOffset.current;
+      if (!off) return;
+      setSortDialogPos(clampToViewport(ev.clientX - off.dx, ev.clientY - off.dy));
+    };
+    const onUp = () => {
+      sortDragOffset.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setSortDialogPos((pos) => {
+        if (pos) localStorage.setItem('ds-sort-dialog-pos', JSON.stringify(pos));
+        return pos;
+      });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [clampToViewport]);
+
+  function orderLabels(column: keyof DealRecord): { asc: string; desc: string } {
+    if (isDateField(column)) return { asc: 'Oldest to Newest', desc: 'Newest to Oldest' };
+    return { asc: 'A to Z', desc: 'Z to A' };
+  }
+
+  function renderSortLevelEditor() {
+    const btn = `text-[11px] px-1 ${t.headerText} hover:text-blue-400 disabled:opacity-25 disabled:hover:text-current`;
+    return (
+      <>
+        <div className={`grid grid-cols-[auto_1fr_auto_auto] gap-1 items-center text-[9px] ${t.headerText} opacity-60 mb-0.5`}>
+          <span />
+          <span>Column</span>
+          <span>Order</span>
+          <span />
+        </div>
+        {sortLevels.length === 0 && (
+          <div className={`text-[10px] ${t.headerText} opacity-60 mb-1`}>
+            No sort — records appear in the default order.
+          </div>
+        )}
+        {sortLevels.map((level, i) => {
+          const labels = orderLabels(level.column);
+          return (
+            <div key={`sort-level-${i}`} className="grid grid-cols-[auto_1fr_auto_auto] gap-1 items-center mb-1">
+              <span className={`text-[9px] ${t.headerText} w-12 shrink-0`}>{i === 0 ? 'Sort by' : 'Then by'}</span>
+              <select
+                value={level.column}
+                onChange={(e) => setSortLevels((prev) => prev.map((l, idx) => (idx === i ? { ...l, column: e.target.value as keyof DealRecord } : l)))}
+                className={`min-w-0 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
+              >
+                {columns.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+              </select>
+              <select
+                value={level.dir}
+                onChange={(e) => setSortLevels((prev) => prev.map((l, idx) => (idx === i ? { ...l, dir: e.target.value as 'asc' | 'desc' } : l)))}
+                className={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
+              >
+                <option value="asc">{labels.asc}</option>
+                <option value="desc">{labels.desc}</option>
+              </select>
+              <span className="flex items-center">
+                <button onClick={() => moveSortLevel(i, i - 1)} disabled={i === 0} title="Move level up" className={btn}>↑</button>
+                <button onClick={() => moveSortLevel(i, i + 1)} disabled={i === sortLevels.length - 1} title="Move level down" className={btn}>↓</button>
+                <button
+                  onClick={() => setSortLevels((prev) => [...prev.slice(0, i + 1), { ...prev[i] }, ...prev.slice(i + 1)])}
+                  title="Copy level"
+                  className={btn}
+                >
+                  ⧉
+                </button>
+                <button
+                  onClick={() => setSortLevels((prev) => prev.filter((_, idx) => idx !== i))}
+                  title="Delete level"
+                  className="text-[11px] px-1 text-red-400 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </span>
+            </div>
+          );
+        })}
+        <button
+          onClick={() => setSortLevels((prev) => [
+            ...prev,
+            { column: (columns.find((c) => !prev.some((l) => l.column === c.key))?.key || columns[0]?.key || 'sortKey') as keyof DealRecord, dir: 'asc' },
+          ])}
+          className={`text-[10px] ${t.headerText} hover:text-blue-400 mt-0.5`}
+        >
+          + Add level
+        </button>
+      </>
+    );
+  }
 
   // Export state
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -1025,7 +1228,7 @@ export default function DealSheetPage() {
         <div className="flex items-center gap-1">
           <span className="text-[10px] opacity-50 mr-1">Live Records</span>
           <button
-            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('all'); }}
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('all'); setSortLevels(QUICK_FILTER_SORT.all); }}
             className={`px-2 py-1 rounded text-xs ${
               quickFilter === 'all' && activeStatuses === '01,02'
                 ? 'bg-blue-600 text-white'
@@ -1035,7 +1238,7 @@ export default function DealSheetPage() {
             All*
           </button>
           <button
-            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('available'); }}
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('available'); setSortLevels(QUICK_FILTER_SORT.available); }}
             className={`px-2 py-1 rounded text-xs ${
               quickFilter === 'available'
                 ? 'bg-blue-600 text-white'
@@ -1045,7 +1248,7 @@ export default function DealSheetPage() {
             Available
           </button>
           <button
-            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('eoi'); }}
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('eoi'); setSortLevels(QUICK_FILTER_SORT.eoi); }}
             className={`px-2 py-1 rounded text-xs ${
               quickFilter === 'eoi'
                 ? 'bg-blue-600 text-white'
@@ -1060,7 +1263,7 @@ export default function DealSheetPage() {
         <div className="flex items-center gap-1">
           <span className="text-[10px] opacity-50 mr-1">Housekeeping</span>
           <button
-            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('awaiting_packager'); }}
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('awaiting_packager'); setSortLevels(QUICK_FILTER_SORT.awaiting_packager); }}
             className={`px-2 py-1 rounded text-xs ${
               quickFilter === 'awaiting_packager'
                 ? 'bg-amber-600 text-white'
@@ -1070,7 +1273,7 @@ export default function DealSheetPage() {
             Awaiting Packager
           </button>
           <button
-            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('awaiting_qa'); }}
+            onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('awaiting_qa'); setSortLevels(QUICK_FILTER_SORT.awaiting_qa); }}
             className={`px-2 py-1 rounded text-xs ${
               quickFilter === 'awaiting_qa'
                 ? 'bg-amber-600 text-white'
@@ -1089,6 +1292,7 @@ export default function DealSheetPage() {
             setFilters({});
             setExcludedFilters({});
             setIdFilter('');
+            setSortLevels(QUICK_FILTER_SORT.all);
             fetchData('01,02');
           }}
           className={`px-2 py-1 rounded text-xs hover:opacity-80 border ${
@@ -1099,6 +1303,30 @@ export default function DealSheetPage() {
         >
           Clear Filters
         </button>
+
+        {/* Sort dialog trigger */}
+        <button
+          ref={sortBtnRef}
+          onClick={openSortDialog}
+          className={`px-2 py-1 rounded text-xs hover:opacity-80 border ${
+            sortLevels.length > 1
+              ? 'bg-blue-600 text-white border-blue-700'
+              : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
+          }`}
+          title="Sort by one or more columns"
+        >
+          Sort{sortLevels.length > 1 ? ` (${sortLevels.length})` : ''} ▼
+        </button>
+        {/* Clear Sort — resets to active filter's default sort */}
+        {JSON.stringify(sortLevels) !== JSON.stringify(QUICK_FILTER_SORT[quickFilter] || DEFAULT_SORT) && (
+          <button
+            onClick={() => setSortLevels(QUICK_FILTER_SORT[quickFilter] || DEFAULT_SORT)}
+            className="px-2 py-1 rounded text-xs hover:opacity-80 border bg-amber-600 text-white border-amber-700"
+            title="Reset sort to this view's default"
+          >
+            Clear Sort
+          </button>
+        )}
 
         {/* Other Records dropdown */}
         <div className="relative dropdown-container">
@@ -1315,7 +1543,7 @@ export default function DealSheetPage() {
                 {[24, 36, 48, 72].map((hours) => (
                   <button
                     key={hours}
-                    onClick={() => { setNewHoursWindow(hours); setShowNewMenu(false); if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('new_24h'); }}
+                    onClick={() => { setNewHoursWindow(hours); setShowNewMenu(false); if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('new_24h'); setSortLevels(QUICK_FILTER_SORT.new_24h); }}
                     className={`block w-full text-left px-3 py-1.5 text-xs ${t.text} ${t.hoverBg} ${newHoursWindow === hours ? 'font-bold' : ''}`}
                   >
                     Last {hours} hours
@@ -1418,14 +1646,19 @@ export default function DealSheetPage() {
                 >
                   <div
                     className="flex items-center gap-0.5 cursor-pointer overflow-hidden"
-                    onClick={() => handleSort(col.key)}
+                    onClick={(e) => handleSort(col.key, e.shiftKey)}
                   >
                     <span className="truncate text-[11px]">{col.label}</span>
-                    {sortColumn === col.key && (
-                      <span className="text-blue-400 text-[10px]">
-                        {sortDirection === 'asc' ? '▲' : sortDirection === 'desc' ? '▼' : ''}
-                      </span>
-                    )}
+                    {(() => {
+                      const levelIdx = sortLevels.findIndex((l) => l.column === col.key);
+                      if (levelIdx === -1) return null;
+                      const dir = sortLevels[levelIdx].dir;
+                      return (
+                        <span className="text-blue-400 text-[10px] whitespace-nowrap">
+                          {dir === 'asc' ? '▲' : '▼'}{sortLevels.length > 1 ? `${levelIdx + 1}` : ''}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Column filter */}
@@ -1498,16 +1731,16 @@ export default function DealSheetPage() {
                         {/* Sort options */}
                         <div className="flex gap-1 mb-1 px-1 border-b border-gray-600 pb-1">
                           <button
-                            onClick={() => { handleSort(col.key); setSortDirection('asc'); }}
+                            onClick={() => setPrimarySort(col.key, 'asc')}
                             className="text-[9px] text-gray-400 hover:text-white"
                           >
-                            A→Z
+                            {isDateField(col.key) ? 'Old→New' : 'A→Z'}
                           </button>
                           <button
-                            onClick={() => { handleSort(col.key); setSortDirection('desc'); }}
+                            onClick={() => setPrimarySort(col.key, 'desc')}
                             className="text-[9px] text-gray-400 hover:text-white"
                           >
-                            Z→A
+                            {isDateField(col.key) ? 'New→Old' : 'Z→A'}
                           </button>
                         </div>
                         {/* Month/Year quick select for date columns */}
@@ -1880,6 +2113,52 @@ export default function DealSheetPage() {
             </div>
           </div>
           <div>{expandedCell.value}</div>
+        </div>
+      )}
+
+      {/* Floating Sort panel — draggable, matches Contract Team Reporting */}
+      {showSortDialog && sortDialogPos && (
+        <div
+          data-sort-dialog
+          className={`fixed z-[90] ${t.bg} border ${t.inputBorder} rounded shadow-2xl dropdown-container`}
+          style={{ left: sortDialogPos.x, top: sortDialogPos.y, width: SORT_DIALOG_WIDTH }}
+        >
+          {/* Drag bar */}
+          <div
+            onPointerDown={startSortDrag}
+            className={`flex items-center justify-between px-2 py-1 border-b ${t.inputBorder} cursor-move select-none rounded-t ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'}`}
+            title="Drag to move"
+          >
+            <span className={`text-[11px] font-bold ${t.text}`}>∷ Sort</span>
+            <button
+              onClick={() => setShowSortDialog(false)}
+              className={`text-[11px] ${t.headerText} hover:text-red-400 px-1`}
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="p-2">
+            <div className={`text-[9px] ${t.headerText} opacity-60 mb-1.5`}>
+              Records are ordered by the first row, then ties are broken by the next, and so on.
+              Shift-click a column header to add a level without opening this.
+            </div>
+            {renderSortLevelEditor()}
+            <div className={`flex justify-between items-center mt-2 pt-1.5 border-t ${t.inputBorder}`}>
+              <button
+                onClick={() => setSortLevels(QUICK_FILTER_SORT[quickFilter] || DEFAULT_SORT)}
+                className={`text-[10px] ${t.headerText} hover:text-blue-400`}
+              >
+                Clear sort
+              </button>
+              <button
+                onClick={() => setShowSortDialog(false)}
+                className="px-3 py-1 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
