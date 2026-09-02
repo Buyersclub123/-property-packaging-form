@@ -222,16 +222,20 @@ export async function saveInvestmentHighlightsV2(
 
     // Find existing row by LGA + State
     let rowIndex = -1;
+    console.log(`[IH-V2 Save] Looking for LGA="${input.lga}" State="${normalizedState}" in ${rows.length} rows`);
     for (let i = 0; i < rows.length; i++) {
       const rowState = (rows[i][V2_COLUMNS.STATE] || '').trim().toUpperCase();
       if (rowState !== normalizedState) continue;
       
       const rowLGA = (rows[i][V2_COLUMNS.LGA] || '').trim();
-      if (lgaMatches(input.lga, rowLGA)) {
+      const match = lgaMatches(input.lga, rowLGA);
+      if (match) {
+        console.log(`[IH-V2 Save] MATCH found at row ${i + 2}: LGA="${rowLGA}" (${match})`);
         rowIndex = i;
         break;
       }
     }
+    console.log(`[IH-V2 Save] Result: ${rowIndex === -1 ? 'CREATE new row' : `UPDATE row ${rowIndex + 2}`}`);
 
     if (rowIndex !== -1) {
       // UPDATE existing row

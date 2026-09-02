@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { logInvestmentHighlightsActivity } from '@/lib/investmentHighlightsLogger';
-import { getSheetsClient } from '@/lib/googleSheets';
+import { saveInvestmentHighlightsV2 } from '@/lib/investmentHighlightsV2';
+import fs from 'fs';
+import path from 'path';
 
-const INVESTMENT_HIGHLIGHTS_SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS || '';
-const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights';
+function logOrganizePdf(msg: string) {
+  const ts = new Date().toISOString();
+  const line = `[${ts}] ${msg}\n`;
+  try { fs.appendFileSync(path.join(process.cwd(), 'logs', 'organize-pdf.log'), line); } catch {}
+  console.log(`[organize-pdf] ${msg}`);
+}
+
 
 /**
  * Clean report name for filename
@@ -41,6 +48,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { fileId, reportName, validPeriod, suburbs, state, userEmail, mainBody, skipSheetWrite } = body;
+    
+    logOrganizePdf(`REQUEST: fileId="${fileId||''}" reportName="${reportName||''}" validPeriod="${validPeriod||''}" state="${state||''}" suburbs="${suburbs||''}" skipSheetWrite=${!!skipSheetWrite} mainBodyLen=${(mainBody||'').length}`);
     
     // Log input values for debugging
     console.log('[organize-pdf] Input values:', {
@@ -226,17 +235,41 @@ export async function POST(request: NextRequest) {
       console.warn('[organize-pdf] WARNING: File name mismatch! Expected:', newFileName, 'Got:', updatedFile.data.name);
     }
     
-    // Step 7: Save to Google Sheet (skip if called from editor which manages its own sheet writes)
+    // Step 7: Save to V2 Google Sheet (skip if called from editor which manages its own sheet writes)
+    logOrganizePdf(`Step 7: skipSheetWrite=${!!skipSheetWrite} reportName="${reportName}" state="${state}" validPeriod="${validPeriod}" mainBodyLen=${(mainBody||'').length}`);
     if (!skipSheetWrite) {
-      await saveToGoogleSheet(
-        suburbs || '',
-        state,
-        reportName,
-        validPeriod,
-        mainBody || '',
-        webViewLink,
-        fileId
-      );
+      // Parse validPeriod into split fields for V2
+      let validFromMonth = '', validFromYear = '', validToMonth = '', validToYear = '';
+      const fullMatch = validPeriod.match(/^([A-Za-z]+)\s+(\d{4})\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+      const shortMatch = validPeriod.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+      if (fullMatch) {
+        validFromMonth = fullMatch[1]; validFromYear = fullMatch[2]; validToMonth = fullMatch[3]; validToYear = fullMatch[4];
+      } else if (shortMatch) {
+        validFromMonth = shortMatch[1]; validFromYear = shortMatch[3]; validToMonth = shortMatch[2]; validToYear = shortMatch[3];
+      }
+      logOrganizePdf(`Parsed period: from=${validFromMonth} ${validFromYear} to=${validToMonth} ${validToYear}`);
+
+      try {
+        const saveResult = await saveInvestmentHighlightsV2({
+          lga: reportName, // Use reportName as LGA fallback
+          state,
+          suburb: suburbs || '',
+          validFromMonth,
+          validFromYear,
+          validToMonth,
+          validToYear,
+          mainBody: mainBody || '',
+          pdfDriveLink: webViewLink,
+          pdfFileId: fileId,
+          updatedBy: userEmail || 'organize-pdf',
+        });
+        logOrganizePdf(`Sheet save OK: ${JSON.stringify(saveResult)}`);
+      } catch (saveErr: any) {
+        logOrganizePdf(`Sheet save FAILED: ${saveErr.message}`);
+        throw saveErr;
+      }
+    } else {
+      logOrganizePdf('Sheet write skipped (skipSheetWrite=true)');
     }
     
     // Step 8: Log upload action
@@ -258,6 +291,7 @@ export async function POST(request: NextRequest) {
       fileName: newFileName,
     });
   } catch (error: any) {
+    logOrganizePdf(`FATAL ERROR: ${error.message}`);
     console.error('PDF organization error:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to organize PDF' },
@@ -304,97 +338,3 @@ async function findOrCreateFolder(
   return folder.data.id;
 }
 
-/**
- * Save PDF metadata to Google Sheet
- * Structure: A:Suburbs, B:State, C:ReportName, D:ValidPeriod, E:MainBody, F:PDFLink, G:FileID
- * 7 columns (A-G) to match requirements
- */
-async function saveToGoogleSheet(
-  suburbs: string,
-  state: string,
-  reportName: string,
-  validPeriod: string,
-  mainBody: string,
-  pdfLink: string,
-  fileId: string
-): Promise<void> {
-  const sheets = getSheetsClient();
-  
-  // Check if row exists for this report (read 7 columns: A-G)
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-    range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:G`,
-  });
-  
-  const rows = response.data.values || [];
-  const normalizedReportName = reportName.trim().toLowerCase();
-  const normalizedState = state.trim().toUpperCase();
-  
-  // Find existing row by report name and state
-  let rowIndex = -1;
-  rowIndex = rows.findIndex((row) => {
-    const rowReportName = (row[2] || '').trim().toLowerCase(); // Column C
-    const rowState = (row[1] || '').trim().toUpperCase(); // Column B
-    return rowReportName === normalizedReportName && rowState === normalizedState;
-  });
-  
-  // Prepare row data (7 columns: A-G)
-  const rowData = [
-    suburbs || '', // A: Suburbs (comma-separated)
-    state, // B: State
-    reportName, // C: Report Name
-    validPeriod, // D: Valid Period
-    mainBody || '', // E: Main Body
-    pdfLink, // F: PDF Drive Link
-    fileId, // G: PDF File ID
-  ];
-  
-  if (rowIndex >= 0) {
-    // EXISTING ROW - Append suburb if not already in list
-    const existingRow = rows[rowIndex];
-    const existingSuburbs = (existingRow[0] || '').trim();
-    
-    // Parse existing suburbs
-    const suburbList = existingSuburbs
-      .split(',')
-      .map((s: string) => s.trim())
-      .filter((s: string) => s.length > 0);
-    
-    // Add new suburb if not already in list
-    const newSuburb = (suburbs || '').trim();
-    if (newSuburb && !suburbList.includes(newSuburb)) {
-      suburbList.push(newSuburb);
-    }
-    
-    // Combine back into comma-separated string
-    const updatedSuburbs = suburbList.join(', ');
-    
-    console.log('[organize-pdf] Existing suburbs:', existingSuburbs);
-    console.log('[organize-pdf] New suburb:', newSuburb);
-    console.log('[organize-pdf] Updated suburbs:', updatedSuburbs);
-    
-    // Update suburbs in row data
-    rowData[0] = updatedSuburbs;
-    
-    // Update existing row (7 columns: A-G)
-    const actualRowNumber = rowIndex + 2; // +2 for header row and 0-index
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A${actualRowNumber}:G${actualRowNumber}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [rowData],
-      },
-    });
-  } else {
-    // Append new row (7 columns: A-G)
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A:G`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [rowData],
-      },
-    });
-  }
-}

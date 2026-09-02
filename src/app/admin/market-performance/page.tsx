@@ -147,12 +147,42 @@ export default function MarketPerformancePage() {
   const [ihShowDeleteConfirm, setIhShowDeleteConfirm] = useState(false);
   const [ihDeleting, setIhDeleting] = useState(false);
   const [ihLoadingData, setIhLoadingData] = useState(false);
+  const [ihEditingMainBody, setIhEditingMainBody] = useState(false);
+  const [ihEditedMainBody, setIhEditedMainBody] = useState('');
+  const [ihSavingMainBody, setIhSavingMainBody] = useState(false);
   const [ihLoadingReports, setIhLoadingReports] = useState(false);
   const [ihSaving, setIhSaving] = useState(false);
   const [ihSavingMetadata, setIhSavingMetadata] = useState(false);
   const [ihShowSaveConfirmModal, setIhShowSaveConfirmModal] = useState(false);
   const [ihMessage, setIhMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const ihSearchRef = useRef<HTMLDivElement>(null);
+
+  // Add new LGA flow
+  const [ihShowAddNew, setIhShowAddNew] = useState(false);
+  const [ihNewSuburb, setIhNewSuburb] = useState('');
+  const [ihNewState, setIhNewState] = useState('');
+  const [ihResolvingLga, setIhResolvingLga] = useState(false);
+  const [ihResolvedLga, setIhResolvedLga] = useState<string | null>(null);
+  const [ihExistingMatch, setIhExistingMatch] = useState<{ lga: string; reportName: string; matchType: string } | null>(null);
+  const [ihCreatingLga, setIhCreatingLga] = useState(false);
+  // PDF processing in add-new flow
+  const [ihNewPdfFile, setIhNewPdfFile] = useState<File | null>(null);
+  const [ihNewProcessing, setIhNewProcessing] = useState(false);
+  const [ihNewProgress, setIhNewProgress] = useState('');
+  const [ihNewFromMonth, setIhNewFromMonth] = useState('');
+  const [ihNewFromYear, setIhNewFromYear] = useState('');
+  const [ihNewToMonth, setIhNewToMonth] = useState('');
+  const [ihNewToYear, setIhNewToYear] = useState('');
+  const [ihNewExtractedName, setIhNewExtractedName] = useState('');
+  const [ihNewShowMetadata, setIhNewShowMetadata] = useState(false);
+  const [ihNewUploadedFileId, setIhNewUploadedFileId] = useState('');
+
+  const V2_MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const V2_CURRENT_YEAR = new Date().getFullYear();
+  const V2_YEARS = Array.from({ length: 5 }, (_, i) => String(V2_CURRENT_YEAR - 1 + i));
 
   // Check email on mount
   useEffect(() => {
@@ -480,6 +510,8 @@ export default function MarketPerformancePage() {
         setIhEditingValidPeriod(false);
         setIhEditedReportName(result.data.reportName || '');
         setIhEditingReportName(false);
+        setIhEditingMainBody(false);
+        setIhEditedMainBody('');
         // Initialize sections with default headings (empty items)
         setIhSections(DEFAULT_SECTION_HEADINGS.map((h) => ({ heading: h, items: [] })));
       } else {
@@ -563,6 +595,230 @@ export default function MarketPerformancePage() {
     setIhShowDeleteConfirm(false);
     setIhSearchQuery('');
     setIhMessage(null);
+  };
+
+  // ---- Add New LGA Handlers ----
+  const handleIhResolve = async () => {
+    if (!ihNewSuburb.trim() || !ihNewState) return;
+    setIhResolvingLga(true);
+    setIhResolvedLga(null);
+    setIhExistingMatch(null);
+    setIhMessage(null);
+
+    try {
+      const res = await fetch('/api/admin/investment-highlights/resolve-lga', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suburb: ihNewSuburb.trim(), state: ihNewState }),
+      });
+      const result = await res.json();
+      if (!result.success) {
+        setIhMessage({ type: 'error', text: result.error || 'Could not resolve LGA' });
+        return;
+      }
+      setIhResolvedLga(result.lga);
+      if (result.existingMatch) {
+        setIhExistingMatch(result.existingMatch);
+      }
+    } catch (err) {
+      setIhMessage({ type: 'error', text: 'Network error resolving LGA' });
+    } finally {
+      setIhResolvingLga(false);
+    }
+  };
+
+  const handleIhNewPdfSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+      setIhMessage({ type: 'error', text: 'Please select a PDF file' });
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setIhMessage({ type: 'error', text: 'File is too large. Maximum 50MB.' });
+      return;
+    }
+    setIhNewPdfFile(file);
+    setIhNewProcessing(true);
+    setIhNewProgress('Uploading PDF...');
+    setIhMessage(null);
+
+    try {
+      // Step 1: Upload PDF to Google Drive
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploadRes = await fetch('/api/investment-highlights/upload-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json();
+        throw new Error(err.error || 'Upload failed');
+      }
+      const uploadResult = await uploadRes.json();
+      setIhNewUploadedFileId(uploadResult.fileId);
+
+      // Step 2: Wait for Drive to process
+      setIhNewProgress('Waiting for file to be ready...');
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Step 3: Extract metadata
+      setIhNewProgress('Extracting metadata...');
+      const extractRes = await fetch('/api/investment-highlights/extract-metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: uploadResult.fileId }),
+      });
+      if (!extractRes.ok) {
+        const err = await extractRes.json();
+        throw new Error(err.error || 'Extraction failed');
+      }
+      const extractResult = await extractRes.json();
+
+      setIhNewExtractedName(extractResult.reportName || ihResolvedLga || '');
+
+      // Parse valid period into split fields
+      const vp = (extractResult.validPeriod || '').trim();
+      if (vp) {
+        const fullMatch = vp.match(/^([A-Za-z]+)\s+(\d{4})\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+        const shortMatch = vp.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+        if (fullMatch) {
+          setIhNewFromMonth(fullMatch[1]); setIhNewFromYear(fullMatch[2]);
+          setIhNewToMonth(fullMatch[3]); setIhNewToYear(fullMatch[4]);
+        } else if (shortMatch) {
+          setIhNewFromMonth(shortMatch[1]); setIhNewFromYear(shortMatch[3]);
+          setIhNewToMonth(shortMatch[2]); setIhNewToYear(shortMatch[3]);
+        }
+      }
+
+      setIhNewShowMetadata(true);
+      setIhNewProgress('');
+    } catch (err: any) {
+      setIhMessage({ type: 'error', text: err.message || 'Failed to upload PDF' });
+      setIhNewProgress('');
+    } finally {
+      setIhNewProcessing(false);
+    }
+  };
+
+  const handleIhCreateNew = async () => {
+    if (!ihResolvedLga || !ihNewState) return;
+    if (!ihNewFromMonth || !ihNewFromYear || !ihNewToMonth || !ihNewToYear) {
+      setIhMessage({ type: 'error', text: 'Please fill in all Valid Period fields' });
+      return;
+    }
+    if (!ihNewUploadedFileId) {
+      setIhMessage({ type: 'error', text: 'Please upload a PDF first' });
+      return;
+    }
+
+    setIhCreatingLga(true);
+    setIhMessage(null);
+
+    // Build valid period string (same as Step 5 handleConfirmMetadata)
+    const builtValidPeriod = ihNewFromYear === ihNewToYear
+      ? `${ihNewFromMonth} - ${ihNewToMonth} ${ihNewToYear}`
+      : `${ihNewFromMonth} ${ihNewFromYear} - ${ihNewToMonth} ${ihNewToYear}`;
+
+    try {
+      // Step 1: Format with AI (same as Step 5)
+      setIhNewProgress('Formatting with AI...');
+      let formattedMainBody = '';
+
+      const aiRequestBody = {
+        type: 'investmentHighlights',
+        fileId: ihNewUploadedFileId,
+        rawText: undefined as string | undefined,
+        context: {
+          suburb: ihNewSuburb.trim(),
+          state: ihNewState,
+          lga: ihResolvedLga,
+        },
+      };
+
+      const parseResponse = await fetch('/api/ai/generate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aiRequestBody),
+      });
+
+      if (parseResponse.ok) {
+        const parseResult = await parseResponse.json();
+        formattedMainBody = parseResult.content || '';
+      } else {
+        const errorText = await parseResponse.text();
+        console.warn('AI formatting failed:', errorText);
+        throw new Error('AI formatting failed. Please try again.');
+      }
+
+      // Step 2: Organize PDF into CURRENT/LEGACY folders and save to sheet
+      // (organize-pdf handles saving to V2 sheet — same as Step 5)
+      setIhNewProgress('Organizing PDF...');
+
+      const response = await fetch('/api/investment-highlights/organize-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileId: ihNewUploadedFileId,
+          reportName: ihResolvedLga,
+          validPeriod: builtValidPeriod,
+          suburbs: ihNewSuburb.trim(),
+          state: ihNewState,
+          userEmail: userEmail || 'admin',
+          mainBody: formattedMainBody,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to organize PDF');
+      }
+
+      // Success
+      setIhMessage({ type: 'success', text: `Created and processed: ${ihResolvedLga} (${ihNewState})` });
+      await loadIhReports();
+
+      // Reset add-new form
+      setIhShowAddNew(false);
+      setIhNewSuburb('');
+      setIhNewState('');
+      setIhResolvedLga(null);
+      setIhExistingMatch(null);
+      setIhNewPdfFile(null);
+      setIhNewShowMetadata(false);
+      setIhNewUploadedFileId('');
+      setIhNewFromMonth(''); setIhNewFromYear('');
+      setIhNewToMonth(''); setIhNewToYear('');
+      setIhNewExtractedName('');
+
+      // Auto-select the new report
+      const newReport: IHReport = { suburbs: ihNewSuburb.trim(), state: ihNewState, reportName: ihResolvedLga, validPeriod: builtValidPeriod };
+      await handleSelectIhReport(newReport);
+    } catch (err: any) {
+      console.error('PDF processing error:', err);
+      setIhMessage({ type: 'error', text: err.message || 'Failed to create LGA report' });
+    } finally {
+      setIhCreatingLga(false);
+      setIhNewProgress('');
+    }
+  };
+
+  const handleIhEditExisting = async () => {
+    if (!ihExistingMatch) return;
+    setIhShowAddNew(false);
+    setIhNewSuburb('');
+    setIhNewState('');
+    setIhResolvedLga(null);
+    setIhExistingMatch(null);
+    // Select the existing report
+    const existingReport: IHReport = {
+      suburbs: '',
+      state: ihNewState,
+      reportName: ihExistingMatch.reportName || ihExistingMatch.lga,
+      validPeriod: '',
+    };
+    setIhSearchQuery(existingReport.reportName);
+    await handleSelectIhReport(existingReport);
   };
 
   const ihAddSuburb = () => {
@@ -810,6 +1066,21 @@ export default function MarketPerformancePage() {
       )
     );
   };
+
+  const ihMoveItem = (sectionIdx: number, fromIdx: number, toIdx: number) => {
+    setIhSections((prev) =>
+      prev.map((s, i) => {
+        if (i !== sectionIdx) return s;
+        const items = [...s.items];
+        const [moved] = items.splice(fromIdx, 1);
+        items.splice(toIdx, 0, moved);
+        return { ...s, items };
+      })
+    );
+  };
+
+  const [ihDragItem, setIhDragItem] = useState<{ sIdx: number; iIdx: number } | null>(null);
+  const [ihDragOverItem, setIhDragOverItem] = useState<{ sIdx: number; iIdx: number } | null>(null);
 
   // Available headings not currently in use
   const ihAvailableHeadings = DEFAULT_SECTION_HEADINGS.filter(
@@ -1301,6 +1572,7 @@ export default function MarketPerformancePage() {
                         >
                           <span className="font-medium">{r.reportName}</span>
                           <span className="text-gray-500 ml-2">{r.state}</span>
+                          {r.validPeriod && <span className="text-gray-400 ml-2 text-xs">({r.validPeriod})</span>}
                           <br />
                           <span className="text-xs text-gray-400">{r.suburbs}</span>
                         </button>
@@ -1320,8 +1592,198 @@ export default function MarketPerformancePage() {
                   Clear
                 </button>
               )}
+
+              {!ihSelectedReport && !ihShowAddNew && (
+                <button
+                  onClick={() => { setIhShowAddNew(true); setIhMessage(null); }}
+                  className="px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-300 rounded-md hover:bg-green-100 whitespace-nowrap"
+                >
+                  + Add new LGA
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Add New LGA panel */}
+          {ihShowAddNew && (
+            <div className="bg-white rounded-lg shadow p-6 mb-6 border-l-4 border-green-500">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Add New LGA</h2>
+                <button
+                  onClick={() => {
+                    setIhShowAddNew(false);
+                    setIhNewSuburb('');
+                    setIhNewState('');
+                    setIhResolvedLga(null);
+                    setIhExistingMatch(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 text-lg"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                Enter a suburb and state. Geoscape will resolve the correct LGA name (same source as the property form).
+              </p>
+
+              <div className="flex gap-3 items-end mb-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Suburb</label>
+                  <input
+                    type="text"
+                    value={ihNewSuburb}
+                    onChange={(e) => {
+                      setIhNewSuburb(e.target.value);
+                      setIhResolvedLga(null);
+                      setIhExistingMatch(null);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. Springfield"
+                  />
+                </div>
+                <div className="w-32">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                  <select
+                    value={ihNewState}
+                    onChange={(e) => {
+                      setIhNewState(e.target.value);
+                      setIhResolvedLga(null);
+                      setIhExistingMatch(null);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">Select</option>
+                    {AUSTRALIAN_STATES.map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={handleIhResolve}
+                  disabled={!ihNewSuburb.trim() || !ihNewState || ihResolvingLga}
+                  className={`px-5 py-2 rounded-md text-sm font-medium text-white ${
+                    !ihNewSuburb.trim() || !ihNewState || ihResolvingLga
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {ihResolvingLga ? 'Resolving...' : 'Look up LGA'}
+                </button>
+              </div>
+
+              {/* Resolved LGA result */}
+              {ihResolvedLga && !ihExistingMatch && (
+                <div className="p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
+                  <p className="text-sm text-green-800 mb-3">
+                    <strong>LGA resolved:</strong> {ihResolvedLga} ({ihNewState})
+                  </p>
+
+                  {/* Step 2: Upload PDF */}
+                  {!ihNewShowMetadata && !ihNewProcessing && (
+                    <div className="mt-3">
+                      <p className="text-xs text-green-600 mb-2">Upload the Hotspotting PDF for this LGA:</p>
+                      <label className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-green-300 rounded-md cursor-pointer hover:bg-green-50 text-sm font-medium text-green-700">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                        {ihNewPdfFile ? ihNewPdfFile.name : 'Select PDF'}
+                        <input type="file" accept=".pdf" onChange={handleIhNewPdfSelect} className="hidden" />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Progress indicator */}
+                  {ihNewProcessing && ihNewProgress && (
+                    <div className="mt-3 flex items-center gap-2 text-sm text-blue-600">
+                      <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                      {ihNewProgress}
+                    </div>
+                  )}
+
+                  {/* Step 3: Verify metadata */}
+                  {ihNewShowMetadata && (
+                    <div className="mt-4 p-4 bg-white border border-gray-200 rounded-lg space-y-3">
+                      <p className="text-sm font-semibold text-gray-800">Verify extracted metadata:</p>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Report Name</label>
+                        <div className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-md text-sm text-gray-800 font-medium">
+                          {ihResolvedLga}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">From Month</label>
+                          <select value={ihNewFromMonth} onChange={(e) => setIhNewFromMonth(e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm bg-white">
+                            <option value="">Select</option>
+                            {V2_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">From Year</label>
+                          <select value={ihNewFromYear} onChange={(e) => setIhNewFromYear(e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm bg-white">
+                            <option value="">Select</option>
+                            {V2_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">To Month</label>
+                          <select value={ihNewToMonth} onChange={(e) => setIhNewToMonth(e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm bg-white">
+                            <option value="">Select</option>
+                            {V2_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">To Year</label>
+                          <select value={ihNewToYear} onChange={(e) => setIhNewToYear(e.target.value)} className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm bg-white">
+                            <option value="">Select</option>
+                            {V2_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      {ihNewProgress && (
+                        <div className="flex items-center gap-2 text-sm text-blue-600">
+                          <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                          {ihNewProgress}
+                        </div>
+                      )}
+
+                      <button
+                        onClick={handleIhCreateNew}
+                        disabled={ihCreatingLga || !ihNewFromMonth || !ihNewFromYear || !ihNewToMonth || !ihNewToYear}
+                        className={`w-full px-5 py-2.5 rounded-md text-sm font-medium text-white ${
+                          ihCreatingLga || !ihNewFromMonth || !ihNewFromYear || !ihNewToMonth || !ihNewToYear
+                            ? 'bg-gray-400 cursor-not-allowed'
+                            : 'bg-green-600 hover:bg-green-700'
+                        }`}
+                      >
+                        {ihCreatingLga ? (ihNewProgress || 'Processing...') : 'Process PDF & Create LGA Report'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Duplicate warning */}
+              {ihResolvedLga && ihExistingMatch && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+                  <p className="text-sm text-amber-800 mb-2">
+                    <strong>This LGA already exists:</strong> {ihExistingMatch.lga} ({ihNewState})
+                  </p>
+                  <p className="text-xs text-amber-600 mb-3">
+                    Geoscape resolved "{ihNewSuburb}" to <strong>{ihResolvedLga}</strong>, which matches the existing report <strong>{ihExistingMatch.reportName}</strong>.
+                    Would you like to edit the existing one instead?
+                  </p>
+                  <button
+                    onClick={handleIhEditExisting}
+                    className="px-5 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Edit existing: {ihExistingMatch.reportName}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* IH Status messages */}
           {ihMessage && (
@@ -1559,33 +2021,7 @@ export default function MarketPerformancePage() {
                 <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-gray-600">Report Name (in sheet):</span>
-                    {ihEditingPdfReportName ? (
-                      <>
-                        <input
-                          type="text"
-                          value={ihEditedReportName}
-                          onChange={(e) => setIhEditedReportName(e.target.value)}
-                          className="input-field max-w-sm !py-1.5"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => setIhEditingPdfReportName(false)}
-                          className="btn-secondary text-sm !px-4 !py-1"
-                        >
-                          Done
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-sm font-medium text-gray-800">{ihEditedReportName || '(not set)'}</span>
-                        <button
-                          onClick={() => setIhEditingPdfReportName(true)}
-                          className="btn-secondary text-sm !px-4 !py-1"
-                        >
-                          Edit
-                        </button>
-                      </>
-                    )}
+                    <span className="text-sm font-medium text-gray-800">{ihEditedReportName || '(not set)'}</span>
                   </div>
                   <div className="flex items-start gap-2 text-sm text-right break-words min-w-0">
                     <span className="text-gray-600 whitespace-nowrap">PDF filename:</span>
@@ -1628,33 +2064,106 @@ export default function MarketPerformancePage() {
                 </div>
               </div>
 
-              {/* Current Main Body (always visible, read-only) */}
+              {/* Current Main Body */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-semibold text-gray-700">Current Main Body</label>
-                  <span className="text-xs text-gray-400">Read-only (select &amp; copy enabled)</span>
+                  <span className="text-xs text-gray-400">{ihEditingMainBody ? 'Editing — paste or type below' : 'Read-only (select & copy enabled)'}</span>
                 </div>
                 <textarea
-                  readOnly
+                  readOnly={!ihEditingMainBody}
                   ref={(el) => {
                     if (el) {
                       el.style.height = 'auto';
                       el.style.height = el.scrollHeight + 'px';
                     }
                   }}
-                  value={ihCurrentData.mainBody || '(empty)'}
-                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-600 font-mono leading-relaxed overflow-hidden resize-none cursor-default select-text"
+                  value={ihEditingMainBody ? ihEditedMainBody : (ihCurrentData.mainBody || '(empty)')}
+                  onChange={ihEditingMainBody ? (e) => setIhEditedMainBody(e.target.value) : undefined}
+                  onInput={ihEditingMainBody ? (e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = target.scrollHeight + 'px';
+                  } : undefined}
+                  className={`w-full p-4 border rounded-md text-sm font-mono leading-relaxed overflow-hidden resize-none select-text ${
+                    ihEditingMainBody
+                      ? 'bg-white border-blue-300 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 cursor-default'
+                  }`}
                 />
+                {ihEditingMainBody && (
+                  <div className="flex items-center gap-3 mt-3">
+                    <button
+                      onClick={async () => {
+                        if (!ihSelectedReport || !ihEditedMainBody.trim()) return;
+                        setIhSavingMainBody(true);
+                        setIhMessage(null);
+                        try {
+                          const res = await fetch('/api/admin/investment-highlights', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              reportName: ihSelectedReport.reportName,
+                              state: ihSelectedReport.state,
+                              mainBody: ihEditedMainBody,
+                              userEmail,
+                              suburbs: ihEditedSuburbs.join(', '),
+                              validPeriod: ihEditedValidPeriod,
+                              editedReportName: ihEditedReportName,
+                            }),
+                          });
+                          const result = await res.json();
+                          if (result.success) {
+                            setIhMessage({ type: 'success', text: 'Main body saved successfully' });
+                            setIhEditingMainBody(false);
+                            await handleSelectIhReport(ihSelectedReport);
+                          } else {
+                            setIhMessage({ type: 'error', text: result.error || 'Failed to save' });
+                          }
+                        } catch (err) {
+                          setIhMessage({ type: 'error', text: 'Network error. Please try again.' });
+                        } finally {
+                          setIhSavingMainBody(false);
+                        }
+                      }}
+                      disabled={ihSavingMainBody || !ihEditedMainBody.trim()}
+                      className={`px-5 py-2 rounded-md text-sm font-medium text-white ${
+                        ihSavingMainBody || !ihEditedMainBody.trim()
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      {ihSavingMainBody ? 'Saving...' : 'Save Main Body'}
+                    </button>
+                    <button
+                      onClick={() => { setIhEditingMainBody(false); setIhEditedMainBody(''); }}
+                      className="px-5 py-2 rounded-md text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Action button: Load existing */}
-              <div className="mb-6">
+              {/* Action buttons: Load existing / Edit main body */}
+              <div className="mb-6 flex gap-3">
                 <button
                   onClick={ihLoadExisting}
                   className="text-sm font-medium px-4 py-2 rounded-md border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100"
                 >
                   Load existing into editor
                 </button>
+                {!ihEditingMainBody && (
+                  <button
+                    onClick={() => {
+                      setIhEditingMainBody(true);
+                      setIhEditedMainBody(ihCurrentData?.mainBody || '');
+                    }}
+                    className="text-sm font-medium px-4 py-2 rounded-md border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                  >
+                    Edit entire main body
+                  </button>
+                )}
               </div>
 
               {/* LGA Title */}
@@ -1684,8 +2193,53 @@ export default function MarketPerformancePage() {
 
                     {/* Items in this section */}
                     {section.items.map((item, iIdx) => (
-                      <div key={iIdx} className="flex items-start gap-2 mb-2 ml-4">
-                        <span className="text-gray-400 mt-2 text-sm select-none">•</span>
+                      <div
+                        key={iIdx}
+                        draggable
+                        onDragStart={() => setIhDragItem({ sIdx, iIdx })}
+                        onDragEnd={() => { setIhDragItem(null); setIhDragOverItem(null); }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          if (ihDragItem && ihDragItem.sIdx === sIdx) {
+                            setIhDragOverItem({ sIdx, iIdx });
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (ihDragItem && ihDragItem.sIdx === sIdx && ihDragItem.iIdx !== iIdx) {
+                            ihMoveItem(sIdx, ihDragItem.iIdx, iIdx);
+                          }
+                          setIhDragItem(null);
+                          setIhDragOverItem(null);
+                        }}
+                        className={`flex items-start gap-2 mb-2 ml-4 rounded-md transition-colors ${
+                          ihDragOverItem?.sIdx === sIdx && ihDragOverItem?.iIdx === iIdx
+                            ? 'bg-blue-50 border border-blue-200 border-dashed'
+                            : ihDragItem?.sIdx === sIdx && ihDragItem?.iIdx === iIdx
+                              ? 'opacity-40'
+                              : ''
+                        }`}
+                      >
+                        <span
+                          className="text-gray-300 mt-2 text-sm select-none cursor-grab active:cursor-grabbing hover:text-gray-500"
+                          title="Drag to reorder"
+                        >
+                          ⠿
+                        </span>
+                        <div className="flex flex-col gap-0.5 mt-1.5">
+                          <button
+                            onClick={() => iIdx > 0 && ihMoveItem(sIdx, iIdx, iIdx - 1)}
+                            disabled={iIdx === 0}
+                            className={`text-xs leading-none ${iIdx === 0 ? 'text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="Move up"
+                          >▲</button>
+                          <button
+                            onClick={() => iIdx < section.items.length - 1 && ihMoveItem(sIdx, iIdx, iIdx + 1)}
+                            disabled={iIdx === section.items.length - 1}
+                            className={`text-xs leading-none ${iIdx === section.items.length - 1 ? 'text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="Move down"
+                          >▼</button>
+                        </div>
                         <textarea
                           value={item}
                           onChange={(e) => ihUpdateItem(sIdx, iIdx, e.target.value)}

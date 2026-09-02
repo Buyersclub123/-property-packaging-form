@@ -2,7 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSheetsClient } from '@/lib/googleSheets';
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS || '';
-const TAB_NAME = 'Investment Highlights';
+const TAB_NAME = 'Investment Highlights V2';
+
+// V2 column mapping: A=Suburbs, B=State, C=LGA, D=Report Name, E=ValidFromMonth, F=ValidFromYear, G=ValidToMonth, H=ValidToYear, I=MainBody, J=PdfDriveLink, K=PdfFileId, L=UpdatedBy, M=UpdatedAt
+function buildValidPeriod(row: any[]): string {
+  const fromMonth = (row[4] || '').trim();
+  const fromYear = (row[5] || '').trim();
+  const toMonth = (row[6] || '').trim();
+  const toYear = (row[7] || '').trim();
+  if (!fromMonth || !toMonth) return '';
+  if (fromYear === toYear) return `${fromMonth} - ${toMonth} ${toYear}`;
+  return `${fromMonth} ${fromYear} - ${toMonth} ${toYear}`;
+}
+
+function parseValidPeriod(vp: string): { fromMonth: string; fromYear: string; toMonth: string; toYear: string } | null {
+  const normalized = vp.trim();
+  // "Month Year - Month Year"
+  const full = normalized.match(/^([A-Za-z]+)\s+(\d{4})\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+  if (full) return { fromMonth: full[1], fromYear: full[2], toMonth: full[3], toYear: full[4] };
+  // "Month - Month Year"
+  const short = normalized.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+  if (short) return { fromMonth: short[1], fromYear: short[3], toMonth: short[2], toYear: short[3] };
+  return null;
+}
 
 /**
  * GET /api/admin/investment-highlights
@@ -26,18 +48,19 @@ export async function GET(request: NextRequest) {
     if (action === 'list') {
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: `${TAB_NAME}!A2:G`,
+        range: `'${TAB_NAME}'!A2:M`,
       });
 
       const rows = response.data.values || [];
 
       const reports = rows
-        .filter((row) => row[0] && row[0].trim())
+        .filter((row) => row[2] && row[2].trim()) // LGA column C must exist
         .map((row) => ({
           suburbs: (row[0] || '').trim(),
           state: (row[1] || '').trim(),
-          reportName: (row[2] || '').trim(),
-          validPeriod: (row[3] || '').trim(),
+          reportName: (row[3] || row[2] || '').trim(), // Report Name (D), fallback to LGA (C)
+          lga: (row[2] || '').trim(),
+          validPeriod: buildValidPeriod(row),
         }))
         .sort((a, b) => a.reportName.localeCompare(b.reportName));
 
@@ -57,17 +80,20 @@ export async function GET(request: NextRequest) {
 
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: `${TAB_NAME}!A2:I`,
+        range: `'${TAB_NAME}'!A2:M`,
       });
 
       const rows = response.data.values || [];
       const normalizedReport = reportName.trim().toLowerCase();
       const normalizedState = state.trim().toUpperCase();
 
+      // Match on Report Name (D) or LGA (C)
       const matchingRow = rows.find((row) => {
-        const rowReport = (row[2] || '').trim().toLowerCase();
         const rowState = (row[1] || '').trim().toUpperCase();
-        return rowReport === normalizedReport && rowState === normalizedState;
+        if (rowState !== normalizedState) return false;
+        const rowReportName = (row[3] || '').trim().toLowerCase();
+        const rowLGA = (row[2] || '').trim().toLowerCase();
+        return rowReportName === normalizedReport || rowLGA === normalizedReport;
       });
 
       if (!matchingRow) {
@@ -80,13 +106,14 @@ export async function GET(request: NextRequest) {
         data: {
           suburbs: matchingRow[0] || '',
           state: matchingRow[1] || '',
-          reportName: matchingRow[2] || '',
-          validPeriod: matchingRow[3] || '',
-          mainBody: matchingRow[4] || '',
-          pdfDriveLink: matchingRow[5] || '',
-          pdfFileId: matchingRow[6] || '',
-          lastEditedBy: matchingRow[7] || '',
-          lastEditedDate: matchingRow[8] || '',
+          lga: matchingRow[2] || '',
+          reportName: matchingRow[3] || matchingRow[2] || '',
+          validPeriod: buildValidPeriod(matchingRow),
+          mainBody: matchingRow[8] || '',
+          pdfDriveLink: matchingRow[9] || '',
+          pdfFileId: matchingRow[10] || '',
+          lastEditedBy: matchingRow[11] || '',
+          lastEditedDate: matchingRow[12] || '',
         },
       });
     }
@@ -134,17 +161,20 @@ export async function POST(request: NextRequest) {
     // Find the row
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${TAB_NAME}!A2:I`,
+      range: `'${TAB_NAME}'!A2:M`,
     });
 
     const rows = response.data.values || [];
     const normalizedReport = reportName.trim().toLowerCase();
     const normalizedState = state.trim().toUpperCase();
 
+    // Match on Report Name (D) or LGA (C)
     const rowIndex = rows.findIndex((row) => {
-      const rowReport = (row[2] || '').trim().toLowerCase();
       const rowState = (row[1] || '').trim().toUpperCase();
-      return rowReport === normalizedReport && rowState === normalizedState;
+      if (rowState !== normalizedState) return false;
+      const rowReportName = (row[3] || '').trim().toLowerCase();
+      const rowLGA = (row[2] || '').trim().toLowerCase();
+      return rowReportName === normalizedReport || rowLGA === normalizedReport;
     });
 
     if (rowIndex === -1) {
@@ -155,28 +185,34 @@ export async function POST(request: NextRequest) {
     }
 
     const actualRowNumber = rowIndex + 2;
-    const now = new Date().toISOString().split('T')[0];
+    const now = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 
-    // Update: column E (Main Body), H (Last Edited By), I (Last Edited Date)
+    // Update: column I (Main Body), L (Updated By), M (Updated At)
     const updates: { range: string; values: string[][] }[] = [
-      { range: `${TAB_NAME}!E${actualRowNumber}`, values: [[mainBody.trim()]] },
-      { range: `${TAB_NAME}!H${actualRowNumber}`, values: [[userEmail]] },
-      { range: `${TAB_NAME}!I${actualRowNumber}`, values: [[now]] },
+      { range: `'${TAB_NAME}'!I${actualRowNumber}`, values: [[mainBody.trim()]] },
+      { range: `'${TAB_NAME}'!L${actualRowNumber}`, values: [[userEmail]] },
+      { range: `'${TAB_NAME}'!M${actualRowNumber}`, values: [[now]] },
     ];
 
     // Optionally update suburbs (col A)
     if (suburbs !== undefined) {
-      updates.push({ range: `${TAB_NAME}!A${actualRowNumber}`, values: [[suburbs.trim()]] });
+      updates.push({ range: `'${TAB_NAME}'!A${actualRowNumber}`, values: [[suburbs.trim()]] });
     }
 
-    // Optionally update report name (col C)
+    // Optionally update report name (col D)
     if (editedReportName && editedReportName.trim()) {
-      updates.push({ range: `${TAB_NAME}!C${actualRowNumber}`, values: [[editedReportName.trim()]] });
+      updates.push({ range: `'${TAB_NAME}'!D${actualRowNumber}`, values: [[editedReportName.trim()]] });
     }
 
-    // Optionally update valid period (col D)
-    if (validPeriod !== undefined) {
-      updates.push({ range: `${TAB_NAME}!D${actualRowNumber}`, values: [[validPeriod.trim()]] });
+    // Optionally update valid period (split into 4 columns E-H)
+    if (validPeriod !== undefined && validPeriod.trim()) {
+      const parsed = parseValidPeriod(validPeriod);
+      if (parsed) {
+        updates.push({ range: `'${TAB_NAME}'!E${actualRowNumber}`, values: [[parsed.fromMonth]] });
+        updates.push({ range: `'${TAB_NAME}'!F${actualRowNumber}`, values: [[parsed.fromYear]] });
+        updates.push({ range: `'${TAB_NAME}'!G${actualRowNumber}`, values: [[parsed.toMonth]] });
+        updates.push({ range: `'${TAB_NAME}'!H${actualRowNumber}`, values: [[parsed.toYear]] });
+      }
     }
 
     await sheets.spreadsheets.values.batchUpdate({
@@ -196,6 +232,7 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 
 /**
  * PATCH /api/admin/investment-highlights
@@ -226,17 +263,20 @@ export async function PATCH(request: NextRequest) {
     // Find the row
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${TAB_NAME}!A2:I`,
+      range: `'${TAB_NAME}'!A2:M`,
     });
 
     const rows = response.data.values || [];
     const normalizedReport = reportName.trim().toLowerCase();
     const normalizedState = state.trim().toUpperCase();
 
+    // Match on Report Name (D) or LGA (C)
     const rowIndex = rows.findIndex((row) => {
-      const rowReport = (row[2] || '').trim().toLowerCase();
       const rowState = (row[1] || '').trim().toUpperCase();
-      return rowReport === normalizedReport && rowState === normalizedState;
+      if (rowState !== normalizedState) return false;
+      const rowReportName = (row[3] || '').trim().toLowerCase();
+      const rowLGA = (row[2] || '').trim().toLowerCase();
+      return rowReportName === normalizedReport || rowLGA === normalizedReport;
     });
 
     if (rowIndex === -1) {
@@ -247,18 +287,18 @@ export async function PATCH(request: NextRequest) {
     }
 
     const actualRowNumber = rowIndex + 2;
-    const now = new Date().toISOString().split('T')[0];
+    const now = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 
     const updates = [
-      { range: `${TAB_NAME}!F${actualRowNumber}`, values: [[pdfDriveLink || '']] },
-      { range: `${TAB_NAME}!G${actualRowNumber}`, values: [[pdfFileId || '']] },
-      { range: `${TAB_NAME}!H${actualRowNumber}`, values: [[userEmail]] },
-      { range: `${TAB_NAME}!I${actualRowNumber}`, values: [[now]] },
+      { range: `'${TAB_NAME}'!J${actualRowNumber}`, values: [[pdfDriveLink || '']] },
+      { range: `'${TAB_NAME}'!K${actualRowNumber}`, values: [[pdfFileId || '']] },
+      { range: `'${TAB_NAME}'!L${actualRowNumber}`, values: [[userEmail]] },
+      { range: `'${TAB_NAME}'!M${actualRowNumber}`, values: [[now]] },
     ];
 
-    // Also update report name in column C if changed
+    // Also update report name in column D if changed
     if (updatedReportName && updatedReportName.trim() !== reportName.trim()) {
-      updates.push({ range: `${TAB_NAME}!C${actualRowNumber}`, values: [[updatedReportName.trim()]] });
+      updates.push({ range: `'${TAB_NAME}'!D${actualRowNumber}`, values: [[updatedReportName.trim()]] });
     }
 
     await sheets.spreadsheets.values.batchUpdate({
@@ -308,15 +348,20 @@ export async function DELETE(request: NextRequest) {
     // Read all rows to find the matching one
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${TAB_NAME}!A2:I`,
+      range: `'${TAB_NAME}'!A2:M`,
     });
 
     const rows = response.data.values || [];
-    const rowIndex = rows.findIndex(
-      (row) =>
-        (row[2] || '').trim().toLowerCase() === reportName.trim().toLowerCase() &&
-        (row[1] || '').trim().toLowerCase() === state.trim().toLowerCase()
-    );
+    const normalizedReport = reportName.trim().toLowerCase();
+    const normalizedState = state.trim().toLowerCase();
+    // Match on Report Name (D) or LGA (C)
+    const rowIndex = rows.findIndex((row) => {
+      const rowState = (row[1] || '').trim().toLowerCase();
+      if (rowState !== normalizedState) return false;
+      const rowReportName = (row[3] || '').trim().toLowerCase();
+      const rowLGA = (row[2] || '').trim().toLowerCase();
+      return rowReportName === normalizedReport || rowLGA === normalizedReport;
+    });
 
     if (rowIndex === -1) {
       return NextResponse.json(

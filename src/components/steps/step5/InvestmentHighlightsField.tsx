@@ -19,6 +19,13 @@ import { useFormStore } from '@/store/formStore';
  * - Manual paste functionality with smart quote cleanup
  */
 
+const V2_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+const V2_CURRENT_YEAR = new Date().getFullYear();
+const V2_YEARS = Array.from({ length: 5 }, (_, i) => String(V2_CURRENT_YEAR - 1 + i));
+
 interface InvestmentHighlightsFieldProps {
   value: string;
   onChange: (value: string) => void;
@@ -66,6 +73,11 @@ export function InvestmentHighlightsField({
   const [extractedReportName, setExtractedReportName] = useState('');
   const [extractedValidPeriod, setExtractedValidPeriod] = useState('');
   const [extractedMainBody, setExtractedMainBody] = useState('');
+  // V2 split date fields
+  const [extractedFromMonth, setExtractedFromMonth] = useState('');
+  const [extractedFromYear, setExtractedFromYear] = useState('');
+  const [extractedToMonth, setExtractedToMonth] = useState('');
+  const [extractedToYear, setExtractedToYear] = useState('');
   const [showVerification, setShowVerification] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -79,63 +91,15 @@ export function InvestmentHighlightsField({
   // Track if we've already done a lookup (prevent multiple calls)
   const hasLookedUpRef = useRef(false);
   
-  // Restore UI state when returning to page after navigation
-  // This ensures "Change Selection" button remains visible when data exists
-  // This matches the pattern used by Proximity and Why This Property fields
+  // Always do a fresh V2 lookup on mount — never trust cached/stored data
   useEffect(() => {
-    const formData = useFormStore.getState().formData;
-    const earlyProcessing = formData.earlyProcessing?.investmentHighlights;
-    
-    // Only restore if:
-    // 1. We have saved report data in formData (user previously selected a report)
-    // 2. We don't have earlyProcessing data (that will be handled by the next useEffect)
-    // 3. matchStatus is null (not already set)
-    if ((formData.hotspottingReportName || formData.hotspottingPdfFileId) && 
-        !earlyProcessing && 
-        matchStatus === null) {
-      console.log('[InvestmentHighlights] Restoring UI state from formData after navigation');
-      setMatchStatus('found');
-      setReportName(formData.hotspottingReportName || '');
-      setValidPeriod(formData.hotspottingValidPeriod || '');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
-  
-  // Check for pre-loaded data from Step 1A
-  useEffect(() => {
-    // First, check if we have pre-loaded data from Step 1A
-    const earlyProcessing = (window as any).__formStore?.getState?.()?.formData?.earlyProcessing;
-    
-    if (earlyProcessing?.investmentHighlights?.status === 'ready' && !hasLookedUpRef.current) {
-      console.log('[InvestmentHighlights] Using pre-loaded data from Step 1A');
-      hasLookedUpRef.current = true;
-      
-      const ihData = earlyProcessing.investmentHighlights;
-      
-      // Set the match status
-      setMatchStatus('found');
-      setReportName(ihData.data?.reportName || '');
-      setValidPeriod(ihData.data?.validPeriod || '');
-      setDateStatus(ihData.dateStatus || null);
-      
-      // If data is already populated, don't trigger another lookup
-      if (value && value.trim() !== '') {
-        console.log('[InvestmentHighlights] Value already populated, skipping lookup');
-        return;
-      }
-      
-      // Value is already set in formData by Step 1A, just update UI
-      return;
-    }
-    
-    // Fallback: If no pre-loaded data, do the lookup as before
-    if ((lga || suburb) && state && !value && !hasLookedUpRef.current) {
-      console.log('[InvestmentHighlights] No pre-loaded data, triggering lookup...');
+    if ((lga || suburb) && state && !hasLookedUpRef.current) {
+      console.log('[InvestmentHighlights] Doing fresh V2 lookup (no cache)...');
       hasLookedUpRef.current = true;
       lookupReport();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lga, suburb, state]); // Removed 'value' to prevent infinite loop
+  }, [lga, suburb, state]);
 
   const handleDropdownSelect = async (report: ReportOption) => {
     console.log('[InvestmentHighlights] Dropdown selection:', report);
@@ -152,10 +116,11 @@ export function InvestmentHighlightsField({
       const suburbsArray = report.suburbs.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
       const firstSuburb = suburbsArray[0] || '';
       
-      const response = await fetch('/api/investment-highlights/lookup', {
+      const response = await fetch('/api/investment-highlights-v2/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
+          lga: report.reportName || '',
           suburb: firstSuburb,
           state: report.state 
         }),
@@ -224,7 +189,7 @@ export function InvestmentHighlightsField({
     setError(null);
     
     try {
-      const response = await fetch('/api/investment-highlights/lookup', {
+      const response = await fetch('/api/investment-highlights-v2/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -290,24 +255,33 @@ export function InvestmentHighlightsField({
   };
 
   const handleSave = async () => {
-    if ((!lga && !suburb) || !state || !newReportName || !newValidPeriod || !newMainBody) {
+    if ((!lga && !suburb) || !state || !newReportName || !extractedFromMonth || !extractedFromYear || !extractedToMonth || !extractedToYear || !newMainBody) {
       alert('Please fill in Report Name, Valid Period, and Main Body');
       return;
     }
     
+    // Build combined validPeriod from split fields
+    const builtValidPeriod = extractedFromYear === extractedToYear
+      ? `${extractedFromMonth} - ${extractedToMonth} ${extractedToYear}`
+      : `${extractedFromMonth} ${extractedFromYear} - ${extractedToMonth} ${extractedToYear}`;
+    
     setLoading(true);
     
     try {
-      const response = await fetch('/api/investment-highlights/save', {
+      const response = await fetch('/api/investment-highlights-v2/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          suburbs: suburb || '', // Comma-separated suburbs (start with current)
+          lga: lga || '',
           state, 
+          suburb: suburb || '',
           reportName: newReportName,
-          validPeriod: newValidPeriod,
+          validFromMonth: extractedFromMonth,
+          validFromYear: extractedFromYear,
+          validToMonth: extractedToMonth,
+          validToYear: extractedToYear,
           mainBody: newMainBody,
-          extraInfo: '',
+          updatedBy: userEmail || 'form-step5',
         }),
       });
       
@@ -320,7 +294,7 @@ export function InvestmentHighlightsField({
       setShowSaveForm(false);
       setMatchStatus('found');
       setReportName(newReportName);
-      setValidPeriod(newValidPeriod);
+      setValidPeriod(builtValidPeriod);
       // Update display with saved content
       const combined = newMainBody;
       onChange(combined);
@@ -392,37 +366,29 @@ export function InvestmentHighlightsField({
       
       const extractResult = await extractResponse.json();
       
-      // Check if report already exists for this LGA/suburb/state
-      // If it does, pre-populate with existing report name (but keep editable)
-      let reportNameToUse = extractResult.reportName || '';
-      try {
-        const lookupResponse = await fetch('/api/investment-highlights/lookup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            lga: lga || '', 
-            suburb: suburb || '', 
-            state 
-          }),
-        });
-        
-        if (lookupResponse.ok) {
-          const lookupResult = await lookupResponse.json();
-          if (lookupResult.found && lookupResult.data?.reportName) {
-            // Use existing report name from sheet instead of extracted one
-            reportNameToUse = lookupResult.data.reportName;
-            console.log('[InvestmentHighlights] Using existing report name from sheet:', reportNameToUse);
-          }
-        }
-      } catch (lookupErr) {
-        // Non-critical - continue with extracted name if lookup fails
-        console.warn('[InvestmentHighlights] Could not check for existing report:', lookupErr);
-      }
+      // Always use the resolved LGA name as the report name — never trust AI extraction
+      // The LGA is already resolved via Geoscape and is the canonical identifier
+      const reportNameToUse = lga || extractResult.reportName || '';
+      console.log('[InvestmentHighlights] Report name set to LGA:', reportNameToUse);
       
       setExtractedReportName(reportNameToUse);
       setExtractedValidPeriod(extractResult.validPeriod || '');
       setExtractedMainBody(extractResult.mainBody || '');
       setExtractionConfidence(extractResult.confidence || null);
+      
+      // Try to parse extracted valid period into split fields
+      const vp = (extractResult.validPeriod || '').trim();
+      if (vp) {
+        const fullMatch = vp.match(/^([A-Za-z]+)\s+(\d{4})\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+        const shortMatch = vp.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+        if (fullMatch) {
+          setExtractedFromMonth(fullMatch[1]); setExtractedFromYear(fullMatch[2]);
+          setExtractedToMonth(fullMatch[3]); setExtractedToYear(fullMatch[4]);
+        } else if (shortMatch) {
+          setExtractedFromMonth(shortMatch[1]); setExtractedFromYear(shortMatch[3]);
+          setExtractedToMonth(shortMatch[2]); setExtractedToYear(shortMatch[3]);
+        }
+      }
       
       // Show verification UI
       setShowVerification(true);
@@ -466,22 +432,28 @@ export function InvestmentHighlightsField({
   };
 
   const handleConfirmMetadata = async () => {
-    if (!extractedReportName || !extractedValidPeriod) {
-      alert('Please fill in Report Name and Valid Period');
+    if (!extractedReportName) {
+      alert('Please fill in Report Name');
+      return;
+    }
+    if (!extractedFromMonth || !extractedFromYear || !extractedToMonth || !extractedToYear) {
+      alert('Please select all Valid Period fields (From Month/Year and To Month/Year)');
       return;
     }
     
-    if (!reportNameVerified || !validPeriodVerified) {
-      alert('Please verify both Report Name and Valid Period by checking the boxes');
-      return;
-    }
+    
+    // Build combined validPeriod string from split fields
+    const builtValidPeriod = extractedFromYear === extractedToYear
+      ? `${extractedFromMonth} - ${extractedToMonth} ${extractedToYear}`
+      : `${extractedFromMonth} ${extractedFromYear} - ${extractedToMonth} ${extractedToYear}`;
+    setExtractedValidPeriod(builtValidPeriod);
     
     setLoading(true);
     setUploadProgress('Checking for existing reports...');
     
     try {
       // Step 1: Check if report already exists for this LGA
-      const lookupResponse = await fetch('/api/investment-highlights/lookup', {
+      const lookupResponse = await fetch('/api/investment-highlights-v2/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -509,7 +481,8 @@ export function InvestmentHighlightsField({
       try {
         const aiRequestBody = {
           type: 'investmentHighlights',
-          rawText: extractedMainBody || '',
+          fileId: uploadedFileId || '',
+          rawText: !uploadedFileId ? (extractedMainBody || '') : undefined,
           context: {
             suburb: suburb || '',
             state: state || '',
@@ -519,8 +492,8 @@ export function InvestmentHighlightsField({
         
         console.log('📤 Sending to AI:', {
           type: aiRequestBody.type,
-          rawTextLength: aiRequestBody.rawText.length,
-          hasRawText: !!aiRequestBody.rawText
+          hasFileId: !!aiRequestBody.fileId,
+          hasRawText: !!aiRequestBody.rawText,
         });
         
         const parseResponse = await fetch('/api/ai/generate-content', {
@@ -564,12 +537,12 @@ export function InvestmentHighlightsField({
           console.log('📊 Formatted Main Body length:', formattedMainBody.length);
         } else {
           const errorText = await parseResponse.text();
-          console.warn('AI formatting failed, using raw text. Error:', errorText);
-          // Continue with raw text if AI fails
+          console.warn('AI formatting failed:', errorText);
+          throw new Error('AI formatting failed. Please try again.');
         }
-      } catch (err) {
-        console.warn('AI formatting error, using raw text:', err);
-        // Continue with raw text if AI fails
+      } catch (err: any) {
+        console.warn('AI formatting error:', err);
+        throw new Error(err?.message || 'AI formatting failed. Please try again.');
       }
       
       // Step 3: Organize PDF into CURRENT/LEGACY folders and save to sheet
@@ -581,7 +554,7 @@ export function InvestmentHighlightsField({
         body: JSON.stringify({
           fileId: uploadedFileId,
           reportName: extractedReportName,
-          validPeriod: extractedValidPeriod,
+          validPeriod: builtValidPeriod,
           suburbs: suburb || '',
           state,
           userEmail: userEmail || 'unknown',
@@ -608,7 +581,7 @@ export function InvestmentHighlightsField({
       // Success - update UI
       setMatchStatus('found');
       setReportName(extractedReportName);
-      setValidPeriod(extractedValidPeriod);
+      setValidPeriod(builtValidPeriod);
       setDateStatus(null); // Clear date status warning since we have a new/updated report
       setShowVerification(false);
       setReportNameVerified(false);
@@ -857,7 +830,11 @@ export function InvestmentHighlightsField({
             </div>
             
             <button
-              onClick={() => setShowSaveForm(!showSaveForm)}
+              onClick={() => {
+                const next = !showSaveForm;
+                setShowSaveForm(next);
+                if (next && !newReportName) setNewReportName(lga || '');
+              }}
               className="text-sm text-blue-600 hover:text-blue-700 underline"
             >
               {showSaveForm ? 'Hide Manual Entry Form' : 'Show Manual Entry Form'}
@@ -891,79 +868,76 @@ export function InvestmentHighlightsField({
             </p>
             
             <div className="space-y-4">
-              {/* Report Name Field */}
+              {/* Report Name Field - auto-populated from LGA, read-only */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Report Name *
+                  Report Name
                 </label>
                 <p className="text-xs text-gray-600 mb-2">
-                  Report Name should match the name when downloaded from Hotspotting
+                  Auto-populated from LGA.
                 </p>
-                {extractionConfidence?.reportName === 'low' && (
-                  <p className="text-sm text-amber-600 mb-2 flex items-center">
-                    <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                    We couldn't automatically extract the Report Name. Please copy from the front page.
-                  </p>
-                )}
                 <input
                   type="text"
                   value={extractedReportName}
-                  onChange={(e) => {
-                    setExtractedReportName(e.target.value);
-                    setReportNameVerified(false); // Reset verification when edited
-                  }}
-                  className="w-full p-2 border rounded-md"
-                  placeholder="e.g., Fraser Coast, Sunshine Coast"
+                  readOnly
+                  className="w-full p-2 border rounded-md bg-gray-100 text-gray-700 cursor-not-allowed"
                 />
-                <label className="flex items-center mt-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={reportNameVerified}
-                    onChange={(e) => setReportNameVerified(e.target.checked)}
-                    className="mr-2 h-4 w-4 text-blue-600"
-                  />
-                  <span className="text-gray-700">
-                    ✓ I have verified this Report Name is correct
-                  </span>
-                </label>
               </div>
               
-              {/* Valid Period Field */}
+              {/* Valid Period - V2 split dropdowns */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Valid Period *
                 </label>
-                {extractionConfidence?.validPeriod === 'low' && (
-                  <p className="text-sm text-amber-600 mb-2 flex items-center">
-                    <svg className="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                    </svg>
-                    We couldn't automatically extract the Valid Period. Please copy from the front page.
-                  </p>
-                )}
-                <input
-                  type="text"
-                  value={extractedValidPeriod}
-                  onChange={(e) => {
-                    setExtractedValidPeriod(e.target.value);
-                    setValidPeriodVerified(false); // Reset verification when edited
-                  }}
-                  className="w-full p-2 border rounded-md"
-                  placeholder="e.g., October 2025 - January 2026"
-                />
-                <label className="flex items-center mt-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={validPeriodVerified}
-                    onChange={(e) => setValidPeriodVerified(e.target.checked)}
-                    className="mr-2 h-4 w-4 text-blue-600"
-                  />
-                  <span className="text-gray-700">
-                    ✓ I have verified this Valid Period is correct
-                  </span>
-                </label>
+                <p className="text-xs text-gray-600 mb-2">
+                  Select the valid period from the front page of the PDF.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">From Month</label>
+                    <select
+                      value={extractedFromMonth}
+                      onChange={(e) => { setExtractedFromMonth(e.target.value); setValidPeriodVerified(false); }}
+                      className="w-full p-2 border rounded-md text-sm"
+                    >
+                      <option value="">Month...</option>
+                      {V2_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">From Year</label>
+                    <select
+                      value={extractedFromYear}
+                      onChange={(e) => { setExtractedFromYear(e.target.value); setValidPeriodVerified(false); }}
+                      className="w-full p-2 border rounded-md text-sm"
+                    >
+                      <option value="">Year...</option>
+                      {V2_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">To Month</label>
+                    <select
+                      value={extractedToMonth}
+                      onChange={(e) => { setExtractedToMonth(e.target.value); setValidPeriodVerified(false); }}
+                      className="w-full p-2 border rounded-md text-sm"
+                    >
+                      <option value="">Month...</option>
+                      {V2_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">To Year</label>
+                    <select
+                      value={extractedToYear}
+                      onChange={(e) => { setExtractedToYear(e.target.value); setValidPeriodVerified(false); }}
+                      className="w-full p-2 border rounded-md text-sm"
+                    >
+                      <option value="">Year...</option>
+                      {V2_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
               
               {/* Main Body Status */}
@@ -980,13 +954,9 @@ export function InvestmentHighlightsField({
             </div>
             
             <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded">
-              <p className="text-base text-gray-800 font-medium mb-2">
-                <strong>⚠️ Important:</strong>
+              <p className="text-base text-gray-800 font-medium">
+                <strong>⚠️ Important:</strong> Select the valid period from the front page of the PDF before confirming.
               </p>
-              <ul className="text-base text-gray-800 font-medium list-disc list-inside space-y-1">
-                <li>Please check both fields carefully. If the extracted values are incorrect, copy the correct information from the front page of the PDF, then check both verification boxes before confirming.</li>
-                <li><strong>Remove the words "Location Report" from the beginning of the name. The list is presented in alphabetical order so the report needs to start with the LGA name.</strong></li>
-              </ul>
             </div>
             
             <div className="flex space-x-2 mt-3">
@@ -994,9 +964,7 @@ export function InvestmentHighlightsField({
                 onClick={handleConfirmMetadata}
                 disabled={
                   !extractedReportName || 
-                  !extractedValidPeriod || 
-                  !reportNameVerified || 
-                  !validPeriodVerified || 
+                  !extractedFromMonth || !extractedFromYear || !extractedToMonth || !extractedToYear ||
                   loading
                 }
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
@@ -1030,27 +998,68 @@ export function InvestmentHighlightsField({
           <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-md space-y-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Report Name *
+                Report Name
               </label>
+              <p className="text-xs text-gray-600 mb-1">
+                Auto-populated from LGA.
+              </p>
               <input
                 type="text"
                 value={newReportName}
-                onChange={(e) => setNewReportName(e.target.value)}
-                placeholder="e.g., SUNSHINE COAST"
-                className="w-full p-2 border rounded-md"
+                readOnly
+                className="w-full p-2 border rounded-md bg-gray-100 text-gray-700 cursor-not-allowed"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Valid Period *
               </label>
-              <input
-                type="text"
-                value={newValidPeriod}
-                onChange={(e) => setNewValidPeriod(e.target.value)}
-                placeholder="e.g., October 2025 - January 2026"
-                className="w-full p-2 border rounded-md"
-              />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">From Month</label>
+                  <select
+                    value={extractedFromMonth}
+                    onChange={(e) => setExtractedFromMonth(e.target.value)}
+                    className="w-full p-2 border rounded-md text-sm"
+                  >
+                    <option value="">Month...</option>
+                    {V2_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">From Year</label>
+                  <select
+                    value={extractedFromYear}
+                    onChange={(e) => setExtractedFromYear(e.target.value)}
+                    className="w-full p-2 border rounded-md text-sm"
+                  >
+                    <option value="">Year...</option>
+                    {V2_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">To Month</label>
+                  <select
+                    value={extractedToMonth}
+                    onChange={(e) => setExtractedToMonth(e.target.value)}
+                    className="w-full p-2 border rounded-md text-sm"
+                  >
+                    <option value="">Month...</option>
+                    {V2_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">To Year</label>
+                  <select
+                    value={extractedToYear}
+                    onChange={(e) => setExtractedToYear(e.target.value)}
+                    className="w-full p-2 border rounded-md text-sm"
+                  >
+                    <option value="">Year...</option>
+                    {V2_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1066,7 +1075,7 @@ export function InvestmentHighlightsField({
             </div>
             <button
               onClick={handleSave}
-              disabled={loading || !newReportName || !newValidPeriod || !newMainBody}
+              disabled={loading || !newReportName || !extractedFromMonth || !extractedFromYear || !extractedToMonth || !extractedToYear || !newMainBody}
               className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
             >
               {loading ? 'Saving...' : 'Save to Google Sheet'}
