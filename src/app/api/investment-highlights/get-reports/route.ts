@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSheetsClient } from '@/lib/googleSheets';
 
 const INVESTMENT_HIGHLIGHTS_SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS || '';
-const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights';
+const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights V2';
 
 export interface ReportOption {
   reportName: string;
@@ -31,29 +31,47 @@ export async function GET(request: NextRequest) {
 
     const sheets = getSheetsClient();
 
-    // Read all data from Investment Highlights sheet (7 columns: A-G)
+    // Read all data from Investment Highlights V2 sheet (13 columns: A-M)
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:G`,
+      range: `'${INVESTMENT_HIGHLIGHTS_TAB_NAME}'!A2:M`,
     });
 
     const rows = response.data.values || [];
 
     // Parse rows into ReportOption objects
+    // V2 columns: A:Suburbs, B:State, C:LGA, D:ReportName, E:ValidFromMonth, F:ValidFromYear, G:ValidToMonth, H:ValidToYear, I:MainBody, J:PDFLink, K:FileID, L:UpdatedBy, M:UpdatedAt
     const reports: ReportOption[] = rows
       .filter(row => {
-        // Filter out rows with empty Report Name (column C, index 2)
-        const reportName = (row[2] || '').trim();
-        return reportName.length > 0;
+        // Filter out rows with empty LGA (column C, index 2)
+        const lga = (row[2] || '').trim();
+        return lga.length > 0;
       })
       .map(row => {
+        const reportName = (row[3] || '').trim(); // Column D (Report Name)
+        const lga = (row[2] || '').trim(); // Column C (LGA)
+        const validFromMonth = (row[4] || '').trim();
+        const validFromYear = (row[5] || '').trim();
+        const validToMonth = (row[6] || '').trim();
+        const validToYear = (row[7] || '').trim();
+
+        // Build combined validPeriod string
+        let validPeriod = '';
+        if (validFromMonth && validToMonth && validToYear) {
+          if (validFromYear === validToYear) {
+            validPeriod = `${validFromMonth} - ${validToMonth} ${validToYear}`;
+          } else {
+            validPeriod = `${validFromMonth} ${validFromYear} - ${validToMonth} ${validToYear}`;
+          }
+        }
+
         return {
-          reportName: (row[2] || '').trim(), // Column C
-          validPeriod: (row[3] || '').trim(), // Column D
+          reportName: reportName || lga, // Use Report Name, fall back to LGA
+          validPeriod,
           state: (row[1] || '').trim(), // Column B
           suburbs: (row[0] || '').trim(), // Column A (comma-separated)
-          pdfLink: (row[5] || '').trim(), // Column F
-          fileId: (row[6] || '').trim(), // Column G
+          pdfLink: (row[9] || '').trim(), // Column J
+          fileId: (row[10] || '').trim(), // Column K
         };
       });
 

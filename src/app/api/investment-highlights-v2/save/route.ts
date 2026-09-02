@@ -8,24 +8,44 @@ import { saveInvestmentHighlightsV2, lookupInvestmentHighlightsV2 } from '@/lib/
  * - If LGA+State already exists: updates row, appends suburb, logs who/when
  * - If LGA+State is new: creates new row
  * 
+ * Accepts either split valid period fields OR a combined validPeriod string.
+ * 
  * Body: {
  *   lga: string,
  *   state: string,
- *   suburb: string,
- *   validFromMonth: string,
- *   validFromYear: string,
- *   validToMonth: string,
- *   validToYear: string,
+ *   suburb?: string,
+ *   reportName?: string,
+ *   validFromMonth?: string,
+ *   validFromYear?: string,
+ *   validToMonth?: string,
+ *   validToYear?: string,
+ *   validPeriod?: string,       // e.g. "September - December 2025" (parsed server-side)
  *   mainBody: string,
  *   pdfDriveLink?: string,
  *   pdfFileId?: string,
  *   updatedBy: string
  * }
  */
+
+/**
+ * Parse a combined validPeriod string into month/year parts.
+ * Handles: "MONTH - MONTH YEAR" and "MONTH YEAR - MONTH YEAR"
+ */
+function parseValidPeriod(vp: string): { fromMonth: string; fromYear: string; toMonth: string; toYear: string } | null {
+  const normalized = vp.trim();
+  // "Month Year - Month Year"
+  const full = normalized.match(/^([A-Za-z]+)\s+(\d{4})\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+  if (full) return { fromMonth: full[1], fromYear: full[2], toMonth: full[3], toYear: full[4] };
+  // "Month - Month Year"
+  const short = normalized.match(/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
+  if (short) return { fromMonth: short[1], fromYear: short[3], toMonth: short[2], toYear: short[3] };
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { lga, state, suburb, validFromMonth, validFromYear, validToMonth, validToYear, mainBody, pdfDriveLink, pdfFileId, updatedBy } = body;
+    let { lga, state, suburb, reportName, validFromMonth, validFromYear, validToMonth, validToYear, validPeriod, mainBody, pdfDriveLink, pdfFileId, updatedBy } = body;
 
     // Validate required fields
     if (!lga || !state) {
@@ -35,9 +55,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If split fields not provided, parse from combined validPeriod string
+    if ((!validFromMonth || !validFromYear || !validToMonth || !validToYear) && validPeriod) {
+      const parsed = parseValidPeriod(validPeriod);
+      if (parsed) {
+        validFromMonth = parsed.fromMonth;
+        validFromYear = parsed.fromYear;
+        validToMonth = parsed.toMonth;
+        validToYear = parsed.toYear;
+      }
+    }
+
     if (!validFromMonth || !validFromYear || !validToMonth || !validToYear) {
       return NextResponse.json(
-        { error: 'Valid period (from/to month and year) is required' },
+        { error: 'Valid period is required (either split fields or validPeriod string)' },
         { status: 400 }
       );
     }
@@ -61,6 +92,7 @@ export async function POST(request: NextRequest) {
     const result = await saveInvestmentHighlightsV2({
       lga,
       state,
+      reportName,
       suburb: suburb || '',
       validFromMonth,
       validFromYear,

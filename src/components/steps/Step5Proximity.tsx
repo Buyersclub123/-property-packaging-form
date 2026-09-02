@@ -19,7 +19,7 @@ import { WhyThisPropertyField } from './step5/WhyThisPropertyField';
 import { InvestmentHighlightsField } from './step5/InvestmentHighlightsField';
 
 export function Step5Proximity() {
-  const { formData, updateFormData } = useFormStore();
+  const { formData, updateFormData, userEmail } = useFormStore();
   const { contentSections, address, proximityData, earlyProcessing, editMode, ghlRecordId } = formData;
   const isEditMode = editMode === true || !!ghlRecordId;
   
@@ -91,7 +91,7 @@ export function Step5Proximity() {
           suburb={address?.suburbName}
           state={address?.state}
           streetAddress={address?.propertyAddress}
-          userEmail="unknown"
+          userEmail={userEmail || 'unknown'}
         />
 
         {/* Component 2: Why This Property */}

@@ -1653,9 +1653,17 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
             {currentStep === 1 && <EditableEmail />}
           </div>
           {subjectLine && (
-            <div className="mt-2">
-              <span className="text-xs font-semibold text-gray-500">Subject Line: </span>
-              <span className="text-xs text-gray-700">{subjectLine}</span>
+            <div className="mt-2 flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-gray-500">Subject Line: </span>
+                <span className="text-xs text-gray-700">{subjectLine}</span>
+              </div>
+              {formData?.address?.lga && (
+                <div>
+                  <span className="text-xs font-semibold text-gray-500">LGA: </span>
+                  <span className="text-xs text-gray-700 font-medium">{formData.address.lga}</span>
+                </div>
+              )}
             </div>
           )}
         </div>

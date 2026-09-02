@@ -899,10 +899,10 @@ export default function DuplicatePage() {
       const hsSuburb = flatSource.suburbName || '';
       const hsState = flatSource.state || '';
       if ((hsLga || hsSuburb) && hsState) {
-        fetch('/api/investment-highlights/lookup', {
+        fetch('/api/investment-highlights-v2/lookup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lga: hsLga, suburb: hsSuburb, state: hsState }),
+          body: JSON.stringify({ lga: hsLga, state: hsState }),
         })
           .then(r => r.ok ? r.json() : null)
           .then(data => {
@@ -1012,10 +1012,10 @@ export default function DuplicatePage() {
         const state = getEffectiveValue('state');
         if ((lga || suburb) && state) {
           try {
-            const hsRes = await fetch('/api/investment-highlights/lookup', {
+            const hsRes = await fetch('/api/investment-highlights-v2/lookup', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ lga: lga || '', suburb: suburb || '', state }),
+              body: JSON.stringify({ lga: lga || '', state }),
             });
             if (hsRes.ok) {
               const hsData = await hsRes.json();

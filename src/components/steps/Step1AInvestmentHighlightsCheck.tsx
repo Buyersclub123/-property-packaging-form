@@ -51,10 +51,11 @@ export function Step1AInvestmentHighlightsCheck() {
     setError(null);
 
     try {
-      const response = await fetch('/api/investment-highlights/lookup', {
+      const response = await fetch('/api/investment-highlights-v2/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          lga: address?.lga || '',
           suburb: address?.suburbName || '',
           state: address?.state || '',
         }),
@@ -118,10 +119,11 @@ export function Step1AInvestmentHighlightsCheck() {
     try {
       // Fetch full report data
       const firstSuburb = report.suburbs[0] || '';
-      const response = await fetch('/api/investment-highlights/lookup', {
+      const response = await fetch('/api/investment-highlights-v2/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          lga: report.reportName || '',
           suburb: firstSuburb,
           state: report.state,
         }),
@@ -318,25 +320,19 @@ export function Step1AInvestmentHighlightsCheck() {
       // Get the parsed sections (if available)
       const sections = (window as any).__investmentHighlightsSections || {};
       
-      const saveResponse = await fetch('/api/investment-highlights/save', {
+      const saveResponse = await fetch('/api/investment-highlights-v2/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          suburbs: address?.suburbName || '',
+          lga: address?.lga || '',
           state: address?.state || '',
+          suburb: address?.suburbName || '',
           reportName: reportData.reportName,
           validPeriod: reportData.validPeriod,
           mainBody: reportData.mainBody,
-          extraInfo: '',
-          populationGrowthContext: sections.populationGrowthContext || '',
-          residential: sections.residential || '',
-          industrial: sections.industrial || '',
-          commercialAndCivic: sections.commercialAndCivic || '',
-          healthAndEducation: sections.healthAndEducation || '',
-          transport: sections.transport || '',
-          jobImplications: sections.jobImplications || '',
-          pdfLink: uploadResult.webViewLink || '',
-          fileId: uploadResult.fileId || '',
+          pdfDriveLink: uploadResult.webViewLink || '',
+          pdfFileId: uploadResult.fileId || '',
+          updatedBy: 'form-step1a',
         }),
       });
 

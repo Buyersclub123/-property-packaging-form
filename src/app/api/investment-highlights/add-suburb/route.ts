@@ -3,12 +3,12 @@ import { getSheetsClient } from '@/lib/googleSheets';
 import { serverLog } from '@/lib/serverLogger';
 
 const INVESTMENT_HIGHLIGHTS_SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS || '';
-const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights';
+const INVESTMENT_HIGHLIGHTS_TAB_NAME = 'Investment Highlights V2';
 
 /**
  * Add suburb to existing report's suburb list in Google Sheet
  * Called on form submission when user selected report from dropdown
- * Structure: 7 columns (A-G)
+ * Structure: 13 columns (A-M) — V2 tab
  */
 export async function POST(request: NextRequest) {
   try {
@@ -24,10 +24,10 @@ export async function POST(request: NextRequest) {
     
     const sheets = getSheetsClient();
     
-    // Read all rows (7 columns: A-G)
+    // Read all rows (V2: A-M, but only need A-D for matching)
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-      range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A2:G`,
+      range: `'${INVESTMENT_HIGHLIGHTS_TAB_NAME}'!A2:D`,
     });
     
     const rows = response.data.values || [];
@@ -41,13 +41,14 @@ export async function POST(request: NextRequest) {
       reportName: normalizedReportName,
     });
     
-    // Find existing row by report name and state
+    // Find existing row by report name matching LGA (col C) or Report Name (col D), and state
     let rowIndex = -1;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const rowReportName = (row[2] || '').trim().toLowerCase(); // Column C
+      const rowLGA = (row[2] || '').trim().toLowerCase(); // Column C (LGA)
+      const rowReportName = (row[3] || '').trim().toLowerCase(); // Column D (Report Name)
       const rowState = (row[1] || '').trim().toUpperCase(); // Column B
-      const matches = rowReportName === normalizedReportName && rowState === normalizedState;
+      const matches = (rowLGA === normalizedReportName || rowReportName === normalizedReportName) && rowState === normalizedState;
       
       if (i < 5) { // Log first 5 rows for debugging
         serverLog(`[add-suburb] Checking row ${i + 2}:`, {
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
       const actualRowNumber = rowIndex + 2; // +2 for header row and 0-index
       await sheets.spreadsheets.values.update({
         spreadsheetId: INVESTMENT_HIGHLIGHTS_SHEET_ID,
-        range: `${INVESTMENT_HIGHLIGHTS_TAB_NAME}!A${actualRowNumber}`,
+        range: `'${INVESTMENT_HIGHLIGHTS_TAB_NAME}'!A${actualRowNumber}`,
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [[updatedSuburbs]],
