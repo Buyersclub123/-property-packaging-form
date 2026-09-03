@@ -418,6 +418,7 @@ export default function EoiLinkModal({
   }
 
   const baEmpty = editBA.trim() === '';
+  const priceEmpty = currencyRaw(editPrice).trim() === '';
 
   return (
     <div className={cls.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
@@ -636,7 +637,7 @@ export default function EoiLinkModal({
                   </div>
                 </div>
 
-                <span className={cls.label}>Close $</span>
+                <span className={cls.label}>Close $ *</span>
                 <div>
                   <input
                     type="text"
@@ -644,12 +645,14 @@ export default function EoiLinkModal({
                     value={currencyFormatted(editPrice)}
                     onChange={(e) => setEditPrice(currencyRaw(e.target.value))}
                     placeholder="e.g. $650,000"
-                    className={`w-full ${cls.input}`}
+                    className={`w-full ${cls.input} ${priceEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`}
                   />
-                  <div className={`text-[10px] mt-0.5 ${cls.sub}`}>
-                    {isEdit
-                      ? `Current: ${record.closingPrice || '-'}; opportunity reference: ${selected?.totalPurchasePrice || '-'}`
-                      : `Prefilled from the property record (${record.type || 'unknown type'}). Opportunity Total Purchase Price for reference: ${selected?.totalPurchasePrice || '-'}`}
+                  <div className={`text-[10px] mt-0.5 ${priceEmpty ? 'text-red-500' : cls.sub}`}>
+                    {priceEmpty
+                      ? 'Required — enter the close price to continue.'
+                      : isEdit
+                        ? `Current: ${record.closingPrice || '-'}; opportunity reference: ${selected?.totalPurchasePrice || '-'}`
+                        : `Prefilled from the property record (${record.type || 'unknown type'}). Opportunity Total Purchase Price for reference: ${selected?.totalPurchasePrice || '-'}`}
                   </div>
                 </div>
 
@@ -701,7 +704,7 @@ export default function EoiLinkModal({
                 )}
               </div>
               {submitError && <span className="text-[10px] text-red-400">{submitError}</span>}
-              <button onClick={handleConfirm} disabled={submitting || !editDateIso || baEmpty || linkLoad === 'loading' || linkLoad === 'missing' || (duplicateLinks.length > 0 && !dupeAcknowledged) || (!selected && !isSpeculative)} className={cls.btnPrimary}>
+              <button onClick={handleConfirm} disabled={submitting || !editDateIso || baEmpty || priceEmpty || linkLoad === 'loading' || linkLoad === 'missing' || (duplicateLinks.length > 0 && !dupeAcknowledged) || (!selected && !isSpeculative)} className={cls.btnPrimary}>
                 {submitting ? 'Saving...' : (isEdit ? 'Confirm changes' : 'Confirm & Link')}
               </button>
             </div>
