@@ -2280,21 +2280,6 @@ export function Step0AddressAndRisk() {
                       throw new Error(errorData.error || `Update failed: ${updateResponse.status}`);
                     }
 
-                    // Call Make.com webhook
-                    const webhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_RESEND_EMAIL;
-                    if (webhookUrl) {
-                      const payload = {
-                        recordId: formData.ghlRecordId,
-                        source: 'form_app_edit',
-                        editor: formData.editor || 'unknown',
-                      };
-                      fetch(webhookUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
-                      }).catch((err) => console.log('Webhook call failed:', err));
-                    }
-
                     updateFormData({ clearInGhl: {} });
                     alert('✅ Changes saved successfully! The GHL record has been updated.');
                   } catch (error) {

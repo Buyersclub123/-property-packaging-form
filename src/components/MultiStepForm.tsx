@@ -1581,21 +1581,6 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
         updateInitialData(initialDataRef.current, changedFieldsOnly);
       }
 
-      // Call Make.com webhook for update (non-blocking)
-      const webhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_RESEND_EMAIL;
-      if (webhookUrl) {
-        const payload = {
-          recordId: formData.ghlRecordId,
-          source: 'form_app_edit',
-          editor: formData.editor || userEmail || 'unknown',
-        };
-        fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }).catch((err) => console.log('Webhook call failed:', err));
-      }
-
       updateFormData({ clearInGhl: {} });
 
       // Show success message with count of changed fields
