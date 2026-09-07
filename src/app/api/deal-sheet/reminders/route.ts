@@ -254,15 +254,20 @@ export async function GET(request: Request) {
     const packagerSentMap = new Map<string, string[]>();
 
     // ================================================================
-    // 1. TRACK packager_approved_at (runs every cycle, not just biz hours)
+    // 1. TRACK approval timestamps (runs every cycle, not just biz hours)
     // ================================================================
     for (const rec of records) {
-      if (rec.packagerApproved.toLowerCase() !== 'approved') continue;
-      if (rec.qaApproved.toLowerCase() === 'approved') continue;
-      const key = `packager_approved_at:${rec.id}`;
-      const existing = await redis.get(key);
-      if (!existing) {
-        await redis.set(key, now.toISOString());
+      if (rec.packagerApproved.toLowerCase() === 'approved') {
+        const pkgKey = `packager_approved_at:${rec.id}`;
+        if (!(await redis.get(pkgKey))) {
+          await redis.set(pkgKey, now.toISOString());
+        }
+        if (rec.qaApproved.toLowerCase() === 'approved') {
+          const qaKey = `qa_approved_at:${rec.id}`;
+          if (!(await redis.get(qaKey))) {
+            await redis.set(qaKey, now.toISOString());
+          }
+        }
       }
     }
 
