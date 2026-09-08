@@ -92,13 +92,21 @@ function TableView({
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const data: Record<string, Record<string, Record<string, string>>> = {};
+    const requests: { ptype: string; state: string; promise: Promise<Response> }[] = [];
     for (const ptype of TYPES) {
       data[ptype] = {};
       for (const st of STATES) {
-        const res = await fetch(`/api/eoi/templates?state=${st}&type=${ptype}&_t=${Date.now()}`);
-        const d = await res.json();
-        data[ptype][st] = d.values || {};
+        requests.push({
+          ptype,
+          state: st,
+          promise: fetch(`/api/eoi/templates?state=${st}&type=${ptype}&_t=${Date.now()}`),
+        });
       }
+    }
+    const responses = await Promise.all(requests.map((r) => r.promise));
+    const jsons = await Promise.all(responses.map((r) => r.json()));
+    for (let i = 0; i < requests.length; i++) {
+      data[requests[i].ptype][requests[i].state] = jsons[i].values || {};
     }
     setAllData(data);
     setEditedCells({});
