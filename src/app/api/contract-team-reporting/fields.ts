@@ -2934,6 +2934,31 @@ export const PROPERTY_FIELD_TYPES: Record<string, string> = {
 // a co_ prefix so they can never collide with opportunity fields.
 export const CO_PREFIX = 'co_';
 
+// ============================================================================
+// EDITABILITY — SINGLE SOURCE OF TRUTH
+// Both the page (cell locking) and the update API (write guard) import these.
+// To make a field editable or read-only, change it HERE and nowhere else.
+// ============================================================================
+
+// Custom object (Property Review) fields are read-only for now (feedback item 31).
+// Flip to false to re-enable editing of co_ fields in both UI and API.
+export const CO_FIELDS_READ_ONLY = true;
+
+// Fields that can never be edited from the tool — system/computed fields plus
+// business-rule read-only fields (feedback items 7, 23, 29).
+// NOTE: registeredAddress was made editable on 2026-09-02 — do not re-add.
+export const READ_ONLY_FIELDS = new Set([
+  // System / computed
+  'id', 'name', 'opportunityName', 'pipelineStage', 'pipelineName', 'pipelineId', 'pipelineStageId',
+  'assignedTo', 'owner', 'followers', 'daysSinceStageChange', 'stage', 'ghlLink', 'status',
+  'monetaryValue', 'createdAt', 'updatedAt', 'lastStageChangeAt',
+  'co_record_id', 'co_linked_opportunity_id',
+  // Contact fields (item 23)
+  'contactName', 'contactEmail', 'contactPhone',
+  // Business rule (items 7 + 29)
+  'assignedBA', 'partnerName', 'partnerEmail', 'partnerPhone',
+]);
+
 // Property Review fields the user explicitly requested for this report
 // (Column A of "20260813 Property Record data and Associatred Opportunity
 // Record Data info.csv"). Everything else from the custom object goes into

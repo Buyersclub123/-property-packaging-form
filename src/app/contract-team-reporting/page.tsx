@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
-import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX } from '@/app/api/contract-team-reporting/fields';
+import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, CO_FIELDS_READ_ONLY, READ_ONLY_FIELDS } from '@/app/api/contract-team-reporting/fields';
 
 if (typeof document !== 'undefined') document.title = 'Contract Team Reporting Tool';
 
@@ -157,12 +157,8 @@ function displayLabelFor(key: string, raw: string): string {
 }
 // Fields that are large text (get expand button in edit mode)
 const LARGE_TEXT_FIELDS = new Set(['latestStatusUpdate', 'bpNegotiationDetail', 'agentBuilderDetails', 'briefNotes']);
-// ALL custom object (co_) fields are read-only for now (feedback item 31).
-// Flip to false to re-enable editing — the write-back plumbing stays in place.
-const CO_FIELDS_READ_ONLY = true;
-
-// Standard across all views (feedback item 7) + contact fields (item 23)
-const READ_ONLY_FIELDS = new Set(['id', 'name', 'opportunityName', 'pipelineStage', 'pipelineName', 'assignedTo', 'assignedBA', 'owner', 'followers', 'daysSinceStageChange', 'stage', 'ghlLink', 'contactName', 'contactEmail', 'contactPhone', 'status', 'monetaryValue', 'createdAt', 'updatedAt', 'lastStageChangeAt', 'pipelineId', 'pipelineStageId', 'co_record_id', 'co_linked_opportunity_id', 'partnerName', 'partnerEmail', 'partnerPhone']);
+// Editability (READ_ONLY_FIELDS, CO_FIELDS_READ_ONLY) is imported from fields.ts —
+// shared with the update API so the UI and the write guard can never disagree.
 
 // ============================================================================
 // TYPES
@@ -1398,12 +1394,13 @@ export default function ContractTeamReportingPage() {
 
   // Fetch data
   const [refreshing, setRefreshing] = useState(false);
-  const fetchData = useCallback(async (isBackground = false) => {
+  const fetchData = useCallback(async (isBackground = false, forceFresh = false) => {
     if (!isBackground) setLoading(true);
     setRefreshing(true);
     try {
-      const res = await fetch('/api/contract-team-reporting');
+      const res = await fetch(forceFresh ? '/api/contract-team-reporting?fresh=1' : '/api/contract-team-reporting');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const fetchedAtHeader = parseInt(res.headers.get('X-Fetched-At') || '', 10);
       const data = await res.json();
       let incoming: OpportunityRecord[] = Array.isArray(data) ? data : [];
       // Overlay recently saved values so stale GHL search results can't revert them
@@ -1420,7 +1417,7 @@ export default function ContractTeamReportingPage() {
         });
       }
       setRecords(incoming);
-      setLastRefresh(new Date());
+      setLastRefresh(fetchedAtHeader > 0 ? new Date(fetchedAtHeader) : new Date());
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to load');
@@ -2040,7 +2037,7 @@ export default function ContractTeamReportingPage() {
       <div className="flex items-center justify-center h-screen bg-gray-900">
         <div className="text-center">
           <p className="text-red-400 text-lg mb-4">Error: {error}</p>
-          <button onClick={() => fetchData()} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry</button>
+          <button onClick={() => fetchData(false, true)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry</button>
         </div>
       </div>
     );
@@ -2589,7 +2586,7 @@ export default function ContractTeamReportingPage() {
           )}
           {lastRefresh && <span className="text-xs opacity-50">{lastRefresh.toLocaleTimeString()}</span>}
 
-          <button onClick={() => fetchData()} className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}>
+          <button onClick={() => fetchData(false, true)} className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}>
             {refreshing ? '...' : 'Refresh'}
           </button>
 

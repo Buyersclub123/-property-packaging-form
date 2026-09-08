@@ -7,6 +7,16 @@ import {
 } from './fields';
 import { sendCtrAlert } from './alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
+import { getRedisClient } from '@/lib/redis';
+
+// Shared fetch: one GHL pull per window, served to every open tab.
+// Freshness matches the page's own 60s auto-refresh so nobody sees older data than today.
+const SHARED_KEY = 'ctr:report';
+const SHARED_LOCK = 'ctr:report:lock';
+const SHARED_TTL_SEC = 60;
+const LOCK_TTL_SEC = 30;
+const WAIT_FOR_LOCK_MS = 15000;
+const WAIT_POLL_MS = 400;
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -412,7 +422,48 @@ function buildPropertyLookup(
   return { propertyByOppId, allPropertyKeys: allKeys };
 }
 
-export async function GET() {
+async function buildReport(): Promise<ReportRecord[]> {
+  const [opportunityData, propertyData] = await Promise.all([
+    Promise.all([fetchPipelineStages(), fetchUsers()]).then(() => fetchAllOpportunities()),
+    fetchPropertyRecords(),
+  ]);
+
+  const allOpportunities = opportunityData;
+  const { records: propertyRecords, keys: allPropertyKeys } = propertyData;
+  const { propertyByOppId } = buildPropertyLookup(propertyRecords, allPropertyKeys);
+
+  return allOpportunities
+    .filter((opp) => opp.status === 'open')
+    .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys))
+    .filter((r) => {
+      if (r.pipelineId === 'zgBRaMnACpskyf1wHCEV' && r.pipelineStage.toLowerCase() === 'settled') return false;
+      // Construction HANDOVER is NOT excluded here: Build Deposit Status has to
+      // include it to match the original report. Views that should leave it out
+      // (PM Intro Tracking, Full F&C) carry their own stage filter.
+      return true;
+    })
+    .sort((a, b) => {
+      const dateA = a.confirmedSettlementDate || '9999-12-31';
+      const dateB = b.confirmedSettlementDate || '9999-12-31';
+      return new Date(dateA).getTime() - new Date(dateB).getTime();
+    });
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function respond(records: ReportRecord[], fetchedAt: number, served: 'shared' | 'live') {
+  return NextResponse.json(records, {
+    headers: {
+      'X-Fetched-At': String(fetchedAt),
+      'X-Served-From': served,
+      'Cache-Control': 'no-store',
+    },
+  });
+}
+
+export async function GET(request: Request) {
   try {
     if (!GHL_API_TOKEN || !GHL_LOCATION_ID) {
       return NextResponse.json(
@@ -421,32 +472,60 @@ export async function GET() {
       );
     }
 
-    const [opportunityData, propertyData] = await Promise.all([
-      Promise.all([fetchPipelineStages(), fetchUsers()]).then(() => fetchAllOpportunities()),
-      fetchPropertyRecords(),
-    ]);
+    const fresh = new URL(request.url).searchParams.get('fresh') === '1';
+    let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
+    try {
+      redis = await getRedisClient();
+    } catch (e) {
+      console.warn('CTR: Redis unavailable, falling back to live fetch:', e);
+    }
 
-    const allOpportunities = opportunityData;
-    const { records: propertyRecords, keys: allPropertyKeys } = propertyData;
-    const { propertyByOppId } = buildPropertyLookup(propertyRecords, allPropertyKeys);
+    // Manual refresh or no Redis → straight to GHL
+    if (fresh || !redis) {
+      const records = await buildReport();
+      const now = Date.now();
+      if (redis) {
+        await redis.set(SHARED_KEY, JSON.stringify({ fetchedAt: now, records }), { EX: SHARED_TTL_SEC });
+      }
+      return respond(records, now, 'live');
+    }
 
-    const records = allOpportunities
-      .filter((opp) => opp.status === 'open')
-      .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys))
-      .filter((r) => {
-        if (r.pipelineId === 'zgBRaMnACpskyf1wHCEV' && r.pipelineStage.toLowerCase() === 'settled') return false;
-        // Construction HANDOVER is NOT excluded here: Build Deposit Status has to
-        // include it to match the original report. Views that should leave it out
-        // (PM Intro Tracking, Full F&C) carry their own stage filter.
-        return true;
-      })
-      .sort((a, b) => {
-        const dateA = a.confirmedSettlementDate || '9999-12-31';
-        const dateB = b.confirmedSettlementDate || '9999-12-31';
-        return new Date(dateA).getTime() - new Date(dateB).getTime();
-      });
+    // 1. Shared result still fresh? Serve it.
+    const cached = await redis.get(SHARED_KEY);
+    if (cached) {
+      const { fetchedAt, records } = JSON.parse(cached) as { fetchedAt: number; records: ReportRecord[] };
+      return respond(records, fetchedAt, 'shared');
+    }
 
-    return NextResponse.json(records);
+    // 2. Expired. Try to be the one caller that refreshes it.
+    const gotLock = await redis.set(SHARED_LOCK, '1', { NX: true, EX: LOCK_TTL_SEC });
+    if (gotLock) {
+      try {
+        const records = await buildReport();
+        const now = Date.now();
+        await redis.set(SHARED_KEY, JSON.stringify({ fetchedAt: now, records }), { EX: SHARED_TTL_SEC });
+        return respond(records, now, 'live');
+      } finally {
+        await redis.del(SHARED_LOCK).catch(() => {});
+      }
+    }
+
+    // 3. Someone else is fetching — wait for their result rather than hitting GHL too.
+    const deadline = Date.now() + WAIT_FOR_LOCK_MS;
+    while (Date.now() < deadline) {
+      await sleep(WAIT_POLL_MS);
+      const ready = await redis.get(SHARED_KEY);
+      if (ready) {
+        const { fetchedAt, records } = JSON.parse(ready) as { fetchedAt: number; records: ReportRecord[] };
+        return respond(records, fetchedAt, 'shared');
+      }
+    }
+
+    // 4. Waited too long (the fetcher probably failed) — fetch ourselves.
+    const records = await buildReport();
+    const now = Date.now();
+    await redis.set(SHARED_KEY, JSON.stringify({ fetchedAt: now, records }), { EX: SHARED_TTL_SEC });
+    return respond(records, now, 'live');
   } catch (err) {
     console.error('Contract Team Reporting API error:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';

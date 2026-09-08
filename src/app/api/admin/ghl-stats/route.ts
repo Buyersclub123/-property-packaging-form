@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
-import { sydneyBuckets } from '@/lib/ghlFetch';
+import { sydneyBuckets, statsKeys, STATS_ENV } from '@/lib/ghlFetch';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   const rows: { hour: string; data: Record<string, number> }[] = [];
   for (let i = 0; i < hours; i++) {
     const bucket = sydneyBuckets(new Date(now - i * 3600000)).hour;
-    const raw = await redis.hGetAll(`ghl_stats:${bucket}`);
+    const raw = await redis.hGetAll(statsKeys.hour(bucket));
     if (Object.keys(raw).length === 0) continue;
     const data: Record<string, number> = {};
     for (const [k, v] of Object.entries(raw)) data[k] = parseInt(v, 10);
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   }
 
   // Recent error events (newest first) + what else was in flight that minute
-  const rawErrors = await redis.zRange('ghl_errors', 0, errorLimit - 1, { REV: true });
+  const rawErrors = await redis.zRange(statsKeys.errors, 0, errorLimit - 1, { REV: true });
   const minuteCache = new Map<string, Record<string, string>>();
   const errors: {
     time: string; minute: string; source: string; endpoint: string; status: string;
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     const { minute } = sydneyBuckets(d);
     let min = minuteCache.get(minute);
     if (!min) {
-      min = await redis.hGetAll(`ghl_min:${minute}`);
+      min = await redis.hGetAll(statsKeys.minute(minute));
       minuteCache.set(minute, min);
     }
     const bySource: Record<string, number> = {};
@@ -66,7 +66,7 @@ export async function GET(request: Request) {
   }
 
   if (searchParams.get('format') === 'json') {
-    return NextResponse.json({ hours, rows, errors });
+    return NextResponse.json({ env: STATS_ENV, hours, rows, errors });
   }
 
   // Collect all sources for column headers
@@ -120,7 +120,7 @@ export async function GET(request: Request) {
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>GHL Request Stats</title></head>
 <body style="font-family:Arial,sans-serif;padding:20px;background:#fafafa;">
-  <h1 style="font-size:18px;">GHL Request Stats — last ${hours}h (Sydney time)</h1>
+  <h1 style="font-size:18px;">GHL Request Stats — <span style="color:${STATS_ENV === 'production' ? '#b91c1c' : '#2563eb'};">${STATS_ENV.toUpperCase()}</span> — last ${hours}h (Sydney time)</h1>
   <p style="font-size:13px;color:#555;">
     <strong>Total requests:</strong> ${totalAll} &nbsp;|&nbsp;
     <strong>429s:</strong> ${total429} &nbsp;|&nbsp;

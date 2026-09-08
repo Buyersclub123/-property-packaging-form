@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX } from '../fields';
+import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX, CO_FIELDS_READ_ONLY, READ_ONLY_FIELDS } from '../fields';
 import { sendCtrAlert } from '../alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
 
@@ -11,14 +11,8 @@ const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 
-// Read-only fields can never be written from the tool (feedback items 7 + 29)
-const READ_ONLY = new Set([
-  'registeredAddress',
-  'assignedBA',
-  'partnerName',
-  'partnerEmail',
-  'partnerPhone',
-]);
+// Read-only rules (READ_ONLY_FIELDS, CO_FIELDS_READ_ONLY) come from fields.ts —
+// the same list the page uses to lock cells, so UI and API can never disagree.
 
 // Fields that are DATE type in GHL
 const DATE_FIELDS = new Set([
@@ -67,8 +61,6 @@ export async function PUT(request: NextRequest) {
       const value = rawValue === null || rawValue === undefined ? '' : String(rawValue);
 
       // Custom object (Property Review) fields — written to the property record.
-      // READ-ONLY for now (feedback item 31): flip to false to re-enable.
-      const CO_FIELDS_READ_ONLY = true;
       if (rawKey.startsWith(CO_PREFIX)) {
         if (CO_FIELDS_READ_ONLY) continue;
         const coKey = rawKey.slice(CO_PREFIX.length);
@@ -87,7 +79,7 @@ export async function PUT(request: NextRequest) {
 
       // financeFormalApproval is an alias the B&P layout uses
       const key = rawKey === 'financeFormalApproval' ? 'financeApprovalReceived' : rawKey;
-      if (READ_ONLY.has(key)) continue;
+      if (READ_ONLY_FIELDS.has(key)) continue;
       const ghlId = FRIENDLY_TO_FIELD_ID[key];
       if (!ghlId) continue;
 

@@ -32,6 +32,14 @@ function endpointKey(url: string): string {
 const MINUTE_TTL_SEC = 3 * 86400; // per-minute detail kept 3 days
 const ERROR_LOG_MAX = 5000;
 
+/** 'production' | 'preview' | 'dev' — dev and prod share Redis, so stats are namespaced. */
+export const STATS_ENV = process.env.VERCEL_ENV || 'dev';
+export const statsKeys = {
+  hour: (bucket: string) => `ghl_stats:${STATS_ENV}:${bucket}`,
+  minute: (bucket: string) => `ghl_min:${STATS_ENV}:${bucket}`,
+  errors: `ghl_errors:${STATS_ENV}`,
+};
+
 const SYD_FMT = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Australia/Sydney',
   year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -53,8 +61,8 @@ export function sydneyBuckets(d: Date): { hour: string; minute: string } {
 function recordStat(source: string, url: string, status: number | 'network', attempt: number, ms: number): void {
   const now = new Date();
   const { hour, minute } = sydneyBuckets(now);
-  const hourKey = `ghl_stats:${hour}`;
-  const minKey = `ghl_min:${minute}`;
+  const hourKey = statsKeys.hour(hour);
+  const minKey = statsKeys.minute(minute);
   const ep = endpointKey(url);
   const isError = status === 'network' || status >= 400;
   console.log(`[ghlFetch] src=${source} ep=${ep} status=${status} attempt=${attempt} ms=${ms}`);
@@ -77,8 +85,8 @@ function recordStat(source: string, url: string, status: number | 'network', att
 
       if (isError) {
         const ts = now.getTime();
-        m.zAdd('ghl_errors', { score: ts, value: `${ts}|${source}|${ep}|${status}|${attempt}|${ms}` });
-        m.zRemRangeByRank('ghl_errors', 0, -(ERROR_LOG_MAX + 1));
+        m.zAdd(statsKeys.errors, { score: ts, value: `${ts}|${source}|${ep}|${status}|${attempt}|${ms}` });
+        m.zRemRangeByRank(statsKeys.errors, 0, -(ERROR_LOG_MAX + 1));
       }
       await m.exec();
     })
