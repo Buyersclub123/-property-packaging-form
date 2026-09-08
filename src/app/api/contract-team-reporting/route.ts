@@ -119,7 +119,8 @@ async function fetchUsers(): Promise<void> {
           Version: GHL_API_VERSION,
           Accept: 'application/json',
         },
-      }
+      },
+      'ctr-users'
     );
     if (!response.ok) return;
     const data = await response.json();
@@ -145,7 +146,8 @@ async function fetchPipelineStages(): Promise<void> {
           Authorization: `Bearer ${GHL_API_TOKEN}`,
           Version: GHL_API_VERSION,
         },
-      }
+      },
+      'ctr-stages'
     );
     if (!response.ok) return;
     const data = await response.json();
@@ -215,7 +217,8 @@ async function fetchPropertyRecords(): Promise<{ records: GHLPropertyRecord[]; k
           page,
           pageLimit: 100,
         }),
-      }
+      },
+      'ctr-properties'
     );
 
     if (!response.ok) {
@@ -484,7 +487,7 @@ async function fetchAllOpportunities(): Promise<GHLOpportunity[]> {
           Authorization: `Bearer ${GHL_API_TOKEN}`,
           Version: GHL_API_VERSION,
         },
-      });
+      }, 'ctr-opportunities');
 
       if (!response.ok) {
         const errorText = await response.text();

@@ -36,7 +36,7 @@ export async function GET(request: Request) {
           page,
           pageLimit: 100,
         }),
-      });
+      }, 'deal-sheet');
 
       if (!response.ok) {
         const errorText = await response.text();

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX } from '../fields';
 import { sendCtrAlert } from '../alerts';
+import { ghlFetch } from '@/lib/ghlFetch';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -119,7 +120,7 @@ export async function PUT(request: NextRequest) {
     // 1. Update opportunity custom fields
     if (Object.keys(payload).length > 0) {
       const url = `${GHL_BASE_URL}/opportunities/${opportunityId}?locationId=${GHL_LOCATION_ID}`;
-      const res = await fetch(url, {
+      const res = await ghlFetch(url, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${GHL_API_TOKEN}`,
@@ -127,7 +128,7 @@ export async function PUT(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-      });
+      }, 'ctr-update-opp');
       if (!res.ok) {
         const errorText = await res.text();
         console.error('CTR opportunity update failed:', res.status, errorText);
@@ -146,7 +147,7 @@ export async function PUT(request: NextRequest) {
     // 2. Update the linked Property Review custom object record
     if (Object.keys(propertyProps).length > 0) {
       const url = `${GHL_BASE_URL}/objects/${PROPERTY_OBJECT_ID}/records/${propertyRecordId}?locationId=${GHL_LOCATION_ID}`;
-      const res = await fetch(url, {
+      const res = await ghlFetch(url, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${GHL_API_TOKEN}`,
@@ -154,7 +155,7 @@ export async function PUT(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ properties: propertyProps }),
-      });
+      }, 'ctr-update-property');
       if (!res.ok) {
         const errorText = await res.text();
         console.error('CTR property record update failed:', res.status, errorText);
