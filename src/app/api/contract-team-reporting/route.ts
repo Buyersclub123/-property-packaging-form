@@ -6,6 +6,7 @@ import {
   PROPERTY_LINK_FIELD_ID,
 } from './fields';
 import { sendCtrAlert } from './alerts';
+import { ghlFetch } from '@/lib/ghlFetch';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -110,7 +111,7 @@ let stageNameCache: Record<string, string> = {};
 
 async function fetchUsers(): Promise<void> {
   try {
-    const response = await fetch(
+    const response = await ghlFetch(
       `${GHL_BASE_URL}/users/?locationId=${GHL_LOCATION_ID}`,
       {
         headers: {
@@ -137,7 +138,7 @@ async function fetchUsers(): Promise<void> {
 
 async function fetchPipelineStages(): Promise<void> {
   try {
-    const response = await fetch(
+    const response = await ghlFetch(
       `${GHL_BASE_URL}/opportunities/pipelines?locationId=${GHL_LOCATION_ID}`,
       {
         headers: {
@@ -199,7 +200,7 @@ async function fetchPropertyRecords(): Promise<{ records: GHLPropertyRecord[]; k
   let hasMore = true;
 
   while (hasMore) {
-    const response = await fetch(
+    const response = await ghlFetch(
       `${GHL_BASE_URL}/objects/${PROPERTY_OBJECT_ID}/records/search`,
       {
         method: 'POST',
@@ -477,7 +478,7 @@ async function fetchAllOpportunities(): Promise<GHLOpportunity[]> {
         url.searchParams.set('startAfterId', startAfterId);
       }
 
-      const response = await fetch(url.toString(), {
+      const response = await ghlFetch(url.toString(), {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${GHL_API_TOKEN}`,

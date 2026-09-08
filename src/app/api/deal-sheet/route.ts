@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GHLRecord, GHLSearchResponse, transformRecord, resolveLinkedOpportunityNames } from '@/lib/dealSheetTransform';
 import { getRedisClient } from '@/lib/redis';
+import { ghlFetch } from '@/lib/ghlFetch';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
     let hasMore = true;
 
     while (hasMore) {
-      const response = await fetch(`${GHL_API_BASE_URL}/${GHL_OBJECT_ID}/records/search`, {
+      const response = await ghlFetch(`${GHL_API_BASE_URL}/${GHL_OBJECT_ID}/records/search`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${GHL_API_TOKEN}`,
