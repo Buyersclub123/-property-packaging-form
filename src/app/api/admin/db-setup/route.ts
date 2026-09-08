@@ -61,8 +61,27 @@ const ESTABLISHED: Record<string, Record<string, string>> = {
   },
 };
 
-// H&L inherits established values but overrides commission + settlement.
-const HL_OVERRIDES: Record<string, string> = {
+// New Single Contract: new build, one contract.
+// - PCI instead of B&P
+// - Has commission
+// - Inherits finance from established
+const NEW_SINGLE_FIELDS: Record<string, string> = {
+  deposit_amount: '',
+  deposit_payable: '',
+  pci: '',
+  commission: 'As Per IBA',
+  settlement: '21 Days from Registration, or 21 Days from Finance Unconditional, whichever is latter',
+};
+
+// H&L Split Contract: separate land + build contracts.
+// - Deposit split into land + build
+// - PCI instead of B&P
+// - Has commission
+// - Inherits finance from established
+const HL_SPLIT_FIELDS: Record<string, string> = {
+  land_deposit: '',
+  build_deposit: '',
+  pci: '',
   commission: 'As Per IBA',
   settlement: '21 Days from Registration, or 21 Days from Finance Unconditional, whichever is latter',
 };
@@ -147,10 +166,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const reseed = searchParams.get('reseed') === '1';
   const sql = getDb();
   const log: string[] = [];
 
   try {
+    // ---- Optional reseed: clear template data to re-seed with updated fields
+    if (reseed) {
+      await sql`DELETE FROM eoi_template_values`;
+      await sql`DELETE FROM special_conditions`;
+      log.push('Cleared eoi_template_values and special_conditions for reseed');
+    }
+
     // ---- Schema creation ----------------------------------------------------
     await sql`
       CREATE TABLE IF NOT EXISTS eoi_template_values (
@@ -267,11 +294,26 @@ export async function GET(request: Request) {
             VALUES (${state}, ${'established'}, ${field}, ${value}, ${'seed'})`;
           inserted++;
         }
-        for (const [field, value] of Object.entries(estFields)) {
-          const hlValue = HL_OVERRIDES[field] ?? value;
+        // New Single Contract: finance inherited from established + new-single fields
+        const nsFields: Record<string, string> = {
+          finance: estFields.finance,
+          ...NEW_SINGLE_FIELDS,
+        };
+        for (const [field, value] of Object.entries(nsFields)) {
           await sql`
             INSERT INTO eoi_template_values (state, property_type, field_name, field_value, updated_by)
-            VALUES (${state}, ${'house_and_land'}, ${field}, ${hlValue}, ${'seed'})`;
+            VALUES (${state}, ${'new_single'}, ${field}, ${value}, ${'seed'})`;
+          inserted++;
+        }
+        // H&L Split Contract: finance inherited from established + split fields
+        const hlFields: Record<string, string> = {
+          finance: estFields.finance,
+          ...HL_SPLIT_FIELDS,
+        };
+        for (const [field, value] of Object.entries(hlFields)) {
+          await sql`
+            INSERT INTO eoi_template_values (state, property_type, field_name, field_value, updated_by)
+            VALUES (${state}, ${'house_and_land'}, ${field}, ${value}, ${'seed'})`;
           inserted++;
         }
       }
@@ -287,13 +329,12 @@ export async function GET(request: Request) {
       for (const state of STATES) {
         const conds = CONDITIONS[state];
         for (let i = 0; i < conds.length; i++) {
-          await sql`
-            INSERT INTO special_conditions (text, state, property_type, is_default, sort_order)
-            VALUES (${conds[i]}, ${state}, ${'established'}, ${true}, ${i})`;
-          await sql`
-            INSERT INTO special_conditions (text, state, property_type, is_default, sort_order)
-            VALUES (${conds[i]}, ${state}, ${'house_and_land'}, ${true}, ${i})`;
-          inserted += 2;
+          for (const ptype of ['established', 'new_single', 'house_and_land']) {
+            await sql`
+              INSERT INTO special_conditions (text, state, property_type, is_default, sort_order)
+              VALUES (${conds[i]}, ${state}, ${ptype}, ${true}, ${i})`;
+            inserted++;
+          }
         }
       }
       log.push(`Seeded special_conditions: ${inserted} rows`);
