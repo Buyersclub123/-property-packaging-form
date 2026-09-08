@@ -29,36 +29,57 @@ function endpointKey(url: string): string {
   }
 }
 
-/** Hour bucket in Sydney time: 2026-09-08T11 */
-function hourBucket(d: Date): string {
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Australia/Sydney',
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
-  });
-  const p = Object.fromEntries(fmt.formatToParts(d).map((x) => [x.type, x.value]));
-  return `${p.year}-${p.month}-${p.day}T${p.hour}`;
+const MINUTE_TTL_SEC = 3 * 86400; // per-minute detail kept 3 days
+const ERROR_LOG_MAX = 5000;
+
+const SYD_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Australia/Sydney',
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+});
+
+/** Sydney-time buckets: hour = 2026-09-08T11, minute = 2026-09-08T11:42 */
+export function sydneyBuckets(d: Date): { hour: string; minute: string } {
+  const p = Object.fromEntries(SYD_FMT.formatToParts(d).map((x) => [x.type, x.value]));
+  const hour = `${p.year}-${p.month}-${p.day}T${p.hour}`;
+  return { hour, minute: `${hour}:${p.minute}` };
 }
 
 /**
  * Record one GHL request attempt in Redis. Fire-and-forget — never blocks or throws.
- * Keys (hash per hour): ghl_stats:{bucket} → { total, status:{code}, src:{source}, ep:{endpoint}, retries }
+ *   ghl_stats:{hour}   hash → total, status:{code}, src:{source}, ep:{endpoint}, retries   (14 days)
+ *   ghl_min:{minute}   hash → total, src:{source}                                           (3 days)
+ *   ghl_errors         zset → score=ms, member="ms|source|endpoint|status|attempt|durMs"    (last 5000)
  */
 function recordStat(source: string, url: string, status: number | 'network', attempt: number, ms: number): void {
   const now = new Date();
-  const key = `ghl_stats:${hourBucket(now)}`;
+  const { hour, minute } = sydneyBuckets(now);
+  const hourKey = `ghl_stats:${hour}`;
+  const minKey = `ghl_min:${minute}`;
   const ep = endpointKey(url);
+  const isError = status === 'network' || status >= 400;
   console.log(`[ghlFetch] src=${source} ep=${ep} status=${status} attempt=${attempt} ms=${ms}`);
   getRedisClient()
     .then(async (redis) => {
       const m = redis.multi();
-      m.hIncrBy(key, 'total', 1);
-      m.hIncrBy(key, `status:${status}`, 1);
-      m.hIncrBy(key, `src:${source}`, 1);
-      m.hIncrBy(key, `ep:${ep}`, 1);
-      m.hIncrBy(key, `src_ep:${source}|${ep}`, 1);
-      if (attempt > 0) m.hIncrBy(key, 'retries', 1);
-      if (status === 429) m.hIncrBy(key, `src_429:${source}`, 1);
-      m.expire(key, STATS_TTL_SEC);
+      m.hIncrBy(hourKey, 'total', 1);
+      m.hIncrBy(hourKey, `status:${status}`, 1);
+      m.hIncrBy(hourKey, `src:${source}`, 1);
+      m.hIncrBy(hourKey, `ep:${ep}`, 1);
+      m.hIncrBy(hourKey, `src_ep:${source}|${ep}`, 1);
+      if (attempt > 0) m.hIncrBy(hourKey, 'retries', 1);
+      if (status === 429) m.hIncrBy(hourKey, `src_429:${source}`, 1);
+      m.expire(hourKey, STATS_TTL_SEC);
+
+      m.hIncrBy(minKey, 'total', 1);
+      m.hIncrBy(minKey, `src:${source}`, 1);
+      if (isError) m.hIncrBy(minKey, 'errors', 1);
+      m.expire(minKey, MINUTE_TTL_SEC);
+
+      if (isError) {
+        const ts = now.getTime();
+        m.zAdd('ghl_errors', { score: ts, value: `${ts}|${source}|${ep}|${status}|${attempt}|${ms}` });
+        m.zRemRangeByRank('ghl_errors', 0, -(ERROR_LOG_MAX + 1));
+      }
       await m.exec();
     })
     .catch((e) => console.warn('[ghlFetch] stats write failed:', e));

@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
+import { sydneyBuckets } from '@/lib/ghlFetch';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/admin/ghl-stats?secret=...&hours=48
- * Shows GHL request volume per hour (Sydney time) as recorded by ghlFetch.
+ * GET /api/admin/ghl-stats?secret=...&hours=48&errors=200
+ * Shows GHL request volume per hour (Sydney time) as recorded by ghlFetch,
+ * plus the most recent error events with what else was in flight that minute.
  * Add &format=json for raw data.
  */
 export async function GET(request: Request) {
@@ -16,21 +18,13 @@ export async function GET(request: Request) {
   }
 
   const hours = Math.min(parseInt(searchParams.get('hours') || '48', 10) || 48, 14 * 24);
+  const errorLimit = Math.min(parseInt(searchParams.get('errors') || '200', 10) || 200, 5000);
   const redis = await getRedisClient();
-
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Australia/Sydney',
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false,
-  });
-  const bucketFor = (d: Date) => {
-    const p = Object.fromEntries(fmt.formatToParts(d).map((x) => [x.type, x.value]));
-    return `${p.year}-${p.month}-${p.day}T${p.hour}`;
-  };
 
   const now = Date.now();
   const rows: { hour: string; data: Record<string, number> }[] = [];
   for (let i = 0; i < hours; i++) {
-    const bucket = bucketFor(new Date(now - i * 3600000));
+    const bucket = sydneyBuckets(new Date(now - i * 3600000)).hour;
     const raw = await redis.hGetAll(`ghl_stats:${bucket}`);
     if (Object.keys(raw).length === 0) continue;
     const data: Record<string, number> = {};
@@ -38,8 +32,41 @@ export async function GET(request: Request) {
     rows.push({ hour: bucket, data });
   }
 
+  // Recent error events (newest first) + what else was in flight that minute
+  const rawErrors = await redis.zRange('ghl_errors', 0, errorLimit - 1, { REV: true });
+  const minuteCache = new Map<string, Record<string, string>>();
+  const errors: {
+    time: string; minute: string; source: string; endpoint: string; status: string;
+    attempt: number; ms: number; minuteTotal: number; minuteBySource: Record<string, number>;
+  }[] = [];
+  for (const entry of rawErrors) {
+    const [tsStr, source, endpoint, status, attemptStr, msStr] = entry.split('|');
+    const ts = parseInt(tsStr, 10);
+    const d = new Date(ts);
+    const { minute } = sydneyBuckets(d);
+    let min = minuteCache.get(minute);
+    if (!min) {
+      min = await redis.hGetAll(`ghl_min:${minute}`);
+      minuteCache.set(minute, min);
+    }
+    const bySource: Record<string, number> = {};
+    for (const [k, v] of Object.entries(min)) if (k.startsWith('src:')) bySource[k.slice(4)] = parseInt(v, 10);
+    const secs = String(d.toLocaleString('en-AU', { timeZone: 'Australia/Sydney', second: '2-digit' })).padStart(2, '0');
+    errors.push({
+      time: `${minute}:${secs}`,
+      minute,
+      source,
+      endpoint,
+      status,
+      attempt: parseInt(attemptStr, 10),
+      ms: parseInt(msStr, 10),
+      minuteTotal: parseInt(min.total || '0', 10),
+      minuteBySource: bySource,
+    });
+  }
+
   if (searchParams.get('format') === 'json') {
-    return NextResponse.json({ hours, rows });
+    return NextResponse.json({ hours, rows, errors });
   }
 
   // Collect all sources for column headers
@@ -72,6 +99,25 @@ export async function GET(request: Request) {
     </tr>`;
   }).join('');
 
+  const errorRows = errors.map((e) => {
+    const is429 = e.status === '429';
+    const color = is429 ? '#b45309' : '#b91c1c';
+    const inFlight = Object.entries(e.minuteBySource)
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, n]) => `${s} <span style="color:#999;">×${n}</span>`)
+      .join(', ');
+    return `<tr>
+      <td style="${td}text-align:left;font-family:monospace;">${e.time}</td>
+      <td style="${td}text-align:left;">${e.source}</td>
+      <td style="${td}text-align:left;font-family:monospace;font-size:11px;">${e.endpoint}</td>
+      <td style="${td}color:${color};font-weight:bold;">${e.status}</td>
+      <td style="${td}">${e.attempt}</td>
+      <td style="${td}">${e.ms}</td>
+      <td style="${td}font-weight:bold;">${e.minuteTotal}</td>
+      <td style="${td}text-align:left;font-size:12px;">${inFlight || '<span style="color:#999;">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>GHL Request Stats</title></head>
 <body style="font-family:Arial,sans-serif;padding:20px;background:#fafafa;">
   <h1 style="font-size:18px;">GHL Request Stats — last ${hours}h (Sydney time)</h1>
@@ -93,6 +139,22 @@ export async function GET(request: Request) {
       ${srcList.map((s) => `<th style="${th}">${s}</th>`).join('')}
     </tr></thead>
     <tbody>${body || '<tr><td colspan="99" style="padding:20px;color:#999;">No data yet.</td></tr>'}</tbody>
+  </table>
+
+  <h2 style="font-size:16px;margin-top:36px;">Error events — last ${errors.length} (newest first)</h2>
+  <p style="font-size:11px;color:#888;">"In flight that minute" = all GHL requests from every source in the same Sydney minute, so you can see what collided. Attempt 0 = first try; 1-3 = retries.</p>
+  <table style="border-collapse:collapse;background:#fff;border:1px solid #ddd;">
+    <thead><tr>
+      <th style="${th}text-align:left;">Time</th>
+      <th style="${th}text-align:left;">Source</th>
+      <th style="${th}text-align:left;">Endpoint</th>
+      <th style="${th}">Status</th>
+      <th style="${th}">Attempt</th>
+      <th style="${th}">ms</th>
+      <th style="${th}">Req/min</th>
+      <th style="${th}text-align:left;">In flight that minute</th>
+    </tr></thead>
+    <tbody>${errorRows || '<tr><td colspan="8" style="padding:20px;color:#999;">No errors recorded.</td></tr>'}</tbody>
   </table>
 </body></html>`;
 
