@@ -5,6 +5,8 @@ export const dynamic = 'force-dynamic';
 
 const VALID_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS'];
 const VALID_TYPES = ['established', 'new_single', 'house_and_land'];
+// The EOI composer uses 'hl_split' but the DB stores 'house_and_land'
+const TYPE_ALIAS: Record<string, string> = { hl_split: 'house_and_land' };
 
 /**
  * GET /api/eoi/templates?state=NSW&type=established
@@ -15,7 +17,8 @@ const VALID_TYPES = ['established', 'new_single', 'house_and_land'];
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const state = searchParams.get('state') || 'NSW';
-  const propertyType = searchParams.get('type') || 'established';
+  const rawType = searchParams.get('type') || 'established';
+  const propertyType = TYPE_ALIAS[rawType] || rawType;
 
   if (!VALID_STATES.includes(state) || !VALID_TYPES.includes(propertyType)) {
     return NextResponse.json({ error: 'Invalid state or type' }, { status: 400 });
@@ -101,7 +104,8 @@ export async function GET(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   const body = await request.json();
-  const { state, property_type, changes, updated_by } = body;
+  const { state, property_type: rawPropType, changes, updated_by } = body;
+  const property_type = TYPE_ALIAS[rawPropType] || rawPropType;
 
   if (!state || !property_type || !Array.isArray(changes) || changes.length === 0) {
     return NextResponse.json({ error: 'state, property_type, and changes[] are required' }, { status: 400 });

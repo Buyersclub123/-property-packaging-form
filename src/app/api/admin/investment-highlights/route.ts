@@ -140,7 +140,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { reportName, state, mainBody, userEmail, suburbs, validPeriod, editedReportName } = body;
+    const { reportName, state, mainBody, suburbs, validPeriod, editedReportName } = body;
+    const userEmail = body.userEmail || request.headers.get('Cf-Access-Authenticated-User-Email') || '';
 
     if (!reportName || !state || !mainBody || !userEmail) {
       return NextResponse.json(
@@ -242,7 +243,8 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { reportName, state, pdfDriveLink, pdfFileId, userEmail, updatedReportName } = body;
+    const { reportName, state, pdfDriveLink, pdfFileId, updatedReportName } = body;
+    const userEmail = body.userEmail || request.headers.get('Cf-Access-Authenticated-User-Email') || '';
 
     if (!reportName || !state || !userEmail) {
       return NextResponse.json(

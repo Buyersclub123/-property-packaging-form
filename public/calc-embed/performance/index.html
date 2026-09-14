@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Property Performance Calculator — Buyers Club POC v1.4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --yellow:#FFD60A; --yellow-soft:#FFF1A6; --charcoal:#1A1A1A; --body:#3B3838;
+    --cream:#F8F4E8; --grey-lt:#F2F2F2; --grey-md:#E0E0E0; --green:#34A853; --red:#D93025; --white:#FFFFFF;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:'Poppins',system-ui,sans-serif;color:var(--body);background:#FAFAFA;line-height:1.5}
+  a{color:inherit}
+
+
+  .hero{padding:48px 36px 24px;max-width:1200px;margin:0 auto;text-align:center}
+  .hero .eyebrow{font-size:11px;letter-spacing:2px;color:var(--body);text-transform:uppercase;font-weight:600;margin-bottom:14px}
+  .hero h1{font-size:46px;font-weight:800;color:var(--charcoal);line-height:1.15;margin:0 0 16px;letter-spacing:-1px}
+  .hero h1 .underline{display:inline-block;position:relative}
+  .hero h1 .underline::after{content:"";position:absolute;left:-4px;right:-4px;bottom:-6px;height:8px;background:var(--yellow);border-radius:4px;z-index:-1;transform:skewX(-2deg)}
+  .hero p{font-size:17px;color:var(--body);max-width:680px;margin:0 auto}
+
+
+  main{max-width:1200px;margin:0 auto;padding:32px 36px 80px}
+  .card{background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04);padding:32px;margin-bottom:24px;border:1px solid #eee}
+  .card h2{font-size:24px;font-weight:700;color:var(--charcoal);margin:0 0 6px}
+  .card .eyebrow{font-size:11px;letter-spacing:2px;color:var(--body);text-transform:uppercase;font-weight:600;margin-bottom:6px}
+  .card .section-sub{font-size:14px;color:#7B7676;margin:0 0 24px}
+
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:760px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field.wide{grid-column:1 / -1}
+  .field label{font-size:13px;font-weight:600;color:var(--charcoal)}
+  .field .help{font-size:11px;color:#9B9696;font-style:italic;margin-top:-2px}
+
+  .input-edit{position:relative;display:flex;align-items:center;background:var(--yellow);border:2px solid #E8C200;border-radius:8px;padding:0 14px;transition:all .15s;box-shadow:inset 0 -2px 0 rgba(0,0,0,0.08)}
+  .input-edit:hover{background:#FFE54A;border-color:#D4AE00;cursor:text}
+  .input-edit:focus-within{border-color:var(--charcoal);box-shadow:0 0 0 3px rgba(26,26,26,0.15)}
+  .input-edit .currency, .input-edit .suffix{font-weight:700;color:var(--charcoal);font-size:14px;user-select:none}
+  .input-edit .currency{margin-right:2px}
+  .input-edit .suffix{margin-left:6px;margin-right:8px}
+  .input-edit input, .input-edit select{background:transparent;border:none;padding:11px 0;flex:1;font-weight:700;font-family:inherit;font-size:14px;color:var(--charcoal);outline:none;min-width:0}
+  .input-edit input{text-align:left}
+  .input-edit::after{content:"\270E";position:absolute;right:12px;top:50%;transform:translateY(-50%);color:rgba(26,26,26,0.4);font-size:14px;pointer-events:none}
+  .input-edit.is-select::after{content:"\25BE";color:var(--charcoal);font-weight:700}
+  .input-edit.is-date::after{content:"";}
+  .input-edit select{cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:24px}
+
+  .field input[readonly], .field .readonly-out{background:var(--cream);font-weight:600;text-align:right;color:var(--charcoal);padding:11px 14px;border:1px solid #ECE6D2;border-radius:8px;font-family:inherit;font-size:14px}
+
+  /* KPI tiles */
+  .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:24px}
+  .kpi-tile{background:var(--cream);border-radius:14px;padding:24px;text-align:center;border:1px solid #ECE6D2}
+  .kpi-tile .label{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--body);font-weight:600;margin-bottom:8px}
+  .kpi-tile .value{font-size:32px;font-weight:800;color:var(--charcoal);font-variant-numeric:tabular-nums}
+  .kpi-tile .sub{font-size:13px;color:#7B7676;margin-top:6px}
+  .kpi-tile.uplift{background:var(--charcoal);color:#fff;border-color:var(--charcoal)}
+  .kpi-tile.uplift .label, .kpi-tile.uplift .sub{color:rgba(255,255,255,0.7)}
+  .kpi-tile.uplift .value{color:var(--yellow)}
+  .kpi-tile.uplift.under{background:#5A5A5A;border-color:#5A5A5A}
+  .kpi-tile.uplift.under .value{color:#FF6B5E}
+
+  /* Comparison readout table */
+  .cmp-table{width:100%;border-collapse:collapse;margin:4px 0 8px}
+  .cmp-table tr td{padding:11px 2px;font-size:14px;border-bottom:1px solid #f0f0f0}
+  .cmp-table tr td:first-child{color:var(--body)}
+  .cmp-table tr td:last-child{text-align:right;font-weight:700;color:var(--charcoal);font-variant-numeric:tabular-nums}
+  .cmp-table tr.hl td{background:var(--cream)}
+  .cmp-table tr.hl td:first-child{border-radius:8px 0 0 8px;padding-left:12px}
+  .cmp-table tr.hl td:last-child{border-radius:0 8px 8px 0;padding-right:12px}
+
+  .narrative{background:var(--yellow);padding:24px 28px;border-radius:14px;color:var(--charcoal);font-size:17px;line-height:1.5;font-weight:600;margin-top:22px}
+  .narrative.under{background:#5A5A5A;color:#fff}
+  .narrative strong{font-weight:800}
+
+  .chart-wrap{margin-top:24px;height:380px;position:relative}
+  .chart-note{font-size:11px;color:#9B9696;font-style:italic;margin-top:8px;text-align:center}
+  .chart-title{font-size:15px;font-weight:700;color:var(--charcoal);margin:28px 0 4px}
+
+  /* PDF CTA */
+  .pdf-cta{margin-top:24px;background:var(--yellow-soft);border:2px solid var(--yellow);border-radius:14px;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  .pdf-cta-text{display:flex;flex-direction:column;gap:4px;flex:1;min-width:260px}
+  .pdf-cta-text strong{font-size:15px;font-weight:800;color:var(--charcoal);letter-spacing:-0.2px;position:relative;display:inline-block;align-self:flex-start}
+  .pdf-cta-text strong::after{content:"";position:absolute;left:-2px;right:-2px;bottom:-3px;height:5px;background:var(--yellow);border-radius:3px;z-index:-1;transform:skewX(-2deg)}
+  .pdf-cta-text span{font-size:13px;color:var(--body);line-height:1.45;font-weight:500}
+  .pdf-btn{background:var(--yellow);color:var(--charcoal);border:none;border-radius:8px;padding:14px 24px;font-family:inherit;font-weight:800;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all .15s;white-space:nowrap;letter-spacing:-0.2px;box-shadow:inset 0 -3px 0 rgba(0,0,0,0.1)}
+  .pdf-btn:hover{background:#FFCF00;transform:translateY(-1px)}
+  .pdf-btn:disabled{opacity:0.65;cursor:wait;transform:none}
+
+  /* Property Log */
+  .log-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .btn-primary{background:var(--yellow);color:var(--charcoal);border:none;border-radius:8px;padding:12px 20px;font-family:inherit;font-weight:800;font-size:14px;cursor:pointer;box-shadow:inset 0 -3px 0 rgba(0,0,0,0.1)}
+  .btn-primary:hover{background:#FFCF00}
+  .btn-ghost{background:transparent;border:1px solid #ddd;color:var(--body);padding:12px 18px;border-radius:8px;font-family:inherit;font-size:13px;cursor:pointer;font-weight:600}
+  .btn-ghost:hover{background:var(--grey-lt);border-color:#bbb}
+  .log-scroll{overflow-x:auto;border:1px solid #ECE6D2;border-radius:10px}
+  .log-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;min-width:980px}
+  .log-tbl th{background:var(--charcoal);color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;padding:10px 8px;text-align:left;font-size:10px;white-space:nowrap;position:sticky;top:0}
+  .log-tbl th.numcol{text-align:right}
+  .log-tbl td{background:var(--cream);padding:9px 8px;font-variant-numeric:tabular-nums;border-bottom:2px solid #fff;white-space:nowrap}
+  .log-tbl td.numcol{text-align:right;font-weight:600}
+  .log-tbl td.pos{color:#1a7a36}
+  .log-tbl td.neg{color:var(--red)}
+  .log-tbl .row-del{background:transparent;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:2px 6px}
+  .log-empty{padding:20px;text-align:center;color:#9B9696;font-style:italic;background:var(--cream)}
+
+  /* Floating trigger + drawer */
+  .float-stack{position:fixed;right:24px;bottom:24px;z-index:60;display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+  .float-btn{background:var(--yellow);color:var(--charcoal);border:none;border-radius:100px;padding:14px 22px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 10px 25px rgba(0,0,0,.2);display:flex;align-items:center;gap:8px;font-size:14px}
+  .float-btn:hover{background:#FFCF00}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.18);z-index:100;display:none;align-items:stretch;justify-content:flex-end}
+  .modal-backdrop.open{display:flex}
+  .modal{background:#fff;border-radius:14px 0 0 14px;max-width:480px;width:100%;height:100vh;overflow-y:auto;padding:28px 32px;box-shadow:-12px 0 36px rgba(0,0,0,.18);animation:drawer-slide .22s ease-out}
+  @keyframes drawer-slide{from{transform:translateX(100%)}to{transform:translateX(0)}}
+  .modal h3{margin-top:0;font-size:22px;font-weight:700}
+  .modal .close{float:right;background:none;border:none;font-size:28px;cursor:pointer;color:var(--body);line-height:1;padding:0}
+  .data-note{font-size:12px;color:#7B7676;background:#F5EFD8;border:1px dashed #D8C870;border-radius:8px;padding:10px 12px;margin:8px 0 16px;line-height:1.4}
+  .data-note strong{color:var(--charcoal)}
+  .mkt-asat{display:flex;align-items:center;gap:10px;margin-bottom:14px;font-size:13px;font-weight:600;color:var(--charcoal)}
+  .mkt-asat .input-edit{flex:1}
+  .mkt-row{display:grid;grid-template-columns:1fr 110px;gap:10px;align-items:center;margin-bottom:8px}
+  .mkt-row .mkt-name{font-size:13px;color:var(--body)}
+  .mkt-row .input-edit{padding:0 10px}
+  .mkt-row .input-edit input{padding:7px 0;font-size:13px;text-align:right}
+
+
+  @media (max-width:760px){
+    .form-grid{grid-template-columns:1fr}
+    .kpi-row{grid-template-columns:1fr}
+    .hero h1{font-size:34px}
+    main{padding:24px 18px 80px}
+    .card{padding:22px}
+    .modal{max-width:100%;border-radius:0}
+  }
+</style>
+</head>
+<body>
+
+
+<section class="hero">
+  <div class="eyebrow">The Tool</div>
+  <h1>How Has Your Property <span class="underline">Performed?</span></h1>
+  <p>Enter your property and we'll show its capital growth since purchase &mdash; then benchmark it against the market so you can see whether it beat the pack.</p>
+</section>
+
+<main>
+
+  <!-- STEP 1 -->
+  <div class="card">
+    <div class="eyebrow">Step 1</div>
+    <h2>Your property</h2>
+    <p class="section-sub">Tell us what you paid, what it's worth now, and the market you'd like to compare against.</p>
+    <div class="form-grid">
+      <div class="field wide">
+        <label>Property address</label>
+        <div class="input-edit"><input id="i_address" type="text" value="" placeholder="e.g. 172 Ebrington Road, Wellard WA 6170" /></div>
+        <span class="help">Used to label this snapshot. (Later: drives the live market lookup.)</span>
+      </div>
+      <div class="field">
+        <label>Purchase price</label>
+        <div class="input-edit"><span class="currency">$</span><input id="i_price" type="text" inputmode="numeric" value="" placeholder="0" /></div>
+      </div>
+      <div class="field">
+        <label>Date of purchase</label>
+        <div class="input-edit is-date"><input id="i_pdate" type="date" value="" /></div>
+      </div>
+      <div class="field">
+        <label>Current valuation estimate</label>
+        <div class="input-edit"><span class="currency">$</span><input id="i_value" type="text" inputmode="numeric" value="" placeholder="0" /></div>
+      </div>
+      <div class="field">
+        <label>Date of valuation estimate</label>
+        <div class="input-edit is-date"><input id="i_vdate" type="date" value="" /></div>
+      </div>
+      <div class="field wide">
+        <label>Comparison market</label>
+        <div class="input-edit is-select"><select id="i_market">
+          <option value="" selected disabled hidden>Select a market…</option>
+        </select></div>
+        <span class="help" id="market_src_help">Benchmark source loads below</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="card">
+    <div class="eyebrow">Step 2</div>
+    <h2>How it's performed</h2>
+    <p class="section-sub">Your property's growth since purchase, and how it stacks up against the market over the same period.</p>
+
+    <div class="kpi-row">
+      <div class="kpi-tile">
+        <div class="label">Total growth</div>
+        <div class="value" id="k_total">&mdash;</div>
+        <div class="sub" id="k_total_sub">since purchase</div>
+      </div>
+      <div class="kpi-tile">
+        <div class="label">Annualised return</div>
+        <div class="value" id="k_cagr">&mdash;</div>
+        <div class="sub">CAGR p.a.</div>
+      </div>
+      <div class="kpi-tile uplift" id="k_out_tile">
+        <div class="label">Vs market</div>
+        <div class="value" id="k_out">&mdash;</div>
+        <div class="sub" id="k_out_sub">over your holding period</div>
+      </div>
+    </div>
+
+    <table class="cmp-table">
+      <tr><td>Capital growth since purchase</td><td id="c_capgrowth">&mdash;</td></tr>
+      <tr><td>Held for</td><td id="c_held">&mdash;</td></tr>
+      <tr class="hl"><td id="c_bench_label">Market benchmark (12-month)</td><td id="c_bench">&mdash;</td></tr>
+      <tr><td id="c_benchadj_label">Market growth over your period</td><td id="c_benchadj">&mdash;</td></tr>
+      <tr><td>Growth multiple</td><td id="c_mult">&mdash;</td></tr>
+    </table>
+
+    <div class="narrative" id="narrative">Enter your purchase price, current value, both dates and a comparison market to see the verdict.</div>
+
+    <h3 class="chart-title">Relative Performance vs Benchmark</h3>
+    <div class="chart-wrap"><canvas id="chart"></canvas></div>
+    <p class="chart-note">Indexed to 100 at purchase. Your property's line is a straight-line estimate between its two known points (purchase &amp; today); the market line follows its compounding rate over the same period.</p>
+
+    <h3 class="chart-title">Holding Period Growth Comparison</h3>
+    <div class="chart-wrap" style="height:220px"><canvas id="barchart"></canvas></div>
+    <p class="chart-note">Total growth since purchase &mdash; your property versus the market's growth over the same holding period.</p>
+
+    <div class="pdf-cta">
+      <div class="pdf-cta-text">
+        <strong>Save this as a PDF.</strong>
+        <span>Generate a branded one-page snapshot of this property's performance &mdash; perfect to share with a client or keep on file.</span>
+      </div>
+      <button class="pdf-btn" id="pdf_btn" onclick="generatePdf()">&#128196; Generate PDF</button>
+    </div>
+  </div>
+
+  <!-- STEP 3 — Property Log -->
+  <div class="card">
+    <div class="eyebrow">Step 3</div>
+    <h2>Property log</h2>
+    <p class="section-sub">Save a snapshot of the current result. Saved snapshots stay on this device until cleared.</p>
+    <div class="log-actions">
+      <button class="btn-primary" onclick="saveSnapshot()">&#128190; Save this snapshot</button>
+      <button class="btn-ghost" onclick="exportLogXlsx()">&#11015; Export Excel</button>
+      <button class="btn-ghost" onclick="clearLog()">Clear log</button>
+    </div>
+    <div class="log-scroll">
+      <table class="log-tbl">
+        <thead><tr>
+          <th>Date Saved</th><th>Address</th><th class="numcol">Purchase Price</th><th>Purchase Date</th>
+          <th class="numcol">Current Valuation</th><th>Valuation Date</th><th>Comparison Market</th>
+          <th class="numcol">Capital Growth ($)</th><th class="numcol">Total Growth (%)</th>
+          <th class="numcol">Annualised (% p.a.)</th><th class="numcol">Market Growth (%)</th>
+          <th class="numcol">Outperformance (percentage points)</th><th class="numcol">Growth Multiple (x)</th>
+          <th class="numcol">% Faster Than Benchmark</th><th></th>
+        </tr></thead>
+        <tbody id="log_body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<div class="float-stack">
+  <button class="float-btn" onclick="document.getElementById('data_modal').classList.add('open')">&#9881; Market data</button>
+</div>
+
+<!-- Market data drawer (mock data layer — becomes the Domain feed later) -->
+<div class="modal-backdrop" id="data_modal">
+  <div class="modal">
+    <button class="close" onclick="document.getElementById('data_modal').classList.remove('open')">&times;</button>
+    <h3>Market data</h3>
+    <div class="data-note">
+      <strong>Mock data layer.</strong> These are the 12-month growth figures used as benchmarks. Edit any value to see the calc update live. In production this panel is replaced by the live <strong>Domain</strong> feed &mdash; the maths below don't change.
+    </div>
+    <div class="mkt-asat">
+      <span>Source &amp; as-at:</span>
+      <div class="input-edit"><input id="mkt_asat" type="date" /></div>
+    </div>
+    <div id="mkt_rows"></div>
+    <button class="btn-ghost" style="margin-top:14px" onclick="resetMarketData()">Reset to defaults</button>
+  </div>
+</div>
+
+
+<script>
+  // ================ Mock market data (stands in for the live Domain feed) ================
+  // Figures = "Growth - Past 12 Months" from the source Reference Markets tab (Cotality HVI).
+  const DEFAULT_MARKETS = {
+    'Sydney':0.048, 'Melbourne':0.034, 'Brisbane':0.190, 'Adelaide':0.114, 'Perth':0.243,
+    'Hobart':0.078, 'Darwin':0.197, 'Canberra':0.061,
+    'Regional NSW':0.089, 'Regional VIC':0.080, 'Regional QLD':0.147, 'Regional SA':0.119,
+    'Regional WA':0.204, 'Regional TAS':0.109
+  };
+  const DEFAULT_ASAT = '2026-03-31';
+  const DATA_SOURCE = 'Cotality HVI';
+  let MARKETS = {...DEFAULT_MARKETS};
+  let MKT_ASAT = DEFAULT_ASAT;
+
+  // ================ Formatting ================
+  const fmt$ = v => (v < 0 ? '−$' : '$') + Math.round(Math.abs(v)).toLocaleString();
+  const fmtPct1 = v => (v*100).toFixed(1) + '%';
+  const fmtPP = v => (v >= 0 ? '+' : '−') + Math.abs(v*100).toFixed(1);
+  const numVal = id => {
+    const n = +String(document.getElementById(id).value).replace(/[^0-9.\-]/g,'');
+    return isNaN(n) ? 0 : n;
+  };
+  const parseDate = id => {
+    const v = document.getElementById(id).value;
+    if(!v) return null;
+    const d = new Date(v + 'T00:00:00');
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const fmtDate = d => d ? d.toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric'}) : '—';
+
+  // ================ Read + compute ================
+  function compute(){
+    const price = numVal('i_price');
+    const value = numVal('i_value');
+    const pdate = parseDate('i_pdate');
+    const vdate = parseDate('i_vdate');
+    const market = document.getElementById('i_market').value;
+    const marketAnnual = market ? MARKETS[market] : null;
+
+    let days = null, years = null;
+    if(pdate && vdate) days = Math.round((vdate - pdate) / 86400000);
+    if(days != null && days > 0) years = days / 365;
+
+    const havePropGrowth = price > 0 && value > 0;
+    const totalGrowth = havePropGrowth ? (value / price - 1) : null;       // E4
+    const capGrowth   = havePropGrowth ? (value - price) : null;           // E3
+    const annualised  = (havePropGrowth && days && days > 0)               // E8
+      ? Math.pow(value / price, 365 / days) - 1 : null;
+
+    // Market growth scaled to the actual holding period (E12)
+    const marketPeriod = (marketAnnual != null && years != null)
+      ? Math.pow(1 + marketAnnual, days / 365) - 1 : null;
+
+    // Over/underperformance in percentage points (E14) and multiple (E4/E12)
+    const outPP = (totalGrowth != null && marketPeriod != null) ? totalGrowth - marketPeriod : null;
+    const mult  = (totalGrowth != null && marketPeriod != null && marketPeriod !== 0)
+      ? totalGrowth / marketPeriod : null;
+
+    return {price, value, pdate, vdate, market, marketAnnual, days, years,
+            totalGrowth, capGrowth, annualised, marketPeriod, outPP, mult};
+  }
+
+  // ================ Verdict sentence (mirrors the sheet's narrative) ================
+  function verdict(r){
+    const m = r.market;
+    if(r.totalGrowth == null || r.marketPeriod == null || !m){
+      return {text:'Enter your purchase price, current value, both dates and a comparison market to see the verdict.', under:false};
+    }
+    const diffPP = r.outPP;            // decimal
+    // "In line" if it rounds to 0.0pp either way
+    if(Math.abs(diffPP) < 0.0005){
+      return {text:`Since purchase, this property has <strong>performed in line with ${m}</strong>.`, under:false};
+    }
+    // Guard against misleading multiples when either side is flat/negative
+    const cleanMult = (r.totalGrowth > 0 && r.marketPeriod > 0);
+    if(diffPP > 0){
+      let s = `Since purchase, this property has <strong>outperformed ${m}</strong> by <strong>${fmtPP(diffPP)} percentage points</strong>`;
+      if(cleanMult){
+        const mult = r.totalGrowth / r.marketPeriod;
+        s += ` &mdash; that's <strong>${mult.toFixed(1)}×</strong> ${m}'s growth (${Math.round((mult-1)*100)}% faster than ${m}).`;
+      } else { s += '.'; }
+      return {text:s, under:false};
+    } else {
+      let s = `Since purchase, this property has <strong>underperformed ${m}</strong> by <strong>${Math.abs(diffPP*100).toFixed(1)} percentage points</strong>`;
+      if(cleanMult){
+        const slower = r.marketPeriod / r.totalGrowth;
+        s += ` &mdash; that's <strong>${slower.toFixed(1)}×</strong> slower growth than ${m} (${Math.round(Math.abs((r.totalGrowth/r.marketPeriod)-1)*100)}% slower than ${m}).`;
+      } else { s += '.'; }
+      return {text:s, under:true};
+    }
+  }
+
+  // ================ Chart ================
+  let chart;
+  function buildSeries(r){
+    if(!r.pdate || !r.vdate || r.days == null || r.days <= 0 || r.totalGrowth == null || r.marketAnnual == null) return null;
+    const start = r.pdate.getTime(), end = r.vdate.getTime();
+    const span = end - start;
+    const months = Math.round(r.days / 30.4);
+    const steps = Math.min(Math.max(months, 2), 120);
+    const labels = [], prop = [], mkt = [];
+    for(let i = 0; i <= steps; i++){
+      const frac = i / steps;
+      const d = new Date(start + frac * span);
+      labels.push(d.toLocaleDateString('en-AU', {month:'short', year:'2-digit'}));
+      prop.push(+(100 * (1 + r.totalGrowth * frac)).toFixed(2));            // straight-line (only 2 known points)
+      const yearsElapsed = (r.days * frac) / 365;
+      mkt.push(+(100 * Math.pow(1 + r.marketAnnual, yearsElapsed)).toFixed(2)); // compounding curve
+    }
+    return {labels, prop, mkt};
+  }
+  function renderChart(r){
+    const s = buildSeries(r);
+    const labels = s ? s.labels : [];
+    const propData = s ? s.prop : [];
+    const mktData = s ? s.mkt : [];
+    const mktLabel = r.market ? r.market : 'Market';
+    if(chart){
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = propData;
+      chart.data.datasets[1].data = mktData;
+      chart.data.datasets[1].label = mktLabel + ' (benchmark)';
+      chart.update();
+      return;
+    }
+    const ctx = document.getElementById('chart').getContext('2d');
+    chart = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets:[
+        {label:'Your property', data:propData, borderColor:'#1A1A1A', backgroundColor:'rgba(255,214,10,0.18)',
+         borderWidth:4, tension:0, pointRadius:0, fill:true,
+         pointBackgroundColor:'#1A1A1A',
+         segment:{}, borderColor:'#E8C200'},
+        {label:mktLabel + ' (benchmark)', data:mktData, borderColor:'#1A1A1A', backgroundColor:'transparent',
+         borderWidth:2.5, borderDash:[6,4], tension:0.15, pointRadius:0}
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:false,
+        interaction:{mode:'index', intersect:false},
+        plugins:{
+          legend:{position:'bottom', labels:{font:{family:'Poppins', weight:'600'}, usePointStyle:true, pointStyle:'line'}},
+          tooltip:{
+            mode:'index', intersect:false,
+            callbacks:{ label:c => c.dataset.label + ': index ' + c.parsed.y.toFixed(1) + ' (' + (c.parsed.y-100>=0?'+':'') + (c.parsed.y-100).toFixed(1) + '%)' },
+            backgroundColor:'rgba(255,255,255,0.98)', titleColor:'#1A1A1A', bodyColor:'#1A1A1A',
+            borderColor:'#1A1A1A', borderWidth:1, padding:12,
+            titleFont:{family:'Poppins', weight:'700', size:13}, bodyFont:{family:'Poppins', size:13}
+          }
+        },
+        scales:{
+          y:{ ticks:{callback:v => v, font:{family:'Poppins'}}, grid:{color:'#eee'}, title:{display:true, text:'Index (purchase = 100)', font:{family:'Poppins', size:11}} },
+          x:{ ticks:{font:{family:'Poppins'}, maxTicksLimit:10, autoSkip:true}, grid:{display:false} }
+        }
+      }
+    });
+  }
+
+  // Holding Period Growth Comparison — horizontal two-bar chart (matches source sheet)
+  let barChart;
+  function renderBar(r){
+    const propName = (document.getElementById('i_address').value || 'Your property').slice(0, 34);
+    const mktName = r.market || 'Market';
+    const have = r.totalGrowth != null && r.marketPeriod != null;
+    const propPct = have ? +(r.totalGrowth * 100).toFixed(1) : null;
+    const mktPct  = have ? +(r.marketPeriod * 100).toFixed(1) : null;
+    const labels = [propName, mktName];
+    const data = [propPct, mktPct];
+    if(barChart){
+      barChart.data.labels = labels;
+      barChart.data.datasets[0].data = data;
+      barChart.update();
+      return;
+    }
+    const ctx = document.getElementById('barchart').getContext('2d');
+    barChart = new Chart(ctx, {
+      type:'bar',
+      data:{ labels, datasets:[{
+        data, backgroundColor:['#FFD60A','#5A5A5A'], borderColor:['#E8C200','#4A4A4A'], borderWidth:1,
+        barPercentage:0.7
+      }]},
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{ callbacks:{ label:c => (c.parsed.x>=0?'':'') + c.parsed.x.toFixed(1) + '%' },
+            backgroundColor:'rgba(255,255,255,0.98)', titleColor:'#1A1A1A', bodyColor:'#1A1A1A',
+            borderColor:'#1A1A1A', borderWidth:1, padding:10, bodyFont:{family:'Poppins', size:13} }
+        },
+        scales:{
+          x:{ ticks:{callback:v => v + '%', font:{family:'Poppins'}}, grid:{color:'#eee'},
+              title:{display:true, text:'Growth Since Purchase (%)', font:{family:'Poppins', size:11, style:'italic'}} },
+          y:{ ticks:{font:{family:'Poppins', weight:'600', size:12}}, grid:{display:false} }
+        }
+      }
+    });
+  }
+
+  // ================ Render ================
+  function render(){
+    const r = compute();
+
+    // KPI tiles
+    document.getElementById('k_total').textContent = r.totalGrowth != null ? fmtPct1(r.totalGrowth) : '—';
+    document.getElementById('k_total_sub').textContent = (r.capGrowth != null) ? 'since purchase · ' + fmt$(r.capGrowth) : 'since purchase';
+    document.getElementById('k_cagr').textContent = r.annualised != null ? (r.annualised*100).toFixed(1) + '%' : '—';
+
+    const outTile = document.getElementById('k_out_tile');
+    const outEl = document.getElementById('k_out');
+    const outSub = document.getElementById('k_out_sub');
+    if(r.outPP != null){
+      outEl.textContent = fmtPP(r.outPP);
+      outSub.textContent = (r.outPP >= 0 ? 'percentage points ahead of ' : 'percentage points behind ') + r.market;
+      outTile.classList.toggle('under', r.outPP < 0);
+    } else {
+      outEl.textContent = '—';
+      outSub.textContent = 'over your holding period';
+      outTile.classList.remove('under');
+    }
+
+    // Comparison table
+    document.getElementById('c_capgrowth').textContent = r.capGrowth != null ? fmt$(r.capGrowth) : '—';
+    document.getElementById('c_held').textContent = (r.days && r.days > 0)
+      ? `${r.years.toFixed(1)} years (${r.days.toLocaleString()} days)` : '—';
+    document.getElementById('c_bench_label').textContent = (r.market || 'Market') + ' benchmark (12-month)';
+    document.getElementById('c_bench').textContent = r.marketAnnual != null ? fmtPct1(r.marketAnnual) + ' p.a.' : '—';
+    document.getElementById('c_benchadj_label').textContent = (r.market || 'Market') + ' growth over your period';
+    document.getElementById('c_benchadj').textContent = r.marketPeriod != null ? fmtPct1(r.marketPeriod) : '—';
+    document.getElementById('c_mult').textContent = r.mult != null && r.mult > 0 ? r.mult.toFixed(1) + '×' : '—';
+
+    // Narrative
+    const v = verdict(r);
+    const nEl = document.getElementById('narrative');
+    nEl.innerHTML = v.text;
+    nEl.classList.toggle('under', v.under);
+
+    // Market source help
+    const help = document.getElementById('market_src_help');
+    help.textContent = `Benchmark: ${DATA_SOURCE} 12-month growth, as at ${fmtDate(new Date(MKT_ASAT + 'T00:00:00'))}`;
+
+    renderChart(r);
+    renderBar(r);
+  }
+
+  // ================ Comparison market dropdown ================
+  function buildMarketDropdown(){
+    const sel = document.getElementById('i_market');
+    const current = sel.value;
+    sel.innerHTML = '<option value="" disabled hidden>Select a market…</option>';
+    Object.keys(MARKETS).forEach(name => {
+      const o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      sel.appendChild(o);
+    });
+    if(current && MARKETS[current] != null) sel.value = current;
+    else sel.value = '';
+  }
+
+  // ================ Market data drawer (mock layer) ================
+  function buildMarketRows(){
+    const wrap = document.getElementById('mkt_rows');
+    wrap.innerHTML = '';
+    Object.keys(MARKETS).forEach(name => {
+      const row = document.createElement('div');
+      row.className = 'mkt-row';
+      const pct = (MARKETS[name]*100).toFixed(1);
+      row.innerHTML = `<span class="mkt-name">${name}</span>
+        <div class="input-edit"><input type="number" step="0.1" value="${pct}"
+          oninput="MARKETS['${name}']=(+this.value||0)/100; render()"/><span class="suffix">%</span></div>`;
+      wrap.appendChild(row);
+    });
+    document.getElementById('mkt_asat').value = MKT_ASAT;
+  }
+  function resetMarketData(){
+    MARKETS = {...DEFAULT_MARKETS};
+    MKT_ASAT = DEFAULT_ASAT;
+    buildMarketRows(); buildMarketDropdown(); render();
+  }
+  document.getElementById('mkt_asat').addEventListener('input', e => { MKT_ASAT = e.target.value || DEFAULT_ASAT; render(); });
+
+  // ================ Property Log (localStorage stand-in for the real store) ================
+  const LOG_KEY = 'bc_perf_log_v1';
+  function loadLog(){ try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch(e){ return []; } }
+  function persistLog(rows){ localStorage.setItem(LOG_KEY, JSON.stringify(rows)); }
+
+  function saveSnapshot(){
+    const r = compute();
+    if(r.totalGrowth == null || r.marketPeriod == null || !r.market){
+      alert('Fill in price, current value, both dates and a comparison market before saving.');
+      return;
+    }
+    const rows = loadLog();
+    rows.unshift({
+      saved: new Date().toISOString(),
+      address: document.getElementById('i_address').value || '—',
+      price: r.price,
+      pdate: document.getElementById('i_pdate').value,
+      value: r.value,
+      vdate: document.getElementById('i_vdate').value,
+      market: r.market,
+      capGrowth: r.capGrowth,
+      totalPct: r.totalGrowth,
+      annualisedPct: r.annualised,
+      mktGrowthPct: r.marketPeriod,
+      outPP: r.outPP,
+      mult: r.mult,
+      fasterPct: (r.mult != null ? r.mult - 1 : null)
+    });
+    persistLog(rows);
+    renderLog();
+  }
+  function deleteLogRow(i){ const rows = loadLog(); rows.splice(i,1); persistLog(rows); renderLog(); }
+  function clearLog(){ if(confirm('Clear all saved snapshots?')){ persistLog([]); renderLog(); } }
+
+  function renderLog(){
+    const rows = loadLog();
+    const body = document.getElementById('log_body');
+    body.innerHTML = '';
+    if(!rows.length){
+      body.innerHTML = '<tr><td class="log-empty" colspan="15">No snapshots saved yet — fill in a property above and hit "Save this snapshot".</td></tr>';
+      return;
+    }
+    rows.forEach((row, i) => {
+      const tr = document.createElement('tr');
+      const savedStr = new Date(row.saved).toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric'});
+      const sign = v => v >= 0 ? 'pos' : 'neg';
+      tr.innerHTML = `
+        <td>${savedStr}</td>
+        <td>${row.address}</td>
+        <td class="numcol">${fmt$(row.price)}</td>
+        <td>${row.pdate || '—'}</td>
+        <td class="numcol">${fmt$(row.value)}</td>
+        <td>${row.vdate || '—'}</td>
+        <td>${row.market}</td>
+        <td class="numcol ${sign(row.capGrowth)}">${fmt$(row.capGrowth)}</td>
+        <td class="numcol ${sign(row.totalPct)}">${fmtPct1(row.totalPct)}</td>
+        <td class="numcol">${row.annualisedPct != null ? (row.annualisedPct*100).toFixed(1)+'%' : '—'}</td>
+        <td class="numcol">${fmtPct1(row.mktGrowthPct)}</td>
+        <td class="numcol ${sign(row.outPP)}">${fmtPP(row.outPP)}</td>
+        <td class="numcol">${row.mult != null ? row.mult.toFixed(2)+'×' : '—'}</td>
+        <td class="numcol ${sign(row.fasterPct||0)}">${row.fasterPct != null ? (row.fasterPct>=0?'+':'')+(row.fasterPct*100).toFixed(0)+'%' : '—'}</td>
+        <td><button class="row-del" title="Delete" onclick="deleteLogRow(${i})">&times;</button></td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  // Export to a real .xlsx so columns auto-fit and money/percent figures carry
+  // proper Excel number formats ($ and %). CSV can't hold widths or formatting.
+  function exportLogXlsx(){
+    if(!window.XLSX){ alert('Spreadsheet library still loading — try again in a second.'); return; }
+    const rows = loadLog();
+    if(!rows.length){ alert('Nothing to export yet.'); return; }
+
+    const headers = ['Date Saved','Address','Purchase Price','Purchase Date','Current Valuation','Valuation Date',
+      'Comparison Market','Capital Growth ($)','Total Growth (%)','Annualised Growth (% p.a.)',
+      'Comparison Market Growth (%)','Outperformance (percentage points)','Growth Multiple (x)','% Faster Than Benchmark'];
+
+    // Per-column Excel number format (null = plain text/number)
+    const FMT_MONEY = '$#,##0';
+    const FMT_PCT1  = '0.0%';
+    const colFmt = [null, null, FMT_MONEY, null, FMT_MONEY, null, null,
+      FMT_MONEY, FMT_PCT1, FMT_PCT1, FMT_PCT1, '0.0', '0.00"×"', '0%'];
+
+    // Build rows as raw typed values (numbers stay numbers so formats apply)
+    const aoa = [headers];
+    rows.forEach(row => {
+      aoa.push([
+        new Date(row.saved).toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric'}),
+        row.address, row.price, row.pdate, row.value, row.vdate, row.market,
+        Math.round(row.capGrowth),
+        row.totalPct,
+        row.annualisedPct != null ? row.annualisedPct : '',
+        row.mktGrowthPct,
+        row.outPP != null ? row.outPP * 100 : '',   // percentage points (e.g. -0.7)
+        row.mult != null ? row.mult : '',
+        row.fasterPct != null ? row.fasterPct : ''
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // Apply number formats + compute auto-fit column widths
+    const cols = [];
+    for(let c = 0; c < headers.length; c++){
+      let maxLen = String(headers[c]).length;
+      for(let rIdx = 1; rIdx < aoa.length; rIdx++){
+        const cell = ws[XLSX.utils.encode_cell({r:rIdx, c})];
+        if(!cell) continue;
+        if(colFmt[c] && cell.t === 'n') cell.z = colFmt[c];
+        // Approximate the displayed text length for auto-fit
+        let disp;
+        if(cell.t === 'n'){
+          if(colFmt[c] === FMT_MONEY)      disp = '$' + Math.round(cell.v).toLocaleString();
+          else if(colFmt[c] === FMT_PCT1)  disp = (cell.v*100).toFixed(1) + '%';
+          else if(colFmt[c] === '0%')      disp = Math.round(cell.v*100) + '%';
+          else if(colFmt[c] === '0.00"×"') disp = cell.v.toFixed(2) + '×';
+          else if(colFmt[c] === '0.0')     disp = cell.v.toFixed(1);
+          else                             disp = String(cell.v);
+        } else {
+          disp = String(cell.v);
+        }
+        maxLen = Math.max(maxLen, disp.length);
+      }
+      cols.push({wch: maxLen + 2}); // +2 padding
+    }
+    ws['!cols'] = cols;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Property Log');
+    XLSX.writeFile(wb, 'Property Log.xlsx');
+  }
+
+  // ================ PDF (one-page branded snapshot) ================
+  function generatePdf(){
+    if(!window.jspdf){ alert('PDF library still loading — try again in a second.'); return; }
+    const r = compute();
+    if(r.totalGrowth == null || r.marketPeriod == null || !r.market){
+      alert('Fill in price, current value, both dates and a comparison market first.');
+      return;
+    }
+    const btn = document.getElementById('pdf_btn');
+    btn.disabled = true; btn.textContent = '⏳ Generating…';
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+      const YELLOW=[255,214,10], CHARCOAL=[26,26,26], CREAM=[248,244,232], BODY=[59,56,56], GREY=[123,118,118];
+      const PAGE_W=210, PAGE_H=297, M=15;
+      const addr = document.getElementById('i_address').value || '—';
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-AU', {day:'numeric', month:'long', year:'numeric'});
+
+      // Header bar
+      doc.setFillColor(...CHARCOAL); doc.rect(0,0,PAGE_W,18,'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(255,255,255);
+      doc.text('buyers', M, 12);
+      doc.setTextColor(...YELLOW); doc.text('club', M + doc.getTextWidth('buyers'), 12);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(255,255,255);
+      doc.text('PERFORMANCE SNAPSHOT', PAGE_W - M, 12, {align:'right'});
+
+      let y = 32;
+      doc.setFontSize(11); doc.setTextColor(...GREY);
+      doc.text(`Property: ${addr}`, M, y);
+      doc.text(dateStr, PAGE_W - M, y, {align:'right'});
+
+      // ASCII-safe signed pp — jsPDF's standard font CANNOT render the − (U+2212)
+      // used on screen; it prints as a stray glyph and corrupts letter spacing.
+      const fmtPPa = v => (v >= 0 ? '+' : '-') + Math.abs(v*100).toFixed(1);
+      const ahead = r.outPP >= 0;
+      const absPP = Math.abs(r.outPP*100).toFixed(1);
+
+      // Headline verdict (absolute value in the sentence — "lagged by 0.7", not "-0.7")
+      y += 20;
+      doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(...CHARCOAL);
+      doc.text(`This property has ${ahead ? 'beaten' : 'lagged'} ${r.market}`, PAGE_W/2, y, {align:'center'});
+      doc.text(`by ${absPP} percentage points`, PAGE_W/2, y+10, {align:'center'});
+      doc.setFillColor(...YELLOW); doc.rect(PAGE_W/2-48, y+14, 96, 2.4, 'F');
+
+      // KPI tiles
+      y += 28;
+      const tileW = (PAGE_W - 2*M - 16)/3, tileH = 34;
+      drawKpiTile(doc, M, y, tileW, tileH, 'TOTAL GROWTH', fmtPct1(r.totalGrowth), 'since purchase', false);
+      drawKpiTile(doc, M+tileW+8, y, tileW, tileH, 'ANNUALISED', (r.annualised*100).toFixed(1)+'%', 'CAGR p.a.', false);
+      drawKpiTile(doc, M+2*(tileW+8), y, tileW, tileH, 'VS '+r.market.toUpperCase(), fmtPPa(r.outPP), ahead?'percentage points ahead':'percentage points behind', true, !ahead);
+
+      // Line chart — Relative Performance vs Benchmark
+      y += tileH + 14;
+      doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...CHARCOAL);
+      doc.text('Relative Performance vs Benchmark', M, y); y += 5;
+      if(chart){
+        doc.addImage(chart.toBase64Image('image/png', 1.0), 'PNG', M, y, PAGE_W - 2*M, 92);
+        y += 92;
+      }
+      doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(...GREY);
+      doc.text(`Property: ${addr}  ·  ${dateStr}  ·  Page 1 of 2`, PAGE_W/2, PAGE_H-8, {align:'center'});
+
+      // ===== Page 2 — bar chart + the detail =====
+      doc.addPage();
+      doc.setFillColor(...CHARCOAL); doc.rect(0,0,PAGE_W,12,'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(255,255,255);
+      doc.text('buyers', M, 8);
+      doc.setTextColor(...YELLOW); doc.text('club', M + doc.getTextWidth('buyers'), 8);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(255,255,255);
+      doc.text('PERFORMANCE SNAPSHOT', PAGE_W - M, 8, {align:'right'});
+
+      y = 28;
+      doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...CHARCOAL);
+      doc.text('Holding Period Growth Comparison', M, y); y += 5;
+      if(barChart){
+        doc.addImage(barChart.toBase64Image('image/png', 1.0), 'PNG', M, y, PAGE_W - 2*M, 72);
+        y += 72 + 12;
+      }
+
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(...CHARCOAL);
+      doc.text('THE DETAIL', M, y); y += 8;
+      doc.setFontSize(10);
+      const held = (r.days && r.days>0) ? `${r.years.toFixed(1)} years (${r.days.toLocaleString()} days)` : '-';
+      const rowsTxt = [
+        ['Purchase price · current value', `${fmt$(r.price)}  ·  ${fmt$(r.value)}`],
+        ['Capital growth', fmt$(r.capGrowth)],
+        ['Held for', held],
+        [`${r.market} benchmark (12-mo)`, fmtPct1(r.marketAnnual)+' p.a.'],
+        [`${r.market} growth over your period`, fmtPct1(r.marketPeriod)],
+        ['Growth multiple', (r.mult!=null && r.mult>0) ? r.mult.toFixed(2)+'x' : '-'],
+      ];
+      rowsTxt.forEach(([k,val]) => {
+        doc.setFont('helvetica','normal'); doc.setTextColor(...GREY); doc.text('•  '+k, M+2, y);
+        doc.setFont('helvetica','bold'); doc.setTextColor(...CHARCOAL); doc.text(val, PAGE_W-M, y, {align:'right'});
+        y += 8;
+      });
+
+      // Disclaimer + footer
+      y += 6;
+      doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(...GREY);
+      const disc = `Benchmark: ${DATA_SOURCE} 12-month growth, as at ${fmtDate(new Date(MKT_ASAT+'T00:00:00'))}. Numbers are illustrative based on the inputs supplied. General information only, not financial or tax advice.`;
+      doc.text(doc.splitTextToSize(disc, PAGE_W - 2*M), M, y);
+      doc.text('Buyers Club Australia  ·  Property Performance Snapshot  ·  Page 2 of 2', PAGE_W/2, PAGE_H-8, {align:'center'});
+
+      const safe = addr.replace(/[^A-Za-z0-9 -]/g,'').replace(/\s+/g,' ').trim().slice(0,40) || 'Property';
+      doc.save(`Buyers Club Performance - ${safe}.pdf`);
+    } catch(err){
+      console.error('PDF generation failed:', err);
+      alert('Sorry — PDF generation hit an error. Check the console.');
+    } finally {
+      btn.disabled = false; btn.textContent = '📄 Generate PDF';
+    }
+  }
+  function drawKpiTile(doc, x, y, w, h, label, value, sub, dark, behind){
+    // dark tile = charcoal hero; when 'behind' (underperformed) use the softer
+    // benchmark grey + red value instead of harsh black.
+    const bg = dark ? (behind ? [90,90,90] : [26,26,26]) : [248,244,232];
+    const valColor = dark ? (behind ? [255,107,94] : [255,214,10]) : [26,26,26];
+    doc.setFillColor(...bg);
+    doc.roundedRect(x, y, w, h, 3, 3, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8);
+    doc.setTextColor(dark?200:123, dark?200:118, dark?200:118);
+    doc.text(label, x+w/2, y+8, {align:'center'});
+    doc.setFontSize(18); doc.setTextColor(...valColor);
+    doc.text(value, x+w/2, y+21, {align:'center'});
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+    doc.setTextColor(dark?200:123, dark?200:118, dark?200:118);
+    doc.text(sub, x+w/2, y+29, {align:'center'});
+  }
+
+  // ================ Wire up ================
+  // Comma-format money inputs
+  ['i_price','i_value'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('focus', () => { el.value = String(el.value).replace(/,/g,''); });
+    el.addEventListener('blur', () => {
+      const n = +String(el.value).replace(/[^0-9.\-]/g,'');
+      el.value = isNaN(n) || n===0 ? '' : n.toLocaleString();
+      render();
+    });
+  });
+  document.querySelectorAll('input,select').forEach(el => el.addEventListener('input', render));
+  document.querySelectorAll('.modal-backdrop').forEach(m => {
+    m.addEventListener('click', e => { if(e.target === m) m.classList.remove('open'); });
+  });
+
+  // Init
+  buildMarketDropdown();
+  buildMarketRows();
+  renderLog();
+  render();
+</script>
+</body>
+</html>

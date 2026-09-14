@@ -787,7 +787,8 @@ export async function POST(request: Request) {
     
     // Email Authentication - Extract and validate user email
     const body = await request.json();
-    const { propertyAddress, latitude, longitude, userEmail } = body;
+    const { propertyAddress, latitude, longitude } = body;
+    const userEmail = body.userEmail || request.headers.get('Cf-Access-Authenticated-User-Email') || '';
     
     // Store for logging
     requestBody = {

@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buyers Club — Affordability Calculator v1.7</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --yellow:#FFD60A; --yellow-soft:#FFF1A6; --charcoal:#1A1A1A; --body:#3B3838;
+    --cream:#F8F4E8; --grey-lt:#F2F2F2; --grey-md:#E0E0E0; --green:#34A853; --red:#D93025; --white:#FFFFFF;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:'Poppins',system-ui,sans-serif;color:var(--body);background:#FAFAFA;line-height:1.5}
+
+
+  .hero{padding:32px 24px 12px;max-width:1200px;margin:0 auto;text-align:center}
+  .hero .eyebrow{font-size:10px;letter-spacing:2px;color:var(--body);text-transform:uppercase;font-weight:700;margin-bottom:8px}
+  .hero h1{font-size:32px;font-weight:800;color:var(--charcoal);line-height:1.1;margin:0 0 8px;letter-spacing:-0.5px}
+  .hero h1 .underline{display:inline-block;position:relative}
+  .hero h1 .underline::after{content:"";position:absolute;left:-4px;right:-4px;bottom:-4px;height:6px;background:var(--yellow);border-radius:3px;z-index:-1;transform:skewX(-2deg)}
+  .hero p{font-size:14px;color:var(--body);max-width:640px;margin:0 auto}
+
+  main{max-width:1200px;margin:0 auto;padding:20px 24px 80px}
+
+  .card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.03);padding:22px 24px;margin-bottom:16px;border:1px solid #eee}
+  .card h2{font-size:18px;font-weight:800;color:var(--charcoal);margin:0 0 4px;letter-spacing:-0.3px}
+  .card .step{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--body);font-weight:700;margin-bottom:4px}
+  .card .sub{font-size:12px;color:#7B7676;margin:0 0 14px;font-weight:500}
+
+  .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .field > label{font-size:11px;font-weight:700;color:var(--charcoal);text-transform:uppercase;letter-spacing:0.3px}
+  .field .help{font-size:11px;color:#9B9696;font-style:italic}
+
+  .input-edit{position:relative;display:flex;align-items:center;background:var(--yellow);border:2px solid #E8C200;border-radius:8px;padding:0 12px;transition:all .15s}
+  .input-edit:hover{background:#FFE54A;border-color:#D4AE00}
+  .input-edit:focus-within{border-color:var(--charcoal);box-shadow:0 0 0 3px rgba(26,26,26,0.12)}
+  .input-edit .currency,.input-edit .suffix{font-weight:700;color:var(--charcoal);font-size:14px;user-select:none}
+  .input-edit input,.input-edit select{background:transparent;border:none;padding:10px 0;flex:1;font-weight:700;font-family:inherit;font-size:14px;color:var(--charcoal);outline:none;min-width:0;width:0}
+  .input-edit input{text-align:left}
+  .input-edit.is-select select{cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:22px}
+  .input-edit.is-select::after{content:"▾";position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--charcoal);font-weight:700;pointer-events:none}
+
+  /* Toggle switches for fee inclusion */
+  .toggle-row{display:grid;grid-template-columns:1fr 100px 60px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px dotted #eee}
+  .toggle-row:last-child{border-bottom:none}
+  .toggle-row .toggle-label{font-size:13px;font-weight:600;color:var(--charcoal)}
+  .toggle-row .toggle-note{font-size:11px;color:#7B7676;font-style:italic;font-weight:400;display:block;margin-top:2px}
+  .toggle-row .input-edit{padding:0 10px}
+  .toggle-row .input-edit input{padding:7px 0;font-size:13px}
+
+  /* Toggle switch */
+  .switch{position:relative;display:inline-block;width:44px;height:24px}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;transition:.2s;border-radius:24px}
+  .slider:before{position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:white;transition:.2s;border-radius:50%}
+  input:checked + .slider{background:var(--yellow)}
+  input:checked + .slider:before{transform:translateX(20px);background:var(--charcoal)}
+  .switch input:disabled + .slider{opacity:0.4;cursor:not-allowed}
+
+  /* ---------- Next-property options table ---------- */
+  .results-wrap{overflow-x:auto;margin-top:8px;padding-right:4px}
+  .results-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;min-width:760px;table-layout:fixed}
+  .results-tbl th{background:var(--charcoal);color:#fff;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;padding:10px 8px;text-align:center;font-size:11px;position:sticky;top:0}
+  .results-tbl th:first-child{text-align:left;border-radius:8px 0 0 0;padding-left:14px;width:230px}
+  .results-tbl th:last-child{border-radius:0 8px 0 0}
+  .results-tbl td{background:var(--cream);padding:10px 8px;font-variant-numeric:tabular-nums;border-bottom:1px solid #fff;text-align:center}
+  .results-tbl td:first-child{text-align:left;font-weight:700;background:#fafafa;color:var(--charcoal);padding-left:14px}
+  .results-tbl tr.avail td{background:#F0F0F0;color:#555;font-weight:600;font-size:12px}
+  .results-tbl tr.avail td:first-child{background:#E8E8E8}
+  .results-tbl tr.price td{background:var(--yellow-soft);font-weight:800;color:var(--charcoal);font-size:14px}
+  .results-tbl tr.price td:first-child{background:var(--yellow)}
+  .results-tbl tr.total td{background:#EEECD6;font-weight:800;color:var(--charcoal)}
+  .results-tbl tr.total td:first-child{background:#DCD9BC}
+  .results-tbl tr.select-row td{background:#fff;padding:12px 6px;border-bottom:none}
+  .results-tbl tr.select-row td:first-child{background:#fff}
+
+  .select-btn{font-family:inherit;font-weight:800;font-size:12px;background:var(--charcoal);color:#fff;border:2px solid var(--charcoal);border-radius:6px;padding:8px 10px;cursor:pointer;transition:all .12s;width:100%;letter-spacing:0.3px;text-transform:uppercase}
+  .select-btn:hover{background:var(--yellow);color:var(--charcoal);border-color:var(--yellow)}
+  .select-btn:active{transform:scale(0.97)}
+  .select-btn:disabled{opacity:0.35;cursor:not-allowed;background:#ccc;border-color:#ccc;color:#666}
+  .select-btn:disabled:hover{background:#ccc;color:#666;border-color:#ccc}
+
+  /* ---------- Portfolio table ---------- */
+  .portfolio-wrap{overflow-x:auto;padding-right:4px}
+  .portfolio-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;min-width:760px}
+  .portfolio-tbl th{background:var(--charcoal);color:#fff;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;padding:10px 8px;text-align:center;font-size:11px}
+  .portfolio-tbl th:first-child{text-align:center;border-radius:8px 0 0 0;width:40px;padding-left:10px}
+  .portfolio-tbl th:nth-child(2){text-align:left}
+  .portfolio-tbl th:last-child{border-radius:0 8px 0 0;width:50px}
+  .portfolio-tbl td{background:var(--cream);padding:10px 8px;font-variant-numeric:tabular-nums;border-bottom:1px solid #fff;text-align:center}
+  .portfolio-tbl td.port-num{font-weight:800;color:var(--charcoal);background:var(--yellow);width:40px}
+  .portfolio-tbl td.port-state{font-weight:800;color:var(--charcoal);background:var(--yellow-soft);text-align:left;padding-left:12px}
+  .portfolio-tbl td.port-total{font-weight:800;color:var(--charcoal);background:#EEECD6}
+  .remove-btn{font-family:inherit;font-weight:800;font-size:16px;background:transparent;color:#a01818;border:1.5px solid #a01818;border-radius:50%;width:26px;height:26px;line-height:1;cursor:pointer;transition:all .12s;padding:0}
+  .remove-btn:hover{background:#a01818;color:#fff}
+
+  .portfolio-empty{padding:32px 24px;text-align:center;color:#9B9696;font-size:13px;font-style:italic;background:var(--cream);border:1px dashed #ECE6D2;border-radius:10px}
+  .portfolio-totals{margin-top:16px;background:#fff;border:1px solid #eee;border-radius:10px;overflow:hidden}
+  .tot-row{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #f4f4f4;font-size:13px}
+  .tot-row:last-child{border-bottom:none}
+  .tot-row span{color:var(--body);font-weight:500}
+  .tot-row strong{color:var(--charcoal);font-weight:800;font-variant-numeric:tabular-nums;font-size:14px}
+  .tot-row.tot-remain{background:#EAF6EA}
+  .tot-row.tot-remain span, .tot-row.tot-remain strong{color:#1a6d1a;font-size:15px}
+  .tot-row.tot-remain.negative{background:#FDEAEA}
+  .tot-row.tot-remain.negative span, .tot-row.tot-remain.negative strong{color:#a01818}
+
+  .clear-btn{font-family:inherit;font-weight:700;font-size:12px;background:transparent;color:#a01818;border:1.5px solid #a01818;border-radius:6px;padding:6px 12px;cursor:pointer;transition:all .12s;letter-spacing:0.3px;text-transform:uppercase}
+  .clear-btn:hover{background:#a01818;color:#fff}
+  .portfolio-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:12px;flex-wrap:wrap}
+
+  /* ---------- Custom-price panel ---------- */
+  .custom-panel{margin-top:18px;background:var(--cream);border:1px solid #ECE6D2;border-radius:10px;padding:16px}
+  .custom-panel .cp-title{font-size:11px;font-weight:800;color:var(--charcoal);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px}
+  .custom-panel .cp-hint{font-size:12px;color:#7B7676;margin-bottom:12px}
+  .custom-grid{display:grid;grid-template-columns:150px 180px 1fr auto;gap:10px;align-items:end}
+  .custom-grid .field > label{font-size:10px}
+  .custom-grid .input-edit input,.custom-grid .input-edit select{padding:9px 0;font-size:14px}
+  .cp-breakdown{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;font-weight:600;color:var(--body);padding:8px 12px;background:#fff;border-radius:8px;border:1px solid #eee;align-self:end;min-height:38px;align-items:center}
+  .cp-breakdown .cp-item{display:flex;gap:4px;align-items:baseline}
+  .cp-breakdown .cp-item span{color:#7B7676;font-weight:500}
+  .cp-breakdown .cp-item strong{font-variant-numeric:tabular-nums;color:var(--charcoal);font-weight:800}
+  .cp-breakdown .cp-item.cp-total strong{color:#1a6d1a}
+  .cp-breakdown .cp-item.cp-warn strong{color:#a01818}
+  .add-btn{font-family:inherit;font-weight:800;font-size:13px;background:var(--charcoal);color:#fff;border:2px solid var(--charcoal);border-radius:8px;padding:10px 18px;cursor:pointer;transition:all .12s;letter-spacing:0.3px;text-transform:uppercase;white-space:nowrap}
+  .add-btn:hover{background:var(--yellow);color:var(--charcoal);border-color:var(--yellow)}
+  .add-btn:active{transform:scale(0.97)}
+  .add-btn:disabled{opacity:0.35;cursor:not-allowed;background:#ccc;border-color:#ccc;color:#666}
+  .add-btn:disabled:hover{background:#ccc;color:#666;border-color:#ccc}
+  @media (max-width:760px){
+    .custom-grid{grid-template-columns:1fr 1fr;gap:10px}
+    .cp-breakdown{grid-column:1 / -1}
+    .add-btn{grid-column:1 / -1}
+  }
+
+
+  @media (max-width:680px){
+    .hero{padding:22px 16px 8px}
+    .hero h1{font-size:24px}
+    main{padding:16px 12px 60px}
+    .card{padding:16px 14px}
+  }
+</style>
+</head>
+<body>
+
+
+<section class="hero">
+  <div class="eyebrow">Internal Tool</div>
+  <h1>What can this client <span class="underline">actually afford?</span></h1>
+  <p>Enter the client's cash and fees, then <strong>add properties one at a time</strong>. Each pick reduces the remaining cash and the table updates to show what they can still afford next.</p>
+</section>
+
+<main>
+
+  <!-- ============= 1. CLIENT & FUNDS ============= -->
+  <div class="card">
+    <div class="step">Step 1</div>
+    <h2>Client &amp; funds</h2>
+    <p class="sub">Who's buying, and how much cash do they have.</p>
+    <div class="form-grid">
+      <div class="field">
+        <label>Ownership</label>
+        <div class="input-edit is-select"><select id="ownership">
+          <option value="Personal">Personal / Trust / Company</option>
+          <option value="SMSF">SMSF</option>
+        </select></div>
+        <span class="help">Drives default deposit % and which fees apply</span>
+      </div>
+      <div class="field">
+        <label>Available funds</label>
+        <div class="input-edit"><span class="currency">$</span><input id="funds" type="text" inputmode="numeric" placeholder="e.g. 250,000" /></div>
+        <span class="help">Total cash the client has to work with</span>
+      </div>
+      <div class="field">
+        <label>Buffer to keep aside</label>
+        <div class="input-edit"><span class="currency">$</span><input id="buffer" type="text" inputmode="numeric" value="10,000" /></div>
+        <span class="help">Cash to leave in the bank, not deployed</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= 2. PER-PROPERTY COSTS ============= -->
+  <div class="card">
+    <div class="step">Step 2</div>
+    <h2>Costs to include</h2>
+    <p class="sub">Toggle each fee that applies. Amounts are editable.</p>
+
+    <div class="toggle-row">
+      <div class="toggle-label">
+        Buyer's Agent fee
+        <span class="toggle-note">Per property.</span>
+      </div>
+      <div class="input-edit"><span class="currency">$</span><input id="fee_ba" type="text" inputmode="numeric" value="16,900" /></div>
+      <label class="switch"><input id="fee_ba_on" type="checkbox" checked><span class="slider"></span></label>
+    </div>
+
+    <div class="toggle-row">
+      <div class="toggle-label">
+        Conveyancing / Legals
+        <span class="toggle-note">Per property.</span>
+      </div>
+      <div class="input-edit"><span class="currency">$</span><input id="fee_conv" type="text" inputmode="numeric" value="2,500" /></div>
+      <label class="switch"><input id="fee_conv_on" type="checkbox" checked><span class="slider"></span></label>
+    </div>
+
+    <div class="toggle-row" id="fee_smsf_row" style="display:none">
+      <div class="toggle-label">
+        SMSF setup fee
+        <span class="toggle-note">One-off, deducted once from total funds.</span>
+      </div>
+      <div class="input-edit"><span class="currency">$</span><input id="fee_smsf" type="text" inputmode="numeric" value="5,500" /></div>
+      <label class="switch"><input id="fee_smsf_on" type="checkbox" checked><span class="slider"></span></label>
+    </div>
+
+  </div>
+
+  <!-- ============= 3. DEPOSIT / LOAN % ============= -->
+  <div class="card">
+    <div class="step">Step 3</div>
+    <h2>Deposit &amp; loan structure</h2>
+    <p class="sub">Deposit % is the cash the client puts down per property.</p>
+
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div class="field">
+        <label>Deposit %</label>
+        <div class="input-edit"><input id="deposit_pct" type="number" step="0.5" value="12" /><span class="suffix">%</span></div>
+        <span class="help">Cash the client puts down (out of pocket)</span>
+      </div>
+      <div class="field">
+        <label>Loan %</label>
+        <div class="input-edit"><input id="loan_pct" type="number" step="0.5" value="90" /><span class="suffix">%</span></div>
+        <span class="help">Loan as % of value. 90% assumes LMI capitalised.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= 4. NEXT PROPERTY OPTIONS ============= -->
+  <div class="card">
+    <div class="step">Step 4</div>
+    <h2>What can they buy next?</h2>
+    <p class="sub">Max property price they can afford in each state <strong>right now</strong> with the remaining cash. Click <strong>Add</strong> on any state to lock it into the portfolio, then check again for a second property. "Stamp duty" includes state transfer duty + mortgage registration + transfer fee.</p>
+
+    <div class="results-wrap">
+      <table class="results-tbl" id="results_tbl">
+        <thead><tr><th>Row</th><th>QLD</th><th>SA</th><th>WA</th><th>VIC</th><th>NSW</th><th>TAS</th></tr></thead>
+        <tbody id="results_body"></tbody>
+      </table>
+    </div>
+
+    <!-- Or add a specific property (custom price, not max) -->
+    <div class="custom-panel">
+      <div class="cp-title">Or add a specific property</div>
+      <div class="cp-hint">Type the actual purchase price you want to model, pick the state, and add it directly.</div>
+      <div class="custom-grid">
+        <div class="field">
+          <label>State</label>
+          <div class="input-edit is-select"><select id="custom_state">
+            <option value="QLD">QLD</option>
+            <option value="SA">SA</option>
+            <option value="WA">WA</option>
+            <option value="VIC">VIC</option>
+            <option value="NSW">NSW</option>
+            <option value="TAS">TAS</option>
+          </select></div>
+        </div>
+        <div class="field">
+          <label>Purchase price</label>
+          <div class="input-edit"><span class="currency">$</span><input id="custom_price" type="text" inputmode="numeric" placeholder="e.g. 550,000" /></div>
+        </div>
+        <div class="cp-breakdown" id="custom_breakdown">
+          <span style="color:#9B9696;font-style:italic;font-weight:500">Enter a price to preview costs…</span>
+        </div>
+        <button class="add-btn" id="custom_add" disabled>+ Add to portfolio</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= 5. PORTFOLIO ============= -->
+  <div class="card" id="portfolio_card">
+    <div class="portfolio-head">
+      <div>
+        <div class="step">Step 5</div>
+        <h2>Portfolio <span id="portfolio_count_badge" style="font-size:13px;color:#7B7676;font-weight:600"></span></h2>
+        <p class="sub" style="margin-bottom:0">Properties added so far. Remove any row to free up that cash and add a different pick.</p>
+      </div>
+      <button class="clear-btn" id="clear_portfolio" style="display:none">Clear all</button>
+    </div>
+
+    <div id="portfolio_empty" class="portfolio-empty">
+      No properties added yet. Pick one from the table above to get started.
+    </div>
+
+    <div id="portfolio_table_wrap" class="portfolio-wrap" style="display:none">
+      <table class="portfolio-tbl">
+        <thead><tr>
+          <th>#</th><th>State</th><th>Price</th><th>Deposit</th><th>Stamp duty</th><th>BA</th><th>Conv</th><th>Cash used</th><th></th>
+        </tr></thead>
+        <tbody id="portfolio_body"></tbody>
+      </table>
+    </div>
+
+    <div id="portfolio_totals" class="portfolio-totals" style="display:none"></div>
+  </div>
+
+</main>
+
+
+<script>
+/* ============================================================================
+   AFFORDABILITY CALCULATOR v1.6 — sequential portfolio builder
+   Enter funds + costs → table shows what they can buy NEXT in each state →
+   Click "Add" to lock a pick into the Portfolio → repeat until done.
+   ============================================================================ */
+
+// -------- Helpers --------
+const $ = id => document.getElementById(id);
+const numVal = id => {
+  const el = $(id); if(!el) return 0;
+  const n = +String(el.value||'').replace(/[^0-9.\-]/g,'');
+  return isNaN(n) ? 0 : n;
+};
+// Exact whole-dollar formatter — no k / M rounding
+const fmt$ = v => (v < 0 ? '−$' : '$') + Math.round(Math.abs(v)).toLocaleString();
+
+// -------- Stamp duty per state (exact office Excel formula) --------
+function stampDuty(state, price){
+  const V = Math.max(0, price);
+  if(V <= 0) return 0;
+  const cu100 = (amt, rate) => Math.ceil(amt / 100) * rate;
+
+  switch(state){
+    case 'VIC': {
+      let base;
+      if(V <= 25000)         base = V * 0.014;
+      else if(V <= 130000)   base = 350 + (V - 25000) * 0.024;
+      else if(V <= 960000)   base = 2870 + (V - 130000) * 0.06;
+      else if(V <= 2000000)  base = V * 0.055;
+      else                   base = 110000 + (V - 2000000) * 0.065;
+      const mReg = Math.ceil(Math.min(3614, 104.3 + 2.34 * Math.floor(V / 1000)));
+      const tFee = 129.2;
+      return base + mReg + tFee;
+    }
+
+    case 'NSW': {
+      let base;
+      if(V <= 17000)         base = V * 0.0125;
+      else if(V <= 36000)    base = 212 + cu100(V - 17000, 1.5);
+      else if(V <= 97000)    base = 497 + cu100(V - 36000, 1.75);
+      else if(V <= 364000)   base = 1564 + cu100(V - 97000, 3.5);
+      else if(V <= 1212000)  base = 10909 + cu100(V - 364000, 4.5);
+      else if(V <= 3636000)  base = 49069 + cu100(V - 1212000, 5.5);
+      else                   base = 182389 + cu100(V - 3636000, 7);
+      const mReg = 165.1;
+      const tFee = 165.1;
+      return base + mReg + tFee;
+    }
+
+    case 'QLD': {
+      let base;
+      if(V <= 5000)          base = 0;
+      else if(V <= 75000)    base = cu100(V - 5000, 1.5);
+      else if(V <= 540000)   base = 1050 + cu100(V - 75000, 3.5);
+      else if(V <= 1000000)  base = 17325 + cu100(V - 540000, 4.5);
+      else                   base = 38025 + cu100(V - 1000000, 5.75);
+      const mReg = 233;
+      const tFee = 233;
+      return base + mReg + tFee;
+    }
+
+    case 'WA': {
+      let base;
+      if(V <= 120000)        base = V * 0.019;
+      else if(V <= 150000)   base = 2280 + cu100(V - 120000, 2.85);
+      else if(V <= 360000)   base = 3135 + cu100(V - 150000, 3.8);
+      else if(V <= 725000)   base = 11115 + cu100(V - 360000, 4.75);
+      else                   base = 28453 + cu100(V - 725000, 5.15);
+      const mReg = 205.7;
+      const tFee = 205.7;
+      return base + mReg + tFee;
+    }
+
+    case 'SA': {
+      let base;
+      if(V <= 12000)         base = V * 0.01;
+      else if(V <= 30000)    base = 120 + cu100(V - 12000, 2);
+      else if(V <= 50000)    base = 480 + cu100(V - 30000, 3);
+      else if(V <= 100000)   base = 1080 + cu100(V - 50000, 3.5);
+      else if(V <= 200000)   base = 2830 + cu100(V - 100000, 4);
+      else if(V <= 250000)   base = 6830 + cu100(V - 200000, 4.25);
+      else if(V <= 300000)   base = 8955 + cu100(V - 250000, 4.75);
+      else if(V <= 500000)   base = 11330 + cu100(V - 300000, 5);
+      else                   base = 21330 + cu100(V - 500000, 5.5);
+      const mReg = 190;
+      const tFee = 190;
+      return base + mReg + tFee;
+    }
+
+    case 'ACT': {
+      let base;
+      if(V <= 260000)        base = cu100(V, 0.49);
+      else if(V <= 300000)   base = 1274 + cu100(V - 260000, 2.2);
+      else if(V <= 500000)   base = 2154 + cu100(V - 300000, 3.4);
+      else if(V <= 750000)   base = 8954 + cu100(V - 500000, 4.32);
+      else if(V <= 1000000)  base = 19754 + cu100(V - 750000, 5.9);
+      else if(V <= 1455000)  base = 34504 + cu100(V - 1000000, 6.4);
+      else                   base = V * 0.0454;
+      const mReg = 165;
+      const tFee = 462;
+      return base + mReg + tFee;
+    }
+
+    case 'NT': {
+      let base;
+      if(V <= 525000)        base = (0.06571441 * Math.pow(V / 1000, 2)) + (15 * (V / 1000));
+      else if(V < 3000000)   base = V * 0.0495;
+      else if(V < 5000000)   base = V * 0.0575;
+      else                   base = V * 0.0595;
+      const mReg = 181;
+      const tFee = 181;
+      return base + mReg + tFee;
+    }
+
+    case 'TAS': {
+      let base;
+      if(V <= 3000)          base = 50;
+      else if(V <= 25000)    base = 50 + cu100(V - 3000, 1.75);
+      else if(V <= 75000)    base = 435 + cu100(V - 25000, 2.25);
+      else if(V <= 200000)   base = 1560 + cu100(V - 75000, 3.5);
+      else if(V <= 375000)   base = 5935 + cu100(V - 200000, 4);
+      else if(V <= 725000)   base = 12935 + cu100(V - 375000, 4.25);
+      else                   base = 27810 + cu100(V - 725000, 4.5);
+      const mReg = 256.76;
+      const tFee = 167.58;
+      return base + mReg + tFee;
+    }
+  }
+  return 0;
+}
+
+// -------- Portfolio state --------
+const STATES = ['QLD','SA','WA','VIC','NSW','TAS'];
+let portfolio = []; // [{ state, price }] — costs recomputed at render time
+
+// -------- Comma-format money inputs --------
+['funds','buffer','fee_ba','fee_conv','fee_smsf','custom_price'].forEach(id => {
+  const el = $(id);
+  if(!el) return;
+  el.addEventListener('focus', () => { el.value = String(el.value).replace(/,/g,''); });
+  el.addEventListener('blur', () => {
+    const n = +String(el.value).replace(/[^0-9.\-]/g,'');
+    el.value = isNaN(n) || n === 0 ? '' : n.toLocaleString();
+    if(id === 'custom_price') updateCustomPanel();
+    else recalc();
+  });
+  el.addEventListener('input', () => {
+    if(id === 'custom_price') updateCustomPanel();
+    else recalc();
+  });
+});
+
+// Custom state picker → refresh preview
+$('custom_state').addEventListener('change', updateCustomPanel);
+
+// -------- Ownership change (SMSF toggle + defaults) --------
+$('ownership').addEventListener('change', () => {
+  const isSmsf = $('ownership').value === 'SMSF';
+  $('fee_smsf_row').style.display = isSmsf ? '' : 'none';
+  $('deposit_pct').value = isSmsf ? 20 : 12;
+  $('loan_pct').value    = isSmsf ? 80 : 90;
+  recalc();
+});
+['deposit_pct','loan_pct','fee_ba_on','fee_conv_on','fee_smsf_on'].forEach(id => {
+  const el = $(id); if(el) el.addEventListener('input', recalc);
+});
+
+// -------- Clear portfolio --------
+$('clear_portfolio').addEventListener('click', () => {
+  if(portfolio.length === 0) return;
+  if(confirm('Clear all properties from the portfolio?')){
+    portfolio = [];
+    recalc();
+  }
+});
+
+// -------- Custom-price panel: live preview + add handler --------
+function updateCustomPanel(){
+  const state = $('custom_state').value;
+  const price = +String($('custom_price').value||'').replace(/[^0-9.\-]/g,'') || 0;
+  const box   = $('custom_breakdown');
+  const btn   = $('custom_add');
+
+  if(price <= 0){
+    box.innerHTML = `<span style="color:#9B9696;font-style:italic;font-weight:500">Enter a price to preview costs…</span>`;
+    btn.disabled = true;
+    return;
+  }
+
+  const depositPct= (+$('deposit_pct').value || 0)/100;
+  const isSmsf    = $('ownership').value === 'SMSF';
+  const feeBA     = $('fee_ba_on').checked   ? numVal('fee_ba')   : 0;
+  const feeConv   = $('fee_conv_on').checked ? numVal('fee_conv') : 0;
+  const feeSMSF   = (isSmsf && $('fee_smsf_on').checked) ? numVal('fee_smsf') : 0;
+
+  const deposit = price * depositPct;
+  const stamp   = stampDuty(state, price);
+  const cashNeeded = deposit + stamp + feeBA + feeConv;
+
+  // How much cash is currently available (funds - buffer - SMSF setup - portfolio spent)?
+  const funds  = numVal('funds');
+  const buffer = numVal('buffer');
+  let spent = 0;
+  for(const p of portfolio){
+    spent += p.price * depositPct + stampDuty(p.state, p.price) + feeBA + feeConv;
+  }
+  const available = funds - buffer - feeSMSF - spent;
+  const wouldRemain = available - cashNeeded;
+  const affordable = wouldRemain >= -100; // small tolerance for cents
+
+  box.innerHTML =
+    `<div class="cp-item"><span>Deposit</span><strong>${fmt$(deposit)}</strong></div>` +
+    `<div class="cp-item"><span>Stamp duty</span><strong>${fmt$(stamp)}</strong></div>` +
+    (feeBA > 0   ? `<div class="cp-item"><span>BA</span><strong>${fmt$(feeBA)}</strong></div>` : '') +
+    (feeConv > 0 ? `<div class="cp-item"><span>Conv</span><strong>${fmt$(feeConv)}</strong></div>` : '') +
+    `<div class="cp-item cp-total"><span>Cash needed</span><strong>${fmt$(cashNeeded)}</strong></div>` +
+    `<div class="cp-item ${affordable ? '' : 'cp-warn'}"><span>Remaining after</span><strong>${fmt$(wouldRemain)}</strong></div>`;
+
+  btn.disabled = !funds || !affordable;
+  btn.title = !funds ? 'Enter available funds first' : (!affordable ? 'Not enough cash for this price' : '');
+}
+
+$('custom_add').addEventListener('click', () => {
+  const state = $('custom_state').value;
+  const price = +String($('custom_price').value||'').replace(/[^0-9.\-]/g,'') || 0;
+  if(price <= 0) return;
+  portfolio.push({ state, price });
+  $('custom_price').value = '';
+  recalc();
+  setTimeout(() => {
+    $('portfolio_card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 60);
+});
+
+// -------- Core calculation --------
+function recalc(){
+  const funds     = numVal('funds');
+  const buffer    = numVal('buffer');
+  const isSmsf    = $('ownership').value === 'SMSF';
+  const depositPct= (+$('deposit_pct').value || 0)/100;
+  const feeBA     = $('fee_ba_on').checked   ? numVal('fee_ba')   : 0;
+  const feeConv   = $('fee_conv_on').checked ? numVal('fee_conv') : 0;
+  const feeSMSF   = (isSmsf && $('fee_smsf_on').checked) ? numVal('fee_smsf') : 0;
+
+  // Recompute each portfolio entry's costs at current settings
+  let portfolioSpent = 0;
+  const portRows = portfolio.map(p => {
+    const deposit = p.price * depositPct;
+    const stamp   = stampDuty(p.state, p.price);
+    const ba      = feeBA;
+    const conv    = feeConv;
+    const total   = deposit + stamp + ba + conv;
+    portfolioSpent += total;
+    return { state: p.state, price: p.price, deposit, stamp, ba, conv, total };
+  });
+
+  // How much cash is left after buffer + one-off SMSF setup + portfolio so far?
+  const availableForNext = funds - buffer - feeSMSF - portfolioSpent;
+
+  // Solve auto-max property price for each state given the remaining cash
+  function fixedFees(){ return feeBA + feeConv; }
+  function cashForProperty(state, price){
+    return price * depositPct + stampDuty(state, price) + fixedFees();
+  }
+  function solveAutoPrice(state, budget){
+    const fixedF = fixedFees();
+    if(budget <= fixedF) return 0;
+    let lo = 0;
+    let hi = (budget - fixedF) / Math.max(depositPct, 0.01);
+    for(let it=0; it<40; it++){
+      const mid = (lo + hi) / 2;
+      const cash = cashForProperty(state, mid);
+      if(cash > budget) hi = mid;
+      else lo = mid;
+      if(hi - lo < 1) break;
+    }
+    return Math.max(0, Math.floor(lo));
+  }
+
+  const nextOpts = {};
+  for(const s of STATES){
+    if(!funds || availableForNext <= 0){
+      nextOpts[s] = null;
+      continue;
+    }
+    const price = solveAutoPrice(s, availableForNext);
+    if(price <= 0){ nextOpts[s] = null; continue; }
+    nextOpts[s] = {
+      price,
+      deposit: price * depositPct,
+      stamp: stampDuty(s, price),
+      ba: feeBA,
+      conv: feeConv,
+      total: cashForProperty(s, price),
+    };
+  }
+
+  renderNextOptions(nextOpts, availableForNext, depositPct, feeBA, feeConv, !!funds);
+  renderPortfolio(portRows, funds, buffer, feeSMSF, portfolioSpent);
+  updateCustomPanel();
+}
+
+// -------- Render: next-property options table --------
+function renderNextOptions(opts, available, depositPct, feeBA, feeConv, hasFunds){
+  const tbody = $('results_body');
+  tbody.innerHTML = '';
+
+  // Available cash header row
+  const trAvail = document.createElement('tr');
+  trAvail.className = 'avail';
+  const availTxt = hasFunds ? fmt$(available) : '—';
+  trAvail.innerHTML = `<td>Cash available for next property</td>` +
+    STATES.map(() => `<td>${availTxt}</td>`).join('');
+  tbody.appendChild(trAvail);
+
+  // Max price row (headline)
+  const trPrice = document.createElement('tr');
+  trPrice.className = 'price';
+  trPrice.innerHTML = `<td>Max property price</td>` +
+    STATES.map(s => `<td>${opts[s] ? fmt$(opts[s].price) : '—'}</td>`).join('');
+  tbody.appendChild(trPrice);
+
+  // Cost breakdown rows
+  const rows = [
+    { label: `Deposit (${(depositPct*100).toFixed(1)}%)`, key: 'deposit', show: true },
+    { label: 'Stamp duty',                                key: 'stamp',   show: true },
+    { label: "Buyer's Agent fees",                        key: 'ba',      show: feeBA > 0 },
+    { label: 'Conveyancing',                              key: 'conv',    show: feeConv > 0 },
+  ];
+  for(const r of rows){
+    if(!r.show) continue;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.label}</td>` +
+      STATES.map(s => `<td>${opts[s] ? fmt$(opts[s][r.key]) : '—'}</td>`).join('');
+    tbody.appendChild(tr);
+  }
+
+  // Total cash needed row
+  const trTotal = document.createElement('tr');
+  trTotal.className = 'total';
+  trTotal.innerHTML = `<td>Total cash needed</td>` +
+    STATES.map(s => `<td>${opts[s] ? fmt$(opts[s].total) : '—'}</td>`).join('');
+  tbody.appendChild(trTotal);
+
+  // Select-button row
+  const trSelect = document.createElement('tr');
+  trSelect.className = 'select-row';
+  trSelect.innerHTML = `<td></td>` +
+    STATES.map(s => {
+      if(opts[s]){
+        return `<td><button class="select-btn" data-state="${s}" data-price="${opts[s].price}">+ Add ${s}</button></td>`;
+      }
+      return `<td><button class="select-btn" disabled>—</button></td>`;
+    }).join('');
+  tbody.appendChild(trSelect);
+
+  tbody.querySelectorAll('.select-btn:not(:disabled)').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const state = btn.dataset.state;
+      const price = +btn.dataset.price;
+      portfolio.push({ state, price });
+      recalc();
+      // Smooth-scroll to portfolio so the girls can see the new row land
+      setTimeout(() => {
+        $('portfolio_card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
+    });
+  });
+}
+
+// -------- Render: portfolio table + totals --------
+function renderPortfolio(rows, funds, buffer, smsfCharge, spent){
+  const tblWrap = $('portfolio_table_wrap');
+  const empty   = $('portfolio_empty');
+  const totals  = $('portfolio_totals');
+  const badge   = $('portfolio_count_badge');
+  const clearBtn= $('clear_portfolio');
+
+  if(rows.length === 0){
+    tblWrap.style.display = 'none';
+    empty.style.display = '';
+    totals.style.display = 'none';
+    badge.textContent = '';
+    clearBtn.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  tblWrap.style.display = '';
+  totals.style.display = '';
+  badge.textContent = `· ${rows.length} propert${rows.length===1?'y':'ies'}`;
+  clearBtn.style.display = '';
+
+  const body = $('portfolio_body');
+  body.innerHTML = '';
+  rows.forEach((p, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td class="port-num">${i+1}</td>` +
+      `<td class="port-state">${p.state}</td>` +
+      `<td>${fmt$(p.price)}</td>` +
+      `<td>${fmt$(p.deposit)}</td>` +
+      `<td>${fmt$(p.stamp)}</td>` +
+      `<td>${fmt$(p.ba)}</td>` +
+      `<td>${fmt$(p.conv)}</td>` +
+      `<td class="port-total">${fmt$(p.total)}</td>` +
+      `<td><button class="remove-btn" data-i="${i}" title="Remove this property">×</button></td>`;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = +btn.dataset.i;
+      portfolio.splice(i, 1);
+      recalc();
+    });
+  });
+
+  // Totals
+  const totalPortValue = rows.reduce((s, p) => s + p.price, 0);
+  const totalDeposit   = rows.reduce((s, p) => s + p.deposit, 0);
+  const totalStamp     = rows.reduce((s, p) => s + p.stamp, 0);
+  const totalBA        = rows.reduce((s, p) => s + p.ba, 0);
+  const totalConv      = rows.reduce((s, p) => s + p.conv, 0);
+  const totalCashUsed  = totalDeposit + totalStamp + totalBA + totalConv + smsfCharge;
+  const remaining      = funds - buffer - totalCashUsed;
+
+  totals.innerHTML =
+    `<div class="tot-row"><span>Total property portfolio value</span><strong>${fmt$(totalPortValue)}</strong></div>` +
+    `<div class="tot-row"><span>Total deposits</span><strong>${fmt$(totalDeposit)}</strong></div>` +
+    `<div class="tot-row"><span>Total stamp duty</span><strong>${fmt$(totalStamp)}</strong></div>` +
+    (totalBA > 0   ? `<div class="tot-row"><span>Total Buyer's Agent fees</span><strong>${fmt$(totalBA)}</strong></div>` : '') +
+    (totalConv > 0 ? `<div class="tot-row"><span>Total conveyancing</span><strong>${fmt$(totalConv)}</strong></div>` : '') +
+    (smsfCharge > 0? `<div class="tot-row"><span>SMSF setup (one-off)</span><strong>${fmt$(smsfCharge)}</strong></div>` : '') +
+    `<div class="tot-row"><span>Total cash deployed</span><strong>${fmt$(totalCashUsed)}</strong></div>` +
+    `<div class="tot-row"><span>Buffer kept aside</span><strong>${fmt$(buffer)}</strong></div>` +
+    `<div class="tot-row tot-remain${remaining < 0 ? ' negative' : ''}"><span>Cash remaining</span><strong>${fmt$(remaining)}</strong></div>`;
+}
+
+// -------- Initial render --------
+recalc();
+</script>
+</body>
+</html>

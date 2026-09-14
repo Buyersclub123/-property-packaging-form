@@ -119,6 +119,21 @@ export function hasValidUserEmail(): boolean {
   return validation.isValid;
 }
 
+/**
+ * Get user email — tries Cloudflare header first, falls back to localStorage.
+ * For use in client components.
+ */
+export async function getAuthEmail(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.email) return data.email;
+    }
+  } catch {}
+  return getUserEmail(); // localStorage fallback
+}
+
 
 
 

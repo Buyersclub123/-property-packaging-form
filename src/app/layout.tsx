@@ -1,11 +1,12 @@
 import '../styles/globals.css';
 
 export const metadata = {
-  title: 'Property Packaging Form',
-  description: 'Multi-step property packaging form with intelligent workflow',
+  title: 'Buyers Club Tools',
+  description: 'Internal tools portal',
   icons: {
     icon: '/logo.jpg',
   },
+  robots: 'noindex, nofollow',
 };
 
 export default function RootLayout({
@@ -19,5 +20,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-

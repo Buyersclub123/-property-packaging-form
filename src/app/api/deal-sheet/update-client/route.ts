@@ -171,7 +171,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Write the updated CO record (status unchanged).
+    // 4. Write the updated CO record.
+    // If a revert status was requested (e.g. "Available", "Close Lost"), use it;
+    // otherwise keep the current status.
+    const newStatus = (isRemove && body.revertStatus) ? body.revertStatus : currentStatus;
+
+    const properties: Record<string, string> = {
+      status: newStatus,
+      linked_opportunity_id: newOppId,
+      client_closed: newClient,
+      closing_ba: newBA,
+      closing_price: newPrice,
+      closing_date: newDate,
+    };
+
+    // When unlinking (remove or revert to speculative), also clear offer price fields.
+    // Note: offer_status / offer_status_land / offer_status_build are SINGLE_OPTIONS
+    // in GHL — sending '' causes a 400 error. Omit them to leave as-is, or send a
+    // valid option. For now we clear prices only; status is left (it becomes stale
+    // but doesn't block the update).
+    if (isRemove) {
+      properties.offer_price = '';
+      properties.offer_price_land = '';
+      properties.offer_price_build = '';
+    }
+
     const putUrl = `${GHL_API_BASE}/objects/${GHL_OBJECT_ID}/records/${recordId}?locationId=${LOCATION_ID}`;
     const putRes = await fetch(putUrl, {
       method: 'PUT',
@@ -180,16 +204,7 @@ export async function POST(request: NextRequest) {
         Version: '2021-07-28',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        properties: {
-          status: currentStatus,
-          linked_opportunity_id: newOppId,
-          client_closed: newClient,
-          closing_ba: newBA,
-          closing_price: newPrice,
-          closing_date: newDate,
-        },
-      }),
+      body: JSON.stringify({ properties }),
     });
 
     if (!putRes.ok) {

@@ -9,11 +9,15 @@ export const dynamic = 'force-dynamic';
  * Searches the special conditions library by text.
  * If no query, returns all conditions (optionally filtered by state/type).
  */
+// The EOI composer uses 'hl_split' but the DB stores 'house_and_land'
+const TYPE_ALIAS: Record<string, string> = { hl_split: 'house_and_land' };
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get('q') || '').trim();
   const state = searchParams.get('state') || null;
-  const propertyType = searchParams.get('type') || null;
+  const rawType = searchParams.get('type') || null;
+  const propertyType = rawType ? (TYPE_ALIAS[rawType] || rawType) : null;
 
   const sql = getDb();
 

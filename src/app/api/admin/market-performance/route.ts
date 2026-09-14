@@ -59,7 +59,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, suburb, state, fields, userEmail } = body;
+    const { action, suburb, state, fields } = body;
+    const userEmail = body.userEmail || request.headers.get('Cf-Access-Authenticated-User-Email') || '';
 
     if (!action || !suburb || !state || !fields || !userEmail) {
       return NextResponse.json(

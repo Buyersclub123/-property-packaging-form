@@ -100,9 +100,34 @@ const REGISTERED_ADDRESS_FIELD_ID = 'PlNx1851lV5PSAotT4FT';
 const TOTAL_PURCHASE_PRICE_FIELD_ID = 'eJLct739hxbwrkrdtfca';
 const ASSIGNED_BA_FIELD_ID = 'NXqFwEzo28k6lOkbyT5N';
 
+// Solicitor/broker custom field IDs on the opportunity (used by EOI prefill)
+const SOLICITOR_NAME_FIELD_ID = 'QOoYpW6A8G1Jk8xWs7h1';
+const SOLICITOR_COMPANY_FIELD_ID = 'bQ7bndudaNLmlLkYeDpG';
+const SOLICITOR_EMAIL_FIELD_ID = 'fr5S8FvqtZi3Pixo7fSY';
+const SOLICITOR_PHONE_FIELD_ID = 'ff8fVDpZc9gwDH9nJdTR';
+const BROKER_NAME_FIELD_ID = 'lX2e29gQ1iFuQ0DksM5W';
+const BROKER_COMPANY_FIELD_ID = 'bV6k9SaZ1UJpOuALO1xY';
+const BROKER_EMAIL_FIELD_ID = 'puGMV3MWyU13n4sBLHDj';
+const BROKER_PHONE_FIELD_ID = 'hSW5hSoB1mZyHsnk2o6n';
+
+// Purchaser 2 / Partner fields (Opportunity Details folder)
+const PARTNER_NAME_FIELD_ID = 'xFKbtz7Lt1X2nNTeFSSH';
+const PARTNER_EMAIL_FIELD_ID = 'd0iUirsqy4kdUVMpHLfD';
+const PARTNER_PHONE_FIELD_ID = 'gpStrUSjZVHE4xyolRvH';
+const PARTNER_ADDRESS_FIELD_ID = 'KpxtSsE1JT2Hgo8gSkvF';
+// Purchaser 1 address (Opportunity Details folder)
+const POSTAL_ADDRESS_FIELD_ID = 'jY0D9emvA78Tr7TsKMB3';
+
+// Contract Entity fields (Property Team Info New folder)
+const ENTITY_SMSF_NAME_FIELD_ID = 'wWJMsF5GadaOEEVuPsGP';
+const ENTITY_PERSONAL_NAME_FIELD_ID = 'wsnXOFf7F4z3TDQEFsCw';
+const ENTITY_TRUST_NAME_FIELD_ID = 'EbDMmXJTBxkkWFBDChy5';
+const ENTITY_TYPE_FIELD_ID = 'V62a5vivXnAKQ4pwKajt';
+
 interface GHLCustomField {
   id: string;
-  fieldValueString?: string;
+  fieldValue?: string | number | null;       // GHL single-opp response uses this
+  fieldValueString?: string;                  // GHL search/list response uses these
   fieldValueNumber?: number;
   fieldValueDate?: number;
   value?: string | number | null;
@@ -116,6 +141,12 @@ interface GHLOpportunity {
   pipelineStageId?: string;
   lastStageChangeAt?: string;
   customFields?: GHLCustomField[];
+  contact?: {
+    id?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+  };
 }
 
 interface GHLResponse {
@@ -138,6 +169,29 @@ interface OpportunityResult {
   stageName: string;
   pipelineName: string;
   lastStageChangeAt: string;
+  // Present on the single-opportunity (?id=) lookup only — the list endpoints
+  // do not return contact details. Used to prefill the EOI purchaser.
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  // Solicitor/broker fields from opportunity custom fields (EOI prefill)
+  solicitorName?: string;
+  solicitorCompany?: string;
+  solicitorEmail?: string;
+  solicitorPhone?: string;
+  brokerName?: string;
+  brokerCompany?: string;
+  brokerEmail?: string;
+  brokerPhone?: string;
+  // Purchaser address + Partner (Purchaser 2) fields
+  postalAddress?: string;
+  partnerName?: string;
+  partnerEmail?: string;
+  partnerPhone?: string;
+  partnerAddress?: string;
+  // Contract Entity
+  contractEntity?: string;
+  entityType?: string;
 }
 
 // Pipeline + stage names resolved live from GHL (programme rule: no hardcoded
@@ -184,6 +238,8 @@ function getCustomFieldValue(
   if (!customFields) return '';
   const field = customFields.find((f) => f.id === fieldId);
   if (!field) return '';
+  // GHL single-opp endpoint returns `fieldValue`; search/list returns `fieldValueString`
+  if (field.fieldValue != null) return String(field.fieldValue);
   if (field.fieldValueString != null) return field.fieldValueString;
   if (field.fieldValueNumber != null) return String(field.fieldValueNumber);
   if (field.value != null) return String(field.value);
@@ -309,10 +365,34 @@ export async function GET(request: NextRequest) {
       }
       const data = await res.json();
       const opp: GHLOpportunity | undefined = data.opportunity || data;
+      
       if (!opp || !opp.id) {
         return NextResponse.json({ opportunities: [], total: 0 });
       }
-      return NextResponse.json({ opportunities: [mapOpportunity(opp)], total: 1 });
+      const mapped: OpportunityResult = {
+        ...mapOpportunity(opp),
+        contactName: opp.contact?.name || '',
+        contactEmail: opp.contact?.email || '',
+        contactPhone: opp.contact?.phone || '',
+        solicitorName: getCustomFieldValue(opp.customFields, SOLICITOR_NAME_FIELD_ID),
+        solicitorCompany: getCustomFieldValue(opp.customFields, SOLICITOR_COMPANY_FIELD_ID),
+        solicitorEmail: getCustomFieldValue(opp.customFields, SOLICITOR_EMAIL_FIELD_ID),
+        solicitorPhone: getCustomFieldValue(opp.customFields, SOLICITOR_PHONE_FIELD_ID),
+        brokerName: getCustomFieldValue(opp.customFields, BROKER_NAME_FIELD_ID),
+        brokerCompany: getCustomFieldValue(opp.customFields, BROKER_COMPANY_FIELD_ID),
+        brokerEmail: getCustomFieldValue(opp.customFields, BROKER_EMAIL_FIELD_ID),
+        brokerPhone: getCustomFieldValue(opp.customFields, BROKER_PHONE_FIELD_ID),
+        postalAddress: getCustomFieldValue(opp.customFields, POSTAL_ADDRESS_FIELD_ID),
+        partnerName: getCustomFieldValue(opp.customFields, PARTNER_NAME_FIELD_ID),
+        partnerEmail: getCustomFieldValue(opp.customFields, PARTNER_EMAIL_FIELD_ID),
+        partnerPhone: getCustomFieldValue(opp.customFields, PARTNER_PHONE_FIELD_ID),
+        partnerAddress: getCustomFieldValue(opp.customFields, PARTNER_ADDRESS_FIELD_ID),
+        contractEntity: getCustomFieldValue(opp.customFields, ENTITY_TRUST_NAME_FIELD_ID)
+          || getCustomFieldValue(opp.customFields, ENTITY_SMSF_NAME_FIELD_ID)
+          || getCustomFieldValue(opp.customFields, ENTITY_PERSONAL_NAME_FIELD_ID),
+        entityType: getCustomFieldValue(opp.customFields, ENTITY_TYPE_FIELD_ID),
+      };
+      return NextResponse.json({ opportunities: [mapped], total: 1 });
     }
 
     const tierParam = request.nextUrl.searchParams.get('tier') || '1';

@@ -24,6 +24,16 @@ export async function PUT(request: NextRequest) {
   const sql = getDb();
   let updated = 0;
 
+  // Collect IDs that should remain active (is_default = true)
+  const activeIds = conditions.map((c: { id: number }) => c.id).filter((id: number) => id != null);
+
+  // Mark any conditions for this state/type NOT in the list as is_default = false
+  await sql`
+    UPDATE special_conditions
+    SET is_default = false
+    WHERE state = ${state} AND property_type = ${property_type}
+      AND is_default = true`;
+
   for (const c of conditions) {
     const { id, sort_order, is_default } = c;
     if (id === undefined || sort_order === undefined) continue;

@@ -16,7 +16,7 @@ export function getDb(): NeonQueryFunction<false, false> {
     if (!url) {
       throw new Error('DATABASE_URL or POSTGRES_URL environment variable is not set');
     }
-    sql = neon(url);
+    sql = neon(url, { fetchOptions: { cache: 'no-store' } });
   }
   return sql;
 }

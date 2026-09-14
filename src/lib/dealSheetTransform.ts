@@ -118,6 +118,8 @@ export function transformRecord(record: GHLRecord) {
   // Close $ for fixed-price deal types (01/02/03). Empty for established
   // (range, not a fixed price) — see D1 brief F3.
   let closePrefill = '';
+  let landPricePrefill = '';
+  let buildPricePrefill = '';
   const isEstablished =
     p.property_type && p.property_type.toLowerCase().includes('established');
 
@@ -137,6 +139,8 @@ export function transformRecord(record: GHLRecord) {
       const calculatedTotal = hasValue(total) ? total : String(parseFloat(landPrice || '0') + parseFloat(buildPrice || '0'));
       acceptAcqTotal = `Land: ${formatCurrency(landPrice)} | Build: ${formatCurrency(buildPrice)} | Total: ${formatCurrency(calculatedTotal)}`;
       closePrefill = calculatedTotal;
+      landPricePrefill = landPrice || '';
+      buildPricePrefill = buildPrice || '';
     } else if (hasValue(total)) {
       acceptAcqTotal = `Total: ${formatCurrency(total)}`;
       closePrefill = total || '';
@@ -213,11 +217,35 @@ export function transformRecord(record: GHLRecord) {
     sellingAgent = [agentName, agentEmail, agentMobile].filter(Boolean).join(' | ');
   }
 
+  // CO property_type + contract_type (used by EOI composer for template selection)
+  const propertyTypeCO = p.property_type || '';     // "Established" | "New"
+  const contractTypeCO = p.contract_type || '';     // "Single Contract" | "Split Contract"
+  // CO state (controlled dropdown — cleaner than parsing from address)
+  const stateCO = p.state || '';
+
   // Cashback
   const cashbackType = p.cashback_rebate_type || '';
   const cashbackValue = p.cashback_rebate_value || '';
 
-  // Closing fields
+  // Offer / Closing fields
+  const offerStatus = p.offer_status || '';
+  const offerPriceLand = p.offer_price_land;
+  const offerPriceBuild = p.offer_price_build;
+  const offerStatusLand = p.offer_status_land || '';
+  const offerStatusBuild = p.offer_status_build || '';
+
+  let offerPrice = '';
+  if (hasValue(offerPriceLand) && hasValue(offerPriceBuild)) {
+    // Split contract — stacked L / B / Total with statuses
+    const landLine = `L: ${formatCurrency(offerPriceLand)}${offerStatusLand ? ' | ' + offerStatusLand : ''}`;
+    const buildLine = `B: ${formatCurrency(offerPriceBuild)}${offerStatusBuild ? ' | ' + offerStatusBuild : ''}`;
+    const totalVal = String(parseFloat(offerPriceLand || '0') + parseFloat(offerPriceBuild || '0'));
+    offerPrice = `${landLine} | ${buildLine} | Total: ${formatCurrency(totalVal)}`;
+  } else if (hasValue(p.offer_price)) {
+    // Single contract
+    offerPrice = formatCurrency(p.offer_price) + (offerStatus ? ' | ' + offerStatus : '');
+  }
+
   const closingBA = p.closing_ba || '';
   const closingPrice = formatCurrency(p.closing_price);
   const clientClosed = p.client_closed || '';
@@ -258,6 +286,8 @@ export function transformRecord(record: GHLRecord) {
     baMessage,
     acceptAcqTotal,
     closePrefill,
+    landPricePrefill,
+    buildPricePrefill,
     config,
     currentRent,
     appraisedRent,
@@ -268,6 +298,7 @@ export function transformRecord(record: GHLRecord) {
     sellingAgent,
     cashbackType,
     cashbackValue,
+    offerPrice,
     closingBA,
     closingPrice,
     clientClosed,
@@ -278,6 +309,12 @@ export function transformRecord(record: GHLRecord) {
     pdfLink,
     portalLink,
     createdAt: record.createdAt || '',
+    propertyTypeCO,
+    contractTypeCO,
+    stateCO,
+    agentNameCO: agentName,
+    agentEmailCO: agentEmail,
+    agentMobileCO: agentMobile,
   };
 }
 

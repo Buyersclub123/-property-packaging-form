@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
       opportunityName,
       assignedBA,
       totalPurchasePrice,
+      offerPriceLand,
+      offerPriceBuild,
       closingDate,
       status,
       writeBaToOpportunity,
@@ -51,18 +53,39 @@ export async function POST(request: NextRequest) {
     }
 
     const url = `https://services.leadconnectorhq.com/objects/${GHL_OBJECT_ID}/records/${recordId}?locationId=${LOCATION_ID}`;
-    const payload = JSON.stringify({
-      properties: {
-        status,
-        linked_opportunity_id: opportunityId,
-        client_closed: opportunityName,
-        closing_ba: assignedBA || '',
-        closing_price: totalPurchasePrice
-          ? String(totalPurchasePrice).replace(/[^0-9.]/g, '')
-          : '',
-        closing_date: closingDate || '',
-      },
-    });
+    const cleanPrice = totalPurchasePrice
+      ? String(totalPurchasePrice).replace(/[^0-9.]/g, '')
+      : '';
+    const properties: Record<string, string> = {
+      status,
+      linked_opportunity_id: opportunityId,
+      client_closed: opportunityName,
+      closing_ba: assignedBA || '',
+      closing_date: closingDate || '',
+    };
+    // Only write closing_price for contract exchanged, not EOI
+    if (status === '03_contr_exchanged' && cleanPrice) {
+      properties.closing_price = cleanPrice;
+    }
+    // For EOI status, write to offer_price and set offer_status to Offered
+    if (status === '02_eoi') {
+      if (cleanPrice) {
+        properties.offer_price = cleanPrice;
+        properties.offer_status = 'offered';
+      }
+      // Split contract land/build offer prices
+      const cleanLand = offerPriceLand ? String(offerPriceLand).replace(/[^0-9.]/g, '') : '';
+      const cleanBuild = offerPriceBuild ? String(offerPriceBuild).replace(/[^0-9.]/g, '') : '';
+      if (cleanLand) {
+        properties.offer_price_land = cleanLand;
+        properties.offer_status_land = 'offered';
+      }
+      if (cleanBuild) {
+        properties.offer_price_build = cleanBuild;
+        properties.offer_status_build = 'offered';
+      }
+    }
+    const payload = JSON.stringify({ properties });
 
     let response: Response | null = null;
     for (let attempt = 0; attempt < 3; attempt++) {

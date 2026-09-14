@@ -54,6 +54,9 @@ export const FIELD_MAP: Record<string, string> = {
   'AIaDWgYjLvpH2DGUwIzo': 'lastConstructionUpdateDate',
   'L40013IVS6t1bTGVw3Lk': 'lastFinanceUpdateDate',
   'PSqmNxR4Etg8twxxg6c6': 'valuationExpectedAccessDate',
+  'xFKbtz7Lt1X2nNTeFSSH': 'partnerName',
+  'd0iUirsqy4kdUVMpHLfD': 'partnerEmail',
+  'gpStrUSjZVHE4xyolRvH': 'partnerPhone',
 };
 
 // Reverse map: friendly name → field ID

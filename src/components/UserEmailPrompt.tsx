@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
+import { getAuthenticatedEmail } from '@/lib/cloudflareAuth';
 
 interface UserEmailPromptProps {
   onEmailSet: (email: string) => void;
@@ -13,14 +14,36 @@ export function UserEmailPrompt({ onEmailSet }: UserEmailPromptProps) {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Check if email is already stored
-    const storedEmail = getUserEmail();
-    if (storedEmail && hasValidUserEmail()) {
-      onEmailSet(storedEmail);
-      setIsChecking(false);
-      return;
+    let cancelled = false;
+
+    async function detectEmail() {
+      // 1. Try Cloudflare Access header (production)
+      try {
+        const cfEmail = await getAuthenticatedEmail();
+        if (!cancelled && cfEmail) {
+          // Persist to localStorage so downstream getUserEmail() calls work
+          saveUserEmail(cfEmail);
+          onEmailSet(cfEmail);
+          setIsChecking(false);
+          return;
+        }
+      } catch {
+        // Cloudflare not available — fall through
+      }
+
+      // 2. Fall back to localStorage (local dev)
+      const storedEmail = getUserEmail();
+      if (!cancelled && storedEmail && hasValidUserEmail()) {
+        onEmailSet(storedEmail);
+        setIsChecking(false);
+        return;
+      }
+
+      if (!cancelled) setIsChecking(false);
     }
-    setIsChecking(false);
+
+    detectEmail();
+    return () => { cancelled = true; };
   }, [onEmailSet]);
 
   const handleSubmit = (e: React.FormEvent) => {

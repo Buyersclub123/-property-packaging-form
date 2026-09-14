@@ -47,7 +47,8 @@ function cleanReportNameForFilename(reportName: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { fileId, reportName, validPeriod, suburbs, state, userEmail, mainBody, skipSheetWrite } = body;
+    const { fileId, reportName, validPeriod, suburbs, state, mainBody, skipSheetWrite } = body;
+    const userEmail = body.userEmail || request.headers.get('Cf-Access-Authenticated-User-Email') || '';
     
     logOrganizePdf(`REQUEST: fileId="${fileId||''}" reportName="${reportName||''}" validPeriod="${validPeriod||''}" state="${state||''}" suburbs="${suburbs||''}" skipSheetWrite=${!!skipSheetWrite} mainBodyLen=${(mainBody||'').length}`);
     
