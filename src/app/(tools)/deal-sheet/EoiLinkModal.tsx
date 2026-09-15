@@ -429,7 +429,8 @@ export default function EoiLinkModal({
         if (isSplitContract) {
           eoiUrl += `&landPrice=${encodeURIComponent(editPriceLand.trim())}&buildPrice=${encodeURIComponent(editPriceBuild.trim())}`;
         }
-        window.open(eoiUrl, '_blank');
+        // DISABLED: EOI composer not yet tested — re-enable after testing
+        // window.open(eoiUrl, '_blank');
       }
     }
   }
@@ -444,7 +445,8 @@ export default function EoiLinkModal({
     } else {
       // Open the EOI composer for speculative (no oppId)
       const eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=initial&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}`;
-      window.open(eoiUrl, '_blank');
+      // DISABLED: EOI composer not yet tested — re-enable after testing
+      // window.open(eoiUrl, '_blank');
     }
   }
 
@@ -873,7 +875,7 @@ export default function EoiLinkModal({
               </div>
               {submitError && <span className="text-[10px] text-red-400">{submitError}</span>}
               <button onClick={handleConfirm} disabled={submitting || (!editDateIso && !isEdit) || baEmpty || priceEmpty || linkLoad === 'loading' || linkLoad === 'missing' || (duplicateLinks.length > 0 && !dupeAcknowledged) || (!selected && !isSpeculative)} className={cls.btnPrimary}>
-                {submitting ? 'Saving...' : (isEdit ? 'Confirm changes' : 'Confirm & Prepare EOI')}
+                {submitting ? 'Saving...' : (isEdit ? 'Confirm changes' : 'Confirm & Link')}
               </button>
             </div>
           </>

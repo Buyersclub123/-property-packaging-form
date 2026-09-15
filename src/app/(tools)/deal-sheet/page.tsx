@@ -2034,7 +2034,8 @@ export default function DealSheetPage() {
                       cellContent = <span className="text-[10px] opacity-50">Saving...</span>;
                     } else {
                       const rs = rawStatus(record.status);
-                      const showEoiBtn = (rs === '02_eoi' || rs === '03_contr_exchanged');
+                      // DISABLED: EOI composer not yet tested — re-enable after testing
+                      const showEoiBtn = false; // was: (rs === '02_eoi' || rs === '03_contr_exchanged');
                       cellContent = (
                         <div className="flex items-center gap-1">
                           <span
