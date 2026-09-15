@@ -18,7 +18,7 @@ export default function TopNavBar() {
     href === '/' ? pathname === '/' : pathname.startsWith(href);
 
   return (
-    <header className="bg-brand-charcoal text-white">
+    <header className="sticky top-0 z-50 bg-brand-charcoal text-white">
       <div className="mx-auto flex max-w-[1180px] items-center justify-between gap-4 px-4 py-[22px]">
         <Link href="/" className="flex items-center gap-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-yellow focus-visible:ring-offset-2 focus-visible:ring-offset-brand-charcoal rounded">
           <span className="flex items-baseline leading-none">

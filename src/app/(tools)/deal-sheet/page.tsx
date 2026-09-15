@@ -1269,7 +1269,7 @@ export default function DealSheetPage() {
   }
 
   return (
-    <div className={`h-full flex flex-col ${t.bg} ${t.text}`}>
+    <div className={`h-screen flex flex-col ${t.bg} ${t.text}`}>
       {/* Header */}
       <div className={`flex items-center justify-between px-4 py-2 ${t.headerBg} border-b ${t.cellBorder}`}>
         <div className="flex items-center gap-4">
