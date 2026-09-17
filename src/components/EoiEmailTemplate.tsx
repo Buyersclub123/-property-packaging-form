@@ -436,7 +436,7 @@ export function EoiEmailTemplate({ data }: EoiEmailTemplateProps) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tbody><tr>
             <td style={{ fontSize: 10, color: '#666', padding: '10px 12px', background: '#f5f5f5', fontFamily: FONT, borderTop: '1px solid #ddd' }}>
-              Submitted by {data.consultantName || 'Buyers Club'} {'\u00B7'} Buyers Club {'\u00B7'} property@buyersclub.com.au
+              Submitted by {data.consultantName || 'Buyers Club'} {'\u00B7'} Buyers Club {'\u00B7'} {data.senderEmail || 'property@buyersclub.com.au'}
             </td>
           </tr></tbody>
         </table>

@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
 
   // ---- Render email HTML ---------------------------------------------------
   // Use client-rendered WYSIWYG HTML when available; fall back to server template
-  const html = clientRenderedHtml || await renderEoiEmailHtml(emailData);
+  let html = clientRenderedHtml || await renderEoiEmailHtml(emailData);
   const subject = renderEoiSubject(emailData, sendType);
 
   // ---- Parse offer price to decimal for DB ---------------------------------
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
       const auth = new google.auth.JWT({
         email: credentials.client_email,
         key: credentials.private_key,
-        scopes: ['https://www.googleapis.com/auth/gmail.send'],
+        scopes: ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.settings.basic'],
         subject: sentBy,
       });
 
@@ -219,6 +219,23 @@ export async function POST(request: NextRequest) {
         ccList.push(FROM_EMAIL);
         if (consultantEmail && consultantEmail.includes('@')) ccList.push(consultantEmail);
         console.error('Failed to fetch global CC settings (non-fatal):', err);
+      }
+
+      // Fetch the sender's Gmail signature (non-fatal if it fails)
+      let signature = '';
+      try {
+        const sendAsRes = await gmail.users.settings.sendAs.get({
+          userId: 'me',
+          sendAsEmail: sentBy,
+        });
+        signature = sendAsRes.data.signature || '';
+      } catch (err) {
+        console.error('Failed to fetch Gmail signature (non-fatal):', err);
+      }
+
+      // Inject signature into HTML before </body>
+      if (signature) {
+        html = html.replace('</body>', `<div style="margin-top:16px">${signature}</div></body>`);
       }
 
       // RFC 2047 encode subject for non-ASCII characters (e.g. em dash)

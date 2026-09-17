@@ -55,6 +55,7 @@ export interface EoiEmailData {
   notes: string;
   lvr: string;
   speculativeMessage?: string;
+  senderEmail?: string;
 }
 
 const FONT = "Calibri,'Segoe UI',Arial,sans-serif";

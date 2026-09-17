@@ -646,6 +646,7 @@ export default function EoiComposePage() {
       notes,
       lvr,
       speculativeMessage: !oppId ? speculativeMessage : undefined,
+      senderEmail: sendAsEmail || authEmail,
     };
   }
 
