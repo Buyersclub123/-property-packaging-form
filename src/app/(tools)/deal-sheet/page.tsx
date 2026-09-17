@@ -917,7 +917,17 @@ export default function DealSheetPage() {
           )
         );
       } else {
-        // Edit/reassign path
+        // Edit/reassign path — rebuild offer display with updated price
+        let updatedOfferDisplay = '';
+        if (payload.offerPriceLand && payload.offerPriceBuild) {
+          const lNum = parseFloat(payload.offerPriceLand);
+          const bNum = parseFloat(payload.offerPriceBuild);
+          const lFmt = isNaN(lNum) ? payload.offerPriceLand : '$' + lNum.toLocaleString('en-AU');
+          const bFmt = isNaN(bNum) ? payload.offerPriceBuild : '$' + bNum.toLocaleString('en-AU');
+          updatedOfferDisplay = `L: ${lFmt}\nB: ${bFmt}\nTot. ${priceDisplay}\nOffered`;
+        } else if (priceDisplay) {
+          updatedOfferDisplay = `${priceDisplay} | Offered`;
+        }
         setRecords((prev) =>
           prev.map((r) =>
             r.id === recordId
@@ -928,6 +938,7 @@ export default function DealSheetPage() {
                   closingPrice: priceDisplay,
                   closingDate: payload.closingDate,
                   linkedOpportunityId: payload.opportunityId,
+                  offerPrice: updatedOfferDisplay || r.offerPrice,
                 }
               : r
           )

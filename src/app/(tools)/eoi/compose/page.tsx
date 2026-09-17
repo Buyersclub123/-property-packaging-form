@@ -389,6 +389,12 @@ export default function EoiComposePage() {
   // Contact loading note
   const [contactNote, setContactNote] = useState('');
 
+  // D28-PRE: load-from-history state
+  const [loadFrom, setLoadFrom] = useState('');
+  const [loadedFromHistory, setLoadedFromHistory] = useState(false);
+  const [lastSendDate, setLastSendDate] = useState('');
+  const [historyFallback, setHistoryFallback] = useState(false);
+
   // Preview
   const [previewHtml, setPreviewHtml] = useState('');
 
@@ -481,10 +487,16 @@ export default function EoiComposePage() {
 
     const st = p.get('sendType');
     if (st === 'increase' || st === 'revision') setSendType(st);
+
+    // D28-PRE: flag for loading from last send
+    const lf = p.get('loadFrom');
+    if (lf) setLoadFrom(lf);
   }, []);
 
   // ---- load linked opportunity contact + solicitor + broker -----------------
   useEffect(() => {
+    // D28-PRE: skip opp contact fetch when loading from last send — payload has everything
+    if (loadFrom === 'lastSend') return;
     if (!oppId || !authEmail) {
       if (!oppId && recordId) setContactNote('No linked opportunity — this will be a speculative EOI.');
       return;
@@ -572,10 +584,12 @@ export default function EoiComposePage() {
     } catch { /* fall back to empty */ }
   }, [state, propertyType]);
 
-  useEffect(() => { if (authEmail) fetchTerms(); }, [fetchTerms, authEmail]);
+  useEffect(() => { if (authEmail && loadFrom !== 'lastSend') fetchTerms(); }, [fetchTerms, authEmail, loadFrom]);
 
   // Initialise editable copies when terms/conditions load from DB
+  // (skipped when loaded from history — payload populates these instead)
   useEffect(() => {
+    if (loadedFromHistory) return;
     setEditDepositAmount(terms.deposit_amount || '');
     setEditDepositPayable(terms.deposit_payable || '');
     setEditLandDeposit(terms.land_deposit || '');
@@ -588,7 +602,96 @@ export default function EoiComposePage() {
     setEditConditions(conditions.map(c => c.replace(/^[\s]*[-\u2013\u2014\u2022]\s*/, '').trim()).filter(Boolean));
     setNotes(terms.notes || '');
     setSpeculativeMessage(terms.speculative_message || '');
-  }, [terms, conditions]);
+  }, [terms, conditions, loadedFromHistory]);
+
+  // ---- D28-PRE: load from last sent EOI ------------------------------------
+  useEffect(() => {
+    if (loadFrom !== 'lastSend' || !recordId || !authEmail) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/eoi/last-send?recordId=${encodeURIComponent(recordId)}&_t=${Date.now()}`);
+        if (!res.ok) {
+          // No previous send — fall back to Template Admin
+          setHistoryFallback(true);
+          setLoadFrom(''); // allow fetchTerms to run
+          return;
+        }
+        const data = await res.json();
+        const p = data.payload;
+        if (!p) { setHistoryFallback(true); setLoadFrom(''); return; }
+
+        // Populate all fields from the payload
+        // Terms / conditions
+        setEditDepositAmount(p.depositAmount || '');
+        setEditDepositPayable(p.depositPayable || '');
+        setEditLandDeposit(p.landDeposit || '');
+        setEditBuildDeposit(p.buildDeposit || '');
+        setEditFinance(p.finance || '');
+        setEditBuildingPest(p.buildingPest || '');
+        setEditPci(p.pci || '');
+        setEditCommission(p.commission || '');
+        setEditSettlement(p.settlement || '');
+        setEditConditions(Array.isArray(p.specialConditions)
+          ? p.specialConditions.map((c: string) => c.replace(/^[\s]*[-\u2013\u2014\u2022]\s*/, '').trim()).filter(Boolean)
+          : []);
+        setNotes(p.notes || '');
+        setSpeculativeMessage(p.speculativeMessage || '');
+
+        // Contract entity
+        if (p.contractEntity) setContractEntity(p.contractEntity);
+
+        // Purchasers
+        if (Array.isArray(p.purchasers) && p.purchasers.length > 0) {
+          setPurchasers(p.purchasers.map((pu: { name?: string; email?: string; phone?: string; address?: string }) => ({
+            name: pu.name || '',
+            email: pu.email || '',
+            phone: pu.phone || '',
+            address: pu.address || '',
+          })));
+        }
+
+        // Agent
+        if (p.agentName) setAgentName(p.agentName);
+        if (p.agentEmail) setAgentEmail(p.agentEmail);
+        if (p.agentPhone) setAgentPhone(p.agentPhone);
+        if (p.agencyName) setAgencyName(p.agencyName);
+
+        // Solicitor
+        if (p.solicitorName) setSolicitorName(p.solicitorName);
+        if (p.solicitorCompany) setSolicitorCompany(p.solicitorCompany);
+        if (p.solicitorEmail) setSolicitorEmail(p.solicitorEmail);
+        if (p.solicitorPhone) setSolicitorPhone(p.solicitorPhone);
+
+        // Broker
+        if (p.brokerName) setBrokerName(p.brokerName);
+        if (p.brokerCompany) setBrokerCompany(p.brokerCompany);
+        if (p.brokerEmail) setBrokerEmail(p.brokerEmail);
+        if (p.brokerPhone) setBrokerPhone(p.brokerPhone);
+
+        // Consultant
+        if (p.consultantName) setConsultantName(p.consultantName);
+        if (p.consultantEmail) setConsultantEmail(p.consultantEmail);
+
+        // LVR
+        if (p.lvr) setLvr(p.lvr);
+
+        // Prices: for increase, URL params already set the new price — don't overwrite.
+        // For revision and resend, use the payload prices.
+        if (sendType !== 'increase') {
+          if (p.offerPrice) setOfferPrice(p.offerPrice);
+          if (p.landPrice) setLandPrice(p.landPrice.replace(/[$,\s]/g, ''));
+          if (p.buildPrice) setBuildPrice(p.buildPrice.replace(/[$,\s]/g, ''));
+        }
+
+        setLoadedFromHistory(true);
+        setLastSendDate(data.sentAt ? new Date(data.sentAt).toLocaleDateString('en-AU') : '');
+        setContactNote('Values loaded from the last sent EOI — contacts, terms, and conditions are from the previous send.');
+      } catch {
+        setHistoryFallback(true);
+        setLoadFrom('');
+      }
+    })();
+  }, [loadFrom, recordId, authEmail, sendType]);
 
   // ---- load history ---------------------------------------------------------
   useEffect(() => {
@@ -1013,6 +1116,21 @@ export default function EoiComposePage() {
             </div>
             <a href="/admin/eoi-templates" target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', fontSize: 11, color: '#666', textDecoration: 'underline' }}>EOI Template Admin</a>
           </div>
+
+          {/* D28-PRE: data source banner */}
+          {loadedFromHistory && (
+            <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#856404' }}>
+              <strong>Values loaded from previously sent EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong>
+              {sendType === 'increase' && <span> Only the offer price has been updated — all other terms, conditions, and details are retained from the earlier send.</span>}
+              {sendType === 'revision' && <span> Price is unchanged from the earlier send — edit terms, conditions, or other details as needed.</span>}
+              {sendType !== 'increase' && sendType !== 'revision' && <span> This is an exact copy of the previous send.</span>}
+            </div>
+          )}
+          {historyFallback && (
+            <div style={{ background: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: 6, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#721c24' }}>
+              <strong>No previous send found for this property.</strong> Values loaded from EOI Template Admin defaults.
+            </div>
+          )}
 
           {/* Form table */}
           <table className="eoi-form-table">

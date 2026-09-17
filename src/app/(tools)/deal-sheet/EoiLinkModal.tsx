@@ -28,6 +28,7 @@ interface DealRecord {
   agentNameCO: string;
   agentEmailCO: string;
   agentMobileCO: string;
+  offerPrice: string;
 }
 
 export interface EoiOpportunity {
@@ -58,6 +59,8 @@ export interface EoiUpdatePayload {
   opportunityName: string;
   assignedBA: string;
   totalPurchasePrice: string;
+  offerPriceLand?: string;
+  offerPriceBuild?: string;
   closingDate: string;
   transitionType: 'client_edited' | 'reassigned' | 'reverted_to_speculative' | 'client_removed';
   writeBaToOpportunity: boolean;
@@ -171,7 +174,7 @@ export default function EoiLinkModal({
   const isSpeculative = record.clientClosed === 'SPECULATIVE EOI' && !record.linkedOpportunityId;
 
   // ---- Step 1 state ----
-  const [step, setStep] = useState<'pick' | 'confirm'>(isEdit ? 'confirm' : 'pick');
+  const [step, setStep] = useState<'pick' | 'confirm' | 'actions' | 'increase'>(isEdit && !isSpeculative ? 'actions' : isEdit ? 'confirm' : 'pick');
   const [tierResults, setTierResults] = useState<Record<number, EoiOpportunity[]>>({});
   const [loadedTiers, setLoadedTiers] = useState<number[]>([]);
   const [loadingTier, setLoadingTier] = useState<number | null>(null);
@@ -204,6 +207,12 @@ export default function EoiLinkModal({
   const [dupeAcknowledged, setDupeAcknowledged] = useState(false);
   // D23: skip opening the EOI composer after linking
   const [skipComposer, setSkipComposer] = useState(false);
+  // D27: which edit action was picked from the action menu
+  const [editAction, setEditAction] = useState<string | null>(null);
+  // D28: new price fields for Increase Offer flow
+  const [newPrice, setNewPrice] = useState('');
+  const [newPriceLand, setNewPriceLand] = useState('');
+  const [newPriceBuild, setNewPriceBuild] = useState('');
 
   // Edit-mode load outcome for the linked opportunity.
   //   ok      = loaded from GHL, safe to confirm
@@ -497,6 +506,64 @@ export default function EoiLinkModal({
     if (!ok) setSubmitError('Failed to remove client. Try again or cancel.');
   }
 
+  // D28: Increase Offer — update BA/date then open composer with new price
+  async function handleIncreaseConfirm(linkOnly = false) {
+    if (editBA.trim() === '' || !selected) return;
+    setSubmitting(true);
+    setSubmitError('');
+
+    const changedBA = editBA.trim() !== (selected.assignedBA || '').trim();
+    const totalNewPrice = isSplitContract
+      ? String(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0'))
+      : newPrice.trim();
+
+    // Write BA/date updates to the property record
+    const ok = await onUpdate({
+      opportunityId: selected.id,
+      opportunityName: selected.name,
+      assignedBA: editBA.trim(),
+      totalPurchasePrice: totalNewPrice,
+      offerPriceLand: isSplitContract ? newPriceLand.trim() : undefined,
+      offerPriceBuild: isSplitContract ? newPriceBuild.trim() : undefined,
+      closingDate: isoToDDMMYYYY(editDateIso),
+      transitionType: 'client_edited',
+      writeBaToOpportunity: changedBA,
+    });
+    setSubmitting(false);
+    if (!ok) {
+      setSubmitError('Failed to update. Try again or cancel.');
+      return;
+    }
+
+    if (linkOnly) {
+      // Log the price update to eoi_sends so it appears in history
+      try {
+        await fetch('/api/eoi/log-update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId: record.id,
+            opportunityId: selected.id,
+            propertyAddress: record.propertyAddress,
+            offerPrice: totalNewPrice,
+            sendType: 'increase',
+            sentBy: editBA.trim(),
+          }),
+        });
+      } catch { /* non-fatal — update already succeeded */ }
+      onCancel();
+      return;
+    }
+
+    // Open the composer with sendType=increase and the new price
+    let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(selected.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(selected.name || '')}&ba=${encodeURIComponent(editBA.trim())}&price=${encodeURIComponent(totalNewPrice)}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=increase&loadFrom=lastSend`;
+    if (isSplitContract) {
+      eoiUrl += `&landPrice=${encodeURIComponent(newPriceLand.trim())}&buildPrice=${encodeURIComponent(newPriceBuild.trim())}`;
+    }
+    window.open(eoiUrl, '_blank');
+    onCancel();
+  }
+
   const baEmpty = editBA.trim() === '';
   const priceEmpty = isSplitContract
     ? (currencyRaw(editPriceLand).trim() === '' || currencyRaw(editPriceBuild).trim() === '')
@@ -688,6 +755,193 @@ export default function EoiLinkModal({
                 </div>
               </div>
             )}
+          </>
+        )}
+
+        {step === 'actions' && (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              {/* Read-only context */}
+              <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
+                <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
+                <div><span className="font-medium">Client:</span> {record.clientClosed || '-'}</div>
+                <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
+              </div>
+
+              {linkLoad === 'loading' && (
+                <div className={`text-center text-xs py-4 ${cls.sub}`}>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400 mx-auto mb-2" />
+                  Loading opportunity data...
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="space-y-2">
+                <div className={`text-[10px] font-semibold uppercase tracking-wide ${cls.sub}`}>EOI Actions</div>
+                <button onClick={() => { setEditAction('increase'); setNewPrice(''); setNewPriceLand(''); setNewPriceBuild(''); setStep('increase'); }} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Increase Offer</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Send a new EOI with a higher price</span>
+                </button>
+                <button onClick={() => setEditAction('revise')} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Revise EOI Details (non $)</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Change terms, conditions, or other non-price details</span>
+                </button>
+                <button onClick={() => setEditAction('resend')} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Resend as-is</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Re-send the last EOI with no changes</span>
+                </button>
+                <button onClick={() => setEditAction('mark_accepted')} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Mark Accepted</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Record that the offer has been accepted</span>
+                </button>
+
+                <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Client Management</div>
+                <button onClick={() => setEditAction('speculative')} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Change to Speculative</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Remove the opportunity link, keep EOI status</span>
+                </button>
+                <button onClick={() => setEditAction('reassign_only')} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Reassign Client only</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Link a different opportunity without sending an EOI</span>
+                </button>
+                <button onClick={() => setEditAction('reassign_eoi')} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Reassign + new EOI</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Link a different opportunity and send a new EOI</span>
+                </button>
+
+                <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Unlink</div>
+                <button onClick={() => setEditAction('unlink_lost')} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                  <span className="font-medium">Unlink — Lost</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Lost to another buyer — clears offer data</span>
+                </button>
+                <button onClick={() => setEditAction('unlink_test')} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                  <span className="font-medium">Unlink — Test</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Mark as test record — clears all linked info</span>
+                </button>
+                <button onClick={() => setEditAction('unlink_available')} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                  <span className="font-medium">Unlink — Available</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Return to available — requires a reason</span>
+                </button>
+
+                <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Other</div>
+                <button onClick={() => setEditAction('view_history')} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">View History</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>View all EOI sends for this property</span>
+                </button>
+              </div>
+            </div>
+
+            <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
+              {editAction && <span className={`text-[10px] ${cls.sub}`}>Selected: <span className="font-medium">{editAction}</span></span>}
+              <button onClick={onCancel} className={cls.btn}>Cancel</button>
+            </div>
+          </>
+        )}
+
+        {step === 'increase' && (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className={`text-xs font-semibold mb-3`}>Increase Offer</div>
+
+              <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 items-center text-xs">
+                {/* RO fields */}
+                <span className={cls.label}>Property</span>
+                <span className={cls.sub}>{record.propertyAddress}</span>
+
+                <span className={cls.label}>Client</span>
+                <span className="font-medium">{selected?.name || record.clientClosed || '-'}</span>
+
+                <span className={cls.label}>Pipeline / Stage</span>
+                <span className={cls.sub}>
+                  {selected?.pipelineName || selected?.stageName
+                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' — ')
+                    : '-'}
+                </span>
+
+                <span className={cls.label}>Offer Status</span>
+                <span className={cls.sub} style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span>
+
+                {/* Editable BA */}
+                <span className={cls.label}>Assigned BA *</span>
+                <div>
+                  {baOptionsFailed && baOptions.length === 0 ? (
+                    <input type="text" value={editBA} onChange={(e) => setEditBA(e.target.value)}
+                      placeholder="Required — type the BA name"
+                      className={`w-full ${cls.input} ${baEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                  ) : (
+                    <select value={editBA} onChange={(e) => setEditBA(e.target.value)}
+                      className={`w-full ${cls.input} ${baEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
+                      <option value="">— Select a BA —</option>
+                      {editBA && !baOptions.includes(editBA) && <option value={editBA}>{editBA} (not in list)</option>}
+                      {baOptions.map((ba) => <option key={ba} value={ba}>{ba}</option>)}
+                    </select>
+                  )}
+                </div>
+
+                {/* Editable Close Date */}
+                <span className={cls.label}>Close Date</span>
+                <input type="date" value={editDateIso} onChange={(e) => setEditDateIso(e.target.value)} className={`w-fit ${cls.input}`} />
+
+                {/* Current price — reference */}
+                <span className={cls.label}>Current Price (ref)</span>
+                <span className={`${cls.sub} font-medium`} style={{ whiteSpace: 'pre-line' }}>
+                  {record.offerPrice || currencyFormatted(record.closingPrice || record.closePrefill || '') || '-'}
+                </span>
+
+                {/* New price — editable */}
+                {isSplitContract ? (
+                  <>
+                    <span className={cls.label}>New Price (Land) *</span>
+                    <input type="text" inputMode="decimal" value={currencyFormatted(newPriceLand)}
+                      onChange={(e) => setNewPriceLand(currencyRaw(e.target.value))}
+                      placeholder="e.g. $300,000"
+                      className={`w-full ${cls.input} ${!newPriceLand.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+
+                    <span className={cls.label}>New Price (Build) *</span>
+                    <input type="text" inputMode="decimal" value={currencyFormatted(newPriceBuild)}
+                      onChange={(e) => setNewPriceBuild(currencyRaw(e.target.value))}
+                      placeholder="e.g. $250,000"
+                      className={`w-full ${cls.input} ${!newPriceBuild.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+
+                    <span className={cls.label}>New Total</span>
+                    <span className={`font-medium ${cls.sub}`}>
+                      {newPriceLand || newPriceBuild
+                        ? currencyFormatted(String(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0')))
+                        : '-'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className={cls.label}>New Offer Price *</span>
+                    <input type="text" inputMode="decimal" value={currencyFormatted(newPrice)}
+                      onChange={(e) => setNewPrice(currencyRaw(e.target.value))}
+                      placeholder="e.g. $700,000"
+                      className={`w-full ${cls.input} ${!newPrice.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <button onClick={() => setStep('actions')} disabled={submitting} className={cls.btn}>← Back</button>
+              {submitError && <span className="text-[10px] text-red-400">{submitError}</span>}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => handleIncreaseConfirm(false)}
+                  disabled={submitting || baEmpty || linkLoad !== 'ok' || (isSplitContract ? (!newPriceLand.trim() || !newPriceBuild.trim()) : !newPrice.trim())}
+                  className={cls.btnPrimary}
+                >
+                  {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
+                </button>
+                <button
+                  onClick={() => { setSkipComposer(true); handleIncreaseConfirm(true); }}
+                  disabled={submitting || baEmpty || linkLoad !== 'ok' || (isSplitContract ? (!newPriceLand.trim() || !newPriceBuild.trim()) : !newPrice.trim())}
+                  className={cls.btnPrimary}
+                >
+                  {submitting && skipComposer ? 'Saving...' : 'Confirm (update only)'}
+                </button>
+              </div>
+            </div>
           </>
         )}
 

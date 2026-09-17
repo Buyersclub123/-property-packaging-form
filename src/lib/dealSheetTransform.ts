@@ -236,11 +236,12 @@ export function transformRecord(record: GHLRecord) {
 
   let offerPrice = '';
   if (hasValue(offerPriceLand) && hasValue(offerPriceBuild)) {
-    // Split contract — stacked L / B / Total with statuses
-    const landLine = `L: ${formatCurrency(offerPriceLand)}${offerStatusLand ? ' | ' + offerStatusLand : ''}`;
-    const buildLine = `B: ${formatCurrency(offerPriceBuild)}${offerStatusBuild ? ' | ' + offerStatusBuild : ''}`;
+    // Split contract — stacked L / B / Tot. with statuses (newline-separated for pre-line rendering)
+    const landFmt = formatCurrency(offerPriceLand);
+    const buildFmt = formatCurrency(offerPriceBuild);
     const totalVal = String(parseFloat(offerPriceLand || '0') + parseFloat(offerPriceBuild || '0'));
-    offerPrice = `${landLine} | ${buildLine} | Total: ${formatCurrency(totalVal)}`;
+    const statusLabel = offerStatusLand || offerStatus || '';
+    offerPrice = `L: ${landFmt}\nB: ${buildFmt}\nTot. ${formatCurrency(totalVal)}${statusLabel ? '\n' + statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1) : ''}`;
   } else if (hasValue(p.offer_price)) {
     // Single contract
     offerPrice = formatCurrency(p.offer_price) + (offerStatus ? ' | ' + offerStatus : '');
