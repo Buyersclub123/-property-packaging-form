@@ -764,7 +764,7 @@ export default function DealSheetPage() {
         const bNum = parseFloat(payload.offerPriceBuild);
         const lFmt = isNaN(lNum) ? payload.offerPriceLand : '$' + lNum.toLocaleString('en-AU');
         const bFmt = isNaN(bNum) ? payload.offerPriceBuild : '$' + bNum.toLocaleString('en-AU');
-        offerDisplay = `L: ${lFmt} | Offered | B: ${bFmt} | Offered | Total: ${priceFormatted}`;
+        offerDisplay = `L: ${lFmt}\nB: ${bFmt}\nTot. ${priceFormatted}\nOffered`;
       } else {
         offerDisplay = priceFormatted ? `${priceFormatted} | Offered` : '';
       }
@@ -793,7 +793,7 @@ export default function DealSheetPage() {
 
   // Speculative EOI (F4): sets the status AND flags the Client field with
   // "SPECULATIVE EOI" so the sheet and the unlinked-EOI view both show it.
-  const handleEoiSpeculative = async (): Promise<boolean> => {
+  const handleEoiSpeculative = async (prices?: { totalPrice: string; landPrice?: string; buildPrice?: string }): Promise<boolean> => {
     if (!eoiModalRecord) return false;
     const recordId = eoiModalRecord.id;
     try {
@@ -843,9 +843,24 @@ export default function DealSheetPage() {
       });
       if (!res.ok) return false;
       recentlyUpdatedIds.current.set(recordId, Date.now());
+      // Build offer display from modal prices
+      let specOfferDisplay = '';
+      if (prices?.landPrice && prices?.buildPrice) {
+        const lNum = parseFloat(prices.landPrice);
+        const bNum = parseFloat(prices.buildPrice);
+        const tNum = parseFloat(prices.totalPrice || '0');
+        const lFmt = isNaN(lNum) ? prices.landPrice : '$' + lNum.toLocaleString('en-AU');
+        const bFmt = isNaN(bNum) ? prices.buildPrice : '$' + bNum.toLocaleString('en-AU');
+        const tFmt = isNaN(tNum) ? '' : '$' + tNum.toLocaleString('en-AU');
+        specOfferDisplay = `L: ${lFmt}\nB: ${bFmt}\nTot. ${tFmt}\nOffered`;
+      } else if (prices?.totalPrice) {
+        const pNum = parseFloat(prices.totalPrice);
+        const pFmt = isNaN(pNum) ? prices.totalPrice : '$' + pNum.toLocaleString('en-AU');
+        specOfferDisplay = `${pFmt} | Offered`;
+      }
       setRecords((prev) =>
         prev.map((r) =>
-          r.id === recordId ? { ...r, status: '02 Eoi', clientClosed: 'SPECULATIVE EOI' } : r
+          r.id === recordId ? { ...r, status: '02 Eoi', clientClosed: 'SPECULATIVE EOI', offerPrice: specOfferDisplay } : r
         )
       );
       setEoiModalRecord(null);
@@ -2034,8 +2049,7 @@ export default function DealSheetPage() {
                       cellContent = <span className="text-[10px] opacity-50">Saving...</span>;
                     } else {
                       const rs = rawStatus(record.status);
-                      // DISABLED: EOI composer not yet tested — re-enable after testing
-                      const showEoiBtn = false; // was: (rs === '02_eoi' || rs === '03_contr_exchanged');
+                      const showEoiBtn = (rs === '02_eoi' || rs === '03_contr_exchanged');
                       cellContent = (
                         <div className="flex items-center gap-1">
                           <span
@@ -2166,6 +2180,7 @@ export default function DealSheetPage() {
                         minWidth: col.width,
                         maxWidth: col.width,
                         ...tbcStyle,
+                        ...(col.key === 'offerPrice' ? { whiteSpace: 'pre-line' as const } : {}),
                       }}
                       title={value}
                       onClick={(e) => {

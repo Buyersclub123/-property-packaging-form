@@ -22,6 +22,14 @@ const FROM_EMAIL = 'property@buyersclub.com.au';
 export async function POST(request: NextRequest) {
   const body = await request.json();
 
+  interface AttachmentPayload {
+    base64: string;
+    mimeType: string;
+    autoName: string;
+    type: string;
+    forLabel: string;
+  }
+
   const {
     recordId,
     opportunityId,
@@ -30,9 +38,11 @@ export async function POST(request: NextRequest) {
     offerPrice,
     agentEmail,
     sentBy,
+    initiatedBy,
     consultantEmail,
     emailData,
     renderedHtml: clientRenderedHtml,
+    attachments,
   } = body as {
     recordId: string;
     opportunityId?: string;
@@ -41,9 +51,11 @@ export async function POST(request: NextRequest) {
     offerPrice: string;
     agentEmail: string;
     sentBy: string;
+    initiatedBy?: string;
     consultantEmail?: string;
     emailData: EoiEmailData;
     renderedHtml?: string;
+    attachments?: AttachmentPayload[];
   };
 
   if (!recordId || !agentEmail || !emailData) {
@@ -119,11 +131,13 @@ export async function POST(request: NextRequest) {
 
   // ---- Render email HTML ---------------------------------------------------
   // Use client-rendered WYSIWYG HTML when available; fall back to server template
-  const html = clientRenderedHtml || renderEoiEmailHtml(emailData);
+  const html = clientRenderedHtml || await renderEoiEmailHtml(emailData);
   const subject = renderEoiSubject(emailData, sendType);
 
   // ---- Parse offer price to decimal for DB ---------------------------------
-  const priceNumeric = parseFloat((offerPrice || '').replace(/[^0-9.]/g, '')) || null;
+  // Extract first numeric value from price (handles ranges like "$890,000 – $920,000")
+  const priceMatch = (offerPrice || '').match(/[\d][,\d]*\.?\d*/);
+  const priceNumeric = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) || null : null;
 
   // ---- Insert send record (pending) ----------------------------------------
   const sendRecord = await sql`
@@ -134,7 +148,14 @@ export async function POST(request: NextRequest) {
     ) VALUES (
       ${recordId}, ${opportunityId || null}, ${propertyAddress || null}, ${sendType},
       ${priceNumeric}, ${agentEmail}, ${agentContactId}, ${sentBy || 'unknown'},
-      'pending', ${JSON.stringify(emailData)}, 'sending'
+      'pending', ${JSON.stringify(
+        {
+          ...(attachments && attachments.length > 0
+            ? { ...emailData, attachments: attachments.map(a => ({ type: a.type, forLabel: a.forLabel, autoName: a.autoName, mimeType: a.mimeType, size: Math.round(a.base64.length * 3 / 4) })) }
+            : emailData),
+          ...(initiatedBy && initiatedBy !== sentBy ? { initiatedBy } : {}),
+        }
+      )}, 'sending'
     ) RETURNING id`;
 
   const sendId = sendRecord[0]?.id as number;
@@ -162,33 +183,103 @@ export async function POST(request: NextRequest) {
         email: credentials.client_email,
         key: credentials.private_key,
         scopes: ['https://www.googleapis.com/auth/gmail.send'],
-        subject: FROM_EMAIL,
+        subject: sentBy,
       });
 
       const gmail = google.gmail({ version: 'v1', auth });
 
-      // CC: property@ (inbox copy) + Assigned BA email (from the opportunity)
-      // The logged-in user (sentBy) is NOT CC'd — they are recorded in eoi_sends for audit only
-      const ccList = [FROM_EMAIL];
-      if (consultantEmail && consultantEmail.includes('@')) {
-        ccList.push(consultantEmail);
+      // CC: configurable from Template Admin (property@, BA, and custom emails)
+      const ccList: string[] = [];
+      try {
+        const ccRows = await sql`
+          SELECT field_name, field_value FROM eoi_template_values
+          WHERE state = 'GLB' AND property_type = 'all'
+            AND field_name IN ('cc_list', 'cc_include_property', 'cc_include_ba')`;
+        const ccSettings: Record<string, string> = {};
+        for (const row of ccRows) ccSettings[row.field_name as string] = row.field_value as string;
+
+        // property@ — included unless explicitly disabled
+        if (ccSettings.cc_include_property !== 'false') {
+          ccList.push(FROM_EMAIL);
+        }
+        // Assigned BA — included unless explicitly disabled
+        if (ccSettings.cc_include_ba !== 'false' && consultantEmail && consultantEmail.includes('@')) {
+          ccList.push(consultantEmail);
+        }
+        // Custom CC emails
+        if (ccSettings.cc_list) {
+          const extras = ccSettings.cc_list
+            .split(',')
+            .map(e => e.trim())
+            .filter(e => e.includes('@') && !ccList.includes(e));
+          ccList.push(...extras);
+        }
+      } catch (err) {
+        // Fallback: include property@ and BA if DB fetch fails
+        ccList.push(FROM_EMAIL);
+        if (consultantEmail && consultantEmail.includes('@')) ccList.push(consultantEmail);
+        console.error('Failed to fetch global CC settings (non-fatal):', err);
       }
 
       // RFC 2047 encode subject for non-ASCII characters (e.g. em dash)
       const encodedSubject = `=?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`;
 
       // Build RFC 2822 MIME message
-      const messageParts = [
-        `From: "Buyers Club" <${FROM_EMAIL}>`,
-        `To: ${agentEmail}`,
-        `Cc: ${ccList.join(', ')}`,
-        `Subject: ${encodedSubject}`,
-        'MIME-Version: 1.0',
-        'Content-Type: text/html; charset=UTF-8',
-        '',
-        html,
-      ];
-      const rawMessage = messageParts.join('\r\n');
+      let rawMessage: string;
+
+      if (attachments && attachments.length > 0) {
+        // Multipart/mixed — HTML body + file attachments
+        const boundary = '----=_Part_EOI';
+        const headers = [
+          `From: ${sentBy}`,
+          `To: ${agentEmail}`,
+          `Cc: ${ccList.join(', ')}`,
+          `Subject: ${encodedSubject}`,
+          'MIME-Version: 1.0',
+          `Content-Type: multipart/mixed; boundary="${boundary}"`,
+          '',
+        ];
+
+        const parts: string[] = [];
+
+        // HTML body part
+        parts.push(
+          `--${boundary}`,
+          'Content-Type: text/html; charset=UTF-8',
+          '',
+          html,
+        );
+
+        // Attachment parts
+        for (const att of attachments) {
+          parts.push(
+            `--${boundary}`,
+            `Content-Type: ${att.mimeType}; name="${att.autoName}"`,
+            `Content-Disposition: attachment; filename="${att.autoName}"`,
+            'Content-Transfer-Encoding: base64',
+            '',
+            att.base64,
+          );
+        }
+
+        // Closing boundary
+        parts.push(`--${boundary}--`);
+
+        rawMessage = headers.join('\r\n') + '\r\n' + parts.join('\r\n');
+      } else {
+        // Simple text/html — no attachments (backward compatible)
+        const messageParts = [
+          `From: ${sentBy}`,
+          `To: ${agentEmail}`,
+          `Cc: ${ccList.join(', ')}`,
+          `Subject: ${encodedSubject}`,
+          'MIME-Version: 1.0',
+          'Content-Type: text/html; charset=UTF-8',
+          '',
+          html,
+        ];
+        rawMessage = messageParts.join('\r\n');
+      }
       const encodedMessage = Buffer.from(rawMessage)
         .toString('base64')
         .replace(/\+/g, '-')
@@ -231,6 +322,14 @@ export async function POST(request: NextRequest) {
         if (isHL) {
           properties.offer_status_land = 'offered';
           properties.offer_status_build = 'offered';
+          // H&L: write calculated total to Offer Price
+          if (emailData.landPrice && emailData.buildPrice) {
+            const rawLand = parseFloat(emailData.landPrice.replace(/[^0-9.]/g, '')) || 0;
+            const rawBuild = parseFloat(emailData.buildPrice.replace(/[^0-9.]/g, '')) || 0;
+            if (rawLand + rawBuild > 0) {
+              properties.offer_price = String(rawLand + rawBuild);
+            }
+          }
         } else {
           properties.offer_status = 'offered';
         }
@@ -260,6 +359,9 @@ export async function POST(request: NextRequest) {
               const rawBuild = emailData.buildPrice.replace(/[^0-9.]/g, '');
               if (rawLand) properties.offer_price_land = rawLand;
               if (rawBuild) properties.offer_price_build = rawBuild;
+              // Also write total to offer_price
+              const totalRaw = String((parseFloat(rawLand) || 0) + (parseFloat(rawBuild) || 0));
+              if (totalRaw !== '0') properties.offer_price = totalRaw;
             } else {
               properties.offer_price = rawPrice;
             }

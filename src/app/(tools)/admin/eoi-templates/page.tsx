@@ -18,9 +18,9 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 // Fields per property type
-const ESTABLISHED_FIELDS = ['notes', 'deposit_amount', 'deposit_payable', 'finance', 'building_pest', 'settlement'] as const;
-const NEW_SINGLE_FIELDS = ['notes', 'deposit_amount', 'deposit_payable', 'finance', 'pci', 'commission', 'settlement'] as const;
-const HL_FIELDS = ['notes', 'land_deposit', 'build_deposit', 'finance', 'pci', 'commission', 'settlement'] as const;
+const ESTABLISHED_FIELDS = ['notes', 'speculative_message', 'deposit_amount', 'deposit_payable', 'finance', 'building_pest', 'settlement'] as const;
+const NEW_SINGLE_FIELDS = ['notes', 'speculative_message', 'deposit_amount', 'deposit_payable', 'finance', 'pci', 'commission', 'settlement'] as const;
+const HL_FIELDS = ['notes', 'speculative_message', 'land_deposit', 'build_deposit', 'finance', 'pci', 'commission', 'settlement'] as const;
 
 const FIELDS_BY_TYPE: Record<string, readonly string[]> = {
   established: ESTABLISHED_FIELDS,
@@ -30,6 +30,7 @@ const FIELDS_BY_TYPE: Record<string, readonly string[]> = {
 
 const FIELD_LABELS: Record<string, string> = {
   notes: 'Notes',
+  speculative_message: 'Speculative Message',
   deposit_amount: 'Deposit Amount',
   deposit_payable: 'Deposit Payable',
   finance: 'Finance',
@@ -89,6 +90,13 @@ function TableView({
   const [editedCells, setEditedCells] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Conditions modal state
+  const [condModal, setCondModal] = useState<{ state: string; ptype: string } | null>(null);
+  const [condItems, setCondItems] = useState<ConditionRow[]>([]);
+  const [condNewText, setCondNewText] = useState('');
+  const [condLoading, setCondLoading] = useState(false);
+  const [condSaving, setCondSaving] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -173,6 +181,121 @@ function TableView({
     setSaving(false);
   }
 
+  // ---- Conditions modal functions ----
+  async function openCondModal(st: string, ptype: string) {
+    setCondModal({ state: st, ptype });
+    setCondNewText('');
+    setCondLoading(true);
+    try {
+      const res = await fetch(`/api/eoi/templates?state=${st}&type=${ptype}&_t=${Date.now()}`);
+      const data = await res.json();
+      setCondItems(
+        (data.special_conditions || [])
+          .filter((c: ConditionRow) => c.is_default)
+          .sort((a: ConditionRow, b: ConditionRow) => a.sort_order - b.sort_order)
+      );
+    } catch {
+      showToast('Failed to load conditions');
+    } finally {
+      setCondLoading(false);
+    }
+  }
+
+  function condMove(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= condItems.length) return;
+    const next = [...condItems];
+    [next[index], next[target]] = [next[target], next[index]];
+    setCondItems(next);
+  }
+
+  function condRemove(index: number) {
+    setCondItems(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function condUpdate(index: number, text: string) {
+    setCondItems(prev => prev.map((c, i) => i === index ? { ...c, text } : c));
+  }
+
+  async function condAdd() {
+    if (!condNewText.trim() || !condModal) return;
+    setCondSaving(true);
+    try {
+      const res = await fetch('/api/eoi/conditions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: condNewText.trim(), state: condModal.state, property_type: condModal.ptype }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      setCondItems(prev => [...prev, {
+        id: data.id, text: condNewText.trim(), state: condModal.state,
+        property_type: condModal.ptype, is_default: true, sort_order: prev.length, usage_count: 0,
+      }]);
+      setCondNewText('');
+      showToast('Condition added');
+    } catch { showToast('Failed to add condition'); }
+    finally { setCondSaving(false); }
+  }
+
+  async function condSave() {
+    if (!condModal) return;
+    setCondSaving(true);
+    try {
+      const payload = condItems.map((c, i) => ({ id: c.id, sort_order: i, is_default: true, text: c.text }));
+      await fetch('/api/eoi/conditions/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: condModal.state, property_type: condModal.ptype, conditions: payload }),
+      });
+      showToast('Conditions saved');
+    } catch { showToast('Failed to save conditions'); }
+    finally { setCondSaving(false); }
+  }
+
+  async function copyConditionsToAllStates(ptype: string) {
+    // 1. Fetch conditions for all states, find first with conditions
+    const allConds: Record<string, ConditionRow[]> = {};
+    await Promise.all(STATES.map(async (st) => {
+      const res = await fetch(`/api/eoi/templates?state=${st}&type=${ptype}&_t=${Date.now()}`);
+      const data = await res.json();
+      allConds[st] = (data.special_conditions || [])
+        .filter((c: ConditionRow) => c.is_default)
+        .sort((a: ConditionRow, b: ConditionRow) => a.sort_order - b.sort_order);
+    }));
+    const sourceState = STATES.find(st => allConds[st].length > 0);
+    if (!sourceState) { showToast('No conditions found to copy'); return; }
+    const sourceTexts = allConds[sourceState].map(c => c.text);
+
+    setSaving(true);
+    let copied = 0;
+    for (const st of STATES) {
+      if (st === sourceState) continue;
+      // Create new conditions for this state
+      const newIds: number[] = [];
+      for (const text of sourceTexts) {
+        const res = await fetch('/api/eoi/conditions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, state: st, property_type: ptype }),
+        });
+        if (res.ok) { const d = await res.json(); newIds.push(d.id); }
+      }
+      // Save order and mark as default
+      await fetch('/api/eoi/conditions/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          state: st, property_type: ptype,
+          conditions: newIds.map((id, i) => ({ id, sort_order: i, is_default: true })),
+        }),
+      });
+      copied++;
+    }
+    setSaving(false);
+    showToast(`Copied ${sourceTexts.length} conditions from ${sourceState} to ${copied} states`);
+  }
+
   const hasChanges = Object.entries(editedCells).some(([key, value]) => {
     const [ptype, state, field] = key.split('/');
     return value !== (allData[ptype]?.[state]?.[field] ?? '');
@@ -200,8 +323,24 @@ function TableView({
                 <tbody>
                   {fields.map((field) => (
                     <tr key={field} className="hover:bg-gray-50">
-                      <td className="px-2 py-1.5 border-b border-gray-100 text-[10px] font-semibold text-gray-600 whitespace-nowrap">
+                      <td className="px-2 py-1.5 border-b border-gray-100 text-[10px] font-semibold text-gray-600">
                         {FIELD_LABELS[field] || field}
+                        {field === 'notes' && (
+                          <p className="text-[9px] text-gray-400 italic mt-0.5 font-normal">&apos;Please do not send the contract directly to the purchaser&apos; is automatically included in every EOI email.</p>
+                        )}
+                        {field === 'speculative_message' && (
+                          <p className="text-[9px] text-gray-400 italic mt-0.5 font-normal">Shown as a banner when the EOI is speculative (no linked opportunity).</p>
+                        )}
+                        <button
+                          onClick={() => {
+                            const src = STATES.map(s => getCellValue(ptype, s, field)).find(v => v.trim());
+                            if (!src) return;
+                            STATES.forEach(s => setCellValue(ptype, s, field, src));
+                          }}
+                          className="text-[9px] text-blue-500 hover:text-blue-700 mt-1 font-normal block"
+                        >
+                          → Copy to all states
+                        </button>
                       </td>
                       {STATES.map((st) => (
                         <td key={st} className="px-1 py-1 border-b border-gray-100 align-top">
@@ -227,255 +366,102 @@ function TableView({
                       ))}
                     </tr>
                   ))}
+                  {/* Special Conditions row */}
+                  <tr>
+                    <td className="px-2 py-1.5 border-b border-gray-100 text-[10px] font-semibold text-gray-600">
+                      Special Conditions
+                      <button
+                        onClick={() => copyConditionsToAllStates(ptype)}
+                        disabled={saving}
+                        className="text-[9px] text-blue-500 hover:text-blue-700 mt-1 font-normal block disabled:opacity-50"
+                      >
+                        → Copy to all states
+                      </button>
+                    </td>
+                    {STATES.map(st => (
+                      <td key={st} className="px-1 py-1.5 border-b border-gray-100 text-center">
+                        <button onClick={() => openCondModal(st, ptype)}
+                          className="px-2 py-0.5 text-[10px] rounded border border-gray-300 text-gray-600 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700">
+                          Edit
+                        </button>
+                      </td>
+                    ))}
+                  </tr>
                 </tbody>
               </table>
             </div>
           </div>
         );
       })}
-      <div className="flex justify-end mb-4">
-        <button onClick={saveAll} disabled={saving || !hasChanges} className={btnPrimary}>
-          {saving ? 'Saving…' : 'Save All Changes'}
-        </button>
-      </div>
-    </div>
-  );
-}
+      {hasChanges && (
+        <div className="sticky bottom-0 z-10 bg-white/95 backdrop-blur border-t border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] py-3 px-4 flex justify-end -mx-4 mt-4">
+          <button onClick={saveAll} disabled={saving} className="px-5 py-2 text-sm font-bold rounded bg-amber-500 text-white hover:bg-amber-600 shadow-lg ring-2 ring-amber-300 animate-pulse disabled:opacity-50 disabled:animate-none">
+            {saving ? 'Saving…' : `Save All Changes (${Object.keys(editedCells).length})`}
+          </button>
+        </div>
+      )}
 
-// ============================================================================
-// TEMPLATE PREVIEW COMPONENT — read-only view showing the EOI template
-// structure by property type, including hardcoded elements
-// ============================================================================
-
-const HARDCODED_WARNING = 'IMPORTANT: Do not send the contract directly to the purchaser. Exchanged contracts must be sent to contracts@buyersclub.com.au';
-
-function TemplatePreview() {
-  const previewTypes = [
-    {
-      key: 'established',
-      label: 'Established',
-      sections: [
-        { heading: 'PROPERTY', rows: [
-          { field: 'Property Address', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Notes', source: 'Template Admin', colour: 'green' },
-          { field: HARDCODED_WARNING, source: 'Hardcoded — always shown on form and in sent email', colour: 'hardcoded' },
-        ]},
-        { heading: 'TERMS', rows: [
-          { field: 'Price', source: 'Manual / URL param from Deal Sheet', colour: 'white' },
-          { field: 'Deposit Amount', source: 'Template Admin', colour: 'green' },
-          { field: 'Deposit Payable', source: 'Template Admin', colour: 'green' },
-          { field: 'Finance', source: 'Template Admin', colour: 'green' },
-          { field: 'Building & Pest', source: 'Template Admin', colour: 'green' },
-          { field: 'Settlement', source: 'Template Admin', colour: 'green' },
-          { field: 'Special Conditions', source: 'Template Admin (default conditions)', colour: 'green' },
-        ]},
-        { heading: 'PURCHASER/S', rows: [
-          { field: 'Contract Entity', source: 'Opportunity (SMSF/Trust/Personal)', colour: 'amber' },
-          { field: 'Purchaser 1 — Name / Email / Phone', source: 'Opportunity Contact', colour: 'amber' },
-          { field: 'Purchaser 1 — Address', source: 'Opportunity → writes back on send', colour: 'amber' },
-          { field: 'Purchaser 2 — Name / Email / Phone / Address', source: 'Opportunity (Partner) → writes back on send', colour: 'amber' },
-          { field: 'Purchasers 3–6', source: 'Manual entry (form only)', colour: 'white' },
-        ]},
-        { heading: 'LEGALS', rows: [
-          { field: 'Solicitor — Company / Contact / Phone / Email', source: 'Opportunity → writes back on send', colour: 'amber' },
-        ]},
-        { heading: 'FINANCE', rows: [
-          { field: 'Broker — Company / Contact / Phone / Email', source: 'Opportunity → writes back on send', colour: 'amber' },
-          { field: 'LVR', source: 'Manual entry (form only)', colour: 'white' },
-        ]},
-        { heading: 'SEND METADATA', rows: [
-          { field: 'To (Agent Email)', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Agent Name', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Assigned BA / Consultant', source: 'Opportunity → Assigned BA field', colour: 'amber' },
-          { field: 'Sent By (CC)', source: 'Logged-in user email', colour: 'white' },
-        ]},
-        { heading: 'ON SEND', rows: [
-          { field: 'Offer Status → Offered', source: 'Writes to CO (offer_status / offer_status_land / offer_status_build)', colour: 'amber' },
-          { field: 'Offer Price (increase/revision)', source: 'Writes to CO (offer_price / offer_price_land / offer_price_build)', colour: 'amber' },
-          { field: 'EOI Notes', source: 'Writes to CO (eoi_notes)', colour: 'amber' },
-          { field: 'P1 Address + P2 details + Solicitor + Broker', source: 'Writes back to Opportunity (13 fields)', colour: 'amber' },
-          { field: 'Agent / Solicitor / Broker contacts', source: 'Upserts to contacts DB', colour: 'grey' },
-          { field: 'Full EOI payload', source: 'Saved to eoi_sends (JSONB)', colour: 'grey' },
-        ]},
-      ],
-    },
-    {
-      key: 'new_single',
-      label: 'New (Single Contract)',
-      sections: [
-        { heading: 'PROPERTY', rows: [
-          { field: 'Property Address', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Notes', source: 'Template Admin', colour: 'green' },
-          { field: HARDCODED_WARNING, source: 'Hardcoded — always shown on form and in sent email', colour: 'hardcoded' },
-        ]},
-        { heading: 'TERMS', rows: [
-          { field: 'Price', source: 'Manual / URL param from Deal Sheet', colour: 'white' },
-          { field: 'Deposit Amount', source: 'Template Admin', colour: 'green' },
-          { field: 'Deposit Payable', source: 'Template Admin', colour: 'green' },
-          { field: 'Finance', source: 'Template Admin', colour: 'green' },
-          { field: 'PCI', source: 'Template Admin', colour: 'green' },
-          { field: 'Settlement', source: 'Template Admin', colour: 'green' },
-          { field: 'Special Conditions', source: 'Template Admin (default conditions)', colour: 'green' },
-        ]},
-        { heading: 'PURCHASER/S', rows: [
-          { field: 'Contract Entity', source: 'Opportunity (SMSF/Trust/Personal)', colour: 'amber' },
-          { field: 'Purchaser 1 — Name / Email / Phone', source: 'Opportunity Contact', colour: 'amber' },
-          { field: 'Purchaser 1 — Address', source: 'Opportunity → writes back on send', colour: 'amber' },
-          { field: 'Purchaser 2 — Name / Email / Phone / Address', source: 'Opportunity (Partner) → writes back on send', colour: 'amber' },
-          { field: 'Purchasers 3–6', source: 'Manual entry (form only)', colour: 'white' },
-        ]},
-        { heading: 'LEGALS', rows: [
-          { field: 'Solicitor — Company / Contact / Phone / Email', source: 'Opportunity → writes back on send', colour: 'amber' },
-        ]},
-        { heading: 'FINANCE', rows: [
-          { field: 'Broker — Company / Contact / Phone / Email', source: 'Opportunity → writes back on send', colour: 'amber' },
-          { field: 'LVR', source: 'Manual entry (form only)', colour: 'white' },
-        ]},
-        { heading: 'SEND METADATA', rows: [
-          { field: 'To (Agent Email)', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Agent Name', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Assigned BA / Consultant', source: 'Opportunity → Assigned BA field', colour: 'amber' },
-          { field: 'Sent By (CC)', source: 'Logged-in user email', colour: 'white' },
-        ]},
-        { heading: 'ON SEND', rows: [
-          { field: 'Offer Status → Offered', source: 'Writes to CO (offer_status)', colour: 'amber' },
-          { field: 'Offer Price (increase/revision)', source: 'Writes to CO (offer_price)', colour: 'amber' },
-          { field: 'EOI Notes', source: 'Writes to CO (eoi_notes)', colour: 'amber' },
-          { field: 'P1 Address + P2 details + Solicitor + Broker', source: 'Writes back to Opportunity (13 fields)', colour: 'amber' },
-          { field: 'Agent / Solicitor / Broker contacts', source: 'Upserts to contacts DB', colour: 'grey' },
-          { field: 'Full EOI payload', source: 'Saved to eoi_sends (JSONB)', colour: 'grey' },
-        ]},
-      ],
-    },
-    {
-      key: 'hl_split',
-      label: 'H&L (Split Contract)',
-      sections: [
-        { heading: 'PROPERTY', rows: [
-          { field: 'Property Address', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Notes', source: 'Template Admin', colour: 'green' },
-          { field: HARDCODED_WARNING, source: 'Hardcoded — always shown on form and in sent email', colour: 'hardcoded' },
-        ]},
-        { heading: 'TERMS', rows: [
-          { field: 'Land Price', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Build Price', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Total Price', source: 'Calculated (land + build) — read-only', colour: 'grey' },
-          { field: 'Deposit — Land', source: 'Manual entry (required)', colour: 'white' },
-          { field: 'Deposit — Build', source: 'Manual entry (required)', colour: 'white' },
-          { field: 'Finance', source: 'Template Admin', colour: 'green' },
-          { field: 'PCI', source: 'Template Admin', colour: 'green' },
-          { field: 'Commission', source: 'Manual entry (required)', colour: 'white' },
-          { field: 'Settlement', source: 'Template Admin', colour: 'green' },
-          { field: 'Special Conditions', source: 'Template Admin (default conditions)', colour: 'green' },
-        ]},
-        { heading: 'PURCHASER/S', rows: [
-          { field: 'Contract Entity', source: 'Opportunity (SMSF/Trust/Personal)', colour: 'amber' },
-          { field: 'Purchaser 1 — Name / Email / Phone', source: 'Opportunity Contact', colour: 'amber' },
-          { field: 'Purchaser 1 — Address', source: 'Opportunity → writes back on send', colour: 'amber' },
-          { field: 'Purchaser 2 — Name / Email / Phone / Address', source: 'Opportunity (Partner) → writes back on send', colour: 'amber' },
-          { field: 'Purchasers 3–6', source: 'Manual entry (form only)', colour: 'white' },
-        ]},
-        { heading: 'LEGALS', rows: [
-          { field: 'Solicitor — Company / Contact / Phone / Email', source: 'Opportunity → writes back on send', colour: 'amber' },
-        ]},
-        { heading: 'FINANCE', rows: [
-          { field: 'Broker — Company / Contact / Phone / Email', source: 'Opportunity → writes back on send', colour: 'amber' },
-          { field: 'LVR', source: 'Manual entry (form only)', colour: 'white' },
-        ]},
-        { heading: 'SEND METADATA', rows: [
-          { field: 'To (Agent Email)', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Agent Name', source: 'Custom Object (Deal Sheet)', colour: 'amber' },
-          { field: 'Assigned BA / Consultant', source: 'Opportunity → Assigned BA field', colour: 'amber' },
-          { field: 'Sent By (CC)', source: 'Logged-in user email', colour: 'white' },
-        ]},
-        { heading: 'ON SEND', rows: [
-          { field: 'Offer Status → Offered', source: 'Writes to CO (offer_status_land / offer_status_build)', colour: 'amber' },
-          { field: 'Offer Price (increase/revision)', source: 'Writes to CO (offer_price_land / offer_price_build)', colour: 'amber' },
-          { field: 'EOI Notes', source: 'Writes to CO (eoi_notes)', colour: 'amber' },
-          { field: 'P1 Address + P2 details + Solicitor + Broker', source: 'Writes back to Opportunity (13 fields)', colour: 'amber' },
-          { field: 'Agent / Solicitor / Broker contacts', source: 'Upserts to contacts DB', colour: 'grey' },
-          { field: 'Full EOI payload', source: 'Saved to eoi_sends (JSONB)', colour: 'grey' },
-        ]},
-      ],
-    },
-  ];
-
-  const colourMap: Record<string, { bg: string; label: string }> = {
-    green: { bg: '#d4edda', label: 'Template Admin (editable, no write-back)' },
-    amber: { bg: '#fff3cd', label: 'GHL prefill (editable, writes back on send)' },
-    white: { bg: '#ffffff', label: 'Manual entry' },
-    grey: { bg: '#e9ecef', label: 'Calculated / system action (read-only)' },
-    hardcoded: { bg: '#fff0f0', label: 'Hardcoded (always present, not editable)' },
-  };
-
-  return (
-    <div>
-      <p className="text-[11px] text-gray-500 mb-4">
-        Read-only view showing what the EOI form looks like for each property type,
-        which fields come from Template Admin, and what is hardcoded into every EOI.
-      </p>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 mb-4 p-3 bg-gray-50 rounded border border-gray-200">
-        <span className="text-[10px] font-semibold text-gray-500 mr-1">COLOUR KEY:</span>
-        {Object.entries(colourMap).map(([key, { bg, label }]) => (
-          <span key={key} className="flex items-center gap-1">
-            <span style={{ background: bg, border: '1px solid #ccc', width: 14, height: 14, display: 'inline-block', borderRadius: 2 }} />
-            <span className="text-[10px] text-gray-600">{label}</span>
-          </span>
-        ))}
-      </div>
-
-      {/* Type previews */}
-      <div className="space-y-6">
-        {previewTypes.map((pt) => (
-          <div key={pt.key} className="border border-gray-200 rounded overflow-hidden">
-            <div className="bg-gray-100 px-3 py-2 font-semibold text-xs border-b border-gray-200">
-              {pt.label}
+      {/* ---- Conditions Modal ---- */}
+      {condModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setCondModal(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-800">
+                Special Conditions — {condModal.state} / {TYPE_LABELS[condModal.ptype] || condModal.ptype}
+              </h3>
+              <button onClick={() => setCondModal(null)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">&times;</button>
             </div>
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr>
-                  <th className="text-left px-3 py-1.5 bg-gray-50 text-[10px] text-gray-500 font-semibold border-b border-gray-200" style={{ width: '15%' }}>Section</th>
-                  <th className="text-left px-3 py-1.5 bg-gray-50 text-[10px] text-gray-500 font-semibold border-b border-gray-200" style={{ width: '35%' }}>Field</th>
-                  <th className="text-left px-3 py-1.5 bg-gray-50 text-[10px] text-gray-500 font-semibold border-b border-gray-200" style={{ width: '50%' }}>Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pt.sections.map((section) =>
-                  section.rows.map((r, ri) => (
-                    <tr key={`${section.heading}-${ri}`}>
-                      {ri === 0 && (
-                        <td
-                          rowSpan={section.rows.length}
-                          className="px-3 py-1.5 font-semibold text-[10px] text-gray-600 border-b border-gray-100 align-top"
-                          style={{ background: '#f8f9fa' }}
-                        >
-                          {section.heading}
-                        </td>
-                      )}
-                      <td
-                        className={`px-3 py-1.5 border-b border-gray-100 ${r.colour === 'hardcoded' ? 'font-semibold text-[10px]' : ''}`}
-                        style={{ background: colourMap[r.colour]?.bg || '#fff', color: r.colour === 'hardcoded' ? '#b91c1c' : undefined }}
-                      >
-                        {r.field}
-                      </td>
-                      <td className={`px-3 py-1.5 border-b border-gray-100 ${r.colour === 'hardcoded' ? 'text-[10px]' : 'text-gray-500'}`}
-                        style={{ color: r.colour === 'hardcoded' ? '#b91c1c' : undefined }}
-                      >
-                        {r.source}
-                      </td>
-                    </tr>
-                  ))
+
+            {condLoading ? (
+              <div className="text-xs text-gray-500 py-4 text-center">Loading…</div>
+            ) : (
+              <>
+                {condItems.length === 0 && (
+                  <div className="text-xs text-gray-400 py-2">No conditions for this state/type.</div>
                 )}
-              </tbody>
-            </table>
+
+                <div className="space-y-2 mb-3">
+                  {condItems.map((cond, i) => (
+                    <div key={cond.id} className="flex gap-1.5 items-start">
+                      <div className="flex flex-col gap-0.5 pt-0.5">
+                        <button onClick={() => condMove(i, -1)} disabled={i === 0}
+                          className="text-[10px] text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Move up">▲</button>
+                        <button onClick={() => condMove(i, 1)} disabled={i === condItems.length - 1}
+                          className="text-[10px] text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Move down">▼</button>
+                      </div>
+                      <span className="text-[10px] text-gray-400 pt-1 w-4 shrink-0">{i + 1}.</span>
+                      <textarea value={cond.text} onChange={e => condUpdate(i, e.target.value)}
+                        rows={1} className={`${inputCls} flex-1 resize-none overflow-hidden`}
+                        ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+                        onInput={e => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }}
+                      />
+                      <button onClick={() => condRemove(i)} className={`${btnDanger} shrink-0 mt-0.5`} title="Remove">✕</button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 mb-3">
+                  <input value={condNewText} onChange={e => setCondNewText(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && condAdd()}
+                    placeholder="Add a new condition…" className={`${inputCls} flex-1`} />
+                  <button onClick={condAdd} disabled={!condNewText.trim() || condSaving} className={btnSecondary}>+ Add</button>
+                </div>
+
+                <div className="flex justify-end">
+                  <button onClick={condSave} disabled={condSaving}
+                    className="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                    {condSaving ? 'Saving…' : 'Save Conditions'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ============================================================================
 // MAIN COMPONENT
@@ -488,7 +474,7 @@ export default function EoiTemplateAdminPage() {
   const [emailError, setEmailError] = useState('');
 
   // View mode
-  const [view, setView] = useState<'form' | 'table' | 'preview'>('form');
+  const [view, setView] = useState<'form' | 'table'>('form');
 
   // State/type selection (form view)
   const [state, setState] = useState<string>('NSW');
@@ -504,6 +490,16 @@ export default function EoiTemplateAdminPage() {
   const [newConditionText, setNewConditionText] = useState('');
 
   
+
+  // Global CC list
+  const [ccEmails, setCcEmails] = useState<string[]>([]);
+  const [ccEmailsSaved, setCcEmailsSaved] = useState<string[]>([]);
+  const [ccNewEmail, setCcNewEmail] = useState('');
+  const [ccSaving, setCcSaving] = useState(false);
+  const [ccPropertyOn, setCcPropertyOn] = useState(true);
+  const [ccPropertyOnSaved, setCcPropertyOnSaved] = useState(true);
+  const [ccBaOn, setCcBaOn] = useState(true);
+  const [ccBaOnSaved, setCcBaOnSaved] = useState(true);
 
   // Audit log
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
@@ -561,6 +557,65 @@ export default function EoiTemplateAdminPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // ---- Global CC list -------------------------------------------------------
+  const fetchCcList = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/eoi/templates?state=GLB&type=all&_t=${Date.now()}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const raw = data.values?.cc_list || '';
+      const emails = raw.split(',').map((e: string) => e.trim()).filter((e: string) => e.includes('@'));
+      setCcEmails(emails);
+      setCcEmailsSaved(emails);
+      const propOn = data.values?.cc_include_property !== 'false';
+      setCcPropertyOn(propOn);
+      setCcPropertyOnSaved(propOn);
+      const baOn = data.values?.cc_include_ba !== 'false';
+      setCcBaOn(baOn);
+      setCcBaOnSaved(baOn);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchCcList(); }, [fetchCcList]);
+
+  function addCcEmail() {
+    const email = ccNewEmail.trim().toLowerCase();
+    if (!email || !email.includes('@') || ccEmails.includes(email)) return;
+    setCcEmails(prev => [...prev, email]);
+    setCcNewEmail('');
+  }
+
+  function removeCcEmail(email: string) {
+    setCcEmails(prev => prev.filter(e => e !== email));
+  }
+
+  async function saveCcList() {
+    setCcSaving(true);
+    try {
+      const res = await fetch('/api/eoi/templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          state: 'GLB', property_type: 'all',
+          changes: [
+            { field_name: 'cc_list', field_value: ccEmails.join(', ') },
+            { field_name: 'cc_include_property', field_value: String(ccPropertyOn) },
+            { field_name: 'cc_include_ba', field_value: String(ccBaOn) },
+          ],
+          updated_by: userEmail,
+        }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setCcEmailsSaved([...ccEmails]);
+      setCcPropertyOnSaved(ccPropertyOn);
+      setCcBaOnSaved(ccBaOn);
+      showToast('CC list saved');
+    } catch { showToast('Failed to save CC list'); }
+    finally { setCcSaving(false); }
+  }
+
+  const ccHasChanges = JSON.stringify(ccEmails) !== JSON.stringify(ccEmailsSaved) || ccPropertyOn !== ccPropertyOnSaved || ccBaOn !== ccBaOnSaved;
 
   // ---- Save template values ------------------------------------------------
   const activeFields = FIELDS_BY_TYPE[propertyType] || ESTABLISHED_FIELDS;
@@ -717,7 +772,7 @@ export default function EoiTemplateAdminPage() {
         </div>
       )}
 
-      <div className={`mx-auto px-4 py-6 ${view === 'table' ? 'max-w-6xl' : view === 'preview' ? 'max-w-5xl' : 'max-w-3xl'}`}>
+      <div className={`mx-auto px-4 py-6 ${view === 'table' ? 'max-w-6xl' : 'max-w-3xl'}`}>
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-lg font-bold">EOI Template Admin</h1>
           <div className="flex gap-1">
@@ -733,12 +788,7 @@ export default function EoiTemplateAdminPage() {
             >
               Table View
             </button>
-            <button
-              onClick={() => setView('preview')}
-              className={`px-3 py-1 text-xs rounded ${view === 'preview' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-            >
-              Template Preview
-            </button>
+
           </div>
         </div>
         <p className="text-[11px] text-gray-500 mb-4">
@@ -746,10 +796,58 @@ export default function EoiTemplateAdminPage() {
           Logged in as <span className="font-medium">{userEmail}</span>
         </p>
 
+        {/* Global CC Recipients */}
+        <div className="bg-white rounded border border-gray-200 p-4 mb-4">
+          <div className="text-xs font-bold mb-2">CC Recipients (all EOIs)</div>
+          <p className="text-[9px] text-gray-400 italic mb-2">
+            These emails will be CC&apos;d on every EOI. property@buyersclub.com.au and the assigned BA are always included automatically.
+          </p>
+          {/* Toggleable default recipients + added emails */}
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            <label className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border cursor-pointer ${ccPropertyOn ? 'bg-green-50 text-green-800 border-green-200' : 'bg-gray-50 text-gray-400 border-gray-200 line-through'}`}>
+              <input type="checkbox" checked={ccPropertyOn} onChange={e => setCcPropertyOn(e.target.checked)} className="w-3 h-3" />
+              property@buyersclub.com.au
+            </label>
+            <label className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border cursor-pointer ${ccBaOn ? 'bg-green-50 text-green-800 border-green-200' : 'bg-gray-50 text-gray-400 border-gray-200 line-through'}`}>
+              <input type="checkbox" checked={ccBaOn} onChange={e => setCcBaOn(e.target.checked)} className="w-3 h-3" />
+              Assigned BA
+            </label>
+            {ccEmails.map(email => (
+              <span key={email} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-[10px] text-blue-800 border border-blue-200">
+                {email}
+                <button onClick={() => removeCcEmail(email)} className="text-blue-400 hover:text-red-500 font-bold leading-none" title="Remove">&times;</button>
+              </span>
+            ))}
+          </div>
+          {/* Add new */}
+          <div className="flex gap-2 items-center">
+            <input
+              value={ccNewEmail}
+              onChange={e => setCcNewEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addCcEmail()}
+              placeholder="Add email address…"
+              className={`${inputCls} flex-1`}
+            />
+            <button onClick={addCcEmail} disabled={!ccNewEmail.trim() || !ccNewEmail.includes('@')} className={`${btnSecondary} disabled:opacity-50`}>
+              + Add
+            </button>
+          </div>
+          {/* Save */}
+          {ccHasChanges && (
+            <div className="flex justify-end mt-2">
+              <button
+                onClick={saveCcList}
+                disabled={ccSaving}
+                className="px-3 py-1 text-xs rounded bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+              >
+                {ccSaving ? 'Saving…' : 'Save CC List'}
+              </button>
+            </div>
+          )}
+        </div>
+
         {view === 'table' ? (
           <TableView userEmail={userEmail} showToast={showToast} />
-        ) : view === 'preview' ? (
-          <TemplatePreview />
         ) : (
           <>
             {/* State / Type selectors */}
@@ -796,19 +894,27 @@ export default function EoiTemplateAdminPage() {
                             <span className="text-[9px] italic text-gray-400">inherited from Established</span>
                           )}
                         </div>
-                        {field === 'notes' ? (
-                          <textarea
-                            value={editedValues[field] || ''}
-                            onChange={(e) =>
-                              setEditedValues((prev) => ({ ...prev, [field]: e.target.value }))
-                            }
-                            rows={2}
-                            className={`${inputCls} resize-none overflow-hidden ${
-                              editedValues[field] !== values[field] ? 'ring-1 ring-amber-400' : ''
-                            }`}
-                            ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
-                            onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }}
-                          />
+                        {field === 'notes' || field === 'speculative_message' ? (
+                          <>
+                            <textarea
+                              value={editedValues[field] || ''}
+                              onChange={(e) =>
+                                setEditedValues((prev) => ({ ...prev, [field]: e.target.value }))
+                              }
+                              rows={2}
+                              className={`${inputCls} resize-none overflow-hidden ${
+                                editedValues[field] !== values[field] ? 'ring-1 ring-amber-400' : ''
+                              }`}
+                              ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+                              onInput={(e) => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }}
+                            />
+                            {field === 'notes' && (
+                              <p className="text-[9px] text-gray-400 italic mt-0.5">The sentence &apos;Please do not send the contract directly to the purchaser&apos; is automatically included in every EOI email — you do not need to add it here.</p>
+                            )}
+                            {field === 'speculative_message' && (
+                              <p className="text-[9px] text-gray-400 italic mt-0.5">Shown as a banner at the top of the email when the EOI is speculative (no linked opportunity).</p>
+                            )}
+                          </>
                         ) : (
                           <input
                             value={editedValues[field] || ''}
@@ -823,15 +929,17 @@ export default function EoiTemplateAdminPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex justify-end mt-4">
-                    <button
-                      onClick={saveValues}
-                      disabled={saving || !hasValueChanges}
-                      className={btnPrimary}
-                    >
-                      {saving ? 'Saving…' : 'Save All'}
-                    </button>
-                  </div>
+                  {hasValueChanges && (
+                    <div className="sticky bottom-0 z-10 bg-white/95 backdrop-blur border-t border-amber-300 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] py-3 px-4 flex justify-end -mx-4 mt-4">
+                      <button
+                        onClick={saveValues}
+                        disabled={saving}
+                        className="px-5 py-2 text-sm font-bold rounded bg-amber-500 text-white hover:bg-amber-600 shadow-lg ring-2 ring-amber-300 animate-pulse disabled:opacity-50 disabled:animate-none"
+                      >
+                        {saving ? 'Saving…' : 'Save All Changes'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* ---- Special Conditions section ---- */}

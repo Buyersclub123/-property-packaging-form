@@ -3,8 +3,8 @@ import { getDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-const VALID_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS'];
-const VALID_TYPES = ['established', 'new_single', 'house_and_land'];
+const VALID_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'GLB'];
+const VALID_TYPES = ['established', 'new_single', 'house_and_land', 'all'];
 // The EOI composer uses 'hl_split' but the DB stores 'house_and_land'
 const TYPE_ALIAS: Record<string, string> = { hl_split: 'house_and_land' };
 
@@ -117,43 +117,53 @@ export async function PUT(request: NextRequest) {
   const sql = getDb();
   const results: { field_name: string; old_value: string; new_value: string }[] = [];
 
-  for (const change of changes) {
-    const { field_name, field_value } = change;
-    if (!field_name || field_value === undefined) continue;
+  try {
+    for (const change of changes) {
+      const { field_name, field_value } = change;
+      if (!field_name || field_value === undefined) continue;
 
-    // Read current value
-    const current = await sql`
-      SELECT id, field_value FROM eoi_template_values
-      WHERE state = ${state} AND property_type = ${property_type} AND field_name = ${field_name}`;
+      // Read current value
+      const current = await sql`
+        SELECT id, field_value FROM eoi_template_values
+        WHERE state = ${state} AND property_type = ${property_type} AND field_name = ${field_name}`;
 
-    const oldValue = current.length > 0 ? (current[0].field_value as string) : '';
+      const oldValue = current.length > 0 ? (current[0].field_value as string) : '';
 
-    if (current.length > 0) {
-      if (oldValue !== field_value) {
+      if (current.length > 0) {
+        if (oldValue !== field_value) {
+          await sql`
+            UPDATE eoi_template_values
+            SET field_value = ${field_value}, updated_by = ${updated_by || 'unknown'}, updated_at = NOW()
+            WHERE state = ${state} AND property_type = ${property_type} AND field_name = ${field_name}`;
+
+          // Audit log
+          await sql`
+            INSERT INTO eoi_audit_log (table_name, record_id, field_name, old_value, new_value, changed_by)
+            VALUES (${'eoi_template_values'}, ${current[0].id as number}, ${`${state}/${property_type}/${field_name}`}, ${oldValue}, ${field_value}, ${updated_by || 'unknown'})`;
+
+          results.push({ field_name, old_value: oldValue, new_value: field_value });
+        }
+      } else {
+        // Insert new value (e.g. H&L override that didn't exist yet)
         await sql`
-          UPDATE eoi_template_values
-          SET field_value = ${field_value}, updated_by = ${updated_by || 'unknown'}, updated_at = NOW()
-          WHERE state = ${state} AND property_type = ${property_type} AND field_name = ${field_name}`;
+          INSERT INTO eoi_template_values (state, property_type, field_name, field_value, updated_by)
+          VALUES (${state}, ${property_type}, ${field_name}, ${field_value}, ${updated_by || 'unknown'})`;
 
-        // Audit log
-        await sql`
-          INSERT INTO eoi_audit_log (table_name, record_id, field_name, old_value, new_value, changed_by)
-          VALUES (${'eoi_template_values'}, ${current[0].id as number}, ${`${state}/${property_type}/${field_name}`}, ${oldValue}, ${field_value}, ${updated_by || 'unknown'})`;
+        // Audit log (skip record_id for new inserts)
+        try {
+          await sql`
+            INSERT INTO eoi_audit_log (table_name, field_name, old_value, new_value, changed_by)
+            VALUES (${'eoi_template_values'}, ${`${state}/${property_type}/${field_name}`}, ${null}, ${field_value}, ${updated_by || 'unknown'})`;
+        } catch {
+          // Audit log insert may fail if record_id is NOT NULL — non-fatal
+        }
 
-        results.push({ field_name, old_value: oldValue, new_value: field_value });
+        results.push({ field_name, old_value: '', new_value: field_value });
       }
-    } else {
-      // Insert new value (e.g. H&L override that didn't exist yet)
-      await sql`
-        INSERT INTO eoi_template_values (state, property_type, field_name, field_value, updated_by)
-        VALUES (${state}, ${property_type}, ${field_name}, ${field_value}, ${updated_by || 'unknown'})`;
-
-      await sql`
-        INSERT INTO eoi_audit_log (table_name, field_name, old_value, new_value, changed_by)
-        VALUES (${'eoi_template_values'}, ${`${state}/${property_type}/${field_name}`}, ${null}, ${field_value}, ${updated_by || 'unknown'})`;
-
-      results.push({ field_name, old_value: '', new_value: field_value });
     }
+  } catch (err) {
+    console.error('Template PUT error:', err);
+    return NextResponse.json({ error: 'Save failed', detail: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, updated: results.length, changes: results });

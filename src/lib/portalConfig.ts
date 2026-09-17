@@ -55,6 +55,12 @@ export const teams: TeamTile[] = [
         href: '/contract-team-reporting',
         newTab: true,
       },
+      {
+        name: 'EOI Template Admin',
+        description: 'Manage EOI template terms, conditions and settings',
+        href: '/admin/eoi-templates',
+        newTab: true,
+      },
     ],
   },
   {

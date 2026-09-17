@@ -75,7 +75,7 @@ interface EoiLinkModalProps {
   existingLinks?: Record<string, { id: string; address: string; status: string }[]>;
   onLink: (payload: EoiLinkPayload) => Promise<boolean>;
   onUpdate: (payload: EoiUpdatePayload) => Promise<boolean>;
-  onSpeculative: () => Promise<boolean>;
+  onSpeculative: (prices?: { totalPrice: string; landPrice?: string; buildPrice?: string }) => Promise<boolean>;
   onCancel: () => void;
 }
 
@@ -192,6 +192,9 @@ export default function EoiLinkModal({
   const [submitError, setSubmitError] = useState('');
   const [copiedId, setCopiedId] = useState(false);
 
+  // Speculative price dialog state
+  const [showSpeculativePrice, setShowSpeculativePrice] = useState(false);
+
   // Remove-client confirmation state
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [removeAction, setRemoveAction] = useState<'speculative' | 'remove'>('speculative');
@@ -199,6 +202,8 @@ export default function EoiLinkModal({
   // Explicit acknowledgement when the chosen opportunity is already linked
   // to a different property record.
   const [dupeAcknowledged, setDupeAcknowledged] = useState(false);
+  // D23: skip opening the EOI composer after linking
+  const [skipComposer, setSkipComposer] = useState(false);
 
   // Edit-mode load outcome for the linked opportunity.
   //   ok      = loaded from GHL, safe to confirm
@@ -386,7 +391,7 @@ export default function EoiLinkModal({
     setStep('confirm');
   }
 
-  async function handleConfirm() {
+  async function handleConfirm(linkOnly = false) {
     if (editBA.trim() === '') return;
     if (!selected && !isSpeculative) return;
     setSubmitting(true);
@@ -422,6 +427,9 @@ export default function EoiLinkModal({
       setSubmitting(false);
       if (!ok) {
         setSubmitError('Failed to link — the status has NOT been changed. Try again or cancel.');
+      } else if (linkOnly) {
+        // D23: link-only — close the modal without opening the composer
+        onCancel();
       } else {
         // Open the EOI composer with context from this link
         const totalPrice = isSplitContract ? String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0')) : editPrice.trim();
@@ -429,24 +437,38 @@ export default function EoiLinkModal({
         if (isSplitContract) {
           eoiUrl += `&landPrice=${encodeURIComponent(editPriceLand.trim())}&buildPrice=${encodeURIComponent(editPriceBuild.trim())}`;
         }
-        // DISABLED: EOI composer not yet tested — re-enable after testing
-        // window.open(eoiUrl, '_blank');
+        window.open(eoiUrl, '_blank');
       }
     }
   }
 
-  async function handleSpeculative() {
+  async function handleSpeculative(linkOnly = false) {
     setSubmitting(true);
     setSubmitError('');
-    const ok = await onSpeculative();
+    const totalPrice = isSplitContract
+      ? String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))
+      : editPrice.trim();
+    const ok = await onSpeculative({
+      totalPrice,
+      landPrice: isSplitContract ? editPriceLand.trim() : undefined,
+      buildPrice: isSplitContract ? editPriceBuild.trim() : undefined,
+    });
     setSubmitting(false);
     if (!ok) {
       setSubmitError('Failed to set status. Try again or cancel.');
+    } else if (linkOnly) {
+      // D23: speculative link-only — close modal without opening composer
+      onCancel();
     } else {
-      // Open the EOI composer for speculative (no oppId)
-      const eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=initial&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}`;
-      // DISABLED: EOI composer not yet tested — re-enable after testing
-      // window.open(eoiUrl, '_blank');
+      // Open the EOI composer for speculative (no oppId) — include prices
+      const totalPrice = isSplitContract
+        ? String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))
+        : editPrice.trim();
+      let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=initial&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&price=${encodeURIComponent(totalPrice)}`;
+      if (isSplitContract) {
+        eoiUrl += `&landPrice=${encodeURIComponent(editPriceLand.trim())}&buildPrice=${encodeURIComponent(editPriceBuild.trim())}`;
+      }
+      window.open(eoiUrl, '_blank');
     }
   }
 
@@ -583,8 +605,8 @@ export default function EoiLinkModal({
             <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
               <div className="flex items-center gap-2">
                 {!isEdit && (
-                  <button onClick={handleSpeculative} disabled={submitting} className={cls.btn} title="Set 02 EOI with no linked opportunity — it will appear in the Unlinked EOI exception view">
-                    {submitting ? 'Saving...' : 'Speculative — no client yet'}
+                  <button onClick={() => setShowSpeculativePrice(true)} disabled={submitting} className={cls.btn} title="Set 02 EOI with no linked opportunity — it will appear in the Unlinked EOI exception view">
+                    Speculative — no client yet
                   </button>
                 )}
                 {isEdit && (
@@ -596,6 +618,76 @@ export default function EoiLinkModal({
               {submitError && <span className="text-[10px] text-red-400">{submitError}</span>}
               <button onClick={onCancel} className={cls.btn}>Cancel</button>
             </div>
+
+            {/* Speculative price entry panel */}
+            {showSpeculativePrice && (
+              <div className={`px-4 py-3 border-t ${dark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+                <div className={`text-xs font-semibold mb-2 ${dark ? 'text-gray-200' : 'text-gray-700'}`}>
+                  Enter offer prices before opening the EOI composer
+                </div>
+                <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 items-center text-xs">
+                  {isSplitContract ? (
+                    <>
+                      <span className={cls.label}>Offer $ (Land) *</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={currencyFormatted(editPriceLand)}
+                        onChange={(e) => setEditPriceLand(currencyRaw(e.target.value))}
+                        placeholder="e.g. $250,000"
+                        className={`w-full ${cls.input}`}
+                      />
+                      <span className={cls.label}>Offer $ (Build) *</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={currencyFormatted(editPriceBuild)}
+                        onChange={(e) => setEditPriceBuild(currencyRaw(e.target.value))}
+                        placeholder="e.g. $200,000"
+                        className={`w-full ${cls.input}`}
+                      />
+                      <span className={cls.label}>Total $</span>
+                      <div className={`text-xs font-medium ${cls.sub}`}>
+                        {editPriceLand || editPriceBuild
+                          ? currencyFormatted(String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0')))
+                          : '-'}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className={cls.label}>Offer $ *</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={currencyFormatted(editPrice)}
+                        onChange={(e) => setEditPrice(currencyRaw(e.target.value))}
+                        placeholder="e.g. $650,000"
+                        className={`w-full ${cls.input}`}
+                      />
+                    </>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-3">
+                  <button onClick={() => setShowSpeculativePrice(false)} className={cls.btn}>← Back</button>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      onClick={() => { setSkipComposer(false); handleSpeculative(false); }}
+                      disabled={submitting || (isSplitContract ? (!editPriceLand.trim() || !editPriceBuild.trim()) : !editPrice.trim())}
+                      className={cls.btnPrimary}
+                    >
+                      {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
+                    </button>
+                    <button
+                      onClick={() => { setSkipComposer(true); handleSpeculative(true); }}
+                      disabled={submitting || (isSplitContract ? (!editPriceLand.trim() || !editPriceBuild.trim()) : !editPrice.trim())}
+                      className={cls.btnPrimary}
+                    >
+                      {submitting && skipComposer ? 'Saving...' : 'Confirm (link only)'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -874,9 +966,20 @@ export default function EoiLinkModal({
                 )}
               </div>
               {submitError && <span className="text-[10px] text-red-400">{submitError}</span>}
-              <button onClick={handleConfirm} disabled={submitting || (!editDateIso && !isEdit) || baEmpty || priceEmpty || linkLoad === 'loading' || linkLoad === 'missing' || (duplicateLinks.length > 0 && !dupeAcknowledged) || (!selected && !isSpeculative)} className={cls.btnPrimary}>
-                {submitting ? 'Saving...' : (isEdit ? 'Confirm changes' : 'Confirm & Link')}
-              </button>
+              {!isEdit ? (
+                <div className="flex flex-col gap-1.5">
+                  <button onClick={() => { setSkipComposer(false); handleConfirm(false); }} disabled={submitting || !editDateIso || baEmpty || priceEmpty || linkLoad === 'loading' || linkLoad === 'missing' || (duplicateLinks.length > 0 && !dupeAcknowledged) || !selected} className={cls.btnPrimary}>
+                    {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
+                  </button>
+                  <button onClick={() => { setSkipComposer(true); handleConfirm(true); }} disabled={submitting || !editDateIso || baEmpty || priceEmpty || linkLoad === 'loading' || linkLoad === 'missing' || (duplicateLinks.length > 0 && !dupeAcknowledged) || !selected} className={cls.btnPrimary}>
+                    {submitting && skipComposer ? 'Saving...' : 'Confirm (link only)'}
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => handleConfirm(false)} disabled={submitting || baEmpty || priceEmpty || linkLoad === 'loading' || linkLoad === 'missing' || (duplicateLinks.length > 0 && !dupeAcknowledged) || (!selected && !isSpeculative)} className={cls.btnPrimary}>
+                  {submitting ? 'Saving...' : 'Confirm changes'}
+                </button>
+              )}
             </div>
           </>
         )}

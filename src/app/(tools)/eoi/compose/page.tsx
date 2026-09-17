@@ -1,26 +1,26 @@
 'use client';
 
 // ============================================================================
-// EOI COMPOSER — real sending workflow
+// EOI COMPOSER — preview-first rebuild (V2)
 //
-// Matches the layout of the existing GHL EOI builder form:
-// - Charcoal/yellow brand colours
-// - Section headers: PROPERTY, TERMS, PURCHASER/S, LEGALS, FINANCE
-// - Table layout with alternating dark/light rows
-// - Inline editable cells
-// - Recipient bar with agent email + CC
+// Two-panel layout:
+//   Left  — colour-coded edit form (table layout, "i" info toggles)
+//   Right — live email preview in an iframe (server-rendered, WYSIWYG)
+//
+// The preview endpoint and the send route both call renderEoiEmailHtml()
+// from eoi-email.ts. One function, one rendering path, zero drift.
 //
 // Loaded from /eoi/compose?recordId=xxx&address=...&type=...  (Deal Sheet)
 // Prefills from URL params (instant) + linked opportunity contact (GHL lookup).
 // Pulls terms from the DB (WP1 template admin values).
-// Sends via /api/eoi/send (Nodemailer → SMTP).
+// Sends via /api/eoi/send (Gmail API).
 // Records durable history in eoi_sends.
 // ============================================================================
 
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { getUserEmail, saveUserEmail, validateUserEmail } from '@/lib/userAuth';
 import { handleMobileInput, normalizeMobileForStorage } from '@/lib/phoneFormatter';
-import { renderEoiEmailHtml, type EoiEmailData } from '@/lib/eoi-email';
+import type { EoiEmailData } from '@/lib/eoi-email';
 
 if (typeof document !== 'undefined') document.title = 'Buyers Club — Expression of Interest';
 
@@ -54,6 +54,49 @@ interface SendHistoryItem {
   eoi_status: string;
 }
 
+// ---- attachment types -------------------------------------------------------
+
+type AttachmentType = 'ID' | 'Deposit Receipt' | 'Finance Comfort Letter' | 'Upgrade List' | 'Other';
+const ATTACHMENT_TYPES: AttachmentType[] = ['ID', 'Deposit Receipt', 'Finance Comfort Letter', 'Upgrade List', 'Other'];
+
+interface Attachment {
+  file: File;
+  base64: string;
+  mimeType: string;
+  type: AttachmentType;
+  forLabel: string;
+  autoName: string;
+}
+
+/** Build auto-name for an attachment: "{type} - {forLabel}.{ext}" */
+function buildAutoName(type: AttachmentType, forLabel: string, fileName: string): string {
+  const ext = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')) : '';
+  if (type === 'Finance Comfort Letter' || type === 'Upgrade List' || !forLabel.trim()) return `${type}${ext}`;
+  return `${type} - ${forLabel}${ext}`;
+}
+
+/** Read a File as base64 (strips the data URI prefix) */
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1] || '');
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Human-readable file size */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const MAX_TOTAL_ATTACHMENT_SIZE = 18 * 1024 * 1024; // 18MB — Gmail 25MB minus base64 overhead
+
 // ---- helpers ----------------------------------------------------------------
 
 function detectState(address: string): AuState | null {
@@ -82,19 +125,98 @@ function resolvePropertyType(propertyTypeCO: string, contractTypeCO: string, dea
   return 'established';
 }
 
-function currencyRaw(v: string): string { return (v || '').replace(/[^0-9.]/g, ''); }
+/** Strip to numeric only — used for deposit and LVR fields (single numbers). */
+function numericOnly(v: string): string { return (v || '').replace(/[^0-9.]/g, ''); }
 
+/**
+ * B1 fix: Format a value for currency display.
+ * If parseable as a single number, format with $ and thousand separators.
+ * If not (e.g. a range like "$890,000 – $920,000"), return as-is.
+ */
 function currencyFormat(v: string): string {
-  const raw = currencyRaw(v);
-  if (!raw) return '';
-  const n = parseFloat(raw);
-  if (isNaN(n)) return '';
-  return '$' + n.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  if (!v) return '';
+  const cleaned = v.replace(/[$,\s]/g, '').trim();
+  if (/^\d+(\.\d+)?$/.test(cleaned)) {
+    const n = parseFloat(cleaned);
+    return '$' + n.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  return v; // Not a single number — display as-is
 }
 
 function emptyPurchaser(): Purchaser { return { name: '', email: '', phone: '', address: '' }; }
 
-// ---- CSS vars matching the existing form ------------------------------------
+/** T1: Auto-grow textarea to fit content */
+function autoGrow(e: React.FormEvent<HTMLTextAreaElement>) {
+  const ta = e.currentTarget;
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+// ---- colour-coding ----------------------------------------------------------
+
+type FieldColour = 'green' | 'grey' | 'yellow';
+const BG: Record<FieldColour, string> = {
+  green: '#e8f5e9',
+  grey: '#f5f5f5',
+  yellow: '#fff8e1',
+};
+
+// ---- field info data (for "i" panels) ----------------------------------------
+
+const FIELD_INFO: Record<string, string[]> = {
+  propertyAddress: ['Source: Property Record (CO)', 'Field: property_address', 'Does not write back'],
+  notes: ['Source: EOI Template Admin (initial value)', 'On send: Writes eoi_notes to CO'],
+  speculativeMessage: ['Source: EOI Template Admin', 'Shown as banner in email when no opportunity linked', 'Does not write back'],
+  price: ['Source: CO Offer Price field', 'On send: Writes offer_price + offer_status ("Offered") to CO'],
+  landPrice: ['Source: CO Offer Price Land', 'On send: Writes offer_price_land + offer_status_land to CO'],
+  buildPrice: ['Source: CO Offer Price Build', 'On send: Writes offer_price_build + offer_status_build to CO'],
+  totalPrice: ['Calculated from Offer Price Land + Offer Price Build', 'Writes back to CO Offer Price on send'],
+  depositAmount: ['Source: EOI Template Admin', 'Does not write back'],
+  depositPayable: ['Source: EOI Template Admin', 'Does not write back'],
+  landDeposit: ['Source: Manual entry (mandatory)', 'Does not write back'],
+  buildDeposit: ['Source: Manual entry (mandatory)', 'Does not write back'],
+  finance: ['Source: EOI Template Admin', 'Does not write back'],
+  buildingPest: ['Source: EOI Template Admin', 'Does not write back'],
+  pci: ['Source: EOI Template Admin', 'Does not write back'],
+  commission: ['Source: Manual entry', 'Does not write back'],
+  settlement: ['Source: EOI Template Admin', 'Does not write back'],
+  specialConditions: ['Source: EOI Template Admin', 'Does not write back'],
+  contractEntity: ['Source: Opportunity \u2192 Prop Team Info New', 'Field: Trust Name / SMSF Name', 'Does not write back'],
+  p1Name: ['Source: Opportunity \u2192 Contact', 'Contact-inherited \u2014 cannot write back through the Opportunity to the Contact'],
+  p1Email: ['Source: Opportunity \u2192 Contact', 'Contact-inherited \u2014 cannot write back'],
+  p1Phone: ['Source: Opportunity \u2192 Contact', 'Contact-inherited \u2014 cannot write back'],
+  p1Address: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Postal Address', 'Writes back to Opportunity'],
+  p2Name: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Partner Name', 'Writes back to Opportunity'],
+  p2Email: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Partner Email', 'Writes back to Opportunity'],
+  p2Phone: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Partner Phone', 'Writes back to Opportunity'],
+  p2Address: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Partner Address', 'Writes back to Opportunity'],
+  p3Plus: ['No GHL fields for additional purchasers', 'Does not write back'],
+  solicitor: ['Source: Opportunity \u2192 Prop Team Info New', 'Fields: Solicitor Company / Name / Phone / Email', 'On send: Writes back to Opportunity'],
+  broker: ['Source: Opportunity \u2192 Isobel Team Info', 'Fields: Broker Company / Name / Phone / Email', 'On send: Writes back to Opportunity'],
+  lvr: ['Source: Manual entry', 'Does not write back'],
+  agentGroup: ['Source: Property Record (CO) \u2192 agent_email / agent_name / agent_mobile', 'On send: Writes back to CO'],
+};
+
+// ---- form inline styles -----------------------------------------------------
+
+const formSectionSty: React.CSSProperties = {
+  background: '#4D4D4D', color: '#FBD721', textAlign: 'center', fontWeight: 600,
+  letterSpacing: 1, padding: '8px 10px', fontSize: '13px',
+  fontFamily: '"Calibri Light","Calibri","Segoe UI",Arial,sans-serif',
+};
+
+const formLabelSty: React.CSSProperties = {
+  width: 160, padding: '6px 10px', fontWeight: 700, fontSize: '13px',
+  verticalAlign: 'top', borderBottom: '1px solid #ddd', textAlign: 'right',
+  color: '#2A2A2A',
+};
+
+const formValueSty: React.CSSProperties = {
+  padding: '6px 10px', fontSize: '13px', verticalAlign: 'top',
+  borderBottom: '1px solid #ddd',
+};
+
+// ---- CSS vars ---------------------------------------------------------------
 
 const CSS = `
 :root {
@@ -117,7 +239,7 @@ const CSS = `
 body { font-family: "Calibri Light", "Calibri", "Segoe UI", Arial, sans-serif; }
 .eoi-page { background: #f0f0f0; min-height: 100vh; padding: 24px 16px 80px; }
 .toolbar {
-  max-width: 1080px; margin: 0 auto 18px; background: var(--charcoal-dark); color: #fff;
+  max-width: 1400px; margin: 0 auto 18px; background: var(--charcoal-dark); color: #fff;
   border-radius: 6px; padding: 14px 18px; display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
 }
 .toolbar-title { font-weight: 700; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--yellow); margin-right: auto; }
@@ -129,64 +251,62 @@ body { font-family: "Calibri Light", "Calibri", "Segoe UI", Arial, sans-serif; }
 .toolbar button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .toolbar-group { display: flex; align-items: center; gap: 6px; padding-right: 12px; border-right: 1px solid #555; }
 .toolbar-group:last-of-type { border-right: none; }
-.eoi-sheet { max-width: 1080px; margin: 0 auto; background: #fff; padding: 32px 40px 40px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1.5px dashed #c0c0c0; position: relative; }
-.eoi-sheet::before {
-  content: 'EMAIL PREVIEW'; position: absolute; top: -10px; left: 24px;
-  background: #f0f0f0; padding: 1px 10px; font-size: 9px; letter-spacing: 1.5px;
-  color: #999; font-weight: 600; border-radius: 2px;
-}
-.eoi-header { border-bottom: 3px solid var(--yellow); padding-bottom: 18px; margin-bottom: 20px; display: flex; align-items: flex-end; justify-content: space-between; }
-.eoi-header h1 { font-size: 26px; font-weight: 700; color: var(--charcoal-dark); letter-spacing: -0.5px; margin: 0; }
-.badges { display: flex; gap: 6px; }
-.state-badge { background: var(--charcoal-dark); color: var(--yellow); padding: 4px 12px; font-size: 12px; font-weight: 700; letter-spacing: 2px; border-radius: 2px; }
-.type-badge { background: var(--yellow); color: var(--charcoal-dark); padding: 4px 12px; font-size: 12px; font-weight: 700; letter-spacing: 2px; border-radius: 2px; }
-table.eoi { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
-table.eoi td { border: 1pt solid #fff; padding: 6px 10px 6px 14px; vertical-align: middle; font-size: 13.5px; }
-table.eoi input, table.eoi textarea {
-  width: 100%; border: none; background: transparent; font-family: inherit; font-size: 13.5px; color: var(--text);
-  padding: 2px 0; outline: none;
-}
-table.eoi textarea { resize: vertical; overflow: hidden; }
-table.eoi input:focus, table.eoi textarea:focus { background: #fff; box-shadow: inset 0 0 0 2px var(--yellow); border-radius: 2px; }
-.section-head { background: var(--charcoal); color: var(--yellow); text-align: center; font-weight: 600; letter-spacing: 1px; padding: 8px 10px !important; }
-.label-dark { background: var(--row-dark); text-align: right; width: 140px; font-weight: 700; }
-.label-light { background: var(--row-light); text-align: right; width: 140px; font-weight: 700; }
-.value-dark { background: var(--row-dark); }
-.value-light { background: var(--row-light); }
-.value-edit { background: var(--row-edit); }
-.sub-label { text-align: right; width: 100px; font-weight: 700; padding: 6px 10px 6px 14px !important; }
-.purchaser-head { background: var(--charcoal); color: #fff; text-align: center; font-weight: 600; }
-.recipient-bar { background: var(--yellow); border: 1px solid var(--yellow); padding: 12px 14px; margin-bottom: 18px; font-size: 13px; max-width: 1080px; margin: 0 auto 18px; }
+.recipient-bar { background: var(--yellow); border: 1px solid var(--yellow); padding: 12px 14px; margin-bottom: 18px; font-size: 13px; max-width: 1400px; margin: 0 auto 18px; }
 .recipient-row { display: flex; gap: 14px; align-items: center; }
 .recipient-bar label { font-weight: 700; color: var(--charcoal-dark); white-space: nowrap; }
 .recipient-bar input { flex: 1; border: 1px solid #c4a800; padding: 6px 10px; font-family: inherit; font-size: 13px; border-radius: 3px; background: #fff; }
 .recipient-meta { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d4b800; font-size: 12px; color: var(--charcoal-dark); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.history-panel { max-width: 1080px; margin: 18px auto 0; background: #fff; padding: 18px 24px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.history-panel { max-width: 1400px; margin: 18px auto 0; background: #fff; padding: 18px 24px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 .history-item { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
 .history-item:last-child { border-bottom: none; }
-.send-result { max-width: 1080px; margin: 0 auto 12px; padding: 12px 18px; border-radius: 6px; font-size: 13px; }
+.send-result { max-width: 1400px; margin: 0 auto 12px; padding: 12px 18px; border-radius: 6px; font-size: 13px; }
 .send-ok { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
 .send-fail { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-.contact-note { max-width: 1080px; margin: 0 auto 12px; background: #e8f4fd; border: 1px solid #bee5eb; padding: 10px 14px; border-radius: 4px; font-size: 12px; color: #0c5460; }
-.fill-prompt { background: #d4edda !important; }
-.fill-writeback { background: #fff3cd !important; }
-.fill-manual { background: #ffffff !important; }
-.fill-calculated { background: #e9ecef !important; }
+.contact-note { max-width: 1400px; margin: 0 auto 12px; background: #e8f4fd; border: 1px solid #bee5eb; padding: 10px 14px; border-radius: 4px; font-size: 12px; color: #0c5460; }
 .source-label { display: block; font-size: 9.5px; color: #999; font-weight: 400; font-style: italic; margin-top: 1px; letter-spacing: 0.2px; }
-.legend { max-width: 1080px; margin: 18px auto 0; background: #fff; padding: 14px 20px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); font-size: 12px; }
-.legend-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; color: var(--charcoal-dark); }
+
+/* Two-panel layout */
+.eoi-panels { display: flex; gap: 24px; max-width: 1400px; margin: 0 auto; }
+.eoi-form-panel { flex: 1 1 50%; min-width: 0; }
+.eoi-preview-panel { flex: 1 1 50%; min-width: 0; }
+@media (max-width: 1200px) {
+  .eoi-panels { flex-direction: column; }
+  .eoi-preview-panel { }
+}
+
+/* Form table */
+.eoi-form-table { width: 100%; border-collapse: collapse; border: 1px solid #ccc; background: #fff; }
+.eoi-form-input {
+  width: 100%; border: 1px solid #ddd; border-radius: 3px; padding: 4px 8px;
+  font-size: 13px; font-family: inherit; background: #fff;
+}
+.eoi-form-input:focus { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(251,215,33,0.3); }
+.eoi-form-textarea {
+  width: 100%; border: 1px solid #ddd; border-radius: 3px; padding: 4px 8px;
+  font-size: 13px; font-family: inherit; background: #fff; overflow: hidden; resize: none;
+}
+.eoi-form-textarea:focus { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 2px rgba(251,215,33,0.3); }
+
+/* Info button & panel */
+.eoi-info-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%; border: 1px solid #999;
+  background: #fff; color: #666; font-size: 10px; font-weight: 600;
+  cursor: pointer; margin-left: 6px; vertical-align: middle;
+  line-height: 1; padding: 0;
+}
+.eoi-info-btn:hover { background: #e0e0e0; }
+.eoi-info-panel {
+  background: #f0f4ff; padding: 8px 12px 8px 172px; font-size: 11px;
+  color: #444; border-bottom: 1px solid #ddd; line-height: 1.6;
+}
+
+/* Colour legend */
+.legend { max-width: 1400px; margin: 0 auto 12px; background: #fff; padding: 10px 16px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); font-size: 12px; }
 .legend-items { display: flex; flex-wrap: wrap; gap: 16px; }
 .legend-item { display: flex; align-items: center; gap: 6px; }
 .legend-swatch { width: 16px; height: 16px; border: 1px solid #ccc; border-radius: 2px; }
 
-/* Side annotations — anchored to sections */
-.side-note {
-  position: absolute; right: -220px; width: 200px;
-  background: #fafafa; border: 1px solid #e5e5e5; border-radius: 4px; padding: 8px 10px;
-  font-size: 10px; line-height: 1.5; color: #888;
-}
-.side-note strong { color: #555; font-weight: 600; }
-@media (max-width: 1400px) { .side-note { display: none; } }
 `;
 
 // ---- component --------------------------------------------------------------
@@ -195,6 +315,11 @@ export default function EoiComposePage() {
   // Auth
   const [userEmail, setUserEmail] = useState('');
   const [authEmail, setAuthEmail] = useState('');
+  const [sendAsEmail, setSendAsEmail] = useState('');
+  const [teamMembers, setTeamMembers] = useState<{ name: string; email: string }[]>([]);
+  const [globalCcList, setGlobalCcList] = useState<string[]>([]);
+  const [ccPropertyOn, setCcPropertyOn] = useState(true);
+  const [ccBaOn, setCcBaOn] = useState(true);
 
   // Record params (from URL — instant, no fetch needed)
   const [recordId, setRecordId] = useState('');
@@ -247,19 +372,8 @@ export default function EoiComposePage() {
   const [editPci, setEditPci] = useState('');
   const [editCommission, setEditCommission] = useState('');
   const [editSettlement, setEditSettlement] = useState('');
-  const [editConditions, setEditConditions] = useState('');
-
-  // Auto-grow textarea refs
-  const conditionsRef = useRef<HTMLTextAreaElement>(null);
-  const notesRef = useRef<HTMLTextAreaElement>(null);
-  const sheetRef = useRef<HTMLDivElement>(null);
-  const autoGrow = useCallback((el: HTMLTextAreaElement | null) => {
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
-  }, []);
-  useEffect(() => { autoGrow(conditionsRef.current); }, [editConditions, autoGrow]);
-  useEffect(() => { autoGrow(notesRef.current); }, [notes, autoGrow]);
+  const [editConditions, setEditConditions] = useState<string[]>([]);
+  const [newConditionText, setNewConditionText] = useState('');
 
   // Send state
   const [sendType, setSendType] = useState<'initial' | 'increase' | 'revision'>('initial');
@@ -269,8 +383,28 @@ export default function EoiComposePage() {
   // History
   const [history, setHistory] = useState<SendHistoryItem[]>([]);
 
+  // Speculative message
+  const [speculativeMessage, setSpeculativeMessage] = useState('');
+
   // Contact loading note
   const [contactNote, setContactNote] = useState('');
+
+  // Preview
+  const [previewHtml, setPreviewHtml] = useState('');
+
+  // Attachments (T7)
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingType, setPendingType] = useState<AttachmentType>('ID');
+  const [pendingFor, setPendingFor] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Info panel toggle
+  const [openInfo, setOpenInfo] = useState<string | null>(null);
+
+  const toggleInfo = useCallback((id: string) => {
+    setOpenInfo(prev => prev === id ? null : id);
+  }, []);
 
   // ---- auth -----------------------------------------------------------------
   useEffect(() => {
@@ -285,6 +419,25 @@ export default function EoiComposePage() {
       setAuthEmail(userEmail);
     }
   }
+
+  // ---- initialise sendAs + fetch team members --------------------------------
+  useEffect(() => {
+    if (!authEmail) return;
+    setSendAsEmail(authEmail);
+    fetch('/api/bas')
+      .then(r => r.ok ? r.json() : { bas: [] })
+      .then(d => setTeamMembers(d.bas || []))
+      .catch(() => {});
+    fetch(`/api/eoi/templates?state=GLB&type=all&_t=${Date.now()}`)
+      .then(r => r.ok ? r.json() : { values: {} })
+      .then(d => {
+        const raw = d.values?.cc_list || '';
+        setGlobalCcList(raw.split(',').map((e: string) => e.trim()).filter((e: string) => e.includes('@')));
+        setCcPropertyOn(d.values?.cc_include_property !== 'false');
+        setCcBaOn(d.values?.cc_include_ba !== 'false');
+      })
+      .catch(() => {});
+  }, [authEmail]);
 
   // ---- read URL params (instant — no API call needed for basic record data) -
   useEffect(() => {
@@ -308,10 +461,10 @@ export default function EoiComposePage() {
     // Property type: use CO fields property_type + contract_type (Row 3 decision)
     setPropertyType(resolvePropertyType(p.get('propertyType') || '', p.get('contractType') || '', p.get('type') || ''));
 
-    setOfferPrice(currencyRaw(p.get('price') || ''));
-    // H&L land/build prices
-    setLandPrice(currencyRaw(p.get('landPrice') || ''));
-    setBuildPrice(currencyRaw(p.get('buildPrice') || ''));
+    // B1 fix: store price as-is (don't strip non-numeric chars from ranges)
+    setOfferPrice(p.get('price') || '');
+    setLandPrice(p.get('landPrice') || '');
+    setBuildPrice(p.get('buildPrice') || '');
 
     // Agent from CO
     setAgentName(p.get('agentName') || '');
@@ -398,7 +551,6 @@ export default function EoiComposePage() {
         if (opp.brokerEmail) setBrokerEmail(opp.brokerEmail);
         if (opp.brokerPhone) setBrokerPhone(opp.brokerPhone);
 
-        const got = [opp.contactEmail && 'email', opp.contactPhone && 'phone'].filter(Boolean);
         setContactNote('The Agent\'s name, email and phone number are synced with the property record; any changes made here will automatically update that record.');
       } catch {
         setContactNote('Could not read the linked opportunity — enter details manually.');
@@ -426,19 +578,16 @@ export default function EoiComposePage() {
   useEffect(() => {
     setEditDepositAmount(terms.deposit_amount || '');
     setEditDepositPayable(terms.deposit_payable || '');
-    // Land/build deposit: blank & mandatory (rows 10-11) — do NOT prefill from Template Admin
+    setEditLandDeposit(terms.land_deposit || '');
+    setEditBuildDeposit(terms.build_deposit || '');
     setEditFinance(terms.finance || '');
     setEditBuildingPest(terms.building_pest || '');
     setEditPci(terms.pci || '');
-    setEditCommission(''); // Manual entry (row 15)
+    setEditCommission(terms.commission || '');
     setEditSettlement(terms.settlement || '');
-    setEditConditions(conditions.map(c => {
-      const stripped = c.replace(/^[\s]*[-\u2013\u2014\u2022]\s*/, '');
-      return stripped ? `\u2022 ${stripped}` : c;
-    }).join('\n'));
-    // Notes: prefill from Template Admin if available, otherwise use hardcoded default
-    const defaultNotes = 'Exchanged contract is to be sent to: CONTRACTS@BUYERSCLUB.COM.AU\n\nPlease do not send the contract directly to the purchaser';
-    setNotes(terms.notes || defaultNotes);
+    setEditConditions(conditions.map(c => c.replace(/^[\s]*[-\u2013\u2014\u2022]\s*/, '').trim()).filter(Boolean));
+    setNotes(terms.notes || '');
+    setSpeculativeMessage(terms.speculative_message || '');
   }, [terms, conditions]);
 
   // ---- load history ---------------------------------------------------------
@@ -456,8 +605,8 @@ export default function EoiComposePage() {
 
   const totalPrice = useMemo(() => {
     if (!isHL) return '';
-    const land = parseFloat(currencyRaw(landPrice)) || 0;
-    const build = parseFloat(currencyRaw(buildPrice)) || 0;
+    const land = parseFloat((landPrice || '').replace(/[$,\s]/g, '')) || 0;
+    const build = parseFloat((buildPrice || '').replace(/[$,\s]/g, '')) || 0;
     return land + build > 0 ? String(land + build) : '';
   }, [isHL, landPrice, buildPrice]);
 
@@ -485,7 +634,7 @@ export default function EoiComposePage() {
       pci: editPci,
       commission: editCommission,
       settlement: editSettlement,
-      specialConditions: editConditions.split('\n').filter((l: string) => l.trim()),
+      specialConditions: editConditions.filter(l => l.trim()),
       landPrice: isHL ? currencyFormat(landPrice) : '',
       buildPrice: isHL ? currencyFormat(buildPrice) : '',
       totalPrice: isHL ? currencyFormat(totalPrice) : '',
@@ -496,19 +645,101 @@ export default function EoiComposePage() {
       consultantEmail,
       notes,
       lvr,
+      speculativeMessage: !oppId ? speculativeMessage : undefined,
     };
   }
 
-  // Live email preview HTML — same function used on send, so preview = email
-  const previewHtml = useMemo(() => renderEoiEmailHtml(buildEmailData()), [
-    propertyAddress, displayOfferPrice, state, propertyType, purchasers, contractEntity,
-    editDepositAmount, editDepositPayable, editLandDeposit, editBuildDeposit,
-    editFinance, editBuildingPest, editPci, editCommission, editSettlement, editConditions,
-    landPrice, buildPrice, totalPrice, agentName, agentEmail, agentPhone, agencyName,
+  // ---- preview refresh (debounced) ------------------------------------------
+  useEffect(() => {
+    if (!authEmail || !recordId) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const ed = buildEmailData();
+        const res = await fetch('/api/eoi/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emailData: ed }),
+          signal: controller.signal,
+        });
+        if (res.ok) setPreviewHtml(await res.text());
+      } catch { /* aborted or network error */ }
+    }, 400);
+    return () => { clearTimeout(timer); controller.abort(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    propertyAddress, offerPrice, landPrice, buildPrice, state, propertyType,
+    purchasers, contractEntity, editDepositAmount, editDepositPayable,
+    editLandDeposit, editBuildDeposit, editFinance, editBuildingPest,
+    editPci, editCommission, editSettlement, editConditions,
+    agentName, agentEmail, agentPhone, agencyName,
     solicitorName, solicitorEmail, solicitorPhone, solicitorCompany,
     brokerName, brokerEmail, brokerPhone, brokerCompany,
     consultantName, consultantEmail, notes, lvr,
+    authEmail, recordId,
   ]);
+
+  // ---- T1: auto-grow textareas on value changes -----------------------------
+  useEffect(() => {
+    document.querySelectorAll<HTMLTextAreaElement>('.eoi-form-textarea').forEach(ta => {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    });
+  }, [notes, editDepositPayable, editFinance, editBuildingPest, editPci, editSettlement,
+    editCommission, editDepositAmount, propertyAddress, contractEntity, speculativeMessage, purchasers]);
+
+  // ---- T6: iframe auto-height -----------------------------------------------
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const resizeIframe = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc?.documentElement) {
+        iframe.style.height = Math.max(400, doc.documentElement.scrollHeight + 16) + 'px';
+      }
+    } catch { /* cross-origin guard */ }
+  }, []);
+
+  useEffect(() => {
+    if (!previewHtml) return;
+    const timer = setTimeout(resizeIframe, 150);
+    return () => clearTimeout(timer);
+  }, [previewHtml, resizeIframe]);
+
+  // ---- attachment handlers (T7) -----------------------------------------------
+  function handleFileSelected(file: File) {
+    const totalSize = attachments.reduce((sum, a) => sum + a.file.size, 0) + file.size;
+    if (totalSize > MAX_TOTAL_ATTACHMENT_SIZE) {
+      alert(`Total attachment size would exceed 18 MB (Gmail limit minus encoding overhead). Remove an attachment first or choose a smaller file.`);
+      return;
+    }
+    setPendingFile(file);
+    setPendingType('ID');
+    setPendingFor('');
+  }
+
+  async function confirmAttachment() {
+    if (!pendingFile) return;
+    const base64 = await readFileAsBase64(pendingFile);
+    const autoName = buildAutoName(pendingType, pendingFor, pendingFile.name);
+    setAttachments(prev => [...prev, {
+      file: pendingFile,
+      base64,
+      mimeType: pendingFile.type || 'application/octet-stream',
+      type: pendingType,
+      forLabel: pendingFor,
+      autoName,
+    }]);
+    setPendingFile(null);
+    setPendingType('ID');
+    setPendingFor('');
+  }
+
+  function removeAttachment(idx: number) {
+    setAttachments(prev => prev.filter((_, i) => i !== idx));
+  }
 
   // ---- send -----------------------------------------------------------------
   async function handleSend() {
@@ -518,7 +749,7 @@ export default function EoiComposePage() {
     const missing: string[] = [];
     if (isHL && !editLandDeposit.trim()) missing.push('Land Deposit');
     if (isHL && !editBuildDeposit.trim()) missing.push('Build Deposit');
-    if (!lvr.trim()) missing.push('LVR');
+    if (oppId && !lvr.trim()) missing.push('LVR');
     if (missing.length > 0) { alert(`Required fields missing: ${missing.join(', ')}`); return; }
 
     setSending(true);
@@ -526,8 +757,6 @@ export default function EoiComposePage() {
     setContactNote('');
 
     const emailData = buildEmailData();
-    // Use the same renderer as the preview — what you see IS what gets sent
-    const renderedHtml = renderEoiEmailHtml(emailData);
 
     try {
       const res = await fetch('/api/eoi/send', {
@@ -540,10 +769,17 @@ export default function EoiComposePage() {
           sendType,
           offerPrice: displayOfferPrice,
           agentEmail,
-          sentBy: authEmail,
+          sentBy: sendAsEmail || authEmail,
+          initiatedBy: authEmail,
           consultantEmail,
           emailData,
-          renderedHtml,
+          attachments: attachments.length > 0 ? attachments.map(a => ({
+            base64: a.base64,
+            mimeType: a.mimeType,
+            autoName: a.autoName,
+            type: a.type,
+            forLabel: a.forLabel,
+          })) : undefined,
         }),
       });
       const data = await res.json();
@@ -566,6 +802,74 @@ export default function EoiComposePage() {
 
   function removePurchaser(idx: number) {
     if (purchasers.length > 1) setPurchasers((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  // ---- form row helper -------------------------------------------------------
+  function renderFormRow(id: string, label: string, src: string, colour: FieldColour, content: React.ReactNode) {
+    return (
+      <React.Fragment key={id}>
+        <tr style={{ background: BG[colour] }}>
+          <td style={formLabelSty}>
+            {label}
+            <span className="source-label">{src}</span>
+            <button onClick={() => toggleInfo(id)} className="eoi-info-btn" title="Field info">i</button>
+          </td>
+          <td style={formValueSty}>{content}</td>
+        </tr>
+        {openInfo === id && FIELD_INFO[id] && (
+          <tr><td colSpan={2} className="eoi-info-panel">
+            {FIELD_INFO[id].map((line, i) => <div key={i}>{line}</div>)}
+          </td></tr>
+        )}
+      </React.Fragment>
+    );
+  }
+
+  // ---- condition list helpers ------------------------------------------------
+  function addConditionItem() {
+    if (!newConditionText.trim()) return;
+    setEditConditions(prev => [...prev, newConditionText.trim()]);
+    setNewConditionText('');
+  }
+  function removeConditionItem(idx: number) {
+    setEditConditions(prev => prev.filter((_, i) => i !== idx));
+  }
+  function moveConditionItem(idx: number, dir: -1 | 1) {
+    setEditConditions(prev => {
+      const arr = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= arr.length) return prev;
+      [arr[idx], arr[target]] = [arr[target], arr[idx]];
+      return arr;
+    });
+  }
+  function updateConditionItem(idx: number, text: string) {
+    setEditConditions(prev => prev.map((c, i) => i === idx ? text : c));
+  }
+
+  // ---- purchaser field colour ------------------------------------------------
+  function pColour(idx: number, field: string): FieldColour {
+    if (idx === 0) return field === 'address' ? 'green' : 'yellow';
+    if (idx === 1) return 'green';
+    return 'grey';
+  }
+
+  function pInfoId(idx: number, field: string): string {
+    if (idx === 0) return `p1${field.charAt(0).toUpperCase() + field.slice(1)}`;
+    if (idx === 1) return `p2${field.charAt(0).toUpperCase() + field.slice(1)}`;
+    return 'p3Plus';
+  }
+
+  function pSrc(idx: number, field: string): string {
+    if (idx === 0) {
+      if (field === 'address') return 'Opportunity \u2192 Opportunity Details \u2192 Postal Address \u00b7 writes back';
+      return 'Opportunity \u2192 Contact \u00b7 contact-inherited \u00b7 does not write back';
+    }
+    if (idx === 1) {
+      const fMap: Record<string, string> = { name: 'Partner Name', email: 'Partner Email', phone: 'Partner Phone', address: 'Partner Address' };
+      return `Opportunity \u2192 Opportunity Details \u2192 ${fMap[field] || field} \u00b7 writes back`;
+    }
+    return 'Manual \u00b7 does not write back';
   }
 
   // ---- auth gate ------------------------------------------------------------
@@ -595,7 +899,7 @@ export default function EoiComposePage() {
     );
   }
 
-  // ---- RENDER — matching existing form layout --------------------------------
+  // ---- RENDER ----------------------------------------------------------------
   return (
     <div className="eoi-page">
       <style suppressHydrationWarning>{CSS}</style>
@@ -604,13 +908,13 @@ export default function EoiComposePage() {
       <div className="toolbar">
         <span className="toolbar-title">Expression of Interest</span>
         <div className="toolbar-group">
-          <label style={{ fontSize: 12, color: '#ccc' }}>State<span style={{ display: 'block', fontSize: 9, color: '#999', fontStyle: 'italic' }}>CO &rarr; state</span></label>
+          <label style={{ fontSize: 12, color: '#ccc' }}>State<span style={{ display: 'block', fontSize: 9, color: '#999', fontStyle: 'italic' }}>Property Record (CO) &rarr; state</span></label>
           <select value={state} onChange={(e) => setState(e.target.value as AuState)} style={{ background: '#fff3cd' }}>
             {AU_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div className="toolbar-group">
-          <label style={{ fontSize: 12, color: '#ccc' }}>Type<span style={{ display: 'block', fontSize: 9, color: '#999', fontStyle: 'italic' }}>CO &rarr; property_type</span></label>
+          <label style={{ fontSize: 12, color: '#ccc' }}>Type<span style={{ display: 'block', fontSize: 9, color: '#999', fontStyle: 'italic' }}>Property Record (CO) &rarr; property_type</span></label>
           <select value={propertyType} onChange={(e) => setPropertyType(e.target.value as PropertyType)} style={{ background: '#fff3cd' }}>
             {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
@@ -634,7 +938,10 @@ export default function EoiComposePage() {
           {sendResult.ok ? (
             <>{sendResult.deliveryStatus === 'sent' ? 'Success! The EOI has been sent.' : sendResult.deliveryStatus === 'no_credentials' ? 'EOI recorded but email credentials are not configured.' : `EOI recorded. Delivery: ${sendResult.deliveryStatus}`}</>
           ) : (
-            <>{sendResult.error || 'Send failed'}</>
+            <>
+              <div style={{ fontWeight: 600 }}>The EOI could not be sent. Your data is safe — please wait a few moments and try again.</div>
+              {sendResult.error && <div style={{ fontSize: 11, marginTop: 4, opacity: 0.8 }}>{sendResult.error}</div>}
+            </>
           )}
         </div>
       )}
@@ -642,382 +949,443 @@ export default function EoiComposePage() {
       {/* Recipient bar */}
       <div className="recipient-bar">
         <div className="recipient-row">
-          <label>Agent Email: <span className="source-label" style={{ color: '#8a7300' }}>CO &rarr; agent_email</span></label>
+          <label>Agent Email: <span className="source-label" style={{ color: '#8a7300' }}>Property Record (CO) &rarr; agent_email</span></label>
           <input value={agentEmail} onChange={(e) => setAgentEmail(e.target.value)} placeholder="agent@agency.com.au" style={{ fontWeight: 600, fontSize: 14 }} />
+          <button onClick={() => toggleInfo('agentGroup')} className="eoi-info-btn" style={{ borderColor: '#c4a800' }} title="Agent field info">i</button>
         </div>
+        {openInfo === 'agentGroup' && (
+          <div style={{ background: '#f0f4ff', padding: '6px 12px', marginTop: 6, borderRadius: 4, fontSize: 11, color: '#444', lineHeight: 1.6 }}>
+            {FIELD_INFO.agentGroup.map((line, i) => <div key={i}>{line}</div>)}
+          </div>
+        )}
         <div className="recipient-row" style={{ marginTop: 6 }}>
-          <label>Agent Name: <span className="source-label" style={{ color: '#8a7300' }}>CO &rarr; agent_name</span></label>
+          <label>Agent Name: <span className="source-label" style={{ color: '#8a7300' }}>Property Record (CO) &rarr; agent_name</span></label>
           <input value={agentName} onChange={(e) => setAgentName(e.target.value)} placeholder="Agent name" />
         </div>
         <div className="recipient-row" style={{ marginTop: 6 }}>
-          <label>Agent Phone: <span className="source-label" style={{ color: '#8a7300' }}>CO &rarr; agent_mobile</span></label>
+          <label>Agent Phone: <span className="source-label" style={{ color: '#8a7300' }}>Property Record (CO) &rarr; agent_mobile</span></label>
           <input value={agentPhone} onChange={(e) => setAgentPhone(handleMobileInput(e.target.value))}
             onBlur={(e) => setAgentPhone(normalizeMobileForStorage(e.target.value))}
             placeholder="0450 581 822" />
         </div>
         <div className="recipient-meta">
-          <strong>From:</strong>
-          <span>property@buyersclub.com.au</span>
+          <strong>Send as:</strong>
+          <select value={sendAsEmail} onChange={e => setSendAsEmail(e.target.value)}
+            style={{ border: '1px solid #c4a800', borderRadius: 3, padding: '2px 6px', fontSize: 12, background: '#fff', fontFamily: 'inherit' }}>
+            {authEmail && <option value={authEmail}>{authEmail} (you)</option>}
+            {teamMembers.filter(m => m.email !== authEmail).map(m => (
+              <option key={m.email} value={m.email}>{m.name} — {m.email}</option>
+            ))}
+          </select>
           <span style={{ color: '#999' }}>·</span>
           <strong>CC:</strong>
-          <span>property@buyersclub.com.au</span>
-          <span style={{ color: '#999' }}>·</span>
-          <span>{consultantName || 'Assigned BA'}{consultantEmail ? ` (${consultantEmail})` : ''} <span className="source-label" style={{ display: 'inline', color: '#8a7300' }}>(Opp &rarr; Prop Team Info New)</span></span>
+          {ccPropertyOn && <><span>property@buyersclub.com.au</span><span style={{ color: '#999' }}>·</span></>}
+          {ccBaOn && <span>{consultantName || 'Assigned BA'}{consultantEmail ? ` (${consultantEmail})` : ''} <span className="source-label" style={{ display: 'inline', color: '#8a7300' }}>(Opportunity &rarr; Prop Team Info New)</span></span>}
+          {globalCcList.map(email => (
+            <><span key={email} style={{ color: '#999' }}>·</span><span>{email}</span></>
+          ))}
+          {!ccPropertyOn && !ccBaOn && globalCcList.length === 0 && <span style={{ color: '#999', fontStyle: 'italic' }}>None</span>}
         </div>
       </div>
 
-      {/* EOI Sheet */}
-      <div className="eoi-sheet" ref={sheetRef}>
-        <div className="eoi-header">
-          <h1>Expression of Interest</h1>
-          <div className="badges">
-            <span className="state-badge">{state}</span>
-            <span className="type-badge">{TYPE_LABELS[propertyType]}</span>
+      {/* ================ TWO-PANEL LAYOUT ================ */}
+      <div className="eoi-panels">
+
+        {/* ======== LEFT PANEL — Edit Form ======== */}
+        <div className="eoi-form-panel">
+
+          {/* Colour legend */}
+          <div className="legend">
+            <div className="legend-items">
+              <div className="legend-item">
+                <div className="legend-swatch" style={{ background: BG.green, border: '1px solid #4caf50' }} />
+                <span>Writes back to GHL on send</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-swatch" style={{ background: BG.grey, border: '1px solid #9e9e9e' }} />
+                <span>Does not write back</span>
+              </div>
+              <div className="legend-item">
+                <div className="legend-swatch" style={{ background: BG.yellow, border: '1px solid #ff9800' }} />
+                <span>Contact-inherited (this EOI only)</span>
+              </div>
+            </div>
+            <a href="/admin/eoi-templates" target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', fontSize: 11, color: '#666', textDecoration: 'underline' }}>EOI Template Admin</a>
           </div>
-        </div>
 
-        <table className="eoi">
-          <tbody>
-            {/* PROPERTY */}
-            <tr><td colSpan={4} className="section-head" style={{ position: 'relative' }}>PROPERTY
-              <div className="side-note" style={{ top: 0 }}>
-                <strong>Source:</strong> CO / Deal Sheet<br />
-                <strong>Notes:</strong> Template Admin<br />
-                <strong>On send:</strong> Does not write back
-              </div>
-            </td></tr>
-            <tr>
-              <td className="label-dark">Property Address<span className="source-label">CO &rarr; property_address</span></td>
-              <td colSpan={3} className="value-edit fill-writeback">
-                <input value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} placeholder="e.g. 12 Smith Street, Richmond VIC 3121" />
-              </td>
-            </tr>
-            <tr>
-              <td className="label-light" style={{ verticalAlign: 'top' }}>Notes<span className="source-label">EOI Template Admin</span></td>
-              <td colSpan={3} className="fill-prompt" style={{ verticalAlign: 'top' }}>
-                <textarea ref={notesRef} data-field="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} style={{ overflow: 'hidden' }} />
-              </td>
-            </tr>
-            <tr>
-              <td colSpan={4} style={{ padding: '6px 10px', fontSize: 13, color: '#b91c1c', fontWeight: 600, textAlign: 'center', borderBottom: '1px solid #ddd' }}>
-                Please do not send the contract directly to the purchaser
-              </td>
-            </tr>
+          {/* Form table */}
+          <table className="eoi-form-table">
+            <tbody>
 
-            {/* TERMS */}
-            <tr><td colSpan={4} className="section-head" style={{ position: 'relative' }}>TERMS
-              <div className="side-note" style={{ top: 0 }}>
-                <strong>Source:</strong> Template Admin<br />
-                <strong>Price/LVR:</strong> Manual entry<br />
-                <strong>On send:</strong> Offer price &amp; status write to CO
-              </div>
-            </td></tr>
+              {/* ============ SPECULATIVE BANNER ============ */}
+              {!oppId && (
+                renderFormRow('speculativeMessage', 'Speculative Message', 'EOI Template Admin \u00b7 shown as banner when no opportunity linked', 'yellow',
+                  <textarea className="eoi-form-textarea" value={speculativeMessage} onChange={e => setSpeculativeMessage(e.target.value)} onInput={autoGrow} rows={2}
+                    placeholder="e.g. Please find EOI on behalf of my clients..." />
+                )
+              )}
 
-            {/* Price */}
-            {isHL ? (
-              <>
-                <tr>
-                  <td className="label-light" rowSpan={3}>Price<span className="source-label">CO &rarr; land/build_price</span></td>
-                  <td colSpan={3} className="value-light" style={{ padding: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody><tr>
-                      <td className="sub-label" style={{ background: 'var(--row-light)' }}>Land Price:</td>
-                      <td className="fill-writeback"><input value={landPrice ? currencyFormat(landPrice) : ''} onChange={(e) => setLandPrice(currencyRaw(e.target.value))} placeholder="$" /></td>
-                    </tr></tbody></table>
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={3} className="value-light" style={{ padding: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody><tr>
-                      <td className="sub-label" style={{ background: 'var(--row-light)' }}>Build Price:</td>
-                      <td className="fill-writeback"><input value={buildPrice ? currencyFormat(buildPrice) : ''} onChange={(e) => setBuildPrice(currencyRaw(e.target.value))} placeholder="$" /></td>
-                    </tr></tbody></table>
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={3} className="value-light" style={{ padding: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody><tr>
-                      <td className="sub-label" style={{ background: 'var(--row-light)', fontWeight: 700 }}>Total Price:</td>
-                      <td className="fill-calculated" style={{ fontWeight: 700 }}>{totalPrice ? currencyFormat(totalPrice) : ''}<span className="source-label">Calculated</span></td>
-                    </tr></tbody></table>
-                  </td>
-                </tr>
-              </>
-            ) : (
-              <tr>
-                <td className="label-light">Price<span className="source-label">Manual entry</span></td>
-                <td colSpan={3} className="fill-manual">
-                  <input value={offerPrice ? currencyFormat(offerPrice) : ''} onChange={(e) => setOfferPrice(currencyRaw(e.target.value))} placeholder="$" />
-                </td>
-              </tr>
-            )}
+              {/* ============ PROPERTY ============ */}
+              <tr><td colSpan={2} style={formSectionSty}>PROPERTY</td></tr>
 
-            {/* Deposit */}
-            {isHL ? (
-              <>
-                <tr>
-                  <td className="label-dark" rowSpan={2}>Deposit<span className="source-label">Manual (mandatory)</span></td>
-                  <td colSpan={3} className="value-dark" style={{ padding: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody><tr>
-                      <td className="sub-label" style={{ background: 'var(--row-dark)' }}>Land Amount:</td>
-                      <td className="fill-manual"><input value={editLandDeposit ? currencyFormat(editLandDeposit) : ''} onChange={(e) => setEditLandDeposit(currencyRaw(e.target.value))} placeholder="$ (required)" /></td>
-                    </tr></tbody></table>
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={3} className="value-light" style={{ padding: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody><tr>
-                      <td className="sub-label" style={{ background: 'var(--row-light)' }}>Build Amount:</td>
-                      <td className="fill-manual"><input value={editBuildDeposit ? currencyFormat(editBuildDeposit) : ''} onChange={(e) => setEditBuildDeposit(currencyRaw(e.target.value))} placeholder="$ (required)" /></td>
-                    </tr></tbody></table>
-                  </td>
-                </tr>
-              </>
-            ) : (
-              <>
-                <tr>
-                  <td className="label-dark" rowSpan={2}>Deposit</td>
-                  <td colSpan={3} className="value-dark" style={{ padding: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody><tr>
-                      <td className="sub-label" style={{ background: 'var(--row-dark)' }}>Amount:<span className="source-label">EOI Template Admin</span></td>
-                      <td className="fill-prompt"><input value={editDepositAmount} onChange={(e) => setEditDepositAmount(e.target.value)} placeholder="Deposit amount" /></td>
-                    </tr></tbody></table>
-                  </td>
-                </tr>
-                <tr>
-                  <td colSpan={3} className="value-light" style={{ padding: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody><tr>
-                      <td className="sub-label" style={{ background: 'var(--row-light)' }}>Payable:<span className="source-label">EOI Template Admin</span></td>
-                      <td className="fill-prompt"><input value={editDepositPayable} onChange={(e) => setEditDepositPayable(e.target.value)} placeholder="Payable terms" /></td>
-                    </tr></tbody></table>
-                  </td>
-                </tr>
-              </>
-            )}
+              {renderFormRow('propertyAddress', 'Property Address', 'Property Record (CO) \u2192 property_address \u00b7 does not write back', 'grey',
+                <textarea className="eoi-form-textarea" rows={1} value={propertyAddress} onChange={e => setPropertyAddress(e.target.value)} onInput={autoGrow} placeholder="e.g. 12 Smith Street, Richmond VIC 3121" />
+              )}
 
-            <tr>
-              <td className="label-dark">Finance<span className="source-label">EOI Template Admin</span></td>
-              <td colSpan={3} className="fill-prompt"><input value={editFinance} onChange={(e) => setEditFinance(e.target.value)} placeholder="Finance terms" /></td>
-            </tr>
+              {renderFormRow('notes', 'Notes', 'EOI Template Admin \u00b7 writes eoi_notes to CO on send', 'green',
+                <textarea className="eoi-form-textarea" value={notes} onChange={e => setNotes(e.target.value)} onInput={autoGrow} rows={3} />
+              )}
 
-            {isEstablished ? (
-              <tr>
-                <td className="label-light">Building &amp; Pest<span className="source-label">EOI Template Admin</span></td>
-                <td colSpan={3} className="fill-prompt"><input value={editBuildingPest} onChange={(e) => setEditBuildingPest(e.target.value)} placeholder="B&P terms" /></td>
-              </tr>
-            ) : (
-              <tr>
-                <td className="label-light">PCI<span className="source-label">EOI Template Admin</span></td>
-                <td colSpan={3} className="fill-prompt"><input value={editPci} onChange={(e) => setEditPci(e.target.value)} placeholder="PCI terms" /></td>
-              </tr>
-            )}
+              {/* ============ TERMS ============ */}
+              <tr><td colSpan={2} style={formSectionSty}>TERMS</td></tr>
 
-            {isHL && (
-              <tr>
-                <td className="label-dark">Commission<span className="source-label">Manual entry</span></td>
-                <td colSpan={3} className="fill-manual"><input value={editCommission} onChange={(e) => setEditCommission(e.target.value)} placeholder="Commission (required)" /></td>
-              </tr>
-            )}
+              {/* Price — depends on property type */}
+              {isHL ? (
+                <>
+                  {renderFormRow('landPrice', 'Offer Price Land', 'Property Record (CO) \u2192 Offer Price Land \u00b7 writes back on send', 'green',
+                    <input className="eoi-form-input" value={currencyFormat(landPrice)} onChange={e => setLandPrice(e.target.value.replace(/[$,]/g, '').trim())} placeholder="$" />
+                  )}
+                  {renderFormRow('buildPrice', 'Offer Price Build', 'Property Record (CO) \u2192 Offer Price Build \u00b7 writes back on send', 'green',
+                    <input className="eoi-form-input" value={currencyFormat(buildPrice)} onChange={e => setBuildPrice(e.target.value.replace(/[$,]/g, '').trim())} placeholder="$" />
+                  )}
+                  {renderFormRow('totalPrice', 'Offer Price', 'Calculated (land + build) \u00b7 writes back to Offer Price on send', 'green',
+                    <strong>{currencyFormat(totalPrice) || '\u2014'}</strong>
+                  )}
+                </>
+              ) : (
+                renderFormRow('price', 'Offer Price', 'Property Record (CO) \u2192 Offer Price \u00b7 writes back on send', 'green',
+                  <input className="eoi-form-input" value={offerPrice} onChange={e => setOfferPrice(e.target.value)} placeholder="$" />
+                )
+              )}
 
-            <tr>
-              <td className="label-dark" style={{ verticalAlign: 'top' }}>Special Conditions<span className="source-label">EOI Template Admin</span></td>
-              <td colSpan={3} className="fill-prompt" style={{ verticalAlign: 'top', paddingTop: 8, paddingBottom: 8 }}>
-                <textarea
-                  ref={conditionsRef}
-                  data-field="conditions"
-                  value={editConditions}
-                  onChange={(e) => setEditConditions(e.target.value)}
-                  rows={3}
-                  placeholder="One condition per line"
-                  style={{ overflow: 'hidden' }}
-                />
-              </td>
-            </tr>
+              {/* Deposit */}
+              {isHL ? (
+                <>
+                  {renderFormRow('landDeposit', 'Land Deposit', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                    <input className="eoi-form-input" value={editLandDeposit} onChange={e => setEditLandDeposit(e.target.value)} placeholder="Required" />
+                  )}
+                  {renderFormRow('buildDeposit', 'Build Deposit', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                    <input className="eoi-form-input" value={editBuildDeposit} onChange={e => setEditBuildDeposit(e.target.value)} placeholder="Required" />
+                  )}
+                </>
+              ) : (
+                <>
+                  {renderFormRow('depositAmount', 'Deposit Amount', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                    <textarea className="eoi-form-textarea" rows={1} value={editDepositAmount} onChange={e => setEditDepositAmount(e.target.value)} onInput={autoGrow} placeholder="Deposit amount" />
+                  )}
+                  {renderFormRow('depositPayable', 'Deposit Payable', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                    <textarea className="eoi-form-textarea" value={editDepositPayable} onChange={e => setEditDepositPayable(e.target.value)} onInput={autoGrow} rows={2} placeholder="Payable terms" />
+                  )}
+                </>
+              )}
 
-            <tr>
-              <td className="label-light">Settlement<span className="source-label">EOI Template Admin</span></td>
-              <td colSpan={3} className="fill-prompt"><input value={editSettlement} onChange={(e) => setEditSettlement(e.target.value)} placeholder="Settlement terms" /></td>
-            </tr>
+              {/* Finance */}
+              {renderFormRow('finance', 'Finance', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                <textarea className="eoi-form-textarea" rows={1} value={editFinance} onChange={e => setEditFinance(e.target.value)} onInput={autoGrow} placeholder="Finance terms" />
+              )}
 
-            {/* PURCHASER/S */}
-            <tr><td colSpan={4} className="section-head" style={{ position: 'relative' }}>PURCHASER/S
-              <div className="side-note" style={{ top: 0 }}>
-                <strong>Source:</strong> Opp Contact / Details<br />
-                <strong>On send:</strong> P1 address, P2 details write back to Opp
-              </div>
-            </td></tr>
-            <tr>
-              <td className="label-light">Contract Entity<span className="source-label">Opp &rarr; Prop Team Info New</span></td>
-              <td colSpan={3} className="fill-writeback">
-                <input value={contractEntity} onChange={(e) => setContractEntity(e.target.value)} placeholder="e.g. The Smith Family Trust / John Smith Pty Ltd ATF Smith SMSF" />
-              </td>
-            </tr>
-            {/* Purchasers in pairs of 2 per row */}
-            {Array.from({ length: Math.ceil(purchasers.length / 2) }, (_, rowIdx) => {
-              const pair = purchasers.slice(rowIdx * 2, rowIdx * 2 + 2);
-              return (
-                <React.Fragment key={rowIdx}>
-                  {/* Purchaser header row */}
+              {/* Building & Pest / PCI */}
+              {isEstablished ? (
+                renderFormRow('buildingPest', 'Building & Pest', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                  <textarea className="eoi-form-textarea" rows={1} value={editBuildingPest} onChange={e => setEditBuildingPest(e.target.value)} onInput={autoGrow} placeholder="B&P terms" />
+                )
+              ) : (
+                renderFormRow('pci', 'PCI', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                  <textarea className="eoi-form-textarea" rows={1} value={editPci} onChange={e => setEditPci(e.target.value)} onInput={autoGrow} placeholder="PCI terms" />
+                )
+              )}
+
+              {/* Commission (H&L only) */}
+              {isHL && renderFormRow('commission', 'Commission', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                <textarea className="eoi-form-textarea" rows={1} value={editCommission} onChange={e => setEditCommission(e.target.value)} onInput={autoGrow} placeholder="Commission (required)" />
+              )}
+
+              {/* Special Conditions */}
+              {renderFormRow('specialConditions', 'Special Conditions', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                <div style={{ width: '100%' }}>
+                  {editConditions.map((cond, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginBottom: 4 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, paddingTop: 2 }}>
+                        <button onClick={() => moveConditionItem(i, -1)} disabled={i === 0}
+                          style={{ fontSize: 9, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }} title="Move up">{'\u25B2'}</button>
+                        <button onClick={() => moveConditionItem(i, 1)} disabled={i === editConditions.length - 1}
+                          style={{ fontSize: 9, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }} title="Move down">{'\u25BC'}</button>
+                      </div>
+                      <span style={{ fontSize: 13, color: '#888', paddingTop: 2, flexShrink: 0 }}>{'\u2022'}</span>
+                      <textarea className="eoi-form-input" value={cond} onChange={e => updateConditionItem(i, e.target.value)}
+                        onInput={e => { const t = e.currentTarget; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }}
+                        ref={el => { if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; } }}
+                        rows={1} style={{ flex: 1, resize: 'none', overflow: 'hidden' }} />
+                      <button onClick={() => removeConditionItem(i)}
+                        style={{ fontSize: 11, color: '#c0392b', background: 'none', border: '1px solid #e0e0e0', borderRadius: 3, cursor: 'pointer', padding: '2px 6px', flexShrink: 0 }} title="Remove">{'\u2715'}</button>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                    <input className="eoi-form-input" value={newConditionText} onChange={e => setNewConditionText(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && addConditionItem()}
+                      placeholder="Add a new condition\u2026" style={{ flex: 1 }} />
+                    <button onClick={addConditionItem} disabled={!newConditionText.trim()}
+                      style={{ fontSize: 11, background: '#f0f0f0', border: '1px solid #ccc', borderRadius: 3, cursor: 'pointer', padding: '4px 10px', whiteSpace: 'nowrap' }}>+ Add</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Settlement */}
+              {renderFormRow('settlement', 'Settlement', 'EOI Template Admin \u00b7 does not write back', 'grey',
+                <textarea className="eoi-form-textarea" rows={1} value={editSettlement} onChange={e => setEditSettlement(e.target.value)} onInput={autoGrow} placeholder="Settlement terms" />
+              )}
+
+              {/* ============ PURCHASER/S ============ */}
+              <tr><td colSpan={2} style={formSectionSty}>PURCHASER/S</td></tr>
+
+              {/* Contract Entity */}
+              {renderFormRow('contractEntity', 'Contract Entity', 'Opportunity \u2192 Prop Team Info New \u2192 Trust/SMSF Name \u00b7 does not write back', 'grey',
+                <textarea className="eoi-form-textarea" rows={1} value={contractEntity} onChange={e => setContractEntity(e.target.value)} onInput={autoGrow}
+                  placeholder="e.g. The Smith Family Trust / John Smith Pty Ltd ATF Smith SMSF" />
+              )}
+
+              {/* Purchasers */}
+              {purchasers.map((p, idx) => (
+                <React.Fragment key={idx}>
+                  {/* Purchaser sub-header */}
                   <tr>
-                    <td className="label-dark"></td>
-                    <td colSpan={3} style={{ padding: 0 }}>
-                      <table data-purchaser-table="true" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}><tbody><tr>
-                        {pair.map((_, i) => {
-                          const pi = rowIdx * 2 + i;
-                          return (
-                            <td key={pi} className="purchaser-head" style={{ width: pair.length === 1 ? '100%' : '50%' }}>
-                              Purchaser {pi + 1}
-                              {purchasers.length > 1 && (
-                                <button onClick={() => removePurchaser(pi)} style={{ marginLeft: 8, background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 11 }} title="Remove">x</button>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr></tbody></table>
+                    <td colSpan={2} style={{ ...formSectionSty, background: '#666', fontSize: '12px', padding: '5px 10px', textAlign: 'left' }}>
+                      <span style={{ marginLeft: 'auto' }}>Purchaser {idx + 1}</span>
+                      {purchasers.length > 1 && (
+                        <button onClick={() => removePurchaser(idx)}
+                          style={{ marginLeft: 8, background: 'transparent', border: 'none', color: '#ccc', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+                          title="Remove purchaser">&times;</button>
+                      )}
                     </td>
                   </tr>
-                  {/* Purchaser data rows */}
-                  {(['Name', 'Email', 'Phone', 'Address'] as const).map((label, li) => {
-                    const field = label.toLowerCase() as keyof Purchaser;
-                    const isDark = li % 2 === 0;
-                    return (
-                      <tr key={`row${rowIdx}-${label}`}>
-                        <td className={isDark ? 'label-light' : 'label-dark'}>{label}<span className="source-label">{
-                          label === 'Address' ? 'Opp \u2192 Opp Details' : (rowIdx === 0 ? 'Opp \u2192 contact' : 'Opp \u2192 Opp Details')
-                        }</span></td>
-                        <td colSpan={3} style={{ padding: 0 }}>
-                          <table data-purchaser-table="true" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}><tbody><tr>
-                            {pair.map((p, i) => {
-                              const pi = rowIdx * 2 + i;
-                              return (
-                                <td key={pi} className="fill-writeback" style={{ width: pair.length === 1 ? '100%' : '50%', padding: '6px 10px' }}>
-                                  <input value={p[field]} onChange={(e) => updatePurchaser(pi, field, e.target.value)}
-                                    placeholder={label === 'Name' ? 'Full name' : label === 'Email' ? 'email@example.com' : label === 'Phone' ? '04XX XXX XXX' : 'Postal address'} />
-                                </td>
-                              );
-                            })}
-                          </tr></tbody></table>
-                        </td>
-                      </tr>
-                    );
-                  })}
+
+                  {/* Name */}
+                  {renderFormRow(pInfoId(idx, 'name'), 'Name', pSrc(idx, 'name'), pColour(idx, 'name'),
+                    <input className="eoi-form-input" style={{ fontWeight: 600 }}
+                      value={p.name} onChange={e => updatePurchaser(idx, 'name', e.target.value)} placeholder="Full name" />
+                  )}
+                  {/* Email */}
+                  {renderFormRow(pInfoId(idx, 'email'), 'Email', pSrc(idx, 'email'), pColour(idx, 'email'),
+                    <input className="eoi-form-input" value={p.email} onChange={e => updatePurchaser(idx, 'email', e.target.value)} placeholder="email@example.com" />
+                  )}
+                  {/* Phone */}
+                  {renderFormRow(pInfoId(idx, 'phone'), 'Phone', pSrc(idx, 'phone'), pColour(idx, 'phone'),
+                    <input className="eoi-form-input" value={p.phone} onChange={e => updatePurchaser(idx, 'phone', e.target.value)} placeholder="04XX XXX XXX" />
+                  )}
+                  {/* Address */}
+                  {renderFormRow(pInfoId(idx, 'address'), 'Address', pSrc(idx, 'address'), pColour(idx, 'address'),
+                    <textarea className="eoi-form-textarea" rows={1} value={p.address} onChange={e => updatePurchaser(idx, 'address', e.target.value)} onInput={autoGrow} placeholder="Postal address" />
+                  )}
                 </React.Fragment>
-              );
-            })}
-            {purchasers.length < 6 && (
+              ))}
+
+              {/* Add purchaser */}
+              {purchasers.length < 6 && (
+                <tr>
+                  <td colSpan={2} style={{ background: '#f0f0f0', textAlign: 'center', padding: '8px 10px', borderBottom: '1px solid #ddd' }}>
+                    <button onClick={addPurchaser}
+                      style={{ background: 'transparent', border: '1px dashed #bbb', borderRadius: 4, padding: '4px 14px', fontSize: 12, cursor: 'pointer', color: '#555' }}>
+                      + Add purchaser
+                    </button>
+                  </td>
+                </tr>
+              )}
+
+              {/* ============ LEGALS ============ */}
               <tr>
-                <td className="label-light"></td>
-                <td colSpan={3} style={{ background: 'var(--row-light)', textAlign: 'center' }}>
-                  <button onClick={addPurchaser} style={{ background: 'transparent', border: '1px dashed var(--border)', borderRadius: 4, padding: '4px 12px', fontSize: 12, cursor: 'pointer', color: 'var(--text-soft)' }}>
-                    + Add purchaser
-                  </button>
+                <td colSpan={2} style={formSectionSty}>
+                  LEGALS
+                  <button onClick={() => toggleInfo('solicitor')} className="eoi-info-btn"
+                    style={{ marginLeft: 8, borderColor: '#FBD721', color: '#FBD721' }} title="Solicitor field info">i</button>
                 </td>
               </tr>
+              {openInfo === 'solicitor' && (
+                <tr><td colSpan={2} className="eoi-info-panel" style={{ paddingLeft: 12 }}>
+                  {FIELD_INFO.solicitor.map((line, i) => <div key={i}>{line}</div>)}
+                </td></tr>
+              )}
+
+              {/* Solicitor fields */}
+              <tr style={{ background: BG.green }}>
+                <td style={formLabelSty}>Company<span className="source-label">Opportunity &rarr; Prop Team Info New &rarr; Solicitor Company &middot; writes back</span></td>
+                <td style={formValueSty}><input className="eoi-form-input" value={solicitorCompany} onChange={e => setSolicitorCompany(e.target.value)} placeholder="Solicitor / conveyancer company" /></td>
+              </tr>
+              <tr style={{ background: BG.green }}>
+                <td style={formLabelSty}>Contact<span className="source-label">Opportunity &rarr; Prop Team Info New &rarr; Solicitor Name &middot; writes back</span></td>
+                <td style={formValueSty}><input className="eoi-form-input" value={solicitorName} onChange={e => setSolicitorName(e.target.value)} placeholder="Contact name" /></td>
+              </tr>
+              <tr style={{ background: BG.green }}>
+                <td style={formLabelSty}>Phone<span className="source-label">Opportunity &rarr; Prop Team Info New &rarr; Solicitor Phone &middot; writes back</span></td>
+                <td style={formValueSty}><input className="eoi-form-input" value={solicitorPhone} onChange={e => setSolicitorPhone(e.target.value)} /></td>
+              </tr>
+              <tr style={{ background: BG.green }}>
+                <td style={formLabelSty}>Email<span className="source-label">Opportunity &rarr; Prop Team Info New &rarr; Solicitor Email &middot; writes back</span></td>
+                <td style={formValueSty}><input className="eoi-form-input" value={solicitorEmail} onChange={e => setSolicitorEmail(e.target.value)} /></td>
+              </tr>
+
+              {/* ============ FINANCE ============ */}
+              <tr>
+                <td colSpan={2} style={formSectionSty}>
+                  FINANCE
+                  <button onClick={() => toggleInfo('broker')} className="eoi-info-btn"
+                    style={{ marginLeft: 8, borderColor: '#FBD721', color: '#FBD721' }} title="Broker field info">i</button>
+                </td>
+              </tr>
+              {openInfo === 'broker' && (
+                <tr><td colSpan={2} className="eoi-info-panel" style={{ paddingLeft: 12 }}>
+                  {FIELD_INFO.broker.map((line, i) => <div key={i}>{line}</div>)}
+                </td></tr>
+              )}
+
+              {/* Broker fields */}
+              <tr style={{ background: BG.green }}>
+                <td style={formLabelSty}>Company<span className="source-label">Opportunity &rarr; Isobel Team Info &rarr; Broker Company &middot; writes back</span></td>
+                <td style={formValueSty}><input className="eoi-form-input" value={brokerCompany} onChange={e => setBrokerCompany(e.target.value)} placeholder="Broker company" /></td>
+              </tr>
+              <tr style={{ background: BG.green }}>
+                <td style={formLabelSty}>Contact<span className="source-label">Opportunity &rarr; Isobel Team Info &rarr; Broker Name &middot; writes back</span></td>
+                <td style={formValueSty}><input className="eoi-form-input" value={brokerName} onChange={e => setBrokerName(e.target.value)} placeholder="Broker name" /></td>
+              </tr>
+              <tr style={{ background: BG.green }}>
+                <td style={formLabelSty}>Phone<span className="source-label">Opportunity &rarr; Isobel Team Info &rarr; Broker Phone &middot; writes back</span></td>
+                <td style={formValueSty}><input className="eoi-form-input" value={brokerPhone} onChange={e => setBrokerPhone(e.target.value)} /></td>
+              </tr>
+              <tr style={{ background: BG.green }}>
+                <td style={formLabelSty}>Email<span className="source-label">Opportunity &rarr; Isobel Team Info &rarr; Broker Email &middot; writes back</span></td>
+                <td style={formValueSty}><input className="eoi-form-input" value={brokerEmail} onChange={e => setBrokerEmail(e.target.value)} /></td>
+              </tr>
+
+              {/* LVR */}
+              {renderFormRow('lvr', 'LVR', 'Manual entry \u00b7 does not write back', 'grey',
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input className="eoi-form-input" style={{ width: 80 }}
+                    value={lvr} onChange={e => { const v = e.target.value; setLvr(/^[tT][bBcC]{0,2}$/.test(v) ? v.toUpperCase() : numericOnly(v)); }} placeholder="e.g. 80 or TBC" />
+                  {lvr && lvr.toUpperCase() !== 'TBC' && <span style={{ fontSize: 13, fontWeight: 600 }}>%</span>}
+                </div>
+              )}
+
+            </tbody>
+          </table>
+
+          {/* ======== ATTACHMENTS (T7) ======== */}
+          <div style={{ marginTop: 16, background: '#fff', border: '1px solid #ccc', borderRadius: 4, padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <h4 style={{ fontSize: 13, fontWeight: 700, margin: 0, color: '#2A2A2A' }}>Attachments</h4>
+              <button onClick={() => fileInputRef.current?.click()}
+                style={{ background: '#fff', border: '1px dashed #bbb', borderRadius: 4, padding: '4px 14px', fontSize: 12, cursor: 'pointer', color: '#555' }}>
+                + Add attachment
+              </button>
+              <input ref={fileInputRef} type="file" style={{ display: 'none' }}
+                onChange={e => { if (e.target.files?.[0]) handleFileSelected(e.target.files[0]); e.target.value = ''; }} />
+            </div>
+
+            {/* Pending attachment — type + for selection */}
+            {pendingFile && (
+              <div style={{ background: '#f9f9f9', border: '1px solid #ddd', borderRadius: 4, padding: 10, marginBottom: 10, fontSize: 12 }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>{pendingFile.name} ({formatFileSize(pendingFile.size)})</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label style={{ fontWeight: 600 }}>Type:</label>
+                  <select value={pendingType} onChange={e => { setPendingType(e.target.value as AttachmentType); setPendingFor(''); }}
+                    style={{ padding: '3px 8px', fontSize: 12, borderRadius: 3, border: '1px solid #ccc' }}>
+                    {ATTACHMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+
+                  {/* Contextual "For" */}
+                  {pendingType === 'ID' && (
+                    <>
+                      <label style={{ fontWeight: 600 }}>For:</label>
+                      <select value={pendingFor} onChange={e => setPendingFor(e.target.value)}
+                        style={{ padding: '3px 8px', fontSize: 12, borderRadius: 3, border: '1px solid #ccc' }}>
+                        <option value="">Select purchaser</option>
+                        {purchasers.filter(p => p.name.trim()).map((p, i) => (
+                          <option key={i} value={p.name}>{p.name}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                  {pendingType === 'Deposit Receipt' && (
+                    <>
+                      <label style={{ fontWeight: 600 }}>For:</label>
+                      <select value={pendingFor} onChange={e => setPendingFor(e.target.value)}
+                        style={{ padding: '3px 8px', fontSize: 12, borderRadius: 3, border: '1px solid #ccc' }}>
+                        <option value="">Select</option>
+                        {isHL && <option value="Land">Land</option>}
+                        {isHL && <option value="Build">Build</option>}
+                        <option value="Property">Property</option>
+                      </select>
+                    </>
+                  )}
+                  {pendingType === 'Other' && (
+                    <>
+                      <label style={{ fontWeight: 600 }}>For:</label>
+                      <input value={pendingFor} onChange={e => setPendingFor(e.target.value)}
+                        placeholder="Description" style={{ padding: '3px 8px', fontSize: 12, borderRadius: 3, border: '1px solid #ccc', width: 140 }} />
+                    </>
+                  )}
+
+                  <button onClick={confirmAttachment}
+                    disabled={
+                      (pendingType === 'ID' && !pendingFor) ||
+                      (pendingType === 'Deposit Receipt' && !pendingFor)
+                    }
+                    style={{ background: '#FBD721', border: '1px solid #d4b800', borderRadius: 3, padding: '3px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                    Add
+                  </button>
+                  <button onClick={() => { setPendingFile(null); setPendingFor(''); }}
+                    style={{ background: '#eee', border: '1px solid #ccc', borderRadius: 3, padding: '3px 10px', fontSize: 12, cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </div>
+                <div style={{ color: '#888', fontSize: 11, marginTop: 4 }}>
+                  Will be named: <strong>{buildAutoName(pendingType, pendingFor, pendingFile.name)}</strong>
+                </div>
+              </div>
             )}
 
-            {/* LEGALS */}
-            <tr><td colSpan={4} className="section-head" style={{ position: 'relative' }}>LEGALS
-              <div className="side-note" style={{ top: 0 }}>
-                <strong>Source:</strong> Prop Team Info New / Opp<br />
-                <strong>On send:</strong> Writes back to Opp
+            {/* Attached files list */}
+            {attachments.map((a, idx) => (
+              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: idx < attachments.length - 1 ? '1px solid #eee' : 'none', fontSize: 12 }}>
+                <div>
+                  <span style={{ fontWeight: 600 }}>{a.autoName}</span>
+                  <span style={{ color: '#888', marginLeft: 8 }}>({formatFileSize(a.file.size)})</span>
+                </div>
+                <button onClick={() => removeAttachment(idx)}
+                  style={{ background: 'transparent', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
+                  title="Remove attachment">&times;</button>
               </div>
-            </td></tr>
-            <tr>
-              <td className="label-dark">Company<span className="source-label">Opp &rarr; Prop Team Info New</span></td>
-              <td colSpan={3} className="fill-writeback"><input value={solicitorCompany} onChange={(e) => setSolicitorCompany(e.target.value)} placeholder="Solicitor / conveyancer company" /></td>
-            </tr>
-            <tr>
-              <td className="label-light">Contact<span className="source-label">Opp &rarr; Prop Team Info New</span></td>
-              <td colSpan={3} className="fill-writeback"><input value={solicitorName} onChange={(e) => setSolicitorName(e.target.value)} placeholder="Contact name" /></td>
-            </tr>
-            <tr>
-              <td className="label-dark">Phone<span className="source-label">Opp &rarr; Prop Team Info New</span></td>
-              <td colSpan={3} className="fill-writeback"><input value={solicitorPhone} onChange={(e) => setSolicitorPhone(e.target.value)} /></td>
-            </tr>
-            <tr>
-              <td className="label-light">Email<span className="source-label">Opp &rarr; Prop Team Info New</span></td>
-              <td colSpan={3} className="fill-writeback"><input value={solicitorEmail} onChange={(e) => setSolicitorEmail(e.target.value)} /></td>
-            </tr>
+            ))}
 
-            {/* FINANCE */}
-            <tr><td colSpan={4} className="section-head" style={{ position: 'relative' }}>FINANCE
-              <div className="side-note" style={{ top: 0 }}>
-                <strong>Source:</strong> Isobel Team Info / Opp<br />
-                <strong>On send:</strong> Writes back to Opp
-              </div>
-            </td></tr>
-            <tr>
-              <td className="label-dark">Company<span className="source-label">Opp &rarr; Isobel Team Info</span></td>
-              <td colSpan={3} className="fill-writeback"><input value={brokerCompany} onChange={(e) => setBrokerCompany(e.target.value)} placeholder="Broker company" /></td>
-            </tr>
-            <tr>
-              <td className="label-light">Contact<span className="source-label">Opp &rarr; Isobel Team Info</span></td>
-              <td colSpan={3} className="fill-writeback"><input value={brokerName} onChange={(e) => setBrokerName(e.target.value)} placeholder="Broker name" /></td>
-            </tr>
-            <tr>
-              <td className="label-dark">Phone<span className="source-label">Opp &rarr; Isobel Team Info</span></td>
-              <td colSpan={3} className="fill-writeback"><input value={brokerPhone} onChange={(e) => setBrokerPhone(e.target.value)} /></td>
-            </tr>
-            <tr>
-              <td className="label-light">Email<span className="source-label">Opp &rarr; Isobel Team Info</span></td>
-              <td colSpan={3} className="fill-writeback"><input value={brokerEmail} onChange={(e) => setBrokerEmail(e.target.value)} /></td>
-            </tr>
-            <tr>
-              <td className="label-dark">LVR<span className="source-label">Manual entry</span></td>
-              <td colSpan={3} className="fill-manual"><input value={lvr} onChange={(e) => setLvr(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="e.g. 80" style={{ width: 50, display: 'inline-block' }} />{lvr && <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>%</span>}</td>
-            </tr>
-          </tbody>
-        </table>
+            {attachments.length === 0 && !pendingFile && (
+              <div style={{ color: '#999', fontSize: 11, textAlign: 'center', padding: 8 }}>No attachments</div>
+            )}
+          </div>
+
+        </div>
+
+        {/* ======== RIGHT PANEL — Email Preview ======== */}
+        <div className="eoi-preview-panel">
+          <div style={{ background: '#2A2A2A', color: '#FBD721', padding: '8px 14px', fontSize: 12, fontWeight: 700, letterSpacing: 1, borderRadius: '6px 6px 0 0' }}>
+            EMAIL PREVIEW
+          </div>
+          <iframe
+            ref={iframeRef}
+            srcDoc={previewHtml || '<html><body style="margin:0;padding:40px;color:#888;font-family:sans-serif;text-align:center"><p>Preview will appear here once data is loaded...</p></body></html>'}
+            onLoad={resizeIframe}
+            style={{ width: '100%', border: '1px solid #ccc', borderTop: 'none', borderRadius: '0 0 6px 6px', background: '#f0f0f0', minHeight: 400 }}
+            title="EOI Email Preview"
+          />
+        </div>
       </div>
 
-      
-
       {/* Submitted by / consultant */}
-      <div style={{ maxWidth: 920, margin: '0 auto', paddingTop: 8 }}>
+      <div style={{ maxWidth: 1400, margin: '12px auto 0', paddingTop: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)' }}>
           <span>Assigned BA:</span>
           <input value={consultantName} onChange={(e) => setConsultantName(e.target.value)} placeholder="BA / Consultant name"
             style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, width: 200, background: '#fff3cd' }} />
-          <span className="source-label" style={{ display: 'inline' }}>Opp &rarr; Prop Team Info New</span>
+          <span className="source-label" style={{ display: 'inline' }}>Opportunity &rarr; Prop Team Info New</span>
           <span style={{ marginLeft: 'auto' }}>Logged in as: {authEmail}</span>
         </div>
-      </div>
-
-      {/* Legend */}
-      <div className="legend">
-        <div className="legend-title">Field Colour Legend</div>
-        <div className="legend-items">
-          <div className="legend-item">
-            <div className="legend-swatch" style={{ background: '#d4edda' }}></div>
-            <span>EOI Template Admin — editable, does not write back</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-swatch" style={{ background: '#fff3cd' }}></div>
-            <span>Prefilled from GHL (CO/Opp) — editable, writes back on send</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-swatch" style={{ background: '#ffffff' }}></div>
-            <span>Manual entry — user completes before sending</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-swatch" style={{ background: '#e9ecef' }}></div>
-            <span>Calculated — derived from other fields (read-only)</span>
-          </div>
-        </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: '#999' }}>
-          On send: offer status/price write to CO. Purchaser address, partner, solicitor &amp; broker details write back to the Opportunity.
-          CO = Custom Object · Opp = Opportunity
-        </div>
-      </div>
-
-      {/* Live Email Preview — renders using the SAME function that generates the sent email */}
-      <div style={{ maxWidth: 1080, margin: '24px auto 0', position: 'relative' }}>
-        <div style={{ background: '#f0f0f0', padding: '1px 10px', fontSize: 9, letterSpacing: 1.5, color: '#999', fontWeight: 600, borderRadius: 2, display: 'inline-block', marginBottom: -10, position: 'relative', zIndex: 1 }}>
-          EMAIL PREVIEW — what the agent will receive
-        </div>
-        <div
-          style={{ border: '1.5px dashed #c0c0c0', background: '#f0f0f0', padding: 20 }}
-          dangerouslySetInnerHTML={{ __html: previewHtml }}
-        />
       </div>
 
       {/* Send History */}
