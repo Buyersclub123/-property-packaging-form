@@ -231,8 +231,6 @@ export function transformRecord(record: GHLRecord) {
   const offerStatus = p.offer_status || '';
   const offerPriceLand = p.offer_price_land;
   const offerPriceBuild = p.offer_price_build;
-  const offerStatusLand = p.offer_status_land || '';
-  const offerStatusBuild = p.offer_status_build || '';
 
   let offerPrice = '';
   if (hasValue(offerPriceLand) && hasValue(offerPriceBuild)) {
@@ -240,12 +238,16 @@ export function transformRecord(record: GHLRecord) {
     const landFmt = formatCurrency(offerPriceLand);
     const buildFmt = formatCurrency(offerPriceBuild);
     const totalVal = String(parseFloat(offerPriceLand || '0') + parseFloat(offerPriceBuild || '0'));
-    const statusLabel = offerStatusLand || offerStatus || '';
+    const statusLabel = offerStatus || '';
     offerPrice = `L: ${landFmt}\nB: ${buildFmt}\nTot. ${formatCurrency(totalVal)}${statusLabel ? '\n' + statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1) : ''}`;
   } else if (hasValue(p.offer_price)) {
     // Single contract
     offerPrice = formatCurrency(p.offer_price) + (offerStatus ? ' | ' + offerStatus : '');
   }
+
+  // D31: offer accepted flag — green only when status is 02_eoi
+  const rawStatusKey = (p.status || '').toLowerCase().replace(/ /g, '_').replace(/'/g, '');
+  const offerAccepted = offerStatus === 'accepted' && rawStatusKey === '02_eoi' ? 'yes' : '';
 
   const closingBA = p.closing_ba || '';
   const closingPrice = formatCurrency(p.closing_price);
@@ -316,6 +318,8 @@ export function transformRecord(record: GHLRecord) {
     agentNameCO: agentName,
     agentEmailCO: agentEmail,
     agentMobileCO: agentMobile,
+    hasEoiHistory: p.has_eoi_history || '',
+    offerAccepted,
   };
 }
 

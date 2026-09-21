@@ -40,25 +40,34 @@ CREATE TABLE IF NOT EXISTS contacts (
 );
 CREATE INDEX IF NOT EXISTS idx_contacts_type ON contacts(type);
 
--- EOI send history
+-- EOI activity log (sends, verbal updates, links, unlinks, accepts, reassigns)
 CREATE TABLE IF NOT EXISTS eoi_sends (
-  id                  SERIAL PRIMARY KEY,
-  record_id           VARCHAR(50) NOT NULL,
-  opportunity_id      VARCHAR(50),
-  property_address    TEXT,
-  send_type           VARCHAR(20) NOT NULL,
-  offer_price         DECIMAL(12,2),
-  agent_email         VARCHAR(200),
-  agent_contact_id    INT REFERENCES contacts(id),
-  sent_by             VARCHAR(100),
-  sent_at             TIMESTAMPTZ DEFAULT NOW(),
-  delivery_status     VARCHAR(20) DEFAULT 'pending',
-  payload             JSONB,
-  attachments         JSONB,
-  eoi_status          VARCHAR(20) DEFAULT 'sent',
-  previous_stage_id   VARCHAR(100),
-  stage_move_ok       BOOLEAN,
-  notes               TEXT
+  id                        SERIAL PRIMARY KEY,
+  record_id                 VARCHAR(50) NOT NULL,
+  opportunity_id            VARCHAR(50),
+  property_address          TEXT,
+  event_type                VARCHAR(40) NOT NULL,
+  offer_price               DECIMAL(12,2),
+  offer_price_land          DECIMAL(12,2),
+  offer_price_build         DECIMAL(12,2),
+  offer_status_at_event     VARCHAR(20),
+  agent_email               VARCHAR(200),
+  opportunity_name           VARCHAR(300),
+  client_name               VARCHAR(300),
+  assigned_ba               VARCHAR(200),
+  close_date                VARCHAR(20),
+  sent_by                   VARCHAR(100),
+  sent_at                   TIMESTAMPTZ DEFAULT NOW(),
+  delivery_status           VARCHAR(20) DEFAULT 'pending',
+  method                    VARCHAR(20),
+  payload                   JSONB,
+  attachments               JSONB,
+  initiated_by              VARCHAR(100),
+  previous_opportunity_id   VARCHAR(50),
+  previous_client_name      VARCHAR(300),
+  delink_reason             TEXT,
+  changes                   JSONB,
+  notes                     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_eoi_sends_record ON eoi_sends(record_id);
 CREATE INDEX IF NOT EXISTS idx_eoi_sends_opp ON eoi_sends(opportunity_id);

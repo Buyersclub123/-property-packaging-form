@@ -78,11 +78,9 @@ export async function POST(request: NextRequest) {
       const cleanBuild = offerPriceBuild ? String(offerPriceBuild).replace(/[^0-9.]/g, '') : '';
       if (cleanLand) {
         properties.offer_price_land = cleanLand;
-        properties.offer_status_land = 'offered';
       }
       if (cleanBuild) {
         properties.offer_price_build = cleanBuild;
-        properties.offer_status_build = 'offered';
       }
     }
     const payload = JSON.stringify({ properties });

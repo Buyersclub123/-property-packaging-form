@@ -56,6 +56,8 @@ interface DealRecord {
   agentNameCO: string;
   agentEmailCO: string;
   agentMobileCO: string;
+  hasEoiHistory: string;
+  offerAccepted: string;
 }
 
 interface ColumnDef {
@@ -891,7 +893,7 @@ export default function DealSheetPage() {
       const priceDisplay = isNaN(priceNum) ? payload.totalPurchasePrice : '$' + priceNum.toLocaleString('en-AU');
 
       if (isRemove) {
-        // Removal path — clear all client/offer data; potentially change status
+        // Removal path — clear client link data; potentially change status
         const STATUS_DISPLAY: Record<string, string> = {
           '01_available': '01 Available',
           '02_eoi': '02 EOI',
@@ -900,33 +902,38 @@ export default function DealSheetPage() {
           '06_remove_lost': '06 Remove lost',
           '07_test_record': '07 Test Record',
         };
+        const isSpeculative = payload.transitionType === 'reverted_to_speculative';
         setRecords((prev) =>
           prev.map((r) =>
             r.id === recordId
               ? {
                   ...r,
                   status: payload.revertStatus ? (STATUS_DISPLAY[payload.revertStatus] || r.status) : r.status,
-                  clientClosed: payload.transitionType === 'reverted_to_speculative' ? 'SPECULATIVE EOI' : '',
+                  clientClosed: isSpeculative ? 'SPECULATIVE EOI' : '',
                   closingBA: '',
                   closingPrice: '',
                   closingDate: '',
                   linkedOpportunityId: '',
-                  offerPrice: '',
+                  // Speculative keeps offer data; full unlink clears it
+                  offerPrice: isSpeculative ? r.offerPrice : '',
+                  offerAccepted: isSpeculative ? r.offerAccepted : '',
                 }
               : r
           )
         );
       } else {
         // Edit/reassign path — rebuild offer display with updated price
+        const statusLabel = payload.offerStatus === 'accepted' ? 'Accepted' : 'Offered';
+        const isAccepted = payload.offerStatus === 'accepted' && rawStatus(eoiModalRecord.status) === '02_eoi' ? 'yes' : '';
         let updatedOfferDisplay = '';
         if (payload.offerPriceLand && payload.offerPriceBuild) {
           const lNum = parseFloat(payload.offerPriceLand);
           const bNum = parseFloat(payload.offerPriceBuild);
           const lFmt = isNaN(lNum) ? payload.offerPriceLand : '$' + lNum.toLocaleString('en-AU');
           const bFmt = isNaN(bNum) ? payload.offerPriceBuild : '$' + bNum.toLocaleString('en-AU');
-          updatedOfferDisplay = `L: ${lFmt}\nB: ${bFmt}\nTot. ${priceDisplay}\nOffered`;
+          updatedOfferDisplay = `L: ${lFmt}\nB: ${bFmt}\nTot. ${priceDisplay}\n${statusLabel}`;
         } else if (priceDisplay) {
-          updatedOfferDisplay = `${priceDisplay} | Offered`;
+          updatedOfferDisplay = `${priceDisplay} | ${statusLabel}`;
         }
         setRecords((prev) =>
           prev.map((r) =>
@@ -939,6 +946,7 @@ export default function DealSheetPage() {
                   closingDate: payload.closingDate,
                   linkedOpportunityId: payload.opportunityId,
                   offerPrice: updatedOfferDisplay || r.offerPrice,
+                  offerAccepted: isAccepted,
                 }
               : r
           )
@@ -2182,6 +2190,33 @@ export default function DealSheetPage() {
                     );
                   }
 
+                  // D38-LITE: Show "EOI History" link in Offer $ cell for delinked records with history
+                  if (
+                    col.key === 'offerPrice' &&
+                    record.hasEoiHistory === 'Yes' &&
+                    rawStatus(record.status) !== '02_eoi'
+                  ) {
+                    const historyUrl = `/eoi/compose?recordId=${record.id}&property=${encodeURIComponent(record.propertyAddress)}&contractType=${encodeURIComponent(record.contractTypeCO)}&acceptAcqTotal=${encodeURIComponent(record.acceptAcqTotal)}&packager=${encodeURIComponent(record.packager)}&sourcer=${encodeURIComponent(record.sourcer)}&viewHistory=true`;
+                    cellContent = (
+                      <div>
+                        {value && <div style={{ whiteSpace: 'pre-line' }}>{value}</div>}
+                        <a
+                          href={historyUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 hover:text-blue-400 text-[10px] underline"
+                          title="View EOI send history for this property"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          EOI History
+                        </a>
+                      </div>
+                    );
+                  }
+
+                  // D31: green styling for accepted offers in 02 EOI status
+                  const offerGreen = col.key === 'offerPrice' && record.offerAccepted;
+
                   return (
                     <td
                       key={col.key}
@@ -2192,6 +2227,7 @@ export default function DealSheetPage() {
                         maxWidth: col.width,
                         ...tbcStyle,
                         ...(col.key === 'offerPrice' ? { whiteSpace: 'pre-line' as const } : {}),
+                        ...(offerGreen ? { backgroundColor: '#dcfce7', color: '#166534' } : {}),
                       }}
                       title={value}
                       onClick={(e) => {

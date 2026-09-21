@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
   const {
     recordId,
     opportunityId,
+    opportunityName,
     propertyAddress,
     sendType = 'initial',
     offerPrice,
@@ -43,9 +44,11 @@ export async function POST(request: NextRequest) {
     emailData,
     renderedHtml: clientRenderedHtml,
     attachments,
+    changes,
   } = body as {
     recordId: string;
     opportunityId?: string;
+    opportunityName?: string;
     propertyAddress: string;
     sendType: 'initial' | 'increase' | 'revision';
     offerPrice: string;
@@ -56,6 +59,7 @@ export async function POST(request: NextRequest) {
     emailData: EoiEmailData;
     renderedHtml?: string;
     attachments?: AttachmentPayload[];
+    changes?: { field: string; label: string; from: string; to: string }[];
   };
 
   if (!recordId || !agentEmail || !emailData) {
@@ -139,23 +143,35 @@ export async function POST(request: NextRequest) {
   const priceMatch = (offerPrice || '').match(/[\d][,\d]*\.?\d*/);
   const priceNumeric = priceMatch ? parseFloat(priceMatch[0].replace(/,/g, '')) || null : null;
 
+  // ---- Parse land/build prices for split contracts --------------------------
+  const landMatch = (emailData.landPrice || '').match(/[\d][,\d]*\.?\d*/);
+  const landNumeric = landMatch ? parseFloat(landMatch[0].replace(/,/g, '')) || null : null;
+  const buildMatch = (emailData.buildPrice || '').match(/[\d][,\d]*\.?\d*/);
+  const buildNumeric = buildMatch ? parseFloat(buildMatch[0].replace(/,/g, '')) || null : null;
+
   // ---- Insert send record (pending) ----------------------------------------
+  const eventType = `eoi_${sendType}`;
   const sendRecord = await sql`
     INSERT INTO eoi_sends (
-      record_id, opportunity_id, property_address, send_type,
-      offer_price, agent_email, agent_contact_id, sent_by,
-      delivery_status, payload, eoi_status
+      record_id, opportunity_id, opportunity_name, property_address, event_type,
+      offer_price, offer_price_land, offer_price_build, offer_status_at_event,
+      agent_email, client_name, assigned_ba, close_date,
+      sent_by, delivery_status, method, payload,
+      initiated_by, changes
     ) VALUES (
-      ${recordId}, ${opportunityId || null}, ${propertyAddress || null}, ${sendType},
-      ${priceNumeric}, ${agentEmail}, ${agentContactId}, ${sentBy || 'unknown'},
-      'pending', ${JSON.stringify(
+      ${recordId}, ${opportunityId || null}, ${opportunityName || null}, ${propertyAddress || null}, ${eventType},
+      ${priceNumeric}, ${landNumeric}, ${buildNumeric}, ${'sending'},
+      ${agentEmail}, ${emailData.purchasers?.[0]?.name || null}, ${emailData.consultantName || null}, ${null},
+      ${sentBy || 'unknown'}, 'pending', 'email', ${JSON.stringify(
         {
           ...(attachments && attachments.length > 0
             ? { ...emailData, attachments: attachments.map(a => ({ type: a.type, forLabel: a.forLabel, autoName: a.autoName, mimeType: a.mimeType, size: Math.round(a.base64.length * 3 / 4) })) }
             : emailData),
           ...(initiatedBy && initiatedBy !== sentBy ? { initiatedBy } : {}),
         }
-      )}, 'sending'
+      )},
+      ${initiatedBy && initiatedBy !== sentBy ? initiatedBy : null},
+      ${changes ? JSON.stringify(changes) : null}
     ) RETURNING id`;
 
   const sendId = sendRecord[0]?.id as number;
@@ -320,7 +336,7 @@ export async function POST(request: NextRequest) {
   await sql`
     UPDATE eoi_sends
     SET delivery_status = ${deliveryStatus},
-        eoi_status = ${deliveryStatus === 'sent' ? 'sent' : deliveryStatus === 'no_credentials' ? 'recorded' : 'failed'},
+        offer_status_at_event = ${deliveryStatus === 'sent' ? 'offered' : deliveryStatus === 'no_credentials' ? 'recorded' : 'failed'},
         notes = ${deliveryError || null}
     WHERE id = ${sendId}`;
 
@@ -335,10 +351,10 @@ export async function POST(request: NextRequest) {
         // Build properties using field names (same format as link-opportunity route)
         const properties: Record<string, string> = {};
 
-        // Set offer_status to "Offered"
+        // Set offer_status to "Offered" and mark that this CO has EOI history
+        properties.offer_status = 'offered';
+        properties.has_eoi_history = 'Yes';
         if (isHL) {
-          properties.offer_status_land = 'offered';
-          properties.offer_status_build = 'offered';
           // H&L: write calculated total to Offer Price
           if (emailData.landPrice && emailData.buildPrice) {
             const rawLand = parseFloat(emailData.landPrice.replace(/[^0-9.]/g, '')) || 0;
@@ -347,8 +363,6 @@ export async function POST(request: NextRequest) {
               properties.offer_price = String(rawLand + rawBuild);
             }
           }
-        } else {
-          properties.offer_status = 'offered';
         }
 
         // Write eoi_notes to the CO

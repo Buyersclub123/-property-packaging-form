@@ -45,13 +45,25 @@ interface Purchaser { name: string; email: string; phone: string; address: strin
 
 interface SendHistoryItem {
   id: number;
-  send_type: string;
+  event_type: string;
+  opportunity_name: string;
+  property_address: string;
   offer_price: string;
+  offer_price_land: string;
+  offer_price_build: string;
+  offer_status_at_event: string;
   agent_email: string;
+  client_name: string;
+  assigned_ba: string;
+  close_date: string;
   sent_by: string;
   sent_at: string;
   delivery_status: string;
-  eoi_status: string;
+  method: string;
+  initiated_by: string;
+  delink_reason: string;
+  changes: { field: string; label: string; from: string; to: string }[] | null;
+  notes: string;
 }
 
 // ---- attachment types -------------------------------------------------------
@@ -168,8 +180,8 @@ const FIELD_INFO: Record<string, string[]> = {
   notes: ['Source: EOI Template Admin (initial value)', 'On send: Writes eoi_notes to CO'],
   speculativeMessage: ['Source: EOI Template Admin', 'Shown as banner in email when no opportunity linked', 'Does not write back'],
   price: ['Source: CO Offer Price field', 'On send: Writes offer_price + offer_status ("Offered") to CO'],
-  landPrice: ['Source: CO Offer Price Land', 'On send: Writes offer_price_land + offer_status_land to CO'],
-  buildPrice: ['Source: CO Offer Price Build', 'On send: Writes offer_price_build + offer_status_build to CO'],
+  landPrice: ['Source: CO Offer Price Land', 'On send: Writes offer_price_land to CO'],
+  buildPrice: ['Source: CO Offer Price Build', 'On send: Writes offer_price_build to CO'],
   totalPrice: ['Calculated from Offer Price Land + Offer Price Build', 'Writes back to CO Offer Price on send'],
   depositAmount: ['Source: EOI Template Admin', 'Does not write back'],
   depositPayable: ['Source: EOI Template Admin', 'Does not write back'],
@@ -320,11 +332,19 @@ export default function EoiComposePage() {
   const [globalCcList, setGlobalCcList] = useState<string[]>([]);
   const [ccPropertyOn, setCcPropertyOn] = useState(true);
   const [ccBaOn, setCcBaOn] = useState(true);
+  const [manualCc, setManualCc] = useState('');
 
   // Record params (from URL — instant, no fetch needed)
   const [recordId, setRecordId] = useState('');
   const [propertyAddress, setPropertyAddress] = useState('');
   const [oppId, setOppId] = useState('');
+  const [oppName, setOppName] = useState('');
+  // D38: view-history-only mode
+  const [viewHistoryMode, setViewHistoryMode] = useState(false);
+  const [viewContractType, setViewContractType] = useState('');
+  const [viewAcceptAcqTotal, setViewAcceptAcqTotal] = useState('');
+  const [viewPackager, setViewPackager] = useState('');
+  const [viewSourcer, setViewSourcer] = useState('');
 
   // EOI form state
   const [state, setState] = useState<AuState>('NSW');
@@ -376,12 +396,14 @@ export default function EoiComposePage() {
   const [newConditionText, setNewConditionText] = useState('');
 
   // Send state
-  const [sendType, setSendType] = useState<'initial' | 'increase' | 'revision'>('initial');
+  const [sendType, setSendType] = useState<'initial' | 'increase' | 'revision' | 'resend'>('initial');
+  const isResend = sendType === 'resend';
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ ok: boolean; sendId?: number; deliveryStatus?: string; error?: string } | null>(null);
 
   // History
   const [history, setHistory] = useState<SendHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
 
   // Speculative message
   const [speculativeMessage, setSpeculativeMessage] = useState('');
@@ -394,6 +416,8 @@ export default function EoiComposePage() {
   const [loadedFromHistory, setLoadedFromHistory] = useState(false);
   const [lastSendDate, setLastSendDate] = useState('');
   const [historyFallback, setHistoryFallback] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [previousPayload, setPreviousPayload] = useState<Record<string, any> | null>(null);
 
   // Preview
   const [previewHtml, setPreviewHtml] = useState('');
@@ -481,21 +505,34 @@ export default function EoiComposePage() {
     setOppId(p.get('oppId') || '');
 
     const client = p.get('client') || '';
+    setOppName(client);
     if (client && client !== 'SPECULATIVE EOI') {
       setPurchasers([{ ...emptyPurchaser(), name: client }, emptyPurchaser()]);
     }
 
     const st = p.get('sendType');
-    if (st === 'increase' || st === 'revision') setSendType(st);
+    if (st === 'increase' || st === 'revision' || st === 'resend') setSendType(st);
 
     // D28-PRE: flag for loading from last send
     const lf = p.get('loadFrom');
     if (lf) setLoadFrom(lf);
+
+    // D38: view-history-only mode
+    if (p.get('viewHistory') === 'true') {
+      setViewHistoryMode(true);
+      setViewContractType(p.get('contractType') || '');
+      setViewAcceptAcqTotal(p.get('acceptAcqTotal') || '');
+      setViewPackager(p.get('packager') || '');
+      setViewSourcer(p.get('sourcer') || '');
+      // Use property param as address if address not set
+      if (!addr && p.get('property')) setPropertyAddress(p.get('property') || '');
+    }
   }, []);
 
   // ---- load linked opportunity contact + solicitor + broker -----------------
   useEffect(() => {
-    // D28-PRE: skip opp contact fetch when loading from last send — payload has everything
+    // D28-PRE: skip opp contact fetch when loading full last send — payload has everything
+    // lastSendTermsOnly does NOT skip — we need fresh contact data from the new opp
     if (loadFrom === 'lastSend') return;
     if (!oppId || !authEmail) {
       if (!oppId && recordId) setContactNote('No linked opportunity — this will be a speculative EOI.');
@@ -584,7 +621,7 @@ export default function EoiComposePage() {
     } catch { /* fall back to empty */ }
   }, [state, propertyType]);
 
-  useEffect(() => { if (authEmail && loadFrom !== 'lastSend') fetchTerms(); }, [fetchTerms, authEmail, loadFrom]);
+  useEffect(() => { if (authEmail && loadFrom !== 'lastSend' && loadFrom !== 'lastSendTermsOnly') fetchTerms(); }, [fetchTerms, authEmail, loadFrom]);
 
   // Initialise editable copies when terms/conditions load from DB
   // (skipped when loaded from history — payload populates these instead)
@@ -678,11 +715,12 @@ export default function EoiComposePage() {
         // Prices: for increase, URL params already set the new price — don't overwrite.
         // For revision and resend, use the payload prices.
         if (sendType !== 'increase') {
-          if (p.offerPrice) setOfferPrice(p.offerPrice);
+          if (p.offerPrice) setOfferPrice(p.offerPrice.replace(/[$,\s]/g, ''));
           if (p.landPrice) setLandPrice(p.landPrice.replace(/[$,\s]/g, ''));
           if (p.buildPrice) setBuildPrice(p.buildPrice.replace(/[$,\s]/g, ''));
         }
 
+        setPreviousPayload(p);
         setLoadedFromHistory(true);
         setLastSendDate(data.sentAt ? new Date(data.sentAt).toLocaleDateString('en-AU') : '');
         setContactNote('Values loaded from the last sent EOI — contacts, terms, and conditions are from the previous send.');
@@ -693,14 +731,76 @@ export default function EoiComposePage() {
     })();
   }, [loadFrom, recordId, authEmail, sendType]);
 
+  // ---- D32-34: load TERMS ONLY from last sent EOI (keep terms variant) ------
+  // Loads terms/conditions/prices but NOT client data (purchasers, solicitor, broker, etc.)
+  // The opp-fetch useEffect above handles client data from the new opportunity (if oppId present).
+  useEffect(() => {
+    if (loadFrom !== 'lastSendTermsOnly' || !recordId || !authEmail) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/eoi/last-send?recordId=${encodeURIComponent(recordId)}&_t=${Date.now()}`);
+        if (!res.ok) {
+          // No previous send — fall back to Template Admin
+          setHistoryFallback(true);
+          setLoadFrom('');
+          return;
+        }
+        const data = await res.json();
+        const p = data.payload;
+        if (!p) { setHistoryFallback(true); setLoadFrom(''); return; }
+
+        // Populate TERMS fields only
+        setEditDepositAmount(p.depositAmount || '');
+        setEditDepositPayable(p.depositPayable || '');
+        setEditLandDeposit(p.landDeposit || '');
+        setEditBuildDeposit(p.buildDeposit || '');
+        setEditFinance(p.finance || '');
+        setEditBuildingPest(p.buildingPest || '');
+        setEditPci(p.pci || '');
+        setEditCommission(p.commission || '');
+        setEditSettlement(p.settlement || '');
+        setEditConditions(Array.isArray(p.specialConditions)
+          ? p.specialConditions.map((c: string) => c.replace(/^[\s]*[-\u2013\u2014\u2022]\s*/, '').trim()).filter(Boolean)
+          : []);
+        setNotes(p.notes || '');
+        setSpeculativeMessage(p.speculativeMessage || '');
+
+        // Prices from payload (not URL for keep-terms)
+        if (p.offerPrice) setOfferPrice(p.offerPrice.replace(/[$,\s]/g, ''));
+        if (p.landPrice) setLandPrice(p.landPrice.replace(/[$,\s]/g, ''));
+        if (p.buildPrice) setBuildPrice(p.buildPrice.replace(/[$,\s]/g, ''));
+
+        // NOT populated: purchasers, contractEntity, solicitor, broker, LVR, consultant
+        // Those come from the opp-fetch effect (reassign) or stay blank (speculative)
+
+        setPreviousPayload(p);
+        setLoadedFromHistory(true);
+        setLastSendDate(data.sentAt ? new Date(data.sentAt).toLocaleDateString('en-AU') : '');
+
+        // Banner text
+        const clientParam = new URLSearchParams(window.location.search).get('client');
+        if (clientParam) {
+          setContactNote(`Terms retained from previously sent EOI (${data.sentAt ? new Date(data.sentAt).toLocaleDateString('en-AU') : 'unknown'}) — contact details from ${clientParam}.`);
+        } else {
+          setContactNote(`Terms retained from previously sent EOI (${data.sentAt ? new Date(data.sentAt).toLocaleDateString('en-AU') : 'unknown'}) — no client linked (speculative).`);
+        }
+      } catch {
+        setHistoryFallback(true);
+        setLoadFrom('');
+      }
+    })();
+  }, [loadFrom, recordId, authEmail]);
+
   // ---- load history ---------------------------------------------------------
   useEffect(() => {
-    if (!recordId || !authEmail) return;
+    if (!recordId || (!authEmail && !viewHistoryMode)) return;
+    setHistoryLoading(true);
     fetch(`/api/eoi/history?recordId=${encodeURIComponent(recordId)}&_t=${Date.now()}`)
       .then((r) => r.json())
       .then((d) => setHistory(d.sends || []))
-      .catch(() => {});
-  }, [recordId, authEmail, sendResult]);
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false));
+  }, [recordId, authEmail, viewHistoryMode, sendResult]);
 
   // ---- derived values -------------------------------------------------------
   const isHL = propertyType === 'hl_split';
@@ -717,6 +817,78 @@ export default function EoiComposePage() {
     if (isHL && totalPrice) return currencyFormat(totalPrice);
     return currencyFormat(offerPrice);
   }, [isHL, totalPrice, offerPrice]);
+
+  // ---- D-CHANGES: diff previous payload against current emailData ------------
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function diffPayloads(prev: Record<string, any>, curr: Record<string, any>): { field: string; label: string; from: string; to: string }[] {
+    const changes: { field: string; label: string; from: string; to: string }[] = [];
+
+    // Simple string/value fields to compare
+    const fieldMap: Record<string, string> = {
+      offerPrice: 'Offer Price',
+      landPrice: 'Land Price',
+      buildPrice: 'Build Price',
+      totalPrice: 'Total Price',
+      depositAmount: 'Deposit Amount',
+      depositPayable: 'Deposit Payable',
+      landDeposit: 'Land Deposit',
+      buildDeposit: 'Build Deposit',
+      finance: 'Finance',
+      buildingPest: 'Building & Pest',
+      pci: 'PCI',
+      commission: 'Commission',
+      settlement: 'Settlement',
+      contractEntity: 'Contract Entity',
+      notes: 'Notes',
+      lvr: 'LVR',
+      speculativeMessage: 'Speculative Message',
+      agentName: 'Agent Name',
+      agentEmail: 'Agent Email',
+      agentPhone: 'Agent Phone',
+      agencyName: 'Agency Name',
+      solicitorName: 'Solicitor Name',
+      solicitorEmail: 'Solicitor Email',
+      solicitorPhone: 'Solicitor Phone',
+      solicitorCompany: 'Solicitor Company',
+      brokerName: 'Broker Name',
+      brokerEmail: 'Broker Email',
+      brokerPhone: 'Broker Phone',
+      brokerCompany: 'Broker Company',
+      consultantName: 'Consultant Name',
+      consultantEmail: 'Consultant Email',
+    };
+
+    for (const [key, label] of Object.entries(fieldMap)) {
+      const prevVal = (prev[key] ?? '').toString().trim();
+      const currVal = (curr[key] ?? '').toString().trim();
+      if (prevVal !== currVal) {
+        changes.push({ field: key, label, from: prevVal, to: currVal });
+      }
+    }
+
+    // Special conditions — array comparison
+    const prevConds: string[] = Array.isArray(prev.specialConditions) ? prev.specialConditions.map((c: string) => c.trim()) : [];
+    const currConds: string[] = Array.isArray(curr.specialConditions) ? curr.specialConditions.map((c: string) => c.trim()) : [];
+    const addedConds = currConds.filter(c => !prevConds.includes(c));
+    const removedConds = prevConds.filter(c => !currConds.includes(c));
+    if (addedConds.length > 0 || removedConds.length > 0) {
+      const parts: string[] = [];
+      if (addedConds.length) parts.push(`${addedConds.length} added`);
+      if (removedConds.length) parts.push(`${removedConds.length} removed`);
+      changes.push({ field: 'specialConditions', label: 'Special Conditions', from: `${prevConds.length} conditions`, to: `${currConds.length} conditions (${parts.join(', ')})` });
+    }
+
+    // Purchasers — compare names
+    const prevPurchasers: string[] = Array.isArray(prev.purchasers) ? prev.purchasers.map((p: { name?: string }) => (p.name || '').trim()) : [];
+    const currPurchasers: string[] = Array.isArray(curr.purchasers) ? curr.purchasers.map((p: { name?: string }) => (p.name || '').trim()) : [];
+    const prevNames = prevPurchasers.filter(Boolean).join(', ');
+    const currNames = currPurchasers.filter(Boolean).join(', ');
+    if (prevNames !== currNames) {
+      changes.push({ field: 'purchasers', label: 'Purchasers', from: prevNames || '(none)', to: currNames || '(none)' });
+    }
+
+    return changes;
+  }
 
   // ---- build email data object (shared by preview + send) --------------------
   function buildEmailData(): EoiEmailData {
@@ -862,6 +1034,11 @@ export default function EoiComposePage() {
 
     const emailData = buildEmailData();
 
+    // D-CHANGES: compute field-level diff if loaded from a previous send
+    const changes = loadedFromHistory && previousPayload
+      ? diffPayloads(previousPayload, emailData)
+      : undefined;
+
     try {
       const res = await fetch('/api/eoi/send', {
         method: 'POST',
@@ -869,6 +1046,7 @@ export default function EoiComposePage() {
         body: JSON.stringify({
           recordId,
           opportunityId: oppId || null,
+          opportunityName: oppName || null,
           propertyAddress,
           sendType,
           offerPrice: displayOfferPrice,
@@ -877,6 +1055,8 @@ export default function EoiComposePage() {
           initiatedBy: authEmail,
           consultantEmail,
           emailData,
+          manualCc: manualCc.trim() || undefined,
+          changes: changes !== undefined ? changes : undefined,
           attachments: attachments.length > 0 ? attachments.map(a => ({
             base64: a.base64,
             mimeType: a.mimeType,
@@ -976,6 +1156,83 @@ export default function EoiComposePage() {
     return 'Manual \u00b7 does not write back';
   }
 
+  // ---- D38: view-history-only mode ------------------------------------------
+  if (viewHistoryMode) {
+    return (
+      <div className="eoi-page">
+        <style suppressHydrationWarning>{CSS}</style>
+        <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 16px' }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: 'var(--charcoal-dark)' }}>EOI History</h2>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+            <span><strong>Property:</strong> {propertyAddress || '—'}</span>
+            {viewContractType && <span><strong>Contract Type:</strong> {viewContractType}</span>}
+            {viewAcceptAcqTotal && <span><strong>Accept Acq&apos;/Total:</strong> {viewAcceptAcqTotal}</span>}
+            {viewPackager && <span><strong>Packager:</strong> {viewPackager}</span>}
+            {viewSourcer && <span><strong>Sourcer:</strong> {viewSourcer}</span>}
+          </div>
+          {historyLoading ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading history...</p>
+          ) : history.length > 0 ? (
+            <div className="history-panel">
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: 'var(--charcoal-dark)' }}>Send History</h3>
+              {history.map((h) => (
+                <div key={h.id} style={{ borderBottom: '1px solid #eee', padding: '10px 0', fontSize: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <strong style={{ textTransform: 'capitalize' }}>{({
+                        eoi_initial: 'Initial',
+                        eoi_increase: 'Increase',
+                        eoi_revision: 'Revision',
+                        eoi_resend: 'Resend',
+                        mark_accepted: 'Mark Accepted',
+                        reassign: 'Reassigned',
+                        change_speculative: 'Changed to Speculative',
+                        unlink_test: 'Unlinked to 07 Test Record',
+                        unlink_lost: 'Unlinked to 06 Close Lost',
+                        unlink_available: 'Unlinked to 01 Available',
+                      } as Record<string, string>)[h.event_type] || (h.event_type || '').replace(/^eoi_/, '')}</strong>
+                      {h.offer_price ? ` — $${Number(h.offer_price).toLocaleString('en-AU')}` : ''}
+                      <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>{h.agent_email}</span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ color: h.delivery_status === 'sent' ? 'var(--green)' : h.delivery_status === 'failed' ? 'var(--red)' : 'var(--text-muted)' }}>
+                        {h.delivery_status}
+                      </span>
+                      {h.delivery_status === 'sent' && (
+                        <>
+                          {' · '}
+                          <a href={`/api/eoi/view-send?sendId=${h.id}`} target="_blank" rel="noopener noreferrer"
+                            style={{ color: 'var(--blue, #3b82f6)', fontSize: 11, textDecoration: 'underline' }}>View EOI</a>
+                        </>
+                      )}
+                      <br />
+                      <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                        {new Date(h.sent_at).toLocaleString('en-AU')} · {h.sent_by}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#666', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                    <span><strong>Opp:</strong> {h.opportunity_name || '—'}</span>
+                    <span><strong>Purchaser 1:</strong> {h.client_name || '—'}</span>
+                    <span><strong>BA:</strong> {h.assigned_ba || '—'}</span>
+                    <span><strong>Method:</strong> {h.method || '—'}</span>
+                    {(h.offer_price_land || h.offer_price_build) && (
+                      <span><strong>L:</strong> ${Number(h.offer_price_land || 0).toLocaleString('en-AU')} · <strong>B:</strong> ${Number(h.offer_price_build || 0).toLocaleString('en-AU')} · <strong>Tot.</strong> ${Number((Number(h.offer_price_land) || 0) + (Number(h.offer_price_build) || 0)).toLocaleString('en-AU')}</span>
+                    )}
+                    {h.offer_status_at_event && <span><strong>Status:</strong> {h.offer_status_at_event}</span>}
+                    {h.delink_reason && <span><strong>Reason:</strong> {h.delink_reason}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No EOI history found for this property.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ---- auth gate ------------------------------------------------------------
   if (!authEmail) {
     return (
@@ -1013,19 +1270,19 @@ export default function EoiComposePage() {
         <span className="toolbar-title">Expression of Interest</span>
         <div className="toolbar-group">
           <label style={{ fontSize: 12, color: '#ccc' }}>State<span style={{ display: 'block', fontSize: 9, color: '#999', fontStyle: 'italic' }}>Property Record (CO) &rarr; state</span></label>
-          <select value={state} onChange={(e) => setState(e.target.value as AuState)} style={{ background: '#fff3cd' }}>
+          <select value={state} onChange={(e) => setState(e.target.value as AuState)} disabled={isResend} style={{ background: '#fff3cd' }}>
             {AU_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div className="toolbar-group">
           <label style={{ fontSize: 12, color: '#ccc' }}>Type<span style={{ display: 'block', fontSize: 9, color: '#999', fontStyle: 'italic' }}>Property Record (CO) &rarr; property_type</span></label>
-          <select value={propertyType} onChange={(e) => setPropertyType(e.target.value as PropertyType)} style={{ background: '#fff3cd' }}>
+          <select value={propertyType} onChange={(e) => setPropertyType(e.target.value as PropertyType)} disabled={isResend} style={{ background: '#fff3cd' }}>
             {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </div>
         <div className="toolbar-group" style={{ borderRight: 'none', gap: 8 }}>
-          <button className="primary" onClick={handleSend} disabled={sending || !agentEmail}>
-            {sending ? 'Sending...' : sendType === 'increase' ? 'Send Increased Offer' : sendType === 'revision' ? 'Send Revised EOI' : 'Send EOI'}
+          <button className="primary" onClick={handleSend} disabled={sending || !agentEmail || !!sendResult?.ok}>
+            {sendResult?.ok ? 'EOI Sent' : sending ? 'Sending...' : 'Send EOI'}
           </button>
           <button onClick={() => window.close()} style={{ background: '#666', color: '#fff', border: '1px solid #555' }}>
             Close
@@ -1040,7 +1297,8 @@ export default function EoiComposePage() {
       {sendResult && (
         <div className={`send-result ${sendResult.ok ? 'send-ok' : 'send-fail'}`}>
           {sendResult.ok ? (
-            <>{sendResult.deliveryStatus === 'sent' ? 'Success! The EOI has been sent.' : sendResult.deliveryStatus === 'no_credentials' ? 'EOI recorded but email credentials are not configured.' : `EOI recorded. Delivery: ${sendResult.deliveryStatus}`}</>
+            <>{sendResult.deliveryStatus === 'sent' ? 'Success! The EOI has been sent.' : sendResult.deliveryStatus === 'no_credentials' ? 'EOI recorded but email credentials are not configured.' : `EOI recorded. Delivery: ${sendResult.deliveryStatus}`}
+            <div style={{ fontSize: 11, marginTop: 4, opacity: 0.8 }}>Close this tab to return to the Deal Sheet. To send again, use the action menu.</div></>
           ) : (
             <>
               <div style={{ fontWeight: 600 }}>The EOI could not be sent. Your data is safe — please wait a few moments and try again.</div>
@@ -1088,7 +1346,13 @@ export default function EoiComposePage() {
           {globalCcList.map(email => (
             <><span key={email} style={{ color: '#999' }}>·</span><span>{email}</span></>
           ))}
-          {!ccPropertyOn && !ccBaOn && globalCcList.length === 0 && <span style={{ color: '#999', fontStyle: 'italic' }}>None</span>}
+          {!ccPropertyOn && !ccBaOn && globalCcList.length === 0 && !manualCc.trim() && <span style={{ color: '#999', fontStyle: 'italic' }}>None</span>}
+        </div>
+        <div className="recipient-row" style={{ marginTop: 6 }}>
+          <label>Additional CC:</label>
+          <input value={manualCc} onChange={(e) => setManualCc(e.target.value)}
+            placeholder="Comma-separated emails e.g. john@example.com, jane@example.com"
+            style={{ flex: 1, fontSize: 12 }} />
         </div>
       </div>
 
@@ -1120,10 +1384,11 @@ export default function EoiComposePage() {
           {/* D28-PRE: data source banner */}
           {loadedFromHistory && (
             <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#856404' }}>
-              <strong>Values loaded from previously sent EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong>
-              {sendType === 'increase' && <span> Only the offer price has been updated — all other terms, conditions, and details are retained from the earlier send.</span>}
-              {sendType === 'revision' && <span> Price is unchanged from the earlier send — edit terms, conditions, or other details as needed.</span>}
-              {sendType !== 'increase' && sendType !== 'revision' && <span> This is an exact copy of the previous send.</span>}
+              {sendType === 'resend' ? (
+                <><strong>This is an exact resend of the previous EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong> Only the recipient, CC, and attachments can be changed.</>
+              ) : (
+                <><strong>Values loaded from previously sent EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong> All fields are editable — terms, conditions, and price. Changes from the previous send will be tracked.</>
+              )}
             </div>
           )}
           {historyFallback && (
@@ -1132,7 +1397,8 @@ export default function EoiComposePage() {
             </div>
           )}
 
-          {/* Form table */}
+          {/* Form table — disabled in resend mode */}
+          <fieldset disabled={isResend} style={{ border: 'none', margin: 0, padding: 0, opacity: isResend ? 0.7 : 1 }}>
           <table className="eoi-form-table">
             <tbody>
 
@@ -1173,7 +1439,7 @@ export default function EoiComposePage() {
                 </>
               ) : (
                 renderFormRow('price', 'Offer Price', 'Property Record (CO) \u2192 Offer Price \u00b7 writes back on send', 'green',
-                  <input className="eoi-form-input" value={offerPrice} onChange={e => setOfferPrice(e.target.value)} placeholder="$" />
+                  <input className="eoi-form-input" value={currencyFormat(offerPrice)} onChange={e => setOfferPrice(e.target.value.replace(/[$,]/g, '').trim())} placeholder="$" />
                 )
               )}
 
@@ -1385,6 +1651,7 @@ export default function EoiComposePage() {
 
             </tbody>
           </table>
+          </fieldset>
 
           {/* ======== ATTACHMENTS (T7) ======== */}
           <div style={{ marginTop: 16, background: '#fff', border: '1px solid #ccc', borderRadius: 4, padding: 14 }}>
@@ -1512,21 +1779,80 @@ export default function EoiComposePage() {
         <div className="history-panel">
           <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: 'var(--charcoal-dark)' }}>Send History</h3>
           {history.map((h) => (
-            <div key={h.id} className="history-item">
-              <div>
-                <strong style={{ textTransform: 'capitalize' }}>{h.send_type}</strong>
-                {h.offer_price ? ` — $${Number(h.offer_price).toLocaleString('en-AU')}` : ''}
-                <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>{h.agent_email}</span>
+            <div key={h.id} style={{ borderBottom: '1px solid #eee', padding: '10px 0', fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <strong style={{ textTransform: 'capitalize' }}>{({
+                    eoi_initial: 'Initial',
+                    eoi_increase: 'Increase',
+                    eoi_revision: 'Revision',
+                    eoi_resend: 'Resend',
+                    mark_accepted: 'Mark Accepted',
+                    reassign: 'Reassigned',
+                    change_speculative: 'Changed to Speculative',
+                    unlink_test: 'Unlinked to 07 Test Record',
+                    unlink_lost: 'Unlinked to 06 Close Lost',
+                    unlink_available: 'Unlinked to 01 Available',
+                  } as Record<string, string>)[h.event_type] || (h.event_type || '').replace(/^eoi_/, '')}</strong>
+                  {h.offer_price ? ` — $${Number(h.offer_price).toLocaleString('en-AU')}` : ''}
+                  <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>{h.agent_email}</span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ color: h.delivery_status === 'sent' ? 'var(--green)' : h.delivery_status === 'failed' ? 'var(--red)' : 'var(--text-muted)' }}>
+                    {h.delivery_status}
+                  </span>
+                  {h.delivery_status === 'sent' && (
+                    <>
+                      {' · '}
+                      <a
+                        href={`/api/eoi/view-send?sendId=${h.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'var(--blue, #3b82f6)', fontSize: 11, textDecoration: 'underline' }}
+                      >
+                        View EOI
+                      </a>
+                    </>
+                  )}
+                  <br />
+                  <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                    {new Date(h.sent_at).toLocaleString('en-AU')} · {h.sent_by}
+                  </span>
+                </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <span style={{ color: h.delivery_status === 'sent' ? 'var(--green)' : h.delivery_status === 'failed' ? 'var(--red)' : 'var(--text-muted)' }}>
-                  {h.delivery_status}
-                </span>
-                <br />
-                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                  {new Date(h.sent_at).toLocaleString('en-AU')} · {h.sent_by}
-                </span>
+              {/* Detail rows — always show key fields, others when populated */}
+              <div style={{ marginTop: 4, fontSize: 11, color: '#666', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                <span><strong>Opp:</strong> {h.opportunity_name || '—'}</span>
+                <span><strong>Purchaser 1:</strong> {h.client_name || '—'}</span>
+                <span><strong>BA:</strong> {h.assigned_ba || '—'}</span>
+                <span><strong>Method:</strong> {h.method || '—'}</span>
+                {h.offer_price_land && h.offer_price_build && (
+                  <span><strong>L:</strong> ${Number(h.offer_price_land).toLocaleString('en-AU')} · <strong>B:</strong> ${Number(h.offer_price_build).toLocaleString('en-AU')} · <strong>Tot.</strong> ${(Number(h.offer_price_land) + Number(h.offer_price_build)).toLocaleString('en-AU')}</span>
+                )}
+                {h.offer_status_at_event && <span><strong>Status:</strong> {h.offer_status_at_event}</span>}
+                {h.initiated_by && <span><strong>Initiated by:</strong> {h.initiated_by}</span>}
+                {h.close_date && <span><strong>Close:</strong> {h.close_date}</span>}
+                {h.delink_reason && <span><strong>Reason:</strong> {h.delink_reason}</span>}
               </div>
+              {/* D-CHANGES: show field-level changes (filtered by action type) */}
+              {(() => {
+                if (!h.changes) return null;
+                // Fields expected to change per action — excluded from display
+                const expectedFields: Record<string, string[]> = {
+                  eoi_increase: ['offerPrice', 'landPrice', 'buildPrice', 'totalPrice'],
+                };
+                const exclude = expectedFields[h.event_type] || [];
+                const additional = h.changes.filter((c: { field: string }) => !exclude.includes(c.field));
+                if (h.changes.length === 0) {
+                  return <div style={{ marginTop: 3, fontSize: 10, color: '#6b7280', fontStyle: 'italic' }}>No changes from previous send — exact resend</div>;
+                }
+                if (additional.length === 0) return null; // only expected changes — nothing extra to show
+                return (
+                  <div style={{ marginTop: 3, fontSize: 10, color: '#b45309', fontStyle: 'italic' }}>
+                    Additional changes: {additional.map((c: { label: string }) => c.label).join(', ')}
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </div>

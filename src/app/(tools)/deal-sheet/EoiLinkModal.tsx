@@ -29,11 +29,15 @@ interface DealRecord {
   agentEmailCO: string;
   agentMobileCO: string;
   offerPrice: string;
+  acceptAcqTotal: string;
+  packager: string;
+  sourcer: string;
 }
 
 export interface EoiOpportunity {
   id: string;
   name: string;
+  contactName?: string;
   registeredAddress: string;
   totalPurchasePrice: string;
   assignedBA: string;
@@ -65,6 +69,8 @@ export interface EoiUpdatePayload {
   transitionType: 'client_edited' | 'reassigned' | 'reverted_to_speculative' | 'client_removed';
   writeBaToOpportunity: boolean;
   revertStatus?: string;
+  offerStatus?: string;
+  offerPrice?: string;
 }
 
 type ModalMode = 'create' | 'edit';
@@ -174,7 +180,7 @@ export default function EoiLinkModal({
   const isSpeculative = record.clientClosed === 'SPECULATIVE EOI' && !record.linkedOpportunityId;
 
   // ---- Step 1 state ----
-  const [step, setStep] = useState<'pick' | 'confirm' | 'actions' | 'increase'>(isEdit && !isSpeculative ? 'actions' : isEdit ? 'confirm' : 'pick');
+  const [step, setStep] = useState<'pick' | 'confirm' | 'actions' | 'increase' | 'mark_accepted' | 'reassign' | 'unlink_test' | 'unlink_lost' | 'unlink_available'>(isEdit ? 'actions' : 'pick');
   const [tierResults, setTierResults] = useState<Record<number, EoiOpportunity[]>>({});
   const [loadedTiers, setLoadedTiers] = useState<number[]>([]);
   const [loadingTier, setLoadingTier] = useState<number | null>(null);
@@ -209,10 +215,23 @@ export default function EoiLinkModal({
   const [skipComposer, setSkipComposer] = useState(false);
   // D27: which edit action was picked from the action menu
   const [editAction, setEditAction] = useState<string | null>(null);
+  // D35/D37: delink reason for unlink flows
+  const [delinkReason, setDelinkReason] = useState('');
   // D28: new price fields for Increase Offer flow
   const [newPrice, setNewPrice] = useState('');
+  const [keepPriceAsIs, setKeepPriceAsIs] = useState(false);
   const [newPriceLand, setNewPriceLand] = useState('');
   const [newPriceBuild, setNewPriceBuild] = useState('');
+  // D32-34: reassign variant ('keep' = loadFrom=lastSend, 'refresh' = fresh Template Admin)
+  const [reassignVariant, setReassignVariant] = useState<'keep' | 'refresh'>('keep');
+  // D32-34: selected opportunity in reassign step (null = speculative)
+  const [reassignSelected, setReassignSelected] = useState<EoiOpportunity | null>(null);
+  const [reassignIsSpeculative, setReassignIsSpeculative] = useState(false);
+  // D31: agreed price fields + confirmation tick-box for Mark Accepted
+  const [agreedPrice, setAgreedPrice] = useState('');
+  const [agreedPriceLand, setAgreedPriceLand] = useState('');
+  const [agreedPriceBuild, setAgreedPriceBuild] = useState('');
+  const [acceptedConfirmed, setAcceptedConfirmed] = useState(false);
 
   // Edit-mode load outcome for the linked opportunity.
   //   ok      = loaded from GHL, safe to confirm
@@ -343,9 +362,9 @@ export default function EoiLinkModal({
     }
   }
 
-  // F15 — load Tier 1 whenever the picker step is entered (create or reassign).
+  // F15 — load Tier 1 whenever a picker step is entered (create, reassign).
   useEffect(() => {
-    if (step === 'pick' && loadedTiers.length === 0) loadTier(1);
+    if ((step === 'pick' || step === 'reassign') && loadedTiers.length === 0) loadTier(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -506,25 +525,27 @@ export default function EoiLinkModal({
     if (!ok) setSubmitError('Failed to remove client. Try again or cancel.');
   }
 
-  // D28: Increase Offer — update BA/date then open composer with new price
+  // D28: Edit EOI — update BA/date/price then open composer
   async function handleIncreaseConfirm(linkOnly = false) {
-    if (editBA.trim() === '' || !selected) return;
+    if (!isSpeculative && (editBA.trim() === '' || !selected)) return;
     setSubmitting(true);
     setSubmitError('');
 
-    const changedBA = editBA.trim() !== (selected.assignedBA || '').trim();
-    const totalNewPrice = isSplitContract
+    const oppId = selected?.id || '';
+    const oppName = selected?.name || 'SPECULATIVE EOI';
+    const changedBA = selected ? editBA.trim() !== (selected.assignedBA || '').trim() : false;
+    const totalNewPrice = keepPriceAsIs ? '' : (isSplitContract
       ? String(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0'))
-      : newPrice.trim();
+      : newPrice.trim());
 
-    // Write BA/date updates to the property record
+    // Write BA/date updates to the property record (price only if changed)
     const ok = await onUpdate({
-      opportunityId: selected.id,
-      opportunityName: selected.name,
+      opportunityId: oppId,
+      opportunityName: oppName,
       assignedBA: editBA.trim(),
       totalPurchasePrice: totalNewPrice,
-      offerPriceLand: isSplitContract ? newPriceLand.trim() : undefined,
-      offerPriceBuild: isSplitContract ? newPriceBuild.trim() : undefined,
+      offerPriceLand: !keepPriceAsIs && isSplitContract ? newPriceLand.trim() : undefined,
+      offerPriceBuild: !keepPriceAsIs && isSplitContract ? newPriceBuild.trim() : undefined,
       closingDate: isoToDDMMYYYY(editDateIso),
       transitionType: 'client_edited',
       writeBaToOpportunity: changedBA,
@@ -543,11 +564,16 @@ export default function EoiLinkModal({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             recordId: record.id,
-            opportunityId: selected.id,
+            opportunityId: oppId,
+            opportunityName: oppName,
             propertyAddress: record.propertyAddress,
             offerPrice: totalNewPrice,
+            offerPriceLand: !keepPriceAsIs && isSplitContract ? newPriceLand.trim() : undefined,
+            offerPriceBuild: !keepPriceAsIs && isSplitContract ? newPriceBuild.trim() : undefined,
             sendType: 'increase',
             sentBy: editBA.trim(),
+            clientName: selected?.contactName || null,
+            assignedBa: editBA.trim(),
           }),
         });
       } catch { /* non-fatal — update already succeeded */ }
@@ -555,12 +581,173 @@ export default function EoiLinkModal({
       return;
     }
 
-    // Open the composer with sendType=increase and the new price
-    let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(selected.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(selected.name || '')}&ba=${encodeURIComponent(editBA.trim())}&price=${encodeURIComponent(totalNewPrice)}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=increase&loadFrom=lastSend`;
-    if (isSplitContract) {
-      eoiUrl += `&landPrice=${encodeURIComponent(newPriceLand.trim())}&buildPrice=${encodeURIComponent(newPriceBuild.trim())}`;
+    // Open the composer — sendType=increase when price changed, revision when as-is
+    const composerSendType = keepPriceAsIs ? 'revision' : 'increase';
+    let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(oppId)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(oppName)}&ba=${encodeURIComponent(editBA.trim())}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=${composerSendType}&loadFrom=lastSend`;
+    if (!keepPriceAsIs) {
+      eoiUrl += `&price=${encodeURIComponent(totalNewPrice)}`;
+      if (isSplitContract) {
+        eoiUrl += `&landPrice=${encodeURIComponent(newPriceLand.trim())}&buildPrice=${encodeURIComponent(newPriceBuild.trim())}`;
+      }
     }
     window.open(eoiUrl, '_blank');
+    onCancel();
+  }
+
+  // D31: Mark Accepted — write agreed price + offer_status to CO, log event
+  async function handleMarkAccepted() {
+    if (editBA.trim() === '' || !selected || !acceptedConfirmed) return;
+    setSubmitting(true);
+    setSubmitError('');
+
+    const changedBA = editBA.trim() !== (selected.assignedBA || '').trim();
+    const totalAgreedPrice = isSplitContract
+      ? String(parseFloat(agreedPriceLand || '0') + parseFloat(agreedPriceBuild || '0'))
+      : agreedPrice.trim();
+
+    const ok = await onUpdate({
+      opportunityId: selected.id,
+      opportunityName: selected.name,
+      assignedBA: editBA.trim(),
+      totalPurchasePrice: totalAgreedPrice,
+      offerPriceLand: isSplitContract ? agreedPriceLand.trim() : undefined,
+      offerPriceBuild: isSplitContract ? agreedPriceBuild.trim() : undefined,
+      closingDate: isoToDDMMYYYY(editDateIso),
+      transitionType: 'client_edited',
+      writeBaToOpportunity: changedBA,
+      offerStatus: 'accepted',
+      offerPrice: totalAgreedPrice,
+    });
+    setSubmitting(false);
+    if (!ok) {
+      setSubmitError('Failed to update. Try again or cancel.');
+      return;
+    }
+
+    // Log mark_accepted event to activity history
+    try {
+      await fetch('/api/eoi/log-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: record.id,
+          opportunityId: selected.id,
+          opportunityName: selected.name,
+          propertyAddress: record.propertyAddress,
+          offerPrice: totalAgreedPrice,
+          offerPriceLand: isSplitContract ? agreedPriceLand.trim() : undefined,
+          offerPriceBuild: isSplitContract ? agreedPriceBuild.trim() : undefined,
+          eventType: 'mark_accepted',
+          sentBy: editBA.trim(),
+          method: 'system',
+          notes: 'Offer marked as accepted',
+          offerStatusAtEvent: 'accepted',
+          assignedBa: editBA.trim(),
+        }),
+      });
+    } catch { /* non-fatal — update already succeeded */ }
+    onCancel();
+  }
+
+  // D32-34: Reassign / Make Speculative — shared handler for both variants
+  async function handleReassignConfirm(linkOnly = false) {
+    if (editBA.trim() === '' && !reassignIsSpeculative) return;
+    if (!reassignSelected && !reassignIsSpeculative) return;
+    setSubmitting(true);
+    setSubmitError('');
+
+    const previousOppId = record.linkedOpportunityId || '';
+    const previousClientName = record.clientClosed || '';
+
+    if (reassignIsSpeculative) {
+      // Go speculative — clear opp link, keep offer data
+      const ok = await onUpdate({
+        opportunityId: '',
+        opportunityName: '',
+        assignedBA: '',
+        totalPurchasePrice: '',
+        closingDate: '',
+        transitionType: 'reverted_to_speculative',
+        writeBaToOpportunity: false,
+      });
+      setSubmitting(false);
+      if (!ok) { setSubmitError('Failed to update record'); return; }
+
+      // Log event
+      try {
+        await fetch('/api/eoi/log-update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId: record.id,
+            opportunityId: null,
+            opportunityName: 'SPECULATIVE EOI',
+            propertyAddress: record.propertyAddress,
+            eventType: 'change_speculative',
+            sentBy: record.closingBA || 'system',
+            method: 'system',
+            notes: 'Changed to speculative',
+            offerStatusAtEvent: 'unchanged',
+            previousOpportunityId: previousOppId || null,
+            previousClientName: previousClientName || null,
+          }),
+        });
+      } catch { /* best effort */ }
+
+      if (!linkOnly) {
+        // Open composer
+        const totalPrice = record.closingPrice || '';
+        let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=revision&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&price=${encodeURIComponent(totalPrice)}`;
+        if (reassignVariant === 'keep') eoiUrl += '&loadFrom=lastSendTermsOnly';
+        window.open(eoiUrl, '_blank');
+      }
+      onCancel();
+      return;
+    }
+
+    // Reassign to new opportunity
+    const opp = reassignSelected!;
+    const changedBA = editBA.trim() !== (opp.assignedBA || '').trim();
+    const ok = await onUpdate({
+      opportunityId: opp.id,
+      opportunityName: opp.name,
+      assignedBA: editBA.trim(),
+      totalPurchasePrice: '', // offer price stays as-is
+      closingDate: isoToDDMMYYYY(editDateIso),
+      transitionType: 'reassigned',
+      writeBaToOpportunity: changedBA,
+    });
+    setSubmitting(false);
+    if (!ok) { setSubmitError('Failed to update record'); return; }
+
+    // Log event
+    try {
+      await fetch('/api/eoi/log-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: record.id,
+          opportunityId: opp.id,
+          opportunityName: opp.name,
+          propertyAddress: record.propertyAddress,
+          eventType: 'reassign',
+          sentBy: editBA.trim(),
+          method: 'system',
+          notes: `Reassigned from ${previousClientName || previousOppId || 'unknown'} to ${opp.name}`,
+          offerStatusAtEvent: 'unchanged',
+          assignedBa: editBA.trim(),
+          previousOpportunityId: previousOppId || null,
+          previousClientName: previousClientName || null,
+        }),
+      });
+    } catch { /* best effort */ }
+
+    if (!linkOnly) {
+      // Open composer
+      let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(opp.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(opp.name || '')}&ba=${encodeURIComponent(editBA.trim())}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=revision`;
+      if (reassignVariant === 'keep') eoiUrl += '&loadFrom=lastSendTermsOnly';
+      window.open(eoiUrl, '_blank');
+    }
     onCancel();
   }
 
@@ -764,7 +951,7 @@ export default function EoiLinkModal({
               {/* Read-only context */}
               <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
                 <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
-                <div><span className="font-medium">Client:</span> {record.clientClosed || '-'}</div>
+                <div><span className="font-medium">Opportunity:</span> {record.clientClosed || '-'}</div>
                 <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
               </div>
 
@@ -778,53 +965,45 @@ export default function EoiLinkModal({
               {/* Action buttons */}
               <div className="space-y-2">
                 <div className={`text-[10px] font-semibold uppercase tracking-wide ${cls.sub}`}>EOI Actions</div>
-                <button onClick={() => { setEditAction('increase'); setNewPrice(''); setNewPriceLand(''); setNewPriceBuild(''); setStep('increase'); }} className={`w-full text-left ${cls.btn} py-2`}>
-                  <span className="font-medium">Increase Offer</span>
-                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Send a new EOI with a higher price</span>
+                <button onClick={() => { setEditAction('increase'); setNewPrice(''); setNewPriceLand(''); setNewPriceBuild(''); setKeepPriceAsIs(false); setStep('increase'); }} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Edit &amp; Send EOI / Log verbal offer increase</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Edit terms, price, or both — then send or log verbally</span>
                 </button>
-                <button onClick={() => setEditAction('revise')} className={`w-full text-left ${cls.btn} py-2`}>
-                  <span className="font-medium">Revise EOI Details (non $)</span>
-                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Change terms, conditions, or other non-price details</span>
-                </button>
-                <button onClick={() => setEditAction('resend')} className={`w-full text-left ${cls.btn} py-2`}>
+                <button onClick={() => { const eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(record.linkedOpportunityId || '')}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(record.clientClosed || '')}&ba=${encodeURIComponent(record.closingBA || '')}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=resend&loadFrom=lastSend`; window.open(eoiUrl, '_blank'); onCancel(); }} className={`w-full text-left ${cls.btn} py-2`}>
                   <span className="font-medium">Resend as-is</span>
-                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Re-send the last EOI with no changes</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Re-send the last EOI with no changes (recipient, CC, attachments editable)</span>
                 </button>
-                <button onClick={() => setEditAction('mark_accepted')} className={`w-full text-left ${cls.btn} py-2`}>
+                <button onClick={() => { setEditAction('mark_accepted'); setAgreedPrice(''); setAgreedPriceLand(''); setAgreedPriceBuild(''); setAcceptedConfirmed(false); setStep('mark_accepted'); }} className={`w-full text-left ${cls.btn} py-2`}>
                   <span className="font-medium">Mark Accepted</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Record that the offer has been accepted</span>
                 </button>
 
                 <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Client Management</div>
-                <button onClick={() => setEditAction('speculative')} className={`w-full text-left ${cls.btn} py-2`}>
-                  <span className="font-medium">Change to Speculative</span>
-                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Remove the opportunity link, keep EOI status</span>
+                <button onClick={() => { setEditAction('reassign_keep'); setReassignVariant('keep'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign'); }} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Reassign or make speculative — <span className="underline font-bold">keep existing terms</span></span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Swap the opportunity or go speculative. EOI terms stay as they were.</span>
                 </button>
-                <button onClick={() => setEditAction('reassign_only')} className={`w-full text-left ${cls.btn} py-2`}>
-                  <span className="font-medium">Reassign Client only</span>
-                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Link a different opportunity without sending an EOI</span>
-                </button>
-                <button onClick={() => setEditAction('reassign_eoi')} className={`w-full text-left ${cls.btn} py-2`}>
-                  <span className="font-medium">Reassign + new EOI</span>
-                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Link a different opportunity and send a new EOI</span>
+                <button onClick={() => { setEditAction('reassign_refresh'); setReassignVariant('refresh'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign'); }} className={`w-full text-left ${cls.btn} py-2`}>
+                  <span className="font-medium">Reassign or make speculative — <span className="underline font-bold">refresh terms</span></span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Swap the opportunity or go speculative. EOI terms refresh from Template Admin.</span>
                 </button>
 
                 <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Unlink</div>
-                <button onClick={() => setEditAction('unlink_lost')} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
-                  <span className="font-medium">Unlink — Lost</span>
+                <button onClick={() => { setEditAction('unlink_lost'); setDelinkReason('Lost to another buyer'); setStep('unlink_lost'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                  <span className="font-medium">Unlink — change status to 06 Close Lost</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Lost to another buyer — clears offer data</span>
                 </button>
-                <button onClick={() => setEditAction('unlink_test')} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
-                  <span className="font-medium">Unlink — Test</span>
-                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Mark as test record — clears all linked info</span>
-                </button>
-                <button onClick={() => setEditAction('unlink_available')} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
-                  <span className="font-medium">Unlink — Available</span>
+                <button onClick={() => { setEditAction('unlink_available'); setDelinkReason(''); setStep('unlink_available'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                  <span className="font-medium">Unlink — change status to 01 Available</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Return to available — requires a reason</span>
+                </button>
+                <button onClick={() => { setEditAction('unlink_test'); setStep('unlink_test'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                  <span className="font-medium">Unlink — change status to 07 Test Record</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Strips all linked info</span>
                 </button>
 
                 <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Other</div>
-                <button onClick={() => setEditAction('view_history')} className={`w-full text-left ${cls.btn} py-2`}>
+                <button onClick={() => { window.open(`/eoi/compose?recordId=${record.id}&property=${encodeURIComponent(record.propertyAddress)}&contractType=${encodeURIComponent(record.contractTypeCO)}&acceptAcqTotal=${encodeURIComponent(record.acceptAcqTotal)}&packager=${encodeURIComponent(record.packager)}&sourcer=${encodeURIComponent(record.sourcer)}&viewHistory=true`, '_blank'); }} className={`w-full text-left ${cls.btn} py-2`}>
                   <span className="font-medium">View History</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>View all EOI sends for this property</span>
                 </button>
@@ -841,14 +1020,14 @@ export default function EoiLinkModal({
         {step === 'increase' && (
           <>
             <div className="flex-1 overflow-y-auto px-4 py-3">
-              <div className={`text-xs font-semibold mb-3`}>Increase Offer</div>
+              <div className={`text-xs font-semibold mb-3`}>Edit EOI</div>
 
               <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 items-center text-xs">
                 {/* RO fields */}
                 <span className={cls.label}>Property</span>
                 <span className={cls.sub}>{record.propertyAddress}</span>
 
-                <span className={cls.label}>Client</span>
+                <span className={cls.label}>Opportunity</span>
                 <span className="font-medium">{selected?.name || record.clientClosed || '-'}</span>
 
                 <span className={cls.label}>Pipeline / Stage</span>
@@ -860,6 +1039,129 @@ export default function EoiLinkModal({
 
                 <span className={cls.label}>Offer Status</span>
                 <span className={cls.sub} style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span>
+
+                {/* Editable BA — hidden for speculative */}
+                {!isSpeculative && (
+                  <>
+                    <span className={cls.label}>Assigned BA *</span>
+                    <div>
+                      {baOptionsFailed && baOptions.length === 0 ? (
+                        <input type="text" value={editBA} onChange={(e) => setEditBA(e.target.value)}
+                          placeholder="Required — type the BA name"
+                          className={`w-full ${cls.input} ${baEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                      ) : (
+                        <select value={editBA} onChange={(e) => setEditBA(e.target.value)}
+                          className={`w-full ${cls.input} ${baEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
+                          <option value="">— Select a BA —</option>
+                          {editBA && !baOptions.includes(editBA) && <option value={editBA}>{editBA} (not in list)</option>}
+                          {baOptions.map((ba) => <option key={ba} value={ba}>{ba}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Editable Close Date — hidden for speculative */}
+                {!isSpeculative && (
+                  <>
+                    <span className={cls.label}>Close Date</span>
+                    <input type="date" value={editDateIso} onChange={(e) => setEditDateIso(e.target.value)} className={`w-fit ${cls.input}`} />
+                  </>
+                )}
+
+                {/* Current price — reference */}
+                <span className={cls.label}>Current Price (ref)</span>
+                <span className={`${cls.sub} font-medium`} style={{ whiteSpace: 'pre-line' }}>
+                  {record.offerPrice || currencyFormatted(record.closingPrice || record.closePrefill || '') || '-'}
+                </span>
+
+                {/* Keep price checkbox */}
+                <span className={cls.label}></span>
+                <label className={`flex items-center gap-2 cursor-pointer ${cls.sub}`}>
+                  <input type="checkbox" checked={keepPriceAsIs} onChange={(e) => setKeepPriceAsIs(e.target.checked)} />
+                  <span className="text-xs">Leave current offer price as-is</span>
+                </label>
+
+                {/* New price — editable, hidden when keepPriceAsIs */}
+                {!keepPriceAsIs && (
+                  isSplitContract ? (
+                    <>
+                      <span className={cls.label}>New Price (Land) *</span>
+                      <input type="text" inputMode="decimal" value={currencyFormatted(newPriceLand)}
+                        onChange={(e) => setNewPriceLand(currencyRaw(e.target.value))}
+                        placeholder="e.g. $300,000"
+                        className={`w-full ${cls.input} ${!newPriceLand.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+
+                      <span className={cls.label}>New Price (Build) *</span>
+                      <input type="text" inputMode="decimal" value={currencyFormatted(newPriceBuild)}
+                        onChange={(e) => setNewPriceBuild(currencyRaw(e.target.value))}
+                        placeholder="e.g. $250,000"
+                        className={`w-full ${cls.input} ${!newPriceBuild.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+
+                      <span className={cls.label}>New Total</span>
+                      <span className={`font-medium ${cls.sub}`}>
+                        {newPriceLand || newPriceBuild
+                          ? currencyFormatted(String(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0')))
+                          : '-'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className={cls.label}>New Offer Price *</span>
+                      <input type="text" inputMode="decimal" value={currencyFormatted(newPrice)}
+                        onChange={(e) => setNewPrice(currencyRaw(e.target.value))}
+                        placeholder="e.g. $700,000"
+                        className={`w-full ${cls.input} ${!newPrice.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                    </>
+                  )
+                )}
+              </div>
+            </div>
+
+            <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <button onClick={() => setStep('actions')} disabled={submitting} className={cls.btn}>← Back</button>
+              {submitError && <span className="text-[10px] text-red-400">{submitError}</span>}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => handleIncreaseConfirm(false)}
+                  disabled={submitting || (!isSpeculative && baEmpty) || linkLoad !== 'ok' || (!keepPriceAsIs && (isSplitContract ? (!newPriceLand.trim() || !newPriceBuild.trim()) : !newPrice.trim()))}
+                  className={cls.btnPrimary}
+                >
+                  {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
+                </button>
+                {!keepPriceAsIs && (
+                  <button
+                    onClick={() => { setSkipComposer(true); handleIncreaseConfirm(true); }}
+                    disabled={submitting || (!isSpeculative && baEmpty) || linkLoad !== 'ok' || (isSplitContract ? (!newPriceLand.trim() || !newPriceBuild.trim()) : !newPrice.trim())}
+                    className={cls.btnPrimary}
+                  >
+                    {submitting && skipComposer ? 'Saving...' : 'Confirm (update only)'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {step === 'mark_accepted' && (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className={`text-xs font-semibold mb-3`}>Mark Accepted</div>
+
+              <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 items-center text-xs">
+                {/* RO fields */}
+                <span className={cls.label}>Property</span>
+                <span className={cls.sub}>{record.propertyAddress}</span>
+
+                <span className={cls.label}>Opportunity</span>
+                <span className="font-medium">{selected?.name || record.clientClosed || '-'}</span>
+
+                <span className={cls.label}>Pipeline / Stage</span>
+                <span className={cls.sub}>
+                  {selected?.pipelineName || selected?.stageName
+                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' — ')
+                    : '-'}
+                </span>
 
                 {/* Editable BA */}
                 <span className={cls.label}>Assigned BA *</span>
@@ -882,65 +1184,488 @@ export default function EoiLinkModal({
                 <span className={cls.label}>Close Date</span>
                 <input type="date" value={editDateIso} onChange={(e) => setEditDateIso(e.target.value)} className={`w-fit ${cls.input}`} />
 
-                {/* Current price — reference */}
+                {/* Current price — reference + copy checkbox */}
                 <span className={cls.label}>Current Price (ref)</span>
-                <span className={`${cls.sub} font-medium`} style={{ whiteSpace: 'pre-line' }}>
-                  {record.offerPrice || currencyFormatted(record.closingPrice || record.closePrefill || '') || '-'}
-                </span>
+                <div className="flex items-start gap-2">
+                  <span className={`${cls.sub} font-medium`} style={{ whiteSpace: 'pre-line' }}>
+                    {record.offerPrice || currencyFormatted(record.closingPrice || record.closePrefill || '') || '-'}
+                  </span>
+                  {(record.offerPrice || record.closingPrice || record.closePrefill) && (
+                    <label className={`flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap ${cls.sub}`}>
+                      <input
+                        type="checkbox"
+                        onChange={(e) => {
+                          if (!e.target.checked) return;
+                          const src = record.offerPrice || '';
+                          if (isSplitContract) {
+                            const lMatch = src.match(/L:\s*\$?([\d,]+)/);
+                            const bMatch = src.match(/B:\s*\$?([\d,]+)/);
+                            if (lMatch) setAgreedPriceLand(lMatch[1].replace(/,/g, ''));
+                            if (bMatch) setAgreedPriceBuild(bMatch[1].replace(/,/g, ''));
+                          } else {
+                            const m = src.match(/\$?([\d,]+)/);
+                            if (m) setAgreedPrice(m[1].replace(/,/g, ''));
+                            else if (record.closingPrice) setAgreedPrice(currencyRaw(record.closingPrice));
+                            else if (record.closePrefill) setAgreedPrice(currencyRaw(record.closePrefill));
+                          }
+                          e.target.checked = false;
+                        }}
+                      />
+                      Use as agreed price
+                    </label>
+                  )}
+                </div>
 
-                {/* New price — editable */}
+                {/* Agreed price — editable */}
                 {isSplitContract ? (
                   <>
-                    <span className={cls.label}>New Price (Land) *</span>
-                    <input type="text" inputMode="decimal" value={currencyFormatted(newPriceLand)}
-                      onChange={(e) => setNewPriceLand(currencyRaw(e.target.value))}
+                    <span className={cls.label}>Agreed Price (Land) *</span>
+                    <input type="text" inputMode="decimal" value={currencyFormatted(agreedPriceLand)}
+                      onChange={(e) => setAgreedPriceLand(currencyRaw(e.target.value))}
                       placeholder="e.g. $300,000"
-                      className={`w-full ${cls.input} ${!newPriceLand.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                      className={`w-full ${cls.input} ${!agreedPriceLand.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
 
-                    <span className={cls.label}>New Price (Build) *</span>
-                    <input type="text" inputMode="decimal" value={currencyFormatted(newPriceBuild)}
-                      onChange={(e) => setNewPriceBuild(currencyRaw(e.target.value))}
+                    <span className={cls.label}>Agreed Price (Build) *</span>
+                    <input type="text" inputMode="decimal" value={currencyFormatted(agreedPriceBuild)}
+                      onChange={(e) => setAgreedPriceBuild(currencyRaw(e.target.value))}
                       placeholder="e.g. $250,000"
-                      className={`w-full ${cls.input} ${!newPriceBuild.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                      className={`w-full ${cls.input} ${!agreedPriceBuild.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
 
-                    <span className={cls.label}>New Total</span>
+                    <span className={cls.label}>Agreed Total</span>
                     <span className={`font-medium ${cls.sub}`}>
-                      {newPriceLand || newPriceBuild
-                        ? currencyFormatted(String(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0')))
+                      {agreedPriceLand || agreedPriceBuild
+                        ? currencyFormatted(String(parseFloat(agreedPriceLand || '0') + parseFloat(agreedPriceBuild || '0')))
                         : '-'}
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className={cls.label}>New Offer Price *</span>
-                    <input type="text" inputMode="decimal" value={currencyFormatted(newPrice)}
-                      onChange={(e) => setNewPrice(currencyRaw(e.target.value))}
+                    <span className={cls.label}>Agreed Price *</span>
+                    <input type="text" inputMode="decimal" value={currencyFormatted(agreedPrice)}
+                      onChange={(e) => setAgreedPrice(currencyRaw(e.target.value))}
                       placeholder="e.g. $700,000"
-                      className={`w-full ${cls.input} ${!newPrice.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                      className={`w-full ${cls.input} ${!agreedPrice.trim() ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
                   </>
                 )}
               </div>
+
+              {/* Confirmation tick-box */}
+              <label className={`flex items-center gap-2 mt-4 text-xs cursor-pointer ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
+                <input
+                  type="checkbox"
+                  checked={acceptedConfirmed}
+                  onChange={(e) => setAcceptedConfirmed(e.target.checked)}
+                />
+                <span>I confirm the agreed price is correct and the offer has been accepted</span>
+              </label>
+
+              {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
             </div>
 
             <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
               <button onClick={() => setStep('actions')} disabled={submitting} className={cls.btn}>← Back</button>
-              {submitError && <span className="text-[10px] text-red-400">{submitError}</span>}
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => handleIncreaseConfirm(false)}
-                  disabled={submitting || baEmpty || linkLoad !== 'ok' || (isSplitContract ? (!newPriceLand.trim() || !newPriceBuild.trim()) : !newPrice.trim())}
-                  className={cls.btnPrimary}
-                >
-                  {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
-                </button>
-                <button
-                  onClick={() => { setSkipComposer(true); handleIncreaseConfirm(true); }}
-                  disabled={submitting || baEmpty || linkLoad !== 'ok' || (isSplitContract ? (!newPriceLand.trim() || !newPriceBuild.trim()) : !newPrice.trim())}
-                  className={cls.btnPrimary}
-                >
-                  {submitting && skipComposer ? 'Saving...' : 'Confirm (update only)'}
-                </button>
+              <button
+                onClick={handleMarkAccepted}
+                disabled={submitting || baEmpty || linkLoad !== 'ok' || !acceptedConfirmed || (isSplitContract ? (!agreedPriceLand.trim() || !agreedPriceBuild.trim()) : !agreedPrice.trim())}
+                className="px-4 py-2 rounded text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? 'Processing...' : 'Confirm — Mark Accepted'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'reassign' && (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className={`text-xs font-semibold mb-3`}>
+                {reassignVariant === 'keep'
+                  ? 'Reassign or make speculative — keep existing terms'
+                  : 'Reassign or make speculative — refresh terms'}
               </div>
+
+              {!reassignSelected && !reassignIsSpeculative ? (
+                <>
+                  {/* Opportunity picker */}
+                  <div className={`px-0 py-2 flex items-center gap-2 border-b mb-2 ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Filter by client name or address..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className={`flex-1 ${cls.input}`}
+                    />
+                    <span className={`text-[10px] whitespace-nowrap ${cls.sub}`}>
+                      {loadedTiers.slice().sort().map((tier) => `T${tier}: ${(tierResults[tier] || []).length}`).join(' | ')}
+                    </span>
+                    {nextTier && (
+                      <button onClick={() => loadTier(nextTier)} disabled={loadingTier !== null} className={cls.btn}>
+                        {loadingTier === nextTier ? 'Loading...' : `Widen search (${TIER_LABELS[nextTier]})`}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-[280px] overflow-y-auto">
+                    {loadingTier === 1 && loadedTiers.length === 0 ? (
+                      <div className={`p-6 text-center text-xs ${cls.sub}`}>
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400 mx-auto mb-2"></div>
+                        Loading opportunities...
+                      </div>
+                    ) : (
+                      <table className="w-full text-[11px] border-collapse">
+                        <thead className={`sticky top-0 ${dark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
+                          <tr>
+                            <th className="px-3 py-1.5 text-left font-medium">Opportunity</th>
+                            <th className="px-3 py-1.5 text-left font-medium">Pipeline</th>
+                            <th className="px-3 py-1.5 text-left font-medium">Stage</th>
+                            <th className="px-3 py-1.5 text-left font-medium">Assigned BA</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredOpps.map((opp) => (
+                            <tr key={opp.id} className={cls.row} onClick={() => {
+                              setReassignSelected(opp);
+                              setReassignIsSpeculative(false);
+                              setEditBA(opp.assignedBA || '');
+                              setEditDateIso(getTodayAESTIso());
+                            }}>
+                              <td className="px-3 py-1.5 font-medium">{opp.name}</td>
+                              <td className={`px-3 py-1.5 ${cls.sub}`}>{opp.pipelineName || '-'}</td>
+                              <td className={`px-3 py-1.5 ${cls.sub}`}>{opp.stageName || '-'}</td>
+                              <td className="px-3 py-1.5">{opp.assignedBA || '-'}</td>
+                            </tr>
+                          ))}
+                          {filteredOpps.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className={`px-3 py-4 text-center ${cls.sub}`}>
+                                No opportunities match{nextTier ? ' — try widening the search' : ''}.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => { setReassignIsSpeculative(true); setReassignSelected(null); }}
+                    className={`mt-3 ${cls.btn}`}
+                  >
+                    Make Speculative — no client
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Confirm panel — opportunity selected or speculative */}
+                  <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
+                    <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
+                    <div><span className="font-medium">Previous opportunity:</span> {record.clientClosed || '-'}</div>
+                    <div>
+                      <span className="font-medium">{reassignIsSpeculative ? 'New status:' : 'New opportunity:'}</span>{' '}
+                      {reassignIsSpeculative ? 'SPECULATIVE EOI' : reassignSelected?.name || '-'}
+                    </div>
+                    {reassignSelected && (
+                      <div><span className="font-medium">Pipeline / Stage:</span> {[reassignSelected.pipelineName, reassignSelected.stageName].filter(Boolean).join(' — ') || '-'}</div>
+                    )}
+                  </div>
+
+                  {!reassignIsSpeculative && (
+                    <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 items-center text-xs mb-3">
+                      <span className={cls.label}>Assigned BA *</span>
+                      <div>
+                        {baOptionsFailed && baOptions.length === 0 ? (
+                          <input type="text" value={editBA} onChange={(e) => setEditBA(e.target.value)}
+                            placeholder="Required — type the BA name"
+                            className={`w-full ${cls.input} ${editBA.trim() === '' ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                        ) : (
+                          <select value={editBA} onChange={(e) => setEditBA(e.target.value)}
+                            className={`w-full ${cls.input} ${editBA.trim() === '' ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
+                            <option value="">— Select a BA —</option>
+                            {editBA && !baOptions.includes(editBA) && <option value={editBA}>{editBA} (not in list)</option>}
+                            {baOptions.map((ba) => <option key={ba} value={ba}>{ba}</option>)}
+                          </select>
+                        )}
+                      </div>
+
+                      <span className={cls.label}>Close Date</span>
+                      <input type="date" value={editDateIso} onChange={(e) => setEditDateIso(e.target.value)} className={`w-fit ${cls.input}`} />
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => { setReassignSelected(null); setReassignIsSpeculative(false); }}
+                    className={`text-[10px] ${cls.sub} underline cursor-pointer mb-2`}
+                  >
+                    ← Pick a different opportunity
+                  </button>
+
+                  {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
+                </>
+              )}
+            </div>
+
+            <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <button onClick={() => { setStep('actions'); setReassignSelected(null); setReassignIsSpeculative(false); }} disabled={submitting} className={cls.btn}>← Back</button>
+              {(reassignSelected || reassignIsSpeculative) && (
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => handleReassignConfirm(false)}
+                    disabled={submitting || (!reassignIsSpeculative && editBA.trim() === '')}
+                    className={cls.btnPrimary}
+                  >
+                    {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
+                  </button>
+                  <button
+                    onClick={() => { setSkipComposer(true); handleReassignConfirm(true); }}
+                    disabled={submitting || (!reassignIsSpeculative && editBA.trim() === '')}
+                    className={cls.btnPrimary}
+                  >
+                    {submitting && skipComposer ? 'Saving...' : 'Confirm (link only)'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {step === 'unlink_lost' && (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className={`text-xs font-semibold mb-3`}>Unlink — change status to 06 Close Lost</div>
+
+              <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
+                <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
+                <div><span className="font-medium">Opportunity:</span> {record.clientClosed || '-'}</div>
+                <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
+              </div>
+
+              <div className="mb-3">
+                <label className={`block text-xs font-medium mb-1 ${cls.sub}`}>Reason</label>
+                <input
+                  type="text"
+                  value={delinkReason}
+                  onChange={(e) => setDelinkReason(e.target.value)}
+                  className={`w-full text-xs rounded px-2 py-1.5 ${cls.input}`}
+                  placeholder="Lost to another buyer"
+                />
+              </div>
+
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded p-3 text-xs text-red-800 dark:text-red-300 space-y-2">
+                <div className="font-semibold">This action will:</div>
+                <ul className="list-disc ml-4 space-y-1">
+                  <li>Remove the linked opportunity, BA, price, and close date from the CO</li>
+                  <li>Clear the offer price and offer status</li>
+                  <li>Change the CO status to 06 Close Lost</li>
+                </ul>
+              </div>
+
+              {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
+            </div>
+
+            <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <button onClick={() => setStep('actions')} disabled={submitting} className={cls.btn}>← Back</button>
+              <button
+                onClick={async () => {
+                  setSubmitting(true);
+                  setSubmitError('');
+                  try {
+                    const ok = await onUpdate({
+                      opportunityId: '',
+                      opportunityName: '',
+                      assignedBA: '',
+                      totalPurchasePrice: '',
+                      closingDate: '',
+                      transitionType: 'client_removed',
+                      writeBaToOpportunity: false,
+                      revertStatus: '06_remove_lost',
+                    });
+                    if (!ok) { setSubmitError('Failed to update record'); setSubmitting(false); return; }
+                    try {
+                      await fetch('/api/eoi/log-update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          recordId: record.id,
+                          opportunityId: record.linkedOpportunityId || null,
+                          opportunityName: record.clientClosed || null,
+                          propertyAddress: record.propertyAddress || null,
+                          eventType: 'unlink_lost',
+                          sentBy: record.closingBA || 'system',
+                          method: 'system',
+                          notes: 'Moved to 06 Close Lost',
+                          offerStatusAtEvent: 'cleared',
+                          delinkReason: delinkReason.trim() || 'Lost to another buyer',
+                        }),
+                      });
+                    } catch { /* best effort */ }
+                  } catch {
+                    setSubmitError('Failed to update record');
+                  }
+                  setSubmitting(false);
+                }}
+                disabled={submitting}
+                className="px-4 py-2 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {submitting ? 'Processing...' : 'Confirm — Mark as Lost'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'unlink_available' && (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className={`text-xs font-semibold mb-3`}>Unlink — change status to 01 Available</div>
+
+              <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
+                <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
+                <div><span className="font-medium">Opportunity:</span> {record.clientClosed || '-'}</div>
+                <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
+              </div>
+
+              <div className="mb-3">
+                <label className={`block text-xs font-medium mb-1 ${cls.sub}`}>Reason <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={delinkReason}
+                  onChange={(e) => setDelinkReason(e.target.value)}
+                  className={`w-full text-xs rounded px-2 py-1.5 ${cls.input}`}
+                  placeholder="Enter a detailed reason for returning to available"
+                />
+              </div>
+
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded p-3 text-xs text-red-800 dark:text-red-300 space-y-2">
+                <div className="font-semibold">This action will:</div>
+                <ul className="list-disc ml-4 space-y-1">
+                  <li>Remove the linked opportunity, BA, price, and close date from the CO</li>
+                  <li>Clear the offer price and offer status</li>
+                  <li>Change the CO status to 01 Available</li>
+                </ul>
+              </div>
+
+              {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
+            </div>
+
+            <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <button onClick={() => setStep('actions')} disabled={submitting} className={cls.btn}>← Back</button>
+              <button
+                onClick={async () => {
+                  setSubmitting(true);
+                  setSubmitError('');
+                  try {
+                    const ok = await onUpdate({
+                      opportunityId: '',
+                      opportunityName: '',
+                      assignedBA: '',
+                      totalPurchasePrice: '',
+                      closingDate: '',
+                      transitionType: 'client_removed',
+                      writeBaToOpportunity: false,
+                      revertStatus: '01_available',
+                    });
+                    if (!ok) { setSubmitError('Failed to update record'); setSubmitting(false); return; }
+                    try {
+                      await fetch('/api/eoi/log-update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          recordId: record.id,
+                          opportunityId: record.linkedOpportunityId || null,
+                          opportunityName: record.clientClosed || null,
+                          propertyAddress: record.propertyAddress || null,
+                          eventType: 'unlink_available',
+                          sentBy: record.closingBA || 'system',
+                          method: 'system',
+                          notes: 'Returned to 01 Available',
+                          offerStatusAtEvent: 'cleared',
+                          delinkReason: delinkReason.trim(),
+                        }),
+                      });
+                    } catch { /* best effort */ }
+                  } catch {
+                    setSubmitError('Failed to update record');
+                  }
+                  setSubmitting(false);
+                }}
+                disabled={submitting || !delinkReason.trim()}
+                className="px-4 py-2 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {submitting ? 'Processing...' : 'Confirm — Return to Available'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'unlink_test' && (
+          <>
+            <div className="flex-1 overflow-y-auto px-4 py-3">
+              <div className={`text-xs font-semibold mb-3`}>Unlink — change status to 07 Test Record</div>
+
+              <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
+                <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
+                <div><span className="font-medium">Opportunity:</span> {record.clientClosed || '-'}</div>
+                <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
+              </div>
+
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded p-3 text-xs text-red-800 dark:text-red-300 space-y-2">
+                <div className="font-semibold">This action will:</div>
+                <ul className="list-disc ml-4 space-y-1">
+                  <li>Remove the linked opportunity, BA, price, and close date from the CO</li>
+                  <li>Clear the offer price and offer status</li>
+                  <li>Change the CO status to 07 Test Record</li>
+                </ul>
+              </div>
+
+              {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
+            </div>
+
+            <div className={`px-4 py-3 border-t flex items-center justify-between ${dark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <button onClick={() => setStep('actions')} disabled={submitting} className={cls.btn}>← Back</button>
+              <button
+                onClick={async () => {
+                  setSubmitting(true);
+                  setSubmitError('');
+                  try {
+                    const ok = await onUpdate({
+                      opportunityId: '',
+                      opportunityName: '',
+                      assignedBA: '',
+                      totalPurchasePrice: '',
+                      closingDate: '',
+                      transitionType: 'client_removed',
+                      writeBaToOpportunity: false,
+                      revertStatus: '07_test_record',
+                    });
+                    if (!ok) { setSubmitError('Failed to update record'); setSubmitting(false); return; }
+                    // Log to activity history
+                    try {
+                      await fetch('/api/eoi/log-update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          recordId: record.id,
+                          opportunityId: record.linkedOpportunityId || null,
+                          opportunityName: record.clientClosed || null,
+                          propertyAddress: record.propertyAddress || null,
+                          eventType: 'unlink_test',
+                          sentBy: record.closingBA || 'system',
+                          method: 'system',
+                          notes: 'Moved to 07 Test Record',
+                          offerStatusAtEvent: 'cleared',
+                        }),
+                      });
+                    } catch { /* best effort */ }
+                  } catch {
+                    setSubmitError('Failed to update record');
+                  }
+                  setSubmitting(false);
+                }}
+                disabled={submitting}
+                className="px-4 py-2 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {submitting ? 'Processing...' : 'Confirm — Move to Test'}
+              </button>
             </div>
           </>
         )}
@@ -954,7 +1679,7 @@ export default function EoiLinkModal({
                   : 'Confirm the closing details written to the property record. The values below are prefilled from the opportunity — edited values win.'}
               </div>
               <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 items-center text-xs">
-                <span className={cls.label}>Client (opportunity)</span>
+                <span className={cls.label}>Opportunity</span>
                 <span className="font-medium">{selected?.name || record.clientClosed || '-'}</span>
 
                 {linkLoad === 'missing' && (

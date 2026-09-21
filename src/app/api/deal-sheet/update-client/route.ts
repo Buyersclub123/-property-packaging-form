@@ -50,6 +50,10 @@ export async function POST(request: NextRequest) {
       closingDate,
       transitionType,
       writeBaToOpportunity,
+      offerStatus,
+      offerPrice: offerPriceParam,
+      offerPriceLand,
+      offerPriceBuild,
     } = body as {
       recordId?: string;
       opportunityId?: string;
@@ -59,6 +63,10 @@ export async function POST(request: NextRequest) {
       closingDate?: string;
       transitionType?: ArchiveEntry['transitionType'];
       writeBaToOpportunity?: boolean;
+      offerStatus?: string;
+      offerPrice?: string;
+      offerPriceLand?: string;
+      offerPriceBuild?: string;
     };
 
     if (!recordId || !transitionType) {
@@ -185,15 +193,22 @@ export async function POST(request: NextRequest) {
       closing_date: newDate,
     };
 
-    // When unlinking (remove or revert to speculative), also clear offer price fields.
-    // Note: offer_status / offer_status_land / offer_status_build are SINGLE_OPTIONS
-    // in GHL — sending '' causes a 400 error. Omit them to leave as-is, or send a
-    // valid option. For now we clear prices only; status is left (it becomes stale
-    // but doesn't block the update).
-    if (isRemove) {
+    // When fully unlinking (client_removed), clear offer and EOI fields.
+    // reverted_to_speculative keeps offer data intact — only the opp link is removed.
+    if (transitionType === 'client_removed') {
       properties.offer_price = '';
       properties.offer_price_land = '';
       properties.offer_price_build = '';
+      properties.offer_status = '';
+      properties.eoi_notes = '';
+    }
+
+    // Non-remove: write offer price/status when explicitly provided (e.g. Mark Accepted)
+    if (!isRemove) {
+      if (offerStatus) properties.offer_status = offerStatus;
+      if (offerPriceParam) properties.offer_price = offerPriceParam;
+      if (offerPriceLand) properties.offer_price_land = offerPriceLand;
+      if (offerPriceBuild) properties.offer_price_build = offerPriceBuild;
     }
 
     const putUrl = `${GHL_API_BASE}/objects/${GHL_OBJECT_ID}/records/${recordId}?locationId=${LOCATION_ID}`;

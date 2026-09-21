@@ -21,9 +21,11 @@ export async function GET(request: NextRequest) {
 
   const sends = await sql`
     SELECT
-      id, record_id, opportunity_id, property_address, send_type,
-      offer_price, agent_email, sent_by, sent_at,
-      delivery_status, eoi_status, notes
+      id, record_id, opportunity_id, opportunity_name, property_address, event_type,
+      offer_price, offer_price_land, offer_price_build, offer_status_at_event,
+      agent_email, client_name, assigned_ba, close_date,
+      sent_by, sent_at, delivery_status, method,
+      initiated_by, delink_reason, changes, notes
     FROM eoi_sends
     WHERE record_id = ${recordId}
     ORDER BY sent_at DESC`;

@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const sql = getDb();
 
   const rows = await sql`
-    SELECT id, send_type, offer_price, sent_at, payload
+    SELECT id, event_type, offer_price, sent_at, payload
     FROM eoi_sends
     WHERE record_id = ${recordId}
       AND delivery_status = 'sent'
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     sendId: row.id,
-    sendType: row.send_type,
+    eventType: row.event_type,
     offerPrice: row.offer_price,
     sentAt: row.sent_at,
     payload,
