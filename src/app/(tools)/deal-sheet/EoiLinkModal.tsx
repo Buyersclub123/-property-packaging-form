@@ -232,6 +232,7 @@ export default function EoiLinkModal({
   const [agreedPriceLand, setAgreedPriceLand] = useState('');
   const [agreedPriceBuild, setAgreedPriceBuild] = useState('');
   const [acceptedConfirmed, setAcceptedConfirmed] = useState(false);
+  const [useAsAgreed, setUseAsAgreed] = useState(false);
 
   // Edit-mode load outcome for the linked opportunity.
   //   ok      = loaded from GHL, safe to confirm
@@ -572,7 +573,7 @@ export default function EoiLinkModal({
             offerPriceBuild: !keepPriceAsIs && isSplitContract ? newPriceBuild.trim() : undefined,
             sendType: 'increase',
             sentBy: editBA.trim(),
-            clientName: selected?.contactName || null,
+            clientName: selected?.contactName || selected?.name || null,
             assignedBa: editBA.trim(),
           }),
         });
@@ -634,6 +635,7 @@ export default function EoiLinkModal({
           opportunityId: selected.id,
           opportunityName: selected.name,
           propertyAddress: record.propertyAddress,
+          clientName: selected?.contactName || selected?.name || null,
           offerPrice: totalAgreedPrice,
           offerPriceLand: isSplitContract ? agreedPriceLand.trim() : undefined,
           offerPriceBuild: isSplitContract ? agreedPriceBuild.trim() : undefined,
@@ -970,10 +972,10 @@ export default function EoiLinkModal({
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Edit terms, price, or both — then send or log verbally</span>
                 </button>
                 <button onClick={() => { const eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(record.linkedOpportunityId || '')}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(record.clientClosed || '')}&ba=${encodeURIComponent(record.closingBA || '')}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=resend&loadFrom=lastSend`; window.open(eoiUrl, '_blank'); onCancel(); }} className={`w-full text-left ${cls.btn} py-2`}>
-                  <span className="font-medium">Resend as-is</span>
+                  <span className="font-medium">Resend as-is (add CC or attachments)</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Re-send the last EOI with no changes (recipient, CC, attachments editable)</span>
                 </button>
-                <button onClick={() => { setEditAction('mark_accepted'); setAgreedPrice(''); setAgreedPriceLand(''); setAgreedPriceBuild(''); setAcceptedConfirmed(false); setStep('mark_accepted'); }} className={`w-full text-left ${cls.btn} py-2`}>
+                <button onClick={() => { setEditAction('mark_accepted'); setAgreedPrice(''); setAgreedPriceLand(''); setAgreedPriceBuild(''); setAcceptedConfirmed(false); setUseAsAgreed(false); setStep('mark_accepted'); }} className={`w-full text-left ${cls.btn} py-2`}>
                   <span className="font-medium">Mark Accepted</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Record that the offer has been accepted</span>
                 </button>
@@ -1194,21 +1196,29 @@ export default function EoiLinkModal({
                     <label className={`flex items-center gap-1 text-[10px] cursor-pointer whitespace-nowrap ${cls.sub}`}>
                       <input
                         type="checkbox"
+                        checked={useAsAgreed}
+                        className="h-3.5 w-3.5 shrink-0 accent-blue-500 cursor-pointer"
                         onChange={(e) => {
-                          if (!e.target.checked) return;
-                          const src = record.offerPrice || '';
-                          if (isSplitContract) {
-                            const lMatch = src.match(/L:\s*\$?([\d,]+)/);
-                            const bMatch = src.match(/B:\s*\$?([\d,]+)/);
-                            if (lMatch) setAgreedPriceLand(lMatch[1].replace(/,/g, ''));
-                            if (bMatch) setAgreedPriceBuild(bMatch[1].replace(/,/g, ''));
+                          const on = e.target.checked;
+                          setUseAsAgreed(on);
+                          if (on) {
+                            const src = record.offerPrice || '';
+                            if (isSplitContract) {
+                              const lMatch = src.match(/L:\s*\$?([\d,]+)/);
+                              const bMatch = src.match(/B:\s*\$?([\d,]+)/);
+                              if (lMatch) setAgreedPriceLand(lMatch[1].replace(/,/g, ''));
+                              if (bMatch) setAgreedPriceBuild(bMatch[1].replace(/,/g, ''));
+                            } else {
+                              const m = src.match(/\$?([\d,]+)/);
+                              if (m) setAgreedPrice(m[1].replace(/,/g, ''));
+                              else if (record.closingPrice) setAgreedPrice(currencyRaw(record.closingPrice));
+                              else if (record.closePrefill) setAgreedPrice(currencyRaw(record.closePrefill));
+                            }
                           } else {
-                            const m = src.match(/\$?([\d,]+)/);
-                            if (m) setAgreedPrice(m[1].replace(/,/g, ''));
-                            else if (record.closingPrice) setAgreedPrice(currencyRaw(record.closingPrice));
-                            else if (record.closePrefill) setAgreedPrice(currencyRaw(record.closePrefill));
+                            setAgreedPrice('');
+                            setAgreedPriceLand('');
+                            setAgreedPriceBuild('');
                           }
-                          e.target.checked = false;
                         }}
                       />
                       Use as agreed price
@@ -1255,6 +1265,7 @@ export default function EoiLinkModal({
                   type="checkbox"
                   checked={acceptedConfirmed}
                   onChange={(e) => setAcceptedConfirmed(e.target.checked)}
+                  className="h-4 w-4 shrink-0 accent-blue-500 cursor-pointer"
                 />
                 <span>I confirm the agreed price is correct and the offer has been accepted</span>
               </label>

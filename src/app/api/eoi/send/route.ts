@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     renderedHtml: clientRenderedHtml,
     attachments,
     changes,
+    manualCc,
   } = body as {
     recordId: string;
     opportunityId?: string;
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
     renderedHtml?: string;
     attachments?: AttachmentPayload[];
     changes?: { field: string; label: string; from: string; to: string }[];
+    manualCc?: string;
   };
 
   if (!recordId || !agentEmail || !emailData) {
@@ -168,6 +170,7 @@ export async function POST(request: NextRequest) {
             ? { ...emailData, attachments: attachments.map(a => ({ type: a.type, forLabel: a.forLabel, autoName: a.autoName, mimeType: a.mimeType, size: Math.round(a.base64.length * 3 / 4) })) }
             : emailData),
           ...(initiatedBy && initiatedBy !== sentBy ? { initiatedBy } : {}),
+          ...(manualCc ? { manualCc } : {}),
         }
       )},
       ${initiatedBy && initiatedBy !== sentBy ? initiatedBy : null},
@@ -235,6 +238,15 @@ export async function POST(request: NextRequest) {
         ccList.push(FROM_EMAIL);
         if (consultantEmail && consultantEmail.includes('@')) ccList.push(consultantEmail);
         console.error('Failed to fetch global CC settings (non-fatal):', err);
+      }
+
+      // Manual CC from the compose form (Decision #21)
+      if (manualCc) {
+        const extras = manualCc
+          .split(',')
+          .map(e => e.trim())
+          .filter(e => e.includes('@') && !ccList.includes(e));
+        ccList.push(...extras);
       }
 
       // Fetch the sender's Gmail signature (non-fatal if it fails)
