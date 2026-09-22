@@ -1420,19 +1420,21 @@ export default function EoiLinkModal({
               <button onClick={() => { setStep('actions'); setReassignSelected(null); setReassignIsSpeculative(false); }} disabled={submitting} className={cls.btn}>← Back</button>
               {(reassignSelected || reassignIsSpeculative) && (
                 <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => handleReassignConfirm(false)}
-                    disabled={submitting || (!reassignIsSpeculative && editBA.trim() === '')}
-                    className={cls.btnPrimary}
-                  >
-                    {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
-                  </button>
+                  {!reassignIsSpeculative && (
+                    <button
+                      onClick={() => handleReassignConfirm(false)}
+                      disabled={submitting || editBA.trim() === ''}
+                      className={cls.btnPrimary}
+                    >
+                      {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
+                    </button>
+                  )}
                   <button
                     onClick={() => { setSkipComposer(true); handleReassignConfirm(true); }}
                     disabled={submitting || (!reassignIsSpeculative && editBA.trim() === '')}
                     className={cls.btnPrimary}
                   >
-                    {submitting && skipComposer ? 'Saving...' : 'Confirm (link only)'}
+                    {submitting && skipComposer ? 'Saving...' : reassignIsSpeculative ? 'Confirm' : 'Confirm (link only)'}
                   </button>
                 </div>
               )}
