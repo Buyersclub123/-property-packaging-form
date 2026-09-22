@@ -1213,7 +1213,6 @@ export default function EoiComposePage() {
                   </div>
                   <div style={{ marginTop: 4, fontSize: 11, color: '#666', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                     <span><strong>Opp:</strong> {h.opportunity_name || '—'}</span>
-                    <span><strong>Purchaser 1:</strong> {h.client_name || '—'}</span>
                     <span><strong>BA:</strong> {h.assigned_ba || '—'}</span>
                     <span><strong>Method:</strong> {h.method || '—'}</span>
                     {(h.offer_price_land || h.offer_price_build) && (
@@ -1823,7 +1822,6 @@ export default function EoiComposePage() {
               {/* Detail rows — always show key fields, others when populated */}
               <div style={{ marginTop: 4, fontSize: 11, color: '#666', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                 <span><strong>Opp:</strong> {h.opportunity_name || '—'}</span>
-                <span><strong>Purchaser 1:</strong> {h.client_name || '—'}</span>
                 <span><strong>BA:</strong> {h.assigned_ba || '—'}</span>
                 <span><strong>Method:</strong> {h.method || '—'}</span>
                 {h.offer_price_land && h.offer_price_build && (
