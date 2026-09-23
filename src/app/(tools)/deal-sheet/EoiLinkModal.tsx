@@ -32,6 +32,7 @@ interface DealRecord {
   acceptAcqTotal: string;
   packager: string;
   sourcer: string;
+  offerAccepted: string;
 }
 
 export interface EoiOpportunity {
@@ -133,18 +134,15 @@ function currencyRaw(value: string): string {
   if (!value) return '';
   const cleaned = value.replace(/[^0-9.]/g, '');
   const dotIndex = cleaned.indexOf('.');
-  if (dotIndex === -1) return cleaned;
-  return cleaned.slice(0, dotIndex + 1) + cleaned.slice(dotIndex + 1).replace(/\./g, '');
+  return dotIndex === -1 ? cleaned : cleaned.slice(0, dotIndex);
 }
 
 function currencyFormatted(value: string): string {
   const raw = currencyRaw(value);
   if (!raw) return '';
-  const parts = raw.split('.');
-  const num = parseFloat(parts[0] || '');
+  const num = parseInt(raw, 10);
   if (isNaN(num)) return raw;
-  const dec = parts.length > 1 ? '.' + parts[1] : '';
-  return '$' + num.toLocaleString('en-AU') + dec;
+  return '$' + num.toLocaleString('en-AU');
 }
 
 export default function EoiLinkModal({
@@ -160,7 +158,7 @@ export default function EoiLinkModal({
   const dark = theme === 'dark';
   const cls = {
     overlay: 'fixed inset-0 z-[100] flex items-center justify-center bg-black/60',
-    panel: `w-[720px] max-w-[95vw] max-h-[85vh] flex flex-col rounded-lg border shadow-xl ${
+    panel: `relative w-[720px] max-w-[95vw] max-h-[85vh] flex flex-col rounded-lg border shadow-xl ${
       dark ? 'bg-gray-900 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-900'
     }`,
     header: `px-4 py-3 border-b ${dark ? 'border-gray-700' : 'border-gray-200'}`,
@@ -178,6 +176,7 @@ export default function EoiLinkModal({
 
   const isEdit = mode === 'edit';
   const isSpeculative = record.clientClosed === 'SPECULATIVE EOI' && !record.linkedOpportunityId;
+  const isAccepted = record.offerAccepted === 'yes';
 
   // ---- Step 1 state ----
   const [step, setStep] = useState<'pick' | 'confirm' | 'actions' | 'increase' | 'mark_accepted' | 'reassign' | 'unlink_test' | 'unlink_lost' | 'unlink_available'>(isEdit ? 'actions' : 'pick');
@@ -233,6 +232,9 @@ export default function EoiLinkModal({
   const [agreedPriceBuild, setAgreedPriceBuild] = useState('');
   const [acceptedConfirmed, setAcceptedConfirmed] = useState(false);
   const [useAsAgreed, setUseAsAgreed] = useState(false);
+  // F39: accepted status — prompt shown before any action on an accepted record
+  const [acceptedChoice, setAcceptedChoice] = useState<'accepted' | 'offered' | null>(null);
+  const [pendingAcceptedAction, setPendingAcceptedAction] = useState<string | null>(null);
 
   // Edit-mode load outcome for the linked opportunity.
   //   ok      = loaded from GHL, safe to confirm
@@ -442,12 +444,32 @@ export default function EoiLinkModal({
       });
       setSubmitting(false);
       if (!ok) setSubmitError('Failed to update the link. Try again or cancel.');
+      if (ok) {
+        try {
+          await fetch('/api/eoi/log-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recordId: record.id,
+              opportunityId: opp.id,
+              opportunityName: opp.name,
+              propertyAddress: record.propertyAddress,
+              offerPrice: editPrice.trim(),
+              eventType: 'client_edited',
+              sentBy: editBA.trim(),
+              clientName: opp.contactName || opp.name || null,
+              assignedBa: editBA.trim(),
+              notes: 'BA/date/price updated via Edit modal',
+            }),
+          });
+        } catch { /* non-fatal */ }
+      }
     } else {
       const ok = await onLink({
         opportunityId: opp.id,
         opportunityName: opp.name,
         assignedBA: editBA.trim(),
-        totalPurchasePrice: isSplitContract ? String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0')) : editPrice.trim(),
+        totalPurchasePrice: isSplitContract ? String(Math.round(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))) : editPrice.trim(),
         offerPriceLand: isSplitContract ? editPriceLand.trim() : '',
         offerPriceBuild: isSplitContract ? editPriceBuild.trim() : '',
         closingDate: isoToDDMMYYYY(editDateIso),
@@ -461,7 +483,7 @@ export default function EoiLinkModal({
         onCancel();
       } else {
         // Open the EOI composer with context from this link
-        const totalPrice = isSplitContract ? String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0')) : editPrice.trim();
+        const totalPrice = isSplitContract ? String(Math.round(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))) : editPrice.trim();
         let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(opp.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(opp.name || '')}&ba=${encodeURIComponent(editBA.trim())}&price=${encodeURIComponent(totalPrice)}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}`;
         if (isSplitContract) {
           eoiUrl += `&landPrice=${encodeURIComponent(editPriceLand.trim())}&buildPrice=${encodeURIComponent(editPriceBuild.trim())}`;
@@ -475,7 +497,7 @@ export default function EoiLinkModal({
     setSubmitting(true);
     setSubmitError('');
     const totalPrice = isSplitContract
-      ? String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))
+      ? String(Math.round(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0')))
       : editPrice.trim();
     const ok = await onSpeculative({
       totalPrice,
@@ -491,7 +513,7 @@ export default function EoiLinkModal({
     } else {
       // Open the EOI composer for speculative (no oppId) — include prices
       const totalPrice = isSplitContract
-        ? String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))
+        ? String(Math.round(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0')))
         : editPrice.trim();
       let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=initial&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&price=${encodeURIComponent(totalPrice)}`;
       if (isSplitContract) {
@@ -536,7 +558,7 @@ export default function EoiLinkModal({
     const oppName = selected?.name || 'SPECULATIVE EOI';
     const changedBA = selected ? editBA.trim() !== (selected.assignedBA || '').trim() : false;
     const totalNewPrice = keepPriceAsIs ? '' : (isSplitContract
-      ? String(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0'))
+      ? String(Math.round(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0')))
       : newPrice.trim());
 
     // Write BA/date updates to the property record (price only if changed)
@@ -550,6 +572,7 @@ export default function EoiLinkModal({
       closingDate: isoToDDMMYYYY(editDateIso),
       transitionType: 'client_edited',
       writeBaToOpportunity: changedBA,
+      ...(acceptedChoice === 'offered' ? { offerStatus: 'offered' } : {}),
     });
     setSubmitting(false);
     if (!ok) {
@@ -582,6 +605,28 @@ export default function EoiLinkModal({
       return;
     }
 
+    // Log the CO update so it appears in history (the composer send will log separately)
+    try {
+      await fetch('/api/eoi/log-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: record.id,
+          opportunityId: oppId,
+          opportunityName: oppName,
+          propertyAddress: record.propertyAddress,
+          offerPrice: totalNewPrice,
+          offerPriceLand: !keepPriceAsIs && isSplitContract ? newPriceLand.trim() : undefined,
+          offerPriceBuild: !keepPriceAsIs && isSplitContract ? newPriceBuild.trim() : undefined,
+          eventType: 'increase_prep',
+          sentBy: editBA.trim(),
+          clientName: selected?.contactName || selected?.name || null,
+          assignedBa: editBA.trim(),
+          notes: 'Price/terms updated on CO — EOI composer opened',
+        }),
+      });
+    } catch { /* non-fatal — CO update already succeeded */ }
+
     // Open the composer — sendType=increase when price changed, revision when as-is
     const composerSendType = keepPriceAsIs ? 'revision' : 'increase';
     let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(oppId)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(oppName)}&ba=${encodeURIComponent(editBA.trim())}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=${composerSendType}&loadFrom=lastSend`;
@@ -591,6 +636,7 @@ export default function EoiLinkModal({
         eoiUrl += `&landPrice=${encodeURIComponent(newPriceLand.trim())}&buildPrice=${encodeURIComponent(newPriceBuild.trim())}`;
       }
     }
+    if (acceptedChoice === 'accepted') eoiUrl += '&preserveOfferStatus=accepted';
     window.open(eoiUrl, '_blank');
     onCancel();
   }
@@ -603,7 +649,7 @@ export default function EoiLinkModal({
 
     const changedBA = editBA.trim() !== (selected.assignedBA || '').trim();
     const totalAgreedPrice = isSplitContract
-      ? String(parseFloat(agreedPriceLand || '0') + parseFloat(agreedPriceBuild || '0'))
+      ? String(Math.round(parseFloat(agreedPriceLand || '0') + parseFloat(agreedPriceBuild || '0')))
       : agreedPrice.trim();
 
     const ok = await onUpdate({
@@ -748,9 +794,25 @@ export default function EoiLinkModal({
       // Open composer
       let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(opp.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(opp.name || '')}&ba=${encodeURIComponent(editBA.trim())}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=revision`;
       if (reassignVariant === 'keep') eoiUrl += '&loadFrom=lastSendTermsOnly';
+      if (acceptedChoice === 'accepted') eoiUrl += '&preserveOfferStatus=accepted';
       window.open(eoiUrl, '_blank');
     }
     onCancel();
+  }
+
+  // F39: handle accepted-status choice then execute the pending action
+  function handleAcceptedChoice(choice: 'accepted' | 'offered') {
+    setAcceptedChoice(choice);
+    const action = pendingAcceptedAction;
+    setPendingAcceptedAction(null);
+
+    if (action === 'increase') {
+      setEditAction('increase'); setNewPrice(''); setNewPriceLand(''); setNewPriceBuild(''); setKeepPriceAsIs(false); setStep('increase');
+    } else if (action === 'reassign_keep') {
+      setEditAction('reassign_keep'); setReassignVariant('keep'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign');
+    } else if (action === 'reassign_refresh') {
+      setEditAction('reassign_refresh'); setReassignVariant('refresh'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign');
+    }
   }
 
   const baEmpty = editBA.trim() === '';
@@ -761,6 +823,36 @@ export default function EoiLinkModal({
   return (
     <div className={cls.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className={cls.panel}>
+        {/* F39: Accepted status prompt — shown before any action on an accepted record */}
+        {pendingAcceptedAction && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-lg">
+            <div className={`w-[380px] rounded-lg border shadow-xl p-5 ${dark ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className={`text-sm font-semibold ${dark ? 'text-gray-100' : 'text-gray-900'}`}>
+                  Offer is currently Accepted
+                </div>
+                <button onClick={() => setPendingAcceptedAction(null)} className={`text-xs ${cls.sub} hover:opacity-70`}>✕</button>
+              </div>
+              <div className={`text-xs mb-5 ${dark ? 'text-gray-300' : 'text-gray-600'}`}>
+                Do you want to keep the status as <strong>Accepted</strong>, or change it to <strong>Offered</strong>?
+              </div>
+              <div className="flex justify-center gap-2">
+                <button
+                  onClick={() => handleAcceptedChoice('offered')}
+                  className="px-4 py-2 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600"
+                >
+                  Change to Offered
+                </button>
+                <button
+                  onClick={() => handleAcceptedChoice('accepted')}
+                  className="px-4 py-2 rounded text-xs font-semibold bg-green-600 text-white hover:bg-green-700"
+                >
+                  Keep as Accepted
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className={cls.header}>
           <div className="flex items-center justify-between">
@@ -905,7 +997,7 @@ export default function EoiLinkModal({
                       <span className={cls.label}>Total $</span>
                       <div className={`text-xs font-medium ${cls.sub}`}>
                         {editPriceLand || editPriceBuild
-                          ? currencyFormatted(String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0')))
+                          ? currencyFormatted(String(Math.round(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))))
                           : '-'}
                       </div>
                     </>
@@ -967,11 +1059,11 @@ export default function EoiLinkModal({
               {/* Action buttons */}
               <div className="space-y-2">
                 <div className={`text-[10px] font-semibold uppercase tracking-wide ${cls.sub}`}>EOI Actions</div>
-                <button onClick={() => { setEditAction('increase'); setNewPrice(''); setNewPriceLand(''); setNewPriceBuild(''); setKeepPriceAsIs(false); setStep('increase'); }} className={`w-full text-left ${cls.btn} py-2`}>
+                <button onClick={() => { if (isAccepted && !acceptedChoice) { setPendingAcceptedAction('increase'); return; } setEditAction('increase'); setNewPrice(''); setNewPriceLand(''); setNewPriceBuild(''); setKeepPriceAsIs(false); setStep('increase'); }} className={`w-full text-left ${cls.btn} py-2`}>
                   <span className="font-medium">Edit &amp; Send EOI / Log verbal offer increase</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Edit terms, price, or both — then send or log verbally</span>
                 </button>
-                <button onClick={() => { const eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(record.linkedOpportunityId || '')}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(record.clientClosed || '')}&ba=${encodeURIComponent(record.closingBA || '')}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=resend&loadFrom=lastSend`; window.open(eoiUrl, '_blank'); onCancel(); }} className={`w-full text-left ${cls.btn} py-2`}>
+                <button onClick={() => { let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(record.linkedOpportunityId || '')}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(record.clientClosed || '')}&ba=${encodeURIComponent(record.closingBA || '')}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=resend&loadFrom=lastSend`; if (isAccepted) eoiUrl += '&preserveOfferStatus=accepted'; window.open(eoiUrl, '_blank'); onCancel(); }} className={`w-full text-left ${cls.btn} py-2`}>
                   <span className="font-medium">Resend as-is (add CC or attachments)</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Re-send the last EOI with no changes (recipient, CC, attachments editable)</span>
                 </button>
@@ -981,11 +1073,11 @@ export default function EoiLinkModal({
                 </button>
 
                 <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Client Management</div>
-                <button onClick={() => { setEditAction('reassign_keep'); setReassignVariant('keep'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign'); }} className={`w-full text-left ${cls.btn} py-2`}>
+                <button onClick={() => { if (isAccepted && !acceptedChoice) { setPendingAcceptedAction('reassign_keep'); return; } setEditAction('reassign_keep'); setReassignVariant('keep'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign'); }} className={`w-full text-left ${cls.btn} py-2`}>
                   <span className="font-medium">Reassign or make speculative — <span className="underline font-bold">keep existing terms</span></span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Swap the opportunity or go speculative. EOI terms stay as they were.</span>
                 </button>
-                <button onClick={() => { setEditAction('reassign_refresh'); setReassignVariant('refresh'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign'); }} className={`w-full text-left ${cls.btn} py-2`}>
+                <button onClick={() => { if (isAccepted && !acceptedChoice) { setPendingAcceptedAction('reassign_refresh'); return; } setEditAction('reassign_refresh'); setReassignVariant('refresh'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign'); }} className={`w-full text-left ${cls.btn} py-2`}>
                   <span className="font-medium">Reassign or make speculative — <span className="underline font-bold">refresh terms</span></span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Swap the opportunity or go speculative. EOI terms refresh from Template Admin.</span>
                 </button>
@@ -1103,7 +1195,7 @@ export default function EoiLinkModal({
                       <span className={cls.label}>New Total</span>
                       <span className={`font-medium ${cls.sub}`}>
                         {newPriceLand || newPriceBuild
-                          ? currencyFormatted(String(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0')))
+                          ? currencyFormatted(String(Math.round(parseFloat(newPriceLand || '0') + parseFloat(newPriceBuild || '0'))))
                           : '-'}
                       </span>
                     </>
@@ -1244,7 +1336,7 @@ export default function EoiLinkModal({
                     <span className={cls.label}>Agreed Total</span>
                     <span className={`font-medium ${cls.sub}`}>
                       {agreedPriceLand || agreedPriceBuild
-                        ? currencyFormatted(String(parseFloat(agreedPriceLand || '0') + parseFloat(agreedPriceBuild || '0')))
+                        ? currencyFormatted(String(Math.round(parseFloat(agreedPriceLand || '0') + parseFloat(agreedPriceBuild || '0'))))
                         : '-'}
                     </span>
                   </>
@@ -1816,7 +1908,7 @@ export default function EoiLinkModal({
                     <span className={cls.label}>Total $</span>
                     <div className={`text-xs font-medium ${cls.sub}`}>
                       {editPriceLand || editPriceBuild
-                        ? currencyFormatted(String(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0')))
+                        ? currencyFormatted(String(Math.round(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))))
                         : '-'}
                     </div>
                   </>

@@ -58,7 +58,9 @@ interface SentEoi {
 const STORAGE_KEY = 'eoi-demo-history';
 
 function currencyRaw(v: string): string {
-  return (v || '').replace(/[^0-9.]/g, '');
+  const cleaned = (v || '').replace(/[^0-9.]/g, '');
+  const dotIndex = cleaned.indexOf('.');
+  return dotIndex === -1 ? cleaned : cleaned.slice(0, dotIndex);
 }
 
 function currencyFormatted(v: string): string {

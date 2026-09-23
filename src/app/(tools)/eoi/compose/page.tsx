@@ -345,6 +345,7 @@ export default function EoiComposePage() {
   const [viewAcceptAcqTotal, setViewAcceptAcqTotal] = useState('');
   const [viewPackager, setViewPackager] = useState('');
   const [viewSourcer, setViewSourcer] = useState('');
+  const [preserveOfferStatus, setPreserveOfferStatus] = useState('');
 
   // EOI form state
   const [state, setState] = useState<AuState>('NSW');
@@ -516,6 +517,8 @@ export default function EoiComposePage() {
     // D28-PRE: flag for loading from last send
     const lf = p.get('loadFrom');
     if (lf) setLoadFrom(lf);
+    const pos = p.get('preserveOfferStatus');
+    if (pos) setPreserveOfferStatus(pos);
 
     // D38: view-history-only mode
     if (p.get('viewHistory') === 'true') {
@@ -1056,6 +1059,7 @@ export default function EoiComposePage() {
           consultantEmail,
           emailData,
           manualCc: manualCc.trim() || undefined,
+          preserveOfferStatus: preserveOfferStatus || undefined,
           changes: changes !== undefined ? changes : undefined,
           attachments: attachments.length > 0 ? attachments.map(a => ({
             base64: a.base64,

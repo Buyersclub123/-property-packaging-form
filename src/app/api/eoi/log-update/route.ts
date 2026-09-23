@@ -29,9 +29,9 @@ export async function POST(request: NextRequest) {
 
     const sql = getDb();
 
-    const priceNumeric = offerPrice ? parseFloat(String(offerPrice).replace(/[^0-9.]/g, '')) || null : null;
-    const landNumeric = offerPriceLand ? parseFloat(String(offerPriceLand).replace(/[^0-9.]/g, '')) || null : null;
-    const buildNumeric = offerPriceBuild ? parseFloat(String(offerPriceBuild).replace(/[^0-9.]/g, '')) || null : null;
+    const priceNumeric = offerPrice ? Math.round(parseFloat(String(offerPrice).replace(/[^0-9.]/g, ''))) || null : null;
+    const landNumeric = offerPriceLand ? Math.round(parseFloat(String(offerPriceLand).replace(/[^0-9.]/g, ''))) || null : null;
+    const buildNumeric = offerPriceBuild ? Math.round(parseFloat(String(offerPriceBuild).replace(/[^0-9.]/g, ''))) || null : null;
 
     // eventType override takes precedence (e.g. 'unlink_test'), otherwise prefix sendType with 'eoi_'
     const eventType = eventTypeOverride || (sendType ? `eoi_${sendType}` : 'eoi_increase');

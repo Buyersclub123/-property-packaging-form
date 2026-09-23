@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
     attachments,
     changes,
     manualCc,
+    preserveOfferStatus,
   } = body as {
     recordId: string;
     opportunityId?: string;
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
     attachments?: AttachmentPayload[];
     changes?: { field: string; label: string; from: string; to: string }[];
     manualCc?: string;
+    preserveOfferStatus?: string;
   };
 
   if (!recordId || !agentEmail || !emailData) {
@@ -348,7 +350,7 @@ export async function POST(request: NextRequest) {
   await sql`
     UPDATE eoi_sends
     SET delivery_status = ${deliveryStatus},
-        offer_status_at_event = ${deliveryStatus === 'sent' ? 'offered' : deliveryStatus === 'no_credentials' ? 'recorded' : 'failed'},
+        offer_status_at_event = ${deliveryStatus === 'sent' ? (preserveOfferStatus || 'offered') : deliveryStatus === 'no_credentials' ? 'recorded' : 'failed'},
         notes = ${deliveryError || null}
     WHERE id = ${sendId}`;
 
@@ -364,7 +366,7 @@ export async function POST(request: NextRequest) {
         const properties: Record<string, string> = {};
 
         // Set offer_status to "Offered" and mark that this CO has EOI history
-        properties.offer_status = 'offered';
+        properties.offer_status = preserveOfferStatus || 'offered';
         properties.has_eoi_history = 'Yes';
         if (isHL) {
           // H&L: write calculated total to Offer Price
@@ -372,7 +374,7 @@ export async function POST(request: NextRequest) {
             const rawLand = parseFloat(emailData.landPrice.replace(/[^0-9.]/g, '')) || 0;
             const rawBuild = parseFloat(emailData.buildPrice.replace(/[^0-9.]/g, '')) || 0;
             if (rawLand + rawBuild > 0) {
-              properties.offer_price = String(rawLand + rawBuild);
+              properties.offer_price = String(Math.round(rawLand + rawBuild));
             }
           }
         }
@@ -403,7 +405,7 @@ export async function POST(request: NextRequest) {
               if (rawLand) properties.offer_price_land = rawLand;
               if (rawBuild) properties.offer_price_build = rawBuild;
               // Also write total to offer_price
-              const totalRaw = String((parseFloat(rawLand) || 0) + (parseFloat(rawBuild) || 0));
+              const totalRaw = String(Math.round((parseFloat(rawLand) || 0) + (parseFloat(rawBuild) || 0)));
               if (totalRaw !== '0') properties.offer_price = totalRaw;
             } else {
               properties.offer_price = rawPrice;
