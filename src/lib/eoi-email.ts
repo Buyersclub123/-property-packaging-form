@@ -84,7 +84,6 @@ ${bodyMarkup}
 </html>`;
 }
 
-export function renderEoiSubject(data: EoiEmailData, sendType: string): string {
-  const prefix = sendType === 'increase' ? 'UPDATED EOI' : sendType === 'revision' ? 'REVISED EOI' : 'Expression of Interest';
-  return `${prefix} — ${data.propertyAddress || 'Property'}`;
+export function renderEoiSubject(data: EoiEmailData, _sendType: string): string {
+  return `Expression of Interest — ${data.propertyAddress || 'Property'}`;
 }

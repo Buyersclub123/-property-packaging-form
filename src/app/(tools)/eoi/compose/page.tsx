@@ -350,6 +350,7 @@ export default function EoiComposePage() {
   // EOI form state
   const [state, setState] = useState<AuState>('NSW');
   const [propertyType, setPropertyType] = useState<PropertyType>('established');
+  const [contractTypeError, setContractTypeError] = useState('');
   const [offerPrice, setOfferPrice] = useState('');
   const [landPrice, setLandPrice] = useState('');
   const [buildPrice, setBuildPrice] = useState('');
@@ -490,7 +491,12 @@ export default function EoiComposePage() {
     }
 
     // Property type: use CO fields property_type + contract_type (Row 3 decision)
-    setPropertyType(resolvePropertyType(p.get('propertyType') || '', p.get('contractType') || '', p.get('type') || ''));
+    const ptCO = p.get('propertyType') || '';
+    const ctCO = p.get('contractType') || '';
+    if (!ptCO && !ctCO && !p.get('type')) {
+      setContractTypeError('Contract Type is not set on the Property Record in GHL. Please update the Contract Type field on the Property Record before sending an EOI.');
+    }
+    setPropertyType(resolvePropertyType(ptCO, ctCO, p.get('type') || ''));
 
     // B1 fix: store price as-is (don't strip non-numeric chars from ranges)
     setOfferPrice(p.get('price') || '');
@@ -1301,6 +1307,11 @@ export default function EoiComposePage() {
           {loadedFromHistory && (
             <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#856404' }}>
               <><strong>Values loaded from previously sent EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong> All fields are editable — terms, conditions, and price. Changes from the previous send will be tracked.</>
+            </div>
+          )}
+          {contractTypeError && (
+            <div style={{ background: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: 6, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#721c24' }}>
+              <strong>{contractTypeError}</strong>
             </div>
           )}
           {historyFallback && (
