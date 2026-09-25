@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
         ${buildNumeric},
         ${offerStatusAtEvent || 'offered'},
         ${''},
-        ${clientName || null},
+        ${null},
         ${assignedBa || null},
         ${sentBy || 'unknown'},
         'recorded',

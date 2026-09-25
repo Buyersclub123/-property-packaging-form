@@ -397,8 +397,8 @@ export default function EoiComposePage() {
   const [newConditionText, setNewConditionText] = useState('');
 
   // Send state
-  const [sendType, setSendType] = useState<'initial' | 'increase' | 'revision' | 'resend'>('initial');
-  const isResend = sendType === 'resend';
+  const [sendType, setSendType] = useState<'initial' | 'increase' | 'revision'>('initial');
+  // resend functionality removed — Edit & Send covers all use cases
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ ok: boolean; sendId?: number; deliveryStatus?: string; error?: string } | null>(null);
 
@@ -507,12 +507,9 @@ export default function EoiComposePage() {
 
     const client = p.get('client') || '';
     setOppName(client);
-    if (client && client !== 'SPECULATIVE EOI') {
-      setPurchasers([{ ...emptyPurchaser(), name: client }, emptyPurchaser()]);
-    }
 
     const st = p.get('sendType');
-    if (st === 'increase' || st === 'revision' || st === 'resend') setSendType(st);
+    if (st === 'increase' || st === 'revision') setSendType(st);
 
     // D28-PRE: flag for loading from last send
     const lf = p.get('loadFrom');
@@ -534,50 +531,53 @@ export default function EoiComposePage() {
 
   // ---- load linked opportunity contact + solicitor + broker -----------------
   useEffect(() => {
-    // D28-PRE: skip opp contact fetch when loading full last send — payload has everything
     // lastSendTermsOnly does NOT skip — we need fresh contact data from the new opp
-    if (loadFrom === 'lastSend') return;
     if (!oppId || !authEmail) {
       if (!oppId && recordId) setContactNote('No linked opportunity — this will be a speculative EOI.');
       return;
     }
     (async () => {
       try {
-        const res = await fetch(`/api/deal-sheet/opportunities?v=2&id=${encodeURIComponent(oppId)}&_t=${Date.now()}`, { cache: 'no-store' });
+        // Fetch opportunity and BA list in parallel to avoid sequential round-trips
+        const [res, baRes] = await Promise.all([
+          fetch(`/api/deal-sheet/opportunities?v=2&id=${encodeURIComponent(oppId)}&_t=${Date.now()}`, { cache: 'no-store' }),
+          fetch('/api/bas'),
+        ]);
         if (!res.ok) throw new Error('lookup failed');
         const d = await res.json();
         const opp = (d.opportunities || [])[0];
         if (!opp) throw new Error('not found');
 
         // Purchaser 1 from contact + postal address
-        const name = opp.contactName || opp.name || '';
-        if (name) {
-          setPurchasers((prev) => {
-            const next = [...prev];
-            next[0] = {
-              ...next[0],
-              name: name || next[0].name,
-              email: opp.contactEmail || next[0].email,
-              phone: opp.contactPhone || next[0].phone,
-              address: opp.postalAddress || next[0].address,
+        const name = opp.contactName || '';
+        setPurchasers((prev) => {
+          const next = [...prev];
+          next[0] = {
+            ...next[0],
+            name: name,
+            email: opp.contactEmail || '',
+            phone: opp.contactPhone || '',
+            address: opp.postalAddress || '',
+          };
+          // Purchaser 2 from partner fields
+          if (opp.partnerName || opp.partnerEmail || opp.partnerPhone) {
+            next[1] = {
+              name: opp.partnerName || '',
+              email: opp.partnerEmail || '',
+              phone: opp.partnerPhone || '',
+              address: opp.partnerAddress || '',
             };
-            // Purchaser 2 from partner fields
-            if (opp.partnerName) {
-              next[1] = {
-                name: opp.partnerName || '',
-                email: opp.partnerEmail || '',
-                phone: opp.partnerPhone || '',
-                address: opp.partnerAddress || '',
-              };
-            }
-            return next;
-          });
+          }
+          return next;
+        });
+
+        if (!name) {
+          setContactNote('Contact name not found on this opportunity — check the opportunity in GHL.');
         }
         if (opp.assignedBA) {
           setConsultantName(opp.assignedBA);
-          // Look up BA email from the BAs list for CC purposes
+          // Match BA email from the parallel-fetched BAs list
           try {
-            const baRes = await fetch('/api/bas');
             if (baRes.ok) {
               const baData = await baRes.json();
               const match = (baData.bas || []).find((b: { name: string; email: string }) =>
@@ -605,7 +605,7 @@ export default function EoiComposePage() {
 
         setContactNote('The Agent\'s name, email and phone number are synced with the property record; any changes made here will automatically update that record.');
       } catch {
-        setContactNote('Could not read the linked opportunity — enter details manually.');
+        setContactNote('Could not load contact details from the linked opportunity — check the opportunity in GHL or enter details manually.');
       }
     })();
   }, [oppId, authEmail, recordId]);
@@ -624,7 +624,7 @@ export default function EoiComposePage() {
     } catch { /* fall back to empty */ }
   }, [state, propertyType]);
 
-  useEffect(() => { if (authEmail && loadFrom !== 'lastSend' && loadFrom !== 'lastSendTermsOnly') fetchTerms(); }, [fetchTerms, authEmail, loadFrom]);
+  useEffect(() => { if (authEmail && loadFrom !== 'lastSendTermsOnly') fetchTerms(); }, [fetchTerms, authEmail, loadFrom]);
 
   // Initialise editable copies when terms/conditions load from DB
   // (skipped when loaded from history — payload populates these instead)
@@ -643,96 +643,6 @@ export default function EoiComposePage() {
     setNotes(terms.notes || '');
     setSpeculativeMessage(terms.speculative_message || '');
   }, [terms, conditions, loadedFromHistory]);
-
-  // ---- D28-PRE: load from last sent EOI ------------------------------------
-  useEffect(() => {
-    if (loadFrom !== 'lastSend' || !recordId || !authEmail) return;
-    (async () => {
-      try {
-        const res = await fetch(`/api/eoi/last-send?recordId=${encodeURIComponent(recordId)}&_t=${Date.now()}`);
-        if (!res.ok) {
-          // No previous send — fall back to Template Admin
-          setHistoryFallback(true);
-          setLoadFrom(''); // allow fetchTerms to run
-          return;
-        }
-        const data = await res.json();
-        const p = data.payload;
-        if (!p) { setHistoryFallback(true); setLoadFrom(''); return; }
-
-        // Populate all fields from the payload
-        // Terms / conditions
-        setEditDepositAmount(p.depositAmount || '');
-        setEditDepositPayable(p.depositPayable || '');
-        setEditLandDeposit(p.landDeposit || '');
-        setEditBuildDeposit(p.buildDeposit || '');
-        setEditFinance(p.finance || '');
-        setEditBuildingPest(p.buildingPest || '');
-        setEditPci(p.pci || '');
-        setEditCommission(p.commission || '');
-        setEditSettlement(p.settlement || '');
-        setEditConditions(Array.isArray(p.specialConditions)
-          ? p.specialConditions.map((c: string) => c.replace(/^[\s]*[-\u2013\u2014\u2022]\s*/, '').trim()).filter(Boolean)
-          : []);
-        setNotes(p.notes || '');
-        setSpeculativeMessage(p.speculativeMessage || '');
-
-        // Contract entity
-        if (p.contractEntity) setContractEntity(p.contractEntity);
-
-        // Purchasers
-        if (Array.isArray(p.purchasers) && p.purchasers.length > 0) {
-          setPurchasers(p.purchasers.map((pu: { name?: string; email?: string; phone?: string; address?: string }) => ({
-            name: pu.name || '',
-            email: pu.email || '',
-            phone: pu.phone || '',
-            address: pu.address || '',
-          })));
-        }
-
-        // Agent
-        if (p.agentName) setAgentName(p.agentName);
-        if (p.agentEmail) setAgentEmail(p.agentEmail);
-        if (p.agentPhone) setAgentPhone(p.agentPhone);
-        if (p.agencyName) setAgencyName(p.agencyName);
-
-        // Solicitor
-        if (p.solicitorName) setSolicitorName(p.solicitorName);
-        if (p.solicitorCompany) setSolicitorCompany(p.solicitorCompany);
-        if (p.solicitorEmail) setSolicitorEmail(p.solicitorEmail);
-        if (p.solicitorPhone) setSolicitorPhone(p.solicitorPhone);
-
-        // Broker
-        if (p.brokerName) setBrokerName(p.brokerName);
-        if (p.brokerCompany) setBrokerCompany(p.brokerCompany);
-        if (p.brokerEmail) setBrokerEmail(p.brokerEmail);
-        if (p.brokerPhone) setBrokerPhone(p.brokerPhone);
-
-        // Consultant
-        if (p.consultantName) setConsultantName(p.consultantName);
-        if (p.consultantEmail) setConsultantEmail(p.consultantEmail);
-
-        // LVR
-        if (p.lvr) setLvr(p.lvr);
-
-        // Prices: for increase, URL params already set the new price — don't overwrite.
-        // For revision and resend, use the payload prices.
-        if (sendType !== 'increase') {
-          if (p.offerPrice) setOfferPrice(p.offerPrice.replace(/[$,\s]/g, ''));
-          if (p.landPrice) setLandPrice(p.landPrice.replace(/[$,\s]/g, ''));
-          if (p.buildPrice) setBuildPrice(p.buildPrice.replace(/[$,\s]/g, ''));
-        }
-
-        setPreviousPayload(p);
-        setLoadedFromHistory(true);
-        setLastSendDate(data.sentAt ? new Date(data.sentAt).toLocaleDateString('en-AU') : '');
-        setContactNote('Values loaded from the last sent EOI — contacts, terms, and conditions are from the previous send.');
-      } catch {
-        setHistoryFallback(true);
-        setLoadFrom('');
-      }
-    })();
-  }, [loadFrom, recordId, authEmail, sendType]);
 
   // ---- D32-34: load TERMS ONLY from last sent EOI (keep terms variant) ------
   // Loads terms/conditions/prices but NOT client data (purchasers, solicitor, broker, etc.)
@@ -773,7 +683,10 @@ export default function EoiComposePage() {
         if (p.landPrice) setLandPrice(p.landPrice.replace(/[$,\s]/g, ''));
         if (p.buildPrice) setBuildPrice(p.buildPrice.replace(/[$,\s]/g, ''));
 
-        // NOT populated: purchasers, contractEntity, solicitor, broker, LVR, consultant
+        // LVR is form-only / manual — no live source, must come from payload
+        if (p.lvr) setLvr(p.lvr);
+
+        // NOT populated: purchasers, contractEntity, solicitor, broker, consultant
         // Those come from the opp-fetch effect (reassign) or stay blank (speculative)
 
         setPreviousPayload(p);
@@ -813,7 +726,7 @@ export default function EoiComposePage() {
     if (!isHL) return '';
     const land = parseFloat((landPrice || '').replace(/[$,\s]/g, '')) || 0;
     const build = parseFloat((buildPrice || '').replace(/[$,\s]/g, '')) || 0;
-    return land + build > 0 ? String(land + build) : '';
+    return land + build > 0 ? String(Math.round(land + build)) : '';
   }, [isHL, landPrice, buildPrice]);
 
   const displayOfferPrice = useMemo(() => {
@@ -955,7 +868,7 @@ export default function EoiComposePage() {
     solicitorName, solicitorEmail, solicitorPhone, solicitorCompany,
     brokerName, brokerEmail, brokerPhone, brokerCompany,
     consultantName, consultantEmail, notes, lvr,
-    authEmail, recordId,
+    authEmail, recordId, sendAsEmail,
   ]);
 
   // ---- T1: auto-grow textareas on value changes -----------------------------
@@ -1273,13 +1186,13 @@ export default function EoiComposePage() {
         <span className="toolbar-title">Expression of Interest</span>
         <div className="toolbar-group">
           <label style={{ fontSize: 12, color: '#ccc' }}>State<span style={{ display: 'block', fontSize: 9, color: '#999', fontStyle: 'italic' }}>Property Record (CO) &rarr; state</span></label>
-          <select value={state} onChange={(e) => setState(e.target.value as AuState)} disabled={isResend} style={{ background: '#fff3cd' }}>
+          <select value={state} onChange={(e) => setState(e.target.value as AuState)} style={{ background: '#fff3cd' }}>
             {AU_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div className="toolbar-group">
           <label style={{ fontSize: 12, color: '#ccc' }}>Type<span style={{ display: 'block', fontSize: 9, color: '#999', fontStyle: 'italic' }}>Property Record (CO) &rarr; property_type</span></label>
-          <select value={propertyType} onChange={(e) => setPropertyType(e.target.value as PropertyType)} disabled={isResend} style={{ background: '#fff3cd' }}>
+          <select value={propertyType} onChange={(e) => setPropertyType(e.target.value as PropertyType)} style={{ background: '#fff3cd' }}>
             {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </div>
@@ -1387,11 +1300,7 @@ export default function EoiComposePage() {
           {/* D28-PRE: data source banner */}
           {loadedFromHistory && (
             <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#856404' }}>
-              {sendType === 'resend' ? (
-                <><strong>This is an exact resend of the previous EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong> Only the recipient, CC, and attachments can be changed.</>
-              ) : (
-                <><strong>Values loaded from previously sent EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong> All fields are editable — terms, conditions, and price. Changes from the previous send will be tracked.</>
-              )}
+              <><strong>Values loaded from previously sent EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong> All fields are editable — terms, conditions, and price. Changes from the previous send will be tracked.</>
             </div>
           )}
           {historyFallback && (
@@ -1400,8 +1309,8 @@ export default function EoiComposePage() {
             </div>
           )}
 
-          {/* Form table — disabled in resend mode */}
-          <fieldset disabled={isResend} style={{ border: 'none', margin: 0, padding: 0, opacity: isResend ? 0.7 : 1 }}>
+          {/* Form table */}
+          <fieldset style={{ border: 'none', margin: 0, padding: 0 }}>
           <table className="eoi-form-table">
             <tbody>
 
@@ -1431,10 +1340,10 @@ export default function EoiComposePage() {
               {isHL ? (
                 <>
                   {renderFormRow('landPrice', 'Offer Price Land', 'Property Record (CO) \u2192 Offer Price Land \u00b7 writes back on send', 'green',
-                    <input className="eoi-form-input" value={currencyFormat(landPrice)} onChange={e => setLandPrice(e.target.value.replace(/[$,]/g, '').trim())} placeholder="$" />
+                    <input className="eoi-form-input" value={currencyFormat(landPrice)} onChange={e => setLandPrice(e.target.value.replace(/[$,.]/g, '').trim())} placeholder="$" />
                   )}
                   {renderFormRow('buildPrice', 'Offer Price Build', 'Property Record (CO) \u2192 Offer Price Build \u00b7 writes back on send', 'green',
-                    <input className="eoi-form-input" value={currencyFormat(buildPrice)} onChange={e => setBuildPrice(e.target.value.replace(/[$,]/g, '').trim())} placeholder="$" />
+                    <input className="eoi-form-input" value={currencyFormat(buildPrice)} onChange={e => setBuildPrice(e.target.value.replace(/[$,.]/g, '').trim())} placeholder="$" />
                   )}
                   {renderFormRow('totalPrice', 'Offer Price', 'Calculated (land + build) \u00b7 writes back to Offer Price on send', 'green',
                     <strong>{currencyFormat(totalPrice) || '\u2014'}</strong>
@@ -1442,7 +1351,7 @@ export default function EoiComposePage() {
                 </>
               ) : (
                 renderFormRow('price', 'Offer Price', 'Property Record (CO) \u2192 Offer Price \u00b7 writes back on send', 'green',
-                  <input className="eoi-form-input" value={currencyFormat(offerPrice)} onChange={e => setOfferPrice(e.target.value.replace(/[$,]/g, '').trim())} placeholder="$" />
+                  <input className="eoi-form-input" value={currencyFormat(offerPrice)} onChange={e => setOfferPrice(e.target.value.replace(/[$,.]/g, '').trim())} placeholder="$" />
                 )
               )}
 

@@ -11,6 +11,9 @@
 ## Verification
 - Type-check with: `npx tsc --noEmit -p tsconfig.json` (two pre-existing errors in Step2PropertyDetails.tsx and Step9PhotoDocuments.tsx are known/unrelated; the Next build skips type validation).
 
+## Agent handover and scope
+- The full handoff process and scope rules are in `docs/planning/handoff-process-v1.3.md` — all agents MUST read and follow it.
+
 ## Conventions
 - The Contract Team Reporting Tool feedback tracker lives at `docs/contract-team-reporting-feedback.md` — log user feedback there as numbered items before acting; do not act on items marked "do not action yet".
 - Alert emails for the reporting tool go to john.t@buyersclub.com.au and julie.l@buyersclub.com.au (see `src/app/api/contract-team-reporting/alerts.ts`).

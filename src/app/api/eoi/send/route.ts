@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     opportunityId?: string;
     opportunityName?: string;
     propertyAddress: string;
-    sendType: 'initial' | 'increase' | 'revision';
+    sendType: 'initial' | 'increase' | 'revision' | 'resend';
     offerPrice: string;
     agentEmail: string;
     sentBy: string;
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
     ) VALUES (
       ${recordId}, ${opportunityId || null}, ${opportunityName || null}, ${propertyAddress || null}, ${eventType},
       ${priceNumeric}, ${landNumeric}, ${buildNumeric}, ${'sending'},
-      ${agentEmail}, ${emailData.purchasers?.[0]?.name || null}, ${emailData.consultantName || null}, ${null},
+      ${agentEmail}, ${null}, ${emailData.consultantName || null}, ${null},
       ${sentBy || 'unknown'}, 'pending', 'email', ${JSON.stringify(
         {
           ...(attachments && attachments.length > 0
@@ -410,6 +410,14 @@ export async function POST(request: NextRequest) {
             } else {
               properties.offer_price = rawPrice;
             }
+          }
+        }
+
+        // For non-H&L initial/resend sends, write offer_price if the user edited it in the composer
+        if (!isHL && sendType !== 'increase' && sendType !== 'revision') {
+          const rawPrice = (offerPrice || '').replace(/[^0-9.]/g, '');
+          if (rawPrice) {
+            properties.offer_price = rawPrice;
           }
         }
 

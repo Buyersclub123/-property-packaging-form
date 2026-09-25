@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       : opportunityName || outgoingClient;
     const newOppId = isRemove ? '' : opportunityId || outgoingOppId;
     const newBA = isRemove ? '' : assignedBA || '';
-    const newPrice = isRemove ? '' : totalPurchasePrice || '';
+    const newPrice = isRemove ? '' : (totalPurchasePrice || outgoingPrice);
     const newDate = isRemove ? '' : closingDate || '';
 
     // 3. Archive the outgoing client first if there is one, or on any explicit client change.
