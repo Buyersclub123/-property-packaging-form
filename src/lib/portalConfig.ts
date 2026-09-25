@@ -111,6 +111,7 @@ export const teams: TeamTile[] = [
       { name: 'Pay & Tax Calculator', description: 'Pay and tax calculations', href: '/calculators/pay' },
       { name: 'Affordability Calculator', description: 'Affordability calculations', href: '/calculators/affordability' },
       { name: 'Retirement Planner', description: 'Retirement planning calculator', href: '/calculators/retirement' },
+      { name: 'Market Bottom Calculator', description: 'Market bottom analysis and scenarios', href: '/calculators/market-bottom' },
     ],
   },
   {

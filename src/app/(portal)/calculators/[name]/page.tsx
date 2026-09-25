@@ -8,6 +8,7 @@ const CALCULATORS: Record<string, { title: string; embedPath: string }> = {
   pay: { title: 'Pay & Tax Calculator', embedPath: '/calc-embed/pay/index.html' },
   performance: { title: 'Performance Calculator', embedPath: '/calc-embed/performance/index.html' },
   sales: { title: 'Sales Calculator', embedPath: '/calc-embed/sales/index.html' },
+  'market-bottom': { title: 'Market Bottom Calculator', embedPath: '/calc-embed/market-bottom/index.html' },
 };
 
 export function generateStaticParams() {

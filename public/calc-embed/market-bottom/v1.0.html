@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Bottom Calculator | Buyers Club</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--y:#FBD721;--ys:#FEF6C8;--g:#4C4C4C;--ink:#2a2a2a;--mute:#7a7a7a;--line:#e5e5e2;--bg:#f5f5f2;--neg:#b03a2e;--pos:#1f7a45}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;line-height:1.45}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px 48px}
+header{background:var(--g);color:#fff;border-bottom:5px solid var(--y)}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:18px;padding-bottom:18px;flex-wrap:wrap}
+.logo{font-family:"Playfair Display",Georgia,serif;font-weight:900;font-size:30px;line-height:1}
+.logo .c{color:var(--y)}
+.htitle{font-size:14px;color:#ddd;text-align:right}.htitle strong{display:block;color:#fff;font-size:18px}
+h2{font-size:17px;margin:30px 0 12px;color:var(--g);display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:6px;height:20px;background:var(--y);border-radius:2px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}
+.inputs{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.inputs .wide{grid-column:span 2}
+label{display:block;font-size:12px;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+input{width:100%;font:inherit;font-size:16px;padding:10px 12px;border:1px solid #d6d6d2;border-radius:8px;color:var(--ink)}
+input:focus{outline:none;border-color:var(--g);box-shadow:0 0 0 3px var(--ys)}
+.hint{font-size:12px;color:var(--mute);margin-top:4px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.card .top{background:var(--g);color:#fff;padding:12px 16px;display:flex;gap:10px;align-items:center}
+.badge{width:30px;height:30px;border-radius:50%;background:var(--y);color:var(--g);font-weight:800;display:grid;place-items:center;flex:none}
+.card .top b{display:block;font-size:15px}.card .top span{font-size:12px;color:#ccc}
+.card .body{padding:16px;flex:1}
+.q{font-size:13px;color:var(--mute);margin:0 0 4px}
+.big{font-size:30px;font-weight:800;margin:0 0 2px}
+.sub{font-size:13px;color:var(--mute);margin-bottom:14px}
+.card.hl{border:2px solid var(--y)}
+dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:7px 10px;font-size:14px;border-top:1px solid var(--line);padding-top:12px}
+dt{color:#555}dd{margin:0;text-align:right;font-weight:600}
+dd.tot{font-weight:800}
+.neg{color:var(--neg)}.pos{color:var(--pos)}
+.journey{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}
+.step{text-align:center}.step .l{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--mute);font-weight:600}
+.step .v{font-size:24px;font-weight:800}.step .s{font-size:13px;color:var(--mute)}
+.arrow{font-size:26px;color:var(--y);font-weight:800}
+.step.bot .v{color:var(--neg)}
+.tablewrap{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:520px}
+th,td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--g);color:#fff;font-weight:600;font-size:14px}
+tr.mark td{background:var(--ys);font-weight:700}
+.test{display:flex;gap:14px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+.test>div:first-child{width:220px}
+.testout{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;flex:1;min-width:240px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.btn{border:0;border-radius:8px;padding:11px 18px;font:inherit;font-weight:700;cursor:pointer}
+.btn.y{background:var(--y);color:var(--g)}.btn.g{background:var(--g);color:#fff}
+.note{font-size:12.5px;color:var(--mute);margin-top:26px;border-top:1px solid var(--line);padding-top:14px}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--g);color:#fff;padding:10px 18px;border-radius:8px;opacity:0;transition:.2s;pointer-events:none}
+#toast.show{opacity:1}
+@media (max-width:860px){.inputs{grid-template-columns:1fr 1fr}.cards{grid-template-columns:1fr}.journey{grid-template-columns:1fr}.arrow{transform:rotate(90deg);text-align:center}}
+@media (max-width:460px){.inputs{grid-template-columns:1fr}.inputs .wide{grid-column:auto}.htitle{text-align:left}}
+@media print{body{background:#fff}.actions,#toast{display:none}header,.badge,.card .top,thead th,tr.mark td{-webkit-print-color-adjust:exact;print-color-adjust:exact}.card,.journey,.tablewrap{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="logo">buyers<span class="c">club</span></div>
+  <div class="htitle"><strong>Market Bottom Calculator</strong>Enter the property once, see all three scenarios</div>
+</div></header>
+
+<div class="wrap">
+  <h2>Enter the property (Scenario A, with negative gearing)</h2>
+  <div class="panel">
+    <div class="inputs">
+      <div class="wide"><label for="suburb">Suburb</label><input id="suburb" type="text" placeholder="e.g. Castle Hill"></div>
+      <div><label for="price">Purchase price</label><input id="price" data-m inputmode="numeric" value="2,450,000"></div>
+      <div><label for="rent">Weekly rent</label><input id="rent" data-m inputmode="numeric" value="1,800"></div>
+      <div><label for="lvr">Loan to value %</label><input id="lvr" inputmode="decimal" value="80"></div>
+      <div><label for="rate">Interest rate %</label><input id="rate" inputmode="decimal" value="6.5"></div>
+      <div><label for="exp">Running costs p.a.</label><input id="exp" data-m inputmode="numeric" value="10,000"></div>
+      <div><label for="tax">Tax rate %</label><input id="tax" inputmode="decimal" value="45"></div>
+    </div>
+    <div class="inputs" style="margin-top:14px">
+      <div><label for="rg">Rent growth % p.a.</label><input id="rg" inputmode="decimal" value="4"><div class="hint">Used for Scenario C timing</div></div>
+    </div>
+  </div>
+
+  <h2>The three scenarios</h2>
+  <div class="cards" id="cards"></div>
+
+  <h2>The price journey</h2>
+  <div class="journey" id="journey"></div>
+
+  <h2>Scenario C: recovery as rent rises</h2>
+  <div class="test">
+    <div><label for="trent">Test a future weekly rent</label><input id="trent" data-m inputmode="numeric" placeholder="e.g. 2,200"></div>
+    <div class="testout" id="testout">Enter a rent to see the value the property can go back up to.</div>
+  </div>
+  <div class="tablewrap"><table id="rec"></table></div>
+
+  <div class="actions">
+    <button class="btn y" id="copy">Copy meeting summary</button>
+    <button class="btn g" onclick="window.print()">Print or save as PDF</button>
+  </div>
+
+  <div class="note"><strong>General information only.</strong> Figures are estimates based on the inputs entered. All scenarios use the same loan to value ratio, interest rate and running costs, with interest only lending. The model excludes depreciation, the Medicare levy, vacancy, purchase costs and principal repayments. Without negative gearing, rental losses are assumed to be quarantined and carried forward against future rental income or capital gains, subject to the final legislation. Bottom and recovery values are affordability indicators, not forecasts, and markets can overshoot in either direction. This is not tax, financial or credit advice. Clients should obtain advice from their accountant and a licensed adviser before acting.</div>
+</div>
+<div id="toast">Summary copied</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const num = v => { const n = parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isNaN(n) ? 0 : n; };
+const money = v => { if (v===null||!isFinite(v)) return "n/a"; const s="$"+Math.round(Math.abs(v)).toLocaleString("en-AU"); return v<0?"("+s+")":s; };
+const pct = v => (v===null||!isFinite(v)) ? "n/a" : (v*100).toFixed(1)+"%";
+const cm = v => `<span class="${v<0?"neg":"pos"}">${money(v)}</span>`;
+
+function inputs(){
+  return {suburb:$("suburb").value.trim(), price:num($("price").value), rent:num($("rent").value),
+    lvr:num($("lvr").value)/100, rate:num($("rate").value)/100, exp:num($("exp").value),
+    tax:num($("tax").value)/100, rg:num($("rg").value)/100, trent:num($("trent").value)};
+}
+// cashflow for a price and weekly rent, with or without negative gearing
+function cash(price, rent, ng, x){
+  const loan=price*x.lvr, income=rent*52, interest=loan*x.rate, pre=income-interest-x.exp;
+  let tax = pre<0 ? (ng ? -pre*x.tax : 0) : -pre*x.tax;
+  return {price, rent, loan, deposit:price-loan, income, interest, exp:x.exp, pre, tax, net:pre+tax, carried: (!ng && pre<0) ? -pre : 0};
+}
+// pre tax cashflow needed (no negative gearing) to land on a target net
+const preFor = (target, x) => target<0 ? target : target/(1-x.tax);
+// price (no NG) that gives the target net at a given rent
+const priceFor = (rent, target, x) => { const c=x.lvr*x.rate; if(c<=0) return null; return (rent*52 - x.exp - preFor(target,x))/c; };
+// weekly rent (no NG) that gives the target net at a given price
+const rentFor = (price, target, x) => (price*x.lvr*x.rate + x.exp + preFor(target,x))/52;
+
+function list(c){
+  return `<dl>
+    <dt>Loan</dt><dd>${money(c.loan)}</dd>
+    <dt>Rental income</dt><dd>${money(c.income)}</dd>
+    <dt>Interest</dt><dd>${money(-c.interest)}</dd>
+    <dt>Running costs</dt><dd>${money(-c.exp)}</dd>
+    <dt>Pre tax cashflow</dt><dd>${cm(c.pre)}</dd>
+    <dt>Tax refund</dt><dd>${money(c.tax)}</dd>
+    <dt>Net per year</dt><dd class="tot">${cm(c.net)}</dd>
+    <dt>Net per week</dt><dd>${cm(c.net/52)}</dd>
+  </dl>`;
+}
+
+function update(){
+  const x = inputs();
+  const A = cash(x.price, x.rent, true, x);
+  const bP = priceFor(x.rent, A.net, x);
+  const B = cash(bP, x.rent, false, x);
+  const cR = rentFor(x.price, A.net, x);
+  const C = cash(x.price, cR, false, x);
+  const drop = x.price - bP, dropP = drop/x.price;
+  const rInc = cR - x.rent, rIncP = rInc/x.rent;
+  const yrs = (x.rg>0 && cR>x.rent) ? Math.log(cR/x.rent)/Math.log(1+x.rg) : (cR<=x.rent?0:null);
+  const yrsTxt = yrs===null ? "n/a" : (yrs===0 ? "now" : (yrs<1 ? "~"+Math.max(1,Math.round(yrs*12))+" months" : "~"+yrs.toFixed(1)+" years"));
+  const where = x.suburb ? " in "+x.suburb : "";
+
+  $("cards").innerHTML = `
+    <div class="card"><div class="top"><div class="badge">A</div><div><b>Today, with negative gearing</b><span>${money(x.price)} at $${Math.round(x.rent).toLocaleString("en-AU")} pw</span></div></div>
+      <div class="body"><p class="q">Net cashflow per year</p><div class="big neg">${money(A.net)}</div>
+      <div class="sub">${money(A.net/52)} per week. This is the benchmark holding cost.</div>${list(A)}</div></div>
+    <div class="card hl"><div class="top"><div class="badge">B</div><div><b>No negative gearing, same rent</b><span>Market bottom price</span></div></div>
+      <div class="body"><p class="q">Price with the same net cashflow as A</p><div class="big">${money(bP)}</div>
+      <div class="sub">${money(drop)} (${pct(dropP)}) below Scenario A${where}. This is the bottom of the market.</div>${list(B)}</div></div>
+    <div class="card hl"><div class="top"><div class="badge">C</div><div><b>No negative gearing, higher rent</b><span>Recovery to ${money(x.price)}</span></div></div>
+      <div class="body"><p class="q">Weekly rent needed to match A at ${money(x.price)}</p><div class="big">$${Math.round(cR).toLocaleString("en-AU")}</div>
+      <div class="sub">Up $${Math.round(rInc).toLocaleString("en-AU")} per week (${pct(rIncP)}). At ${(x.rg*100).toFixed(1)}% rent growth that takes ${yrsTxt}.</div>${list(C)}</div></div>`;
+
+  $("journey").innerHTML = `
+    <div class="step"><div class="l">Today (A)</div><div class="v">${money(x.price)}</div><div class="s">$${Math.round(x.rent).toLocaleString("en-AU")} pw, negative gearing</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="step bot"><div class="l">Market bottom (B)</div><div class="v">${money(bP)}</div><div class="s">Down ${pct(dropP)}, same rent, no negative gearing</div></div>
+    <div class="arrow">&rarr;</div>
+    <div class="step"><div class="l">Recovery (C)</div><div class="v">${money(x.price)}</div><div class="s">Once rent reaches $${Math.round(cR).toLocaleString("en-AU")} pw, ${yrsTxt}</div></div>`;
+
+  // recovery table
+  let rows=""; let marked=false;
+  for(let y=0;y<=10;y++){
+    const r = x.rent*Math.pow(1+x.rg,y), v = priceFor(r, A.net, x);
+    const m = !marked && v>=x.price; if(m) marked=true;
+    rows += `<tr class="${m?"mark":""}"><td>${y===0?"Today":"Year "+y}</td><td>$${Math.round(r).toLocaleString("en-AU")}</td><td>${money(v)}</td><td>${cm(v-bP)}</td><td>${v>=x.price?"Back to or above "+money(x.price):pct(1-v/x.price)+" below today"}</td></tr>`;
+  }
+  $("rec").innerHTML = `<thead><tr><th>Year</th><th>Weekly rent</th><th>Value it can go back up to</th><th>Up from bottom</th><th>Compared with today</th></tr></thead><tbody>${rows}</tbody>`;
+
+  if (x.trent>0){
+    const v = priceFor(x.trent, A.net, x);
+    $("testout").innerHTML = `At <strong>$${Math.round(x.trent).toLocaleString("en-AU")} pw</strong> the property can go back up to <strong>${money(v)}</strong>, which is ${money(v-bP)} above the bottom and ${v>=x.price?money(v-x.price)+" above":money(x.price-v)+" below"} today's price, with the same net cashflow as Scenario A.`;
+  } else $("testout").textContent = "Enter a rent to see the value the property can go back up to.";
+
+  window._sum = {x,A,B,C,bP,drop,dropP,cR,rInc,rIncP,yrsTxt};
+}
+
+function summary(){
+  const s=window._sum, x=s.x;
+  return `MARKET BOTTOM SUMMARY${x.suburb?": "+x.suburb.toUpperCase():""}
+Property: ${money(x.price)}, $${Math.round(x.rent).toLocaleString("en-AU")} pw rent, ${Math.round(x.lvr*100)}% loan at ${(x.rate*100).toFixed(2)}%, ${money(x.exp)} running costs, ${Math.round(x.tax*100)}% tax rate
+
+A. Today with negative gearing
+Net cashflow ${money(s.A.net)} p.a., ${money(s.A.net/52)} per week
+
+B. No negative gearing, same rent (market bottom)
+Price for the same cashflow: ${money(s.bP)}, down ${money(s.drop)} (${pct(s.dropP)})
+
+C. No negative gearing, higher rent (recovery)
+Rent needed to hold ${money(x.price)} with the same cashflow: $${Math.round(s.cR).toLocaleString("en-AU")} pw, up $${Math.round(s.rInc).toLocaleString("en-AU")} (${pct(s.rIncP)})
+Time at ${(x.rg*100).toFixed(1)}% rent growth: ${s.yrsTxt}
+
+General information only. Not tax, financial or credit advice.`;
+}
+$("copy").addEventListener("click",()=>{
+  const t=summary(), done=()=>{$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),1600);};
+  const fb=()=>{const a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{document.execCommand("copy")}catch(e){}a.remove();done();};
+  navigator.clipboard ? navigator.clipboard.writeText(t).then(done).catch(fb) : fb();
+});
+document.querySelectorAll("input").forEach(el=>{
+  el.addEventListener("input",update);
+  if (el.hasAttribute("data-m")) el.addEventListener("blur",()=>{ if(el.value.trim()) el.value=num(el.value).toLocaleString("en-AU"); });
+});
+update();
+</script>
+</body>
+</html>
