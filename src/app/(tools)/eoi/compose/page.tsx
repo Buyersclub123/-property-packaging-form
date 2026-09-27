@@ -398,7 +398,7 @@ export default function EoiComposePage() {
   const [newConditionText, setNewConditionText] = useState('');
 
   // Send state
-  const [sendType, setSendType] = useState<'initial' | 'increase' | 'revision'>('initial');
+  const [sendType, setSendType] = useState<'initial' | 'increase' | 'revision' | 'resend'>('initial');
   // resend functionality removed — Edit & Send covers all use cases
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ ok: boolean; sendId?: number; deliveryStatus?: string; error?: string } | null>(null);
@@ -515,7 +515,7 @@ export default function EoiComposePage() {
     setOppName(client);
 
     const st = p.get('sendType');
-    if (st === 'increase' || st === 'revision') setSendType(st);
+    if (st === 'increase' || st === 'revision' || st === 'resend') setSendType(st);
 
     // D28-PRE: flag for loading from last send
     const lf = p.get('loadFrom');
@@ -684,10 +684,8 @@ export default function EoiComposePage() {
         setNotes(p.notes || '');
         setSpeculativeMessage(p.speculativeMessage || '');
 
-        // Prices from payload (not URL for keep-terms)
-        if (p.offerPrice) setOfferPrice(p.offerPrice.replace(/[$,\s]/g, ''));
-        if (p.landPrice) setLandPrice(p.landPrice.replace(/[$,\s]/g, ''));
-        if (p.buildPrice) setBuildPrice(p.buildPrice.replace(/[$,\s]/g, ''));
+        // Price comes from the URL (set by the modal) — NOT from the stored payload.
+        // The stored payload provides terms only. See F64.
 
         // LVR is form-only / manual — no live source, must come from payload
         if (p.lvr) setLvr(p.lvr);
@@ -1103,17 +1101,18 @@ export default function EoiComposePage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <strong style={{ textTransform: 'capitalize' }}>{({
-                        eoi_initial: 'Initial',
-                        eoi_increase: 'Increase',
-                        eoi_revision: 'Revision',
-                        eoi_resend: 'Resend',
+                        eoi_initial: 'EOI Send',
+                        eoi_increase: 'EOI Send',
+                        eoi_revision: 'EOI Send',
+                        eoi_resend: 'EOI Send',
+                        increase_prep: 'Increase Prep',
                         mark_accepted: 'Mark Accepted',
                         reassign: 'Reassigned',
                         change_speculative: 'Changed to Speculative',
                         unlink_test: 'Unlinked to 07 Test Record',
                         unlink_lost: 'Unlinked to 06 Close Lost',
                         unlink_available: 'Unlinked to 01 Available',
-                      } as Record<string, string>)[h.event_type] || (h.event_type || '').replace(/^eoi_/, '')}</strong>
+                      } as Record<string, string>)[h.event_type] || (h.event_type || '').replace(/_/g, ' ')}</strong>
                       {h.offer_price ? ` — $${Number(h.offer_price).toLocaleString('en-AU')}` : ''}
                       <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>{h.agent_email}</span>
                     </div>
@@ -1306,7 +1305,7 @@ export default function EoiComposePage() {
           {/* D28-PRE: data source banner */}
           {loadedFromHistory && (
             <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '10px 14px', marginBottom: 12, fontSize: 12, color: '#856404' }}>
-              <><strong>Values loaded from previously sent EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong> All fields are editable — terms, conditions, and price. Changes from the previous send will be tracked.</>
+              <><strong>Terms and conditions loaded from previously sent EOI{lastSendDate ? ` (sent ${lastSendDate})` : ''}.</strong> All fields are editable. Price comes from the property record. Changes from the previous send will be tracked.</>
             </div>
           )}
           {contractTypeError && (
@@ -1706,17 +1705,18 @@ export default function EoiComposePage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <strong style={{ textTransform: 'capitalize' }}>{({
-                    eoi_initial: 'Initial',
-                    eoi_increase: 'Increase',
-                    eoi_revision: 'Revision',
-                    eoi_resend: 'Resend',
+                    eoi_initial: 'EOI Send',
+                    eoi_increase: 'EOI Send',
+                    eoi_revision: 'EOI Send',
+                    eoi_resend: 'EOI Send',
+                    increase_prep: 'Increase Prep',
                     mark_accepted: 'Mark Accepted',
                     reassign: 'Reassigned',
                     change_speculative: 'Changed to Speculative',
                     unlink_test: 'Unlinked to 07 Test Record',
                     unlink_lost: 'Unlinked to 06 Close Lost',
                     unlink_available: 'Unlinked to 01 Available',
-                  } as Record<string, string>)[h.event_type] || (h.event_type || '').replace(/^eoi_/, '')}</strong>
+                  } as Record<string, string>)[h.event_type] || (h.event_type || '').replace(/_/g, ' ')}</strong>
                   {h.offer_price ? ` — $${Number(h.offer_price).toLocaleString('en-AU')}` : ''}
                   <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>{h.agent_email}</span>
                 </div>
@@ -1756,25 +1756,7 @@ export default function EoiComposePage() {
                 {h.close_date && <span><strong>Close:</strong> {h.close_date}</span>}
                 {h.delink_reason && <span><strong>Reason:</strong> {h.delink_reason}</span>}
               </div>
-              {/* D-CHANGES: show field-level changes (filtered by action type) */}
-              {(() => {
-                if (!h.changes) return null;
-                // Fields expected to change per action — excluded from display
-                const expectedFields: Record<string, string[]> = {
-                  eoi_increase: ['offerPrice', 'landPrice', 'buildPrice', 'totalPrice'],
-                };
-                const exclude = expectedFields[h.event_type] || [];
-                const additional = h.changes.filter((c: { field: string }) => !exclude.includes(c.field));
-                if (h.changes.length === 0) {
-                  return <div style={{ marginTop: 3, fontSize: 10, color: '#6b7280', fontStyle: 'italic' }}>No changes from previous send — exact resend</div>;
-                }
-                if (additional.length === 0) return null; // only expected changes — nothing extra to show
-                return (
-                  <div style={{ marginTop: 3, fontSize: 10, color: '#b45309', fontStyle: 'italic' }}>
-                    Additional changes: {additional.map((c: { label: string }) => c.label).join(', ')}
-                  </div>
-                );
-              })()}
+
             </div>
           ))}
         </div>

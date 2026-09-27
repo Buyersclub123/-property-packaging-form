@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       WHERE record_id = ${record_id} AND delivery_status = 'sent' AND payload IS NOT NULL
       ORDER BY sent_at ASC`;
 
-    const currentIdx = allSends.findIndex((s: { id: number }) => String(s.id) === String(sendId));
+    const currentIdx = allSends.findIndex((s: Record<string, any>) => String(s.id) === String(sendId));
     const prev = currentIdx > 0 ? allSends[currentIdx - 1] : null;
     const next = currentIdx < allSends.length - 1 ? allSends[currentIdx + 1] : null;
     const position = `${currentIdx + 1} of ${allSends.length}`;

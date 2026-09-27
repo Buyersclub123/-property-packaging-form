@@ -189,7 +189,6 @@ export async function POST(request: NextRequest) {
       linked_opportunity_id: newOppId,
       client_closed: newClient,
       closing_ba: newBA,
-      closing_price: newPrice,
       closing_date: newDate,
     };
 
@@ -201,6 +200,7 @@ export async function POST(request: NextRequest) {
       properties.offer_price_build = '';
       properties.offer_status = '';
       properties.eoi_notes = '';
+      properties.closing_price = '';
     }
 
     // Non-remove: write offer price/status when explicitly provided (e.g. Mark Accepted)
@@ -209,6 +209,15 @@ export async function POST(request: NextRequest) {
       if (offerPriceParam) properties.offer_price = offerPriceParam;
       if (offerPriceLand) properties.offer_price_land = offerPriceLand;
       if (offerPriceBuild) properties.offer_price_build = offerPriceBuild;
+    }
+
+    // F70: Close $ (closing_price) only populated when status is Accepted.
+    // Determine the effective status after this update.
+    const effectiveStatus = (isRemove && body.revertStatus) ? body.revertStatus
+      : offerStatus || currentStatus;
+    const isEffectivelyAccepted = effectiveStatus?.toLowerCase() === 'accepted';
+    if (!isRemove) {
+      properties.closing_price = isEffectivelyAccepted ? newPrice : '';
     }
 
     const putUrl = `${GHL_API_BASE}/objects/${GHL_OBJECT_ID}/records/${recordId}?locationId=${LOCATION_ID}`;

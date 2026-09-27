@@ -685,13 +685,24 @@ export default function EoiLinkModal({
       });
     } catch { /* non-fatal — CO update already succeeded */ }
 
-    // Open the composer — sendType=increase when price changed, revision when as-is
-    const composerSendType = keepPriceAsIs ? 'revision' : 'increase';
+    // Open the composer — sendType=increase when price changed, resend when as-is
+    const composerSendType = keepPriceAsIs ? 'resend' : 'increase';
     let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(oppId)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(oppName)}&ba=${encodeURIComponent(editBA.trim())}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=${composerSendType}&loadFrom=lastSendTermsOnly`;
     if (!keepPriceAsIs) {
       eoiUrl += `&price=${encodeURIComponent(totalNewPrice)}`;
       if (isSplitContract) {
         eoiUrl += `&landPrice=${encodeURIComponent(newPriceLand.trim())}&buildPrice=${encodeURIComponent(newPriceBuild.trim())}`;
+      }
+    } else {
+      // F64: even when keeping price as-is, the URL must carry the current price
+      // so the composer doesn't end up with empty price fields.
+      const currentTotal = currencyRaw(record.offerPrice) || record.closingPrice || '';
+      eoiUrl += `&price=${encodeURIComponent(currentTotal)}`;
+      if (isSplitContract) {
+        const lMatch = (record.offerPrice || '').match(/L:\s*\$?([\d,]+)/);
+        const bMatch = (record.offerPrice || '').match(/B:\s*\$?([\d,]+)/);
+        if (lMatch) eoiUrl += `&landPrice=${encodeURIComponent(lMatch[1].replace(/,/g, ''))}`;
+        if (bMatch) eoiUrl += `&buildPrice=${encodeURIComponent(bMatch[1].replace(/,/g, ''))}`;
       }
     }
     if (acceptedChoice === 'accepted') eoiUrl += '&preserveOfferStatus=accepted';
@@ -1126,7 +1137,7 @@ export default function EoiLinkModal({
               <div className="space-y-2">
                 <div className={`text-[10px] font-semibold uppercase tracking-wide ${cls.sub}`}>EOI Actions</div>
                 <button onClick={() => { if (isAccepted && !acceptedChoice) { setPendingAcceptedAction('increase'); return; } setEditAction('increase'); setNewPrice(''); setNewPriceLand(''); setNewPriceBuild(''); setKeepPriceAsIs(false); setStep('increase'); }} className={`w-full text-left ${cls.btn} py-2`}>
-                  <span className="font-medium">Edit &amp; Send EOI / Log verbal offer increase</span>
+                  <span className="font-medium">Log Verbal offer increase / Edit &amp; Send / Resend EOI</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Edit terms, price, or both — then send or log verbally</span>
                 </button>
                 {/* Resend as-is removed — too many edge cases with delinked/reassigned records */}
@@ -1387,6 +1398,10 @@ export default function EoiLinkModal({
                       Use as agreed price
                     </label>
                   )}
+                </div>
+                <span></span>
+                <div className={`text-[10px] ${cls.sub}`} style={{ lineHeight: '1.3', textDecoration: 'underline' }}>
+                  This price is from the property record. Verify it matches the agreed offer before confirming.
                 </div>
 
                 {/* Agreed price — editable */}

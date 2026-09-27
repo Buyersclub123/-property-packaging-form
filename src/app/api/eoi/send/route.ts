@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
       try {
         credentials = JSON.parse(credentialsJson.trim().replace(/^'|'$/g, ''));
       } catch {
-        const cleaned = credentialsJson.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+        const cleaned = credentialsJson.replace(/^'+|'+$/g, '').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
         credentials = JSON.parse(cleaned);
       }
       if (credentials.private_key) {
@@ -365,8 +365,23 @@ export async function POST(request: NextRequest) {
         // Build properties using field names (same format as link-opportunity route)
         const properties: Record<string, string> = {};
 
-        // Set offer_status to "Offered" and mark that this CO has EOI history
-        properties.offer_status = preserveOfferStatus || 'offered';
+        // F69: Check current offer_status on the record — if already Accepted, keep it.
+        // Sending an EOI must never revert Accepted to Offered.
+        let effectiveOfferStatus = preserveOfferStatus || 'offered';
+        try {
+          const recUrl = `https://services.leadconnectorhq.com/objects/${GHL_OBJECT_ID}/records/${recordId}?locationId=${locationId}`;
+          const recRes = await fetch(recUrl, {
+            headers: { Authorization: `Bearer ${bearerToken}`, Version: '2021-07-28' },
+          });
+          if (recRes.ok) {
+            const recData = await recRes.json();
+            const currentStatus = recData?.record?.properties?.offer_status || '';
+            if (currentStatus.toLowerCase() === 'accepted') {
+              effectiveOfferStatus = 'accepted';
+            }
+          }
+        } catch { /* non-fatal — fall back to preserveOfferStatus or 'offered' */ }
+        properties.offer_status = effectiveOfferStatus;
         properties.has_eoi_history = 'Yes';
         if (isHL) {
           // H&L: write calculated total to Offer Price
