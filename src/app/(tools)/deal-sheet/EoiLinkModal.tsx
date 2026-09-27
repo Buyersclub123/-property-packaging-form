@@ -1253,7 +1253,7 @@ export default function EoiLinkModal({
                   <>
                     <span className={cls.label}></span>
                     <span className={`text-[10px] ${cls.sub}`}>
-                      If only changing one price, the other must still have the existing price entered
+                      <u>If only changing one price, the other must still have the existing price entered</u>
                     </span>
                   </>
                 )}
