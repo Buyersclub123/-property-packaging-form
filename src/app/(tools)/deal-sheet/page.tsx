@@ -316,6 +316,7 @@ export default function DealSheetPage() {
   const [syncMessage, setSyncMessage] = useState<string>('');
   const recentlyUpdatedIds = useRef<Map<string, number>>(new Map());
 
+
   // Valid status values
   const STATUS_OPTIONS = [
     { value: '01_available', label: '01 Available' },
@@ -420,16 +421,9 @@ export default function DealSheetPage() {
         }
 
         if (updated.length > 0) {
-          const now = Date.now();
-          // Skip records the user updated in the last 30s
-          const safeUpdated = updated.filter((rec) => {
-            const ts = recentlyUpdatedIds.current.get(rec.id);
-            return !ts || now - ts > 30000;
-          });
-          if (safeUpdated.length === 0) return;
           setRecords((prev) => {
             const map = new Map(prev.map((r) => [r.id, r]));
-            for (const rec of safeUpdated) {
+            for (const rec of updated) {
               map.set(rec.id, rec);
             }
             return Array.from(map.values());
@@ -911,10 +905,11 @@ export default function DealSheetPage() {
                   status: payload.revertStatus ? (STATUS_DISPLAY[payload.revertStatus] || r.status) : r.status,
                   clientClosed: isSpeculative ? 'SPECULATIVE EOI' : '',
                   closingBA: '',
-                  closingPrice: '',
+                  // Speculative keeps offer data; Close $ stays when status is Accepted (F70).
+                  // Full unlink clears everything.
+                  closingPrice: isSpeculative && r.offerAccepted === 'yes' ? r.closingPrice : '',
                   closingDate: '',
                   linkedOpportunityId: '',
-                  // Speculative keeps offer data; full unlink clears it
                   offerPrice: isSpeculative ? r.offerPrice : '',
                   offerAccepted: isSpeculative ? r.offerAccepted : '',
                 }
@@ -942,7 +937,8 @@ export default function DealSheetPage() {
                   ...r,
                   clientClosed: payload.opportunityName,
                   closingBA: payload.assignedBA,
-                  closingPrice: priceDisplay,
+                  // On reassign totalPurchasePrice is '' (keep existing); fall back to current value
+                  closingPrice: priceDisplay || r.closingPrice,
                   closingDate: payload.closingDate,
                   linkedOpportunityId: payload.opportunityId,
                   offerPrice: updatedOfferDisplay || r.offerPrice,

@@ -498,7 +498,7 @@ export default function EoiLinkModal({
         } catch { /* non-fatal — link already succeeded */ }
         // Open the EOI composer with context from this link
         const totalPrice = isSplitContract ? String(Math.round(parseFloat(editPriceLand || '0') + parseFloat(editPriceBuild || '0'))) : editPrice.trim();
-        let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(opp.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(opp.name || '')}&ba=${encodeURIComponent(editBA.trim())}&price=${encodeURIComponent(totalPrice)}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}`;
+        let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(opp.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(opp.name || '')}&ba=${encodeURIComponent(editBA.trim())}&price=${encodeURIComponent(totalPrice)}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&closingPrice=${encodeURIComponent(record.closingPrice || '')}&offerStatus=${encodeURIComponent(record.offerAccepted === 'yes' ? 'accepted' : 'offered')}`;
         if (isSplitContract) {
           eoiUrl += `&landPrice=${encodeURIComponent(editPriceLand.trim())}&buildPrice=${encodeURIComponent(editPriceBuild.trim())}`;
         }
@@ -570,7 +570,7 @@ export default function EoiLinkModal({
           }),
         });
       } catch { /* non-fatal — link already succeeded */ }
-      let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=initial&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&price=${encodeURIComponent(specTotalPrice)}`;
+      let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=initial&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&price=${encodeURIComponent(specTotalPrice)}&closingPrice=${encodeURIComponent(record.closingPrice || '')}&offerStatus=${encodeURIComponent(record.offerAccepted === 'yes' ? 'accepted' : 'offered')}`;
       if (isSplitContract) {
         eoiUrl += `&landPrice=${encodeURIComponent(editPriceLand.trim())}&buildPrice=${encodeURIComponent(editPriceBuild.trim())}`;
       }
@@ -687,7 +687,7 @@ export default function EoiLinkModal({
 
     // Open the composer — sendType=increase when price changed, resend when as-is
     const composerSendType = keepPriceAsIs ? 'resend' : 'increase';
-    let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(oppId)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(oppName)}&ba=${encodeURIComponent(editBA.trim())}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=${composerSendType}&loadFrom=lastSendTermsOnly`;
+    let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(oppId)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(oppName)}&ba=${encodeURIComponent(editBA.trim())}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=${composerSendType}&loadFrom=lastSendTermsOnly&closingPrice=${encodeURIComponent(record.closingPrice || '')}&offerStatus=${encodeURIComponent(record.offerAccepted === 'yes' ? 'accepted' : 'offered')}`;
     if (!keepPriceAsIs) {
       eoiUrl += `&price=${encodeURIComponent(totalNewPrice)}`;
       if (isSplitContract) {
@@ -790,7 +790,15 @@ export default function EoiLinkModal({
       setSubmitting(false);
       if (!ok) { setSubmitError('Failed to update record'); return; }
 
-      // Log event
+      // Log event — include the current offer price so the DB has a baseline
+      // for the F55 price mismatch check from the start of this relationship.
+      const specLandMatch = (record.offerPrice || '').match(/L:\s*\$?([\d,]+)/);
+      const specBuildMatch = (record.offerPrice || '').match(/B:\s*\$?([\d,]+)/);
+      const specLand = specLandMatch ? specLandMatch[1].replace(/,/g, '') : '';
+      const specBuild = specBuildMatch ? specBuildMatch[1].replace(/,/g, '') : '';
+      const specPrice = isSplitContract && specLand && specBuild
+        ? String(Math.round(parseFloat(specLand) + parseFloat(specBuild)))
+        : currencyRaw(record.offerPrice) || record.closingPrice || '';
       try {
         await fetch('/api/eoi/log-update', {
           method: 'POST',
@@ -800,11 +808,14 @@ export default function EoiLinkModal({
             opportunityId: null,
             opportunityName: 'SPECULATIVE EOI',
             propertyAddress: record.propertyAddress,
+            offerPrice: specPrice,
+            offerPriceLand: isSplitContract ? specLand || undefined : undefined,
+            offerPriceBuild: isSplitContract ? specBuild || undefined : undefined,
             eventType: 'change_speculative',
             sentBy: record.closingBA || 'system',
             method: 'system',
             notes: 'Changed to speculative',
-            offerStatusAtEvent: 'unchanged',
+            offerStatusAtEvent: record.offerAccepted === 'yes' ? 'accepted' : 'offered',
             previousOpportunityId: previousOppId || null,
             previousClientName: previousClientName || null,
           }),
@@ -814,7 +825,7 @@ export default function EoiLinkModal({
       if (!linkOnly) {
         // Open composer
         const totalPrice = currencyRaw(record.offerPrice) || record.closingPrice || '';
-        let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=revision&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&price=${encodeURIComponent(totalPrice)}`;
+        let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&sendType=revision&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&price=${encodeURIComponent(totalPrice)}&closingPrice=${encodeURIComponent(record.closingPrice || '')}&offerStatus=${encodeURIComponent(record.offerAccepted === 'yes' ? 'accepted' : 'offered')}`;
         if (reassignVariant === 'keep') eoiUrl += '&loadFrom=lastSendTermsOnly';
         window.open(eoiUrl, '_blank');
       }
@@ -838,7 +849,15 @@ export default function EoiLinkModal({
     setSubmitting(false);
     if (!ok) { setSubmitError('Failed to update record'); return; }
 
-    // Log event
+    // Log event — include the current offer price so the DB has a baseline
+    // for the F55 price mismatch check from the start of this relationship.
+    const rLandMatch = (record.offerPrice || '').match(/L:\s*\$?([\d,]+)/);
+    const rBuildMatch = (record.offerPrice || '').match(/B:\s*\$?([\d,]+)/);
+    const rLand = rLandMatch ? rLandMatch[1].replace(/,/g, '') : '';
+    const rBuild = rBuildMatch ? rBuildMatch[1].replace(/,/g, '') : '';
+    const rPrice = isSplitContract && rLand && rBuild
+      ? String(Math.round(parseFloat(rLand) + parseFloat(rBuild)))
+      : currencyRaw(record.offerPrice) || record.closingPrice || '';
     try {
       await fetch('/api/eoi/log-update', {
         method: 'POST',
@@ -848,6 +867,9 @@ export default function EoiLinkModal({
           opportunityId: opp.id,
           opportunityName: opp.name,
           propertyAddress: record.propertyAddress,
+          offerPrice: rPrice,
+          offerPriceLand: isSplitContract ? rLand || undefined : undefined,
+          offerPriceBuild: isSplitContract ? rBuild || undefined : undefined,
           eventType: 'reassign',
           sentBy: editBA.trim(),
           method: 'system',
@@ -863,7 +885,7 @@ export default function EoiLinkModal({
     if (!linkOnly) {
       // Open composer — price is a deal fact, always included regardless of keep/refresh variant
       const reassignPrice = currencyRaw(record.offerPrice) || record.closingPrice || '';
-      let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(opp.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(opp.name || '')}&ba=${encodeURIComponent(editBA.trim())}&price=${encodeURIComponent(reassignPrice)}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=revision`;
+      let eoiUrl = `/eoi/compose?recordId=${encodeURIComponent(record.id)}&oppId=${encodeURIComponent(opp.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&client=${encodeURIComponent(opp.name || '')}&ba=${encodeURIComponent(editBA.trim())}&price=${encodeURIComponent(reassignPrice)}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&sendType=revision&closingPrice=${encodeURIComponent(record.closingPrice || '')}&offerStatus=${encodeURIComponent(record.offerAccepted === 'yes' ? 'accepted' : 'offered')}`;
       if (isSplitContract) {
         const lMatch = (record.offerPrice || '').match(/L:\s*\$?([\d,]+)/);
         const bMatch = (record.offerPrice || '').match(/B:\s*\$?([\d,]+)/);

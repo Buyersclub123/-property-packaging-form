@@ -421,6 +421,25 @@ export default function EoiComposePage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [previousPayload, setPreviousPayload] = useState<Record<string, any> | null>(null);
 
+  // F55: Price mismatch detection
+  interface PriceMismatch { field: string; urlValue: number | null; dbValue: number | null; }
+  const [priceMismatchLoading, setPriceMismatchLoading] = useState(true);
+  const [priceMismatches, setPriceMismatches] = useState<PriceMismatch[]>([]);
+  const [priceMismatchIsSplit, setPriceMismatchIsSplit] = useState(false);
+  const [priceMismatchResolved, setPriceMismatchResolved] = useState(false);
+  // F55: GHL update confirmation (shown after user chooses the EOI Template Tool price)
+  const [showGhlUpdateConfirm, setShowGhlUpdateConfirm] = useState(false);
+  const [ghlUpdatePending, setGhlUpdatePending] = useState<{
+    total: number | null; land: number | null; build: number | null;
+  } | null>(null);
+  // F55: Close $ mismatch (shown after offer price mismatch is resolved or skipped)
+  const [urlClosingPrice, setUrlClosingPrice] = useState('');
+  const [urlOfferStatus, setUrlOfferStatus] = useState('');
+  const [showClosePriceMismatch, setShowClosePriceMismatch] = useState(false);
+  const [closePriceMismatchValues, setClosePriceMismatchValues] = useState<{
+    closePrice: string; offerPrice: string;
+  } | null>(null);
+
   // Preview
   const [previewHtml, setPreviewHtml] = useState('');
 
@@ -522,6 +541,10 @@ export default function EoiComposePage() {
     if (lf) setLoadFrom(lf);
     const pos = p.get('preserveOfferStatus');
     if (pos) setPreserveOfferStatus(pos);
+
+    // F55: Close $ and offer status for Close $ mismatch check
+    setUrlClosingPrice(p.get('closingPrice') || '');
+    setUrlOfferStatus(p.get('offerStatus') || '');
 
     // D38: view-history-only mode
     if (p.get('viewHistory') === 'true') {
@@ -721,6 +744,59 @@ export default function EoiComposePage() {
       .catch(() => {})
       .finally(() => setHistoryLoading(false));
   }, [recordId, authEmail, viewHistoryMode, sendResult]);
+
+  // ---- F55: price mismatch check on load ------------------------------------
+  useEffect(() => {
+    if (!recordId || !authEmail || viewHistoryMode) {
+      setPriceMismatchLoading(false);
+      return;
+    }
+    (async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlPrice = params.get('price') || '';
+        const urlLand = params.get('landPrice') || '';
+        const urlBuild = params.get('buildPrice') || '';
+        const urlOppId = params.get('oppId') || '';
+
+        const qs = new URLSearchParams({
+          recordId,
+          price: urlPrice,
+          ...(urlLand ? { landPrice: urlLand } : {}),
+          ...(urlBuild ? { buildPrice: urlBuild } : {}),
+          ...(urlOppId ? { opportunityId: urlOppId } : {}),
+        });
+
+        const res = await fetch(`/api/eoi/price-check?${qs.toString()}&_t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) {
+          setPriceMismatchLoading(false);
+          return;
+        }
+        const data = await res.json();
+        if (data.match) {
+          setPriceMismatchLoading(false);
+          return;
+        }
+        // Mismatch found
+        setPriceMismatches(data.mismatches || []);
+        setPriceMismatchIsSplit(!!data.isSplit);
+        setPriceMismatchLoading(false);
+      } catch {
+        // On error, don't block the composer — just proceed
+        setPriceMismatchLoading(false);
+      }
+    })();
+  }, [recordId, authEmail, viewHistoryMode]);
+
+  // F55: Trigger Close $ check when there's no offer price mismatch
+  // (when there IS a mismatch, the check is triggered after resolution)
+  useEffect(() => {
+    if (priceMismatchLoading) return; // Still loading
+    if (priceMismatches.length > 0) return; // Mismatch exists — will be checked after resolution
+    // No mismatch — check Close $ now
+    checkClosePriceMismatch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [priceMismatchLoading, priceMismatches.length]);
 
   // ---- derived values -------------------------------------------------------
   const isHL = propertyType === 'hl_split';
@@ -1052,6 +1128,150 @@ export default function EoiComposePage() {
     setEditConditions(prev => prev.map((c, i) => i === idx ? text : c));
   }
 
+  // ---- F55: price mismatch resolution ----------------------------------------
+  function handlePriceMismatchChoice(source: 'property' | 'database') {
+    // Build the chosen and rejected values for logging
+    const chosenLabel = source === 'property' ? 'GHL' : 'EOI Template Tool';
+    const details = priceMismatches.map(m => {
+      const ghlVal = m.urlValue !== null ? '$' + m.urlValue.toLocaleString('en-AU') : '-';
+      const dbVal = m.dbValue !== null ? '$' + m.dbValue.toLocaleString('en-AU') : '-';
+      const chosen = source === 'property' ? ghlVal : dbVal;
+      return `${m.field}: GHL ${ghlVal} / EOI Template Tool ${dbVal} — chose ${chosen}`;
+    }).join('; ');
+
+    if (source === 'database') {
+      // Use the DB values — update the price fields
+      for (const m of priceMismatches) {
+        const formatted = m.dbValue !== null ? String(m.dbValue) : '';
+        if (m.field === 'total') setOfferPrice(formatted);
+        if (m.field === 'land') setLandPrice(formatted);
+        if (m.field === 'build') setBuildPrice(formatted);
+      }
+    }
+    // If 'property', the URL values are already in the fields — no change needed
+    setPriceMismatchResolved(true);
+
+    // Log the resolution to history
+    const totalMismatch = priceMismatches.find(m => m.field === 'total');
+    const landMismatch = priceMismatches.find(m => m.field === 'land');
+    const buildMismatch = priceMismatches.find(m => m.field === 'build');
+    const chosenTotal = source === 'property' ? totalMismatch?.urlValue : totalMismatch?.dbValue;
+    const chosenLand = source === 'property' ? landMismatch?.urlValue : landMismatch?.dbValue;
+    const chosenBuild = source === 'property' ? buildMismatch?.urlValue : buildMismatch?.dbValue;
+
+    // Log the resolution to history
+    try {
+      fetch('/api/eoi/log-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId,
+          opportunityId: oppId || null,
+          opportunityName: oppName || 'SPECULATIVE EOI',
+          propertyAddress,
+          eventType: 'price_mismatch_resolved',
+          offerPrice: chosenTotal ?? chosenLand ?? null,
+          offerPriceLand: chosenLand ?? undefined,
+          offerPriceBuild: chosenBuild ?? undefined,
+          sentBy: authEmail || 'unknown',
+          method: 'system',
+          notes: `Price discrepancy resolved — chose ${chosenLabel} price. ${details}`,
+          offerStatusAtEvent: preserveOfferStatus || 'offered',
+        }),
+      });
+    } catch { /* best effort */ }
+
+    // If user chose the EOI Template Tool price, GHL needs updating — ask for confirmation
+    if (source === 'database') {
+      setGhlUpdatePending({
+        total: chosenTotal ?? null,
+        land: chosenLand ?? null,
+        build: chosenBuild ?? null,
+      });
+      setShowGhlUpdateConfirm(true);
+    }
+    // If user chose the GHL price, no GHL update needed — but still check Close $
+    if (source === 'property') {
+      checkClosePriceMismatch();
+    }
+  }
+
+  function handleGhlUpdateConfirm(confirmed: boolean) {
+    setShowGhlUpdateConfirm(false);
+    if (confirmed && ghlUpdatePending) {
+      try {
+        fetch('/api/eoi/update-ghl-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recordId,
+            offerPrice: ghlUpdatePending.total,
+            offerPriceLand: ghlUpdatePending.land,
+            offerPriceBuild: ghlUpdatePending.build,
+          }),
+        });
+      } catch { /* best effort */ }
+    }
+    setGhlUpdatePending(null);
+    // After GHL update confirmation, check Close $
+    checkClosePriceMismatch();
+  }
+
+  // F55: Check if Close $ differs from the offer price (Accepted records only)
+  function checkClosePriceMismatch() {
+    const status = (urlOfferStatus || preserveOfferStatus || '').toLowerCase();
+    if (status !== 'accepted') return; // Only relevant for Accepted records
+
+    if (!urlClosingPrice) return; // No Close $ to compare
+
+    // Get the current offer price (may have been updated by mismatch resolution)
+    const currentOffer = isHL
+      ? String(Math.round(
+          (parseFloat((landPrice || '').replace(/[^0-9.]/g, '')) || 0) +
+          (parseFloat((buildPrice || '').replace(/[^0-9.]/g, '')) || 0)
+        ))
+      : (offerPrice || '').replace(/[^0-9.]/g, '');
+
+    const closeRaw = (urlClosingPrice || '').replace(/[^0-9.]/g, '');
+
+    if (!currentOffer || !closeRaw) return;
+
+    const offerNum = Math.round(parseFloat(currentOffer));
+    const closeNum = Math.round(parseFloat(closeRaw));
+
+    if (isNaN(offerNum) || isNaN(closeNum)) return;
+    if (offerNum === closeNum) return; // They match — nothing to do
+
+    setClosePriceMismatchValues({
+      closePrice: '$' + closeNum.toLocaleString('en-AU'),
+      offerPrice: '$' + offerNum.toLocaleString('en-AU'),
+    });
+    setShowClosePriceMismatch(true);
+  }
+
+  function handleClosePriceUpdate() {
+    setShowClosePriceMismatch(false);
+    // Update Close $ in GHL to match the offer price
+    const currentOffer = isHL
+      ? String(Math.round(
+          (parseFloat((landPrice || '').replace(/[^0-9.]/g, '')) || 0) +
+          (parseFloat((buildPrice || '').replace(/[^0-9.]/g, '')) || 0)
+        ))
+      : (offerPrice || '').replace(/[^0-9.]/g, '');
+
+    try {
+      fetch('/api/eoi/update-ghl-price', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId,
+          closingPrice: currentOffer,
+        }),
+      });
+    } catch { /* best effort */ }
+    setClosePriceMismatchValues(null);
+  }
+
   // ---- purchaser field colour ------------------------------------------------
   function pColour(idx: number, field: string): FieldColour {
     if (idx === 0) return field === 'address' ? 'green' : 'yellow';
@@ -1181,10 +1401,194 @@ export default function EoiComposePage() {
     );
   }
 
+  // F55: should the dialogue block the composer?
+  const showPriceMismatch = !priceMismatchLoading && priceMismatches.length > 0 && !priceMismatchResolved;
+
   // ---- RENDER ----------------------------------------------------------------
   return (
     <div className="eoi-page">
       <style suppressHydrationWarning>{CSS}</style>
+
+      {/* F55: Price mismatch dialogue — blocks the composer until resolved */}
+      {showPriceMismatch && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 8, padding: '28px 32px', maxWidth: 520, width: '90%',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 6, color: '#c0392b' }}>
+              Price Discrepancy Detected
+            </h2>
+            <p style={{ fontSize: 13, color: '#444', marginBottom: 16, lineHeight: 1.5 }}>
+              The offer price in GHL differs from the last offer price processed by
+              the EOI Template tool. This suggests someone has edited the field(s)
+              directly in GHL.
+            </p>
+            <p style={{ fontSize: 13, color: '#444', marginBottom: 18, lineHeight: 1.5 }}>
+              To ensure the correct offer price is used, please select from one of the below options:
+            </p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #ddd' }}>
+                  <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 600 }}>&nbsp;</th>
+                  <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600 }}>GHL Record</th>
+                  <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 600 }}>Last EOI Template Tool Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {priceMismatches.map((m) => (
+                  <tr key={m.field} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '6px 8px', fontWeight: 600, textTransform: 'capitalize' }}>
+                      {m.field === 'total' && !priceMismatchIsSplit ? 'Offer Price' : `${m.field.charAt(0).toUpperCase() + m.field.slice(1)} Price`}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#c0392b', fontWeight: 600 }}>
+                      {m.urlValue !== null ? '$' + m.urlValue.toLocaleString('en-AU') : '-'}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', color: '#1e7a3a', fontWeight: 600 }}>
+                      {m.dbValue !== null ? '$' + m.dbValue.toLocaleString('en-AU') : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => handlePriceMismatchChoice('property')}
+                style={{
+                  padding: '10px 20px', fontSize: 13, fontWeight: 600, borderRadius: 4,
+                  border: '2px solid #c0392b', background: '#fff', color: '#c0392b', cursor: 'pointer',
+                  flex: '1 1 0', textAlign: 'center',
+                }}
+              >
+                Use the GHL offer price
+              </button>
+              <button
+                onClick={() => handlePriceMismatchChoice('database')}
+                style={{
+                  padding: '10px 20px', fontSize: 13, fontWeight: 600, borderRadius: 4,
+                  border: '2px solid #1e7a3a', background: '#1e7a3a', color: '#fff', cursor: 'pointer',
+                  flex: '1 1 0', textAlign: 'center',
+                }}
+              >
+                Use the EOI Template Tool offer price
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* F55: GHL update confirmation dialogue */}
+      {showGhlUpdateConfirm && ghlUpdatePending && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 8, padding: '28px 32px', maxWidth: 480, width: '90%',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 10, color: '#2A2A2A' }}>
+              GHL Record Will Be Updated
+            </h2>
+            <p style={{ fontSize: 13, color: '#444', marginBottom: 16, lineHeight: 1.5 }}>
+              Since you chose the EOI Template Tool price, the GHL property record will be
+              updated to match. Click OK to confirm.
+            </p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: 13 }}>
+              <tbody>
+                {ghlUpdatePending.land !== null && (
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '6px 8px', fontWeight: 600 }}>Land Price</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                      {'$' + ghlUpdatePending.land.toLocaleString('en-AU')}
+                    </td>
+                  </tr>
+                )}
+                {ghlUpdatePending.build !== null && (
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '6px 8px', fontWeight: 600 }}>Build Price</td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                      {'$' + ghlUpdatePending.build.toLocaleString('en-AU')}
+                    </td>
+                  </tr>
+                )}
+                {ghlUpdatePending.total !== null && (
+                  <tr style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '6px 8px', fontWeight: 600 }}>
+                      {ghlUpdatePending.land !== null ? 'Total Price' : 'Offer Price'}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                      {'$' + ghlUpdatePending.total.toLocaleString('en-AU')}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => handleGhlUpdateConfirm(true)}
+                style={{
+                  padding: '10px 40px', fontSize: 13, fontWeight: 600, borderRadius: 4,
+                  border: '2px solid #1e7a3a', background: '#1e7a3a', color: '#fff', cursor: 'pointer',
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* F55: Close $ mismatch dialogue */}
+      {showClosePriceMismatch && closePriceMismatchValues && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 8, padding: '28px 32px', maxWidth: 480, width: '90%',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 10, color: '#c0392b' }}>
+              Closing Price Discrepancy
+            </h2>
+            <p style={{ fontSize: 13, color: '#444', marginBottom: 16, lineHeight: 1.5 }}>
+              This record is Accepted, but the Closing Price in GHL does not match the
+              Offer Price. The Closing Price will be updated to match.
+            </p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: 13 }}>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid #eee' }}>
+                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>Current Close $</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', color: '#c0392b', fontWeight: 600 }}>
+                    {closePriceMismatchValues.closePrice}
+                  </td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid #eee' }}>
+                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>Offer Price</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', color: '#1e7a3a', fontWeight: 600 }}>
+                    {closePriceMismatchValues.offerPrice}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={handleClosePriceUpdate}
+                style={{
+                  padding: '10px 40px', fontSize: 13, fontWeight: 600, borderRadius: 4,
+                  border: '2px solid #1e7a3a', background: '#1e7a3a', color: '#fff', cursor: 'pointer',
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="toolbar">
