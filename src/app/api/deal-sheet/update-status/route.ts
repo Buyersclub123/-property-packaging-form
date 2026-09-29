@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { updateCachedRecord } from '@/lib/dealSheetCache';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -62,6 +63,10 @@ export async function PUT(request: NextRequest) {
     }
 
     const data = await response.json();
+
+    // Update the record in the shared cache
+    await updateCachedRecord(recordId);
+
     return NextResponse.json({ success: true, record: data });
   } catch (error) {
     console.error('Update status error:', error);

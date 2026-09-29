@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import EoiLinkModal, { EoiLinkPayload, EoiUpdatePayload } from './EoiLinkModal';
 
@@ -312,6 +313,7 @@ export default function DealSheetPage() {
   // Per-row status editing
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [statusBlockId, setStatusBlockId] = useState<string | null>(null); // F83 inline warning
 
   // Polling state
   const lastPollTimestamp = useRef<number>(0);
@@ -2039,18 +2041,12 @@ export default function DealSheetPage() {
                               return;
                             }
 
-                            // Moving away from a linked/speculative record:
-                            // warn, archive the stripped data, and clear fields (F11/F12).
+                            // F83 — Block status changes away from 02/03 on linked records.
+                            // The user must use the modal to unlink first so the disconnect
+                            // is properly logged in EOI history and all fields are cleared.
                             if (!safe && linked && fromStatus !== newStatus) {
-                              const label = newStatus.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-                              const confirmed = window.confirm(
-                                `Changing this record to ${label} will remove the linked opportunity information. Do you want to continue?`
-                              );
-                              if (confirmed) {
-                                clearAndArchiveStatus(record.id, newStatus);
-                              } else {
-                                setEditingStatusId(null);
-                              }
+                              setEditingStatusId(null);
+                              setStatusBlockId(record.id);
                               return;
                             }
 
@@ -2194,10 +2190,11 @@ export default function DealSheetPage() {
                   }
 
                   // D38-LITE: Show "EOI History" link in Offer $ cell for delinked records with history
+                  // Hidden when the record has an actively linked opportunity (they use the EOI button instead)
                   if (
                     col.key === 'offerPrice' &&
                     record.hasEoiHistory === 'Yes' &&
-                    rawStatus(record.status) !== '02_eoi'
+                    !record.linkedOpportunityId
                   ) {
                     const historyUrl = `/eoi/compose?recordId=${record.id}&property=${encodeURIComponent(record.propertyAddress)}&contractType=${encodeURIComponent(record.contractTypeCO)}&acceptAcqTotal=${encodeURIComponent(record.acceptAcqTotal)}&packager=${encodeURIComponent(record.packager)}&sourcer=${encodeURIComponent(record.sourcer)}&viewHistory=true`;
                     cellContent = (
@@ -2329,6 +2326,30 @@ export default function DealSheetPage() {
           </div>
         </div>
       )}
+
+      {/* F83 — Status change blocked dialog */}
+      {statusBlockId &&
+        ReactDOM.createPortal(
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center" style={{ zIndex: 99999 }}>
+            <div className="bg-white text-gray-900 rounded-lg shadow-xl max-w-md mx-4 p-6">
+              <h3 className="text-sm font-bold mb-3">Status Change Blocked</h3>
+              <p className="text-xs leading-relaxed mb-4">
+                This record has a linked opportunity. To change the status, first use the pencil icon
+                on the <strong>Closing BA</strong> or <strong>Client</strong> field to unlink the opportunity.
+              </p>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setStatusBlockId(null)}
+                  className="px-4 py-1.5 text-xs font-medium bg-amber-500 text-white rounded hover:bg-amber-600"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      }
 
       {/* EOI link / edit modal */}
       {eoiModalRecord && (

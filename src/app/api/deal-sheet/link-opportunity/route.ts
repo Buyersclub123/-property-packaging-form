@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
+import { updateCachedRecord } from '@/lib/dealSheetCache';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -147,6 +148,9 @@ export async function POST(request: NextRequest) {
     } catch (redisErr) {
       console.error('Redis recent_changes push failed (non-fatal):', redisErr);
     }
+
+    // Update the record in the shared cache
+    await updateCachedRecord(recordId);
 
     return NextResponse.json({ success: true, baWriteBackOk, record: data });
   } catch (error) {
