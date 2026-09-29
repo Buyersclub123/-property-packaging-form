@@ -841,7 +841,14 @@ export default function DealSheetPage() {
       const res = await fetch('/api/deal-sheet/update-status', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recordId, status: '02_eoi', clientClosed: 'SPECULATIVE EOI' }),
+        body: JSON.stringify({
+          recordId,
+          status: '02_eoi',
+          clientClosed: 'SPECULATIVE EOI',
+          ...(prices?.totalPrice ? { offerPrice: prices.totalPrice, offerStatus: 'offered' } : {}),
+          ...(prices?.landPrice ? { offerPriceLand: prices.landPrice } : {}),
+          ...(prices?.buildPrice ? { offerPriceBuild: prices.buildPrice } : {}),
+        }),
       });
       if (!res.ok) return false;
       recentlyUpdatedIds.current.set(recordId, Date.now());

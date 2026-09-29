@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { updateCachedRecord } from '@/lib/dealSheetCache';
 
 export const dynamic = 'force-dynamic';
+
+const GHL_OBJECT_ID = process.env.GHL_OBJECT_ID || '692d04e3662599ed0c29edfa';
+const GHL_BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
+const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 
 /**
  * POST /api/eoi/log-update
@@ -66,6 +71,27 @@ export async function POST(request: NextRequest) {
         ${previousOpportunityId || null},
         ${previousClientName || null}
       ) RETURNING id`;
+
+    // Set has_eoi_history on the GHL record so the Deal Sheet shows the history link
+    if (GHL_BEARER_TOKEN && GHL_LOCATION_ID && recordId) {
+      try {
+        await fetch(
+          `https://services.leadconnectorhq.com/objects/${GHL_OBJECT_ID}/records/${recordId}?locationId=${GHL_LOCATION_ID}`,
+          {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${GHL_BEARER_TOKEN}`,
+              Version: '2021-07-28',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ properties: { has_eoi_history: 'Yes' } }),
+          }
+        );
+        await updateCachedRecord(recordId);
+      } catch {
+        // non-fatal — history is saved in DB regardless
+      }
+    }
 
     return NextResponse.json({ ok: true, sendId: result[0]?.id });
   } catch (err) {

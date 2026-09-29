@@ -20,7 +20,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     // clientClosed is optional — used by the speculative-EOI path to flag the
     // record visibly (e.g. "SPECULATIVE EOI") in the Client field (D1 F4).
-    const { recordId, status, clientClosed } = body;
+    const { recordId, status, clientClosed, offerPrice, offerPriceLand, offerPriceBuild, offerStatus } = body;
 
     if (!recordId || !status) {
       return NextResponse.json(
@@ -49,6 +49,10 @@ export async function PUT(request: NextRequest) {
         properties: {
           status: status,
           ...(typeof clientClosed === 'string' ? { client_closed: clientClosed } : {}),
+          ...(offerPrice ? { offer_price: String(offerPrice).replace(/[^0-9.]/g, '') } : {}),
+          ...(offerPriceLand ? { offer_price_land: String(offerPriceLand).replace(/[^0-9.]/g, '') } : {}),
+          ...(offerPriceBuild ? { offer_price_build: String(offerPriceBuild).replace(/[^0-9.]/g, '') } : {}),
+          ...(offerStatus ? { offer_status: offerStatus } : {}),
         },
       }),
     });
