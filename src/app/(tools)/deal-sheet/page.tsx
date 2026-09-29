@@ -708,13 +708,18 @@ export default function DealSheetPage() {
       }
       // Protect this record from poller overwrites for 30s
       recentlyUpdatedIds.current.set(recordId, Date.now());
-      // Update local state
+      // F84: check if the new status still belongs in the current view
+      const statusPrefix = newStatus.split('_')[0]; // e.g. '03' from '03_contr_exchanged'
+      const belongsInView = activeStatuses.split(',').some((s) => s.trim() === statusPrefix);
+      // Update local state — remove if it no longer matches the active filter
       setRecords((prev) =>
-        prev.map((r) =>
-          r.id === recordId
-            ? { ...r, status: newStatus.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()) }
-            : r
-        )
+        belongsInView
+          ? prev.map((r) =>
+              r.id === recordId
+                ? { ...r, status: newStatus.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()) }
+                : r
+            )
+          : prev.filter((r) => r.id !== recordId)
       );
       setEditingStatusId(null);
       return true;

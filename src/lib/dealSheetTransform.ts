@@ -245,9 +245,8 @@ export function transformRecord(record: GHLRecord) {
     offerPrice = formatCurrency(p.offer_price) + (offerStatus ? ' | ' + offerStatus : '');
   }
 
-  // D31: offer accepted flag — green only when status is 02_eoi
-  const rawStatusKey = (p.status || '').toLowerCase().replace(/ /g, '_').replace(/'/g, '');
-  const offerAccepted = offerStatus === 'accepted' && rawStatusKey === '02_eoi' ? 'yes' : '';
+  // D31: offer accepted flag — green when offer status is accepted (any status)
+  const offerAccepted = offerStatus === 'accepted' ? 'yes' : '';
 
   const closingBA = p.closing_ba || '';
   const closingPrice = formatCurrency(p.closing_price);
