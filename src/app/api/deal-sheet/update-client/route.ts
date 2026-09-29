@@ -185,12 +185,12 @@ export async function POST(request: NextRequest) {
     // otherwise keep the current status.
     const newStatus = (isRemove && body.revertStatus) ? body.revertStatus : currentStatus;
 
-    const properties: Record<string, string> = {
+    const properties: Record<string, string | null> = {
       status: newStatus,
       linked_opportunity_id: newOppId,
       client_closed: newClient,
       closing_ba: newBA,
-      closing_date: newDate,
+      closing_date: newDate || null,
     };
 
     // When fully unlinking (client_removed), clear offer and EOI fields.

@@ -937,7 +937,7 @@ export default function DealSheetPage() {
       } else {
         // Edit/reassign path — rebuild offer display with updated price
         const statusLabel = payload.offerStatus === 'accepted' ? 'Accepted' : 'Offered';
-        const isAccepted = payload.offerStatus === 'accepted' && rawStatus(eoiModalRecord.status) === '02_eoi' ? 'yes' : '';
+        const isAccepted = payload.offerStatus === 'accepted' ? 'yes' : '';
         let updatedOfferDisplay = '';
         if (payload.offerPriceLand && payload.offerPriceBuild) {
           const lNum = parseFloat(payload.offerPriceLand);
@@ -956,10 +956,12 @@ export default function DealSheetPage() {
                   clientClosed: payload.opportunityName,
                   closingBA: payload.assignedBA,
                   // On reassign totalPurchasePrice is '' (keep existing); fall back to current value
-                  closingPrice: priceDisplay || r.closingPrice,
+                  // F66: revert to Offered clears Close $
+                  closingPrice: payload.offerStatus === 'offered' ? '' : (priceDisplay || r.closingPrice),
                   closingDate: payload.closingDate,
                   linkedOpportunityId: payload.opportunityId,
-                  offerPrice: updatedOfferDisplay || r.offerPrice,
+                  // F66: when reverting to Offered, update the label in the existing offer display
+                  offerPrice: updatedOfferDisplay || (payload.offerStatus === 'offered' ? r.offerPrice.replace(/Accepted/gi, 'Offered') : r.offerPrice),
                   offerAccepted: isAccepted,
                 }
               : r

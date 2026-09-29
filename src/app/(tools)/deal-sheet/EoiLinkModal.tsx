@@ -712,23 +712,23 @@ export default function EoiLinkModal({
 
   // D31: Mark Accepted — write agreed price + offer_status to CO, log event
   async function handleMarkAccepted() {
-    if (editBA.trim() === '' || !selected || !acceptedConfirmed) return;
+    if ((!isSpeculative && (editBA.trim() === '' || !selected)) || !acceptedConfirmed) return;
     setSubmitting(true);
     setSubmitError('');
 
-    const changedBA = editBA.trim() !== (selected.assignedBA || '').trim();
+    const changedBA = selected ? editBA.trim() !== (selected.assignedBA || '').trim() : false;
     const totalAgreedPrice = isSplitContract
       ? String(Math.round(parseFloat(agreedPriceLand || '0') + parseFloat(agreedPriceBuild || '0')))
       : agreedPrice.trim();
 
     const ok = await onUpdate({
-      opportunityId: selected.id,
-      opportunityName: selected.name,
+      opportunityId: selected?.id || record.linkedOpportunityId || '',
+      opportunityName: selected?.name || record.clientClosed || '',
       assignedBA: editBA.trim(),
       totalPurchasePrice: totalAgreedPrice,
       offerPriceLand: isSplitContract ? agreedPriceLand.trim() : undefined,
       offerPriceBuild: isSplitContract ? agreedPriceBuild.trim() : undefined,
-      closingDate: isoToDDMMYYYY(editDateIso),
+      closingDate: isSpeculative ? '' : isoToDDMMYYYY(editDateIso),
       transitionType: 'client_edited',
       writeBaToOpportunity: changedBA,
       offerStatus: 'accepted',
@@ -747,8 +747,8 @@ export default function EoiLinkModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recordId: record.id,
-          opportunityId: selected.id,
-          opportunityName: selected.name,
+          opportunityId: selected?.id || record.linkedOpportunityId || null,
+          opportunityName: selected?.name || record.clientClosed || null,
           propertyAddress: record.propertyAddress,
           clientName: null,
           offerPrice: totalAgreedPrice,
@@ -763,6 +763,53 @@ export default function EoiLinkModal({
         }),
       });
     } catch { /* non-fatal — update already succeeded */ }
+    onCancel();
+  }
+
+  // F66: Revert Accepted → Offered — clears Close $, logs event
+  async function handleRevertToOffered() {
+    if (!isAccepted) return;
+    setSubmitting(true);
+    setSubmitError('');
+
+    const ok = await onUpdate({
+      opportunityId: selected?.id || record.linkedOpportunityId || '',
+      opportunityName: selected?.name || record.clientClosed || '',
+      assignedBA: editBA.trim(),
+      totalPurchasePrice: '',
+      closingDate: '',
+      transitionType: 'client_edited',
+      writeBaToOpportunity: false,
+      offerStatus: 'offered',
+      offerPrice: '',
+    });
+    setSubmitting(false);
+    if (!ok) {
+      setSubmitError('Failed to revert. Try again or cancel.');
+      return;
+    }
+
+    // Log revert event
+    try {
+      const currentPrice = record.offerPrice?.match(/\$?([\d,]+)/)?.[1]?.replace(/,/g, '') || '';
+      await fetch('/api/eoi/log-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recordId: record.id,
+          opportunityId: selected?.id || record.linkedOpportunityId || null,
+          opportunityName: selected?.name || record.clientClosed || null,
+          propertyAddress: record.propertyAddress,
+          offerPrice: currentPrice,
+          eventType: 'reverted_to_offered',
+          sentBy: editBA.trim() || 'system',
+          method: 'system',
+          notes: 'Accepted reverted to Offered — Close $ cleared',
+          offerStatusAtEvent: 'offered',
+          assignedBa: editBA.trim(),
+        }),
+      });
+    } catch { /* non-fatal */ }
     onCancel();
   }
 
@@ -1167,6 +1214,14 @@ export default function EoiLinkModal({
                   <span className="font-medium">Mark Accepted</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Record that the offer has been accepted</span>
                 </button>
+                <button
+                  onClick={handleRevertToOffered}
+                  disabled={!isAccepted || submitting}
+                  className={`w-full text-left ${cls.btn} py-2 ${!isAccepted ? 'opacity-40 cursor-not-allowed' : ''}`}
+                >
+                  <span className="font-medium">Change Accepted → Offered</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Undo acceptance — clears Close $ and reverts to Offered</span>
+                </button>
 
                 <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Client Management</div>
                 <button onClick={() => { if (isAccepted && !acceptedChoice) { setPendingAcceptedAction('reassign_keep'); return; } setEditAction('reassign_keep'); setReassignVariant('keep'); setReassignSelected(null); setReassignIsSpeculative(false); setStep('reassign'); }} className={`w-full text-left ${cls.btn} py-2`}>
@@ -1361,26 +1416,30 @@ export default function EoiLinkModal({
                     : '-'}
                 </span>
 
-                {/* Editable BA */}
-                <span className={cls.label}>Assigned BA *</span>
-                <div>
-                  {baOptionsFailed && baOptions.length === 0 ? (
-                    <input type="text" value={editBA} onChange={(e) => setEditBA(e.target.value)}
-                      placeholder="Required — type the BA name"
-                      className={`w-full ${cls.input} ${baEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
-                  ) : (
-                    <select value={editBA} onChange={(e) => setEditBA(e.target.value)}
-                      className={`w-full ${cls.input} ${baEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
-                      <option value="">— Select a BA —</option>
-                      {editBA && !baOptions.includes(editBA) && <option value={editBA}>{editBA} (not in list)</option>}
-                      {baOptions.map((ba) => <option key={ba} value={ba}>{ba}</option>)}
-                    </select>
-                  )}
-                </div>
+                {/* Editable BA — hidden for speculative (Decision #20) */}
+                {!isSpeculative && (
+                  <>
+                    <span className={cls.label}>Assigned BA *</span>
+                    <div>
+                      {baOptionsFailed && baOptions.length === 0 ? (
+                        <input type="text" value={editBA} onChange={(e) => setEditBA(e.target.value)}
+                          placeholder="Required — type the BA name"
+                          className={`w-full ${cls.input} ${baEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`} />
+                      ) : (
+                        <select value={editBA} onChange={(e) => setEditBA(e.target.value)}
+                          className={`w-full ${cls.input} ${baEmpty ? 'border-red-500 ring-1 ring-red-500' : ''}`}>
+                          <option value="">— Select a BA —</option>
+                          {editBA && !baOptions.includes(editBA) && <option value={editBA}>{editBA} (not in list)</option>}
+                          {baOptions.map((ba) => <option key={ba} value={ba}>{ba}</option>)}
+                        </select>
+                      )}
+                    </div>
 
-                {/* Editable Close Date */}
-                <span className={cls.label}>Close Date</span>
-                <input type="date" value={editDateIso} onChange={(e) => setEditDateIso(e.target.value)} className={`w-fit ${cls.input}`} />
+                    {/* Editable Close Date */}
+                    <span className={cls.label}>Close Date</span>
+                    <input type="date" value={editDateIso} onChange={(e) => setEditDateIso(e.target.value)} className={`w-fit ${cls.input}`} />
+                  </>
+                )}
 
                 {/* Current price — reference + copy checkbox */}
                 <span className={cls.label}>Current Price (ref)</span>
@@ -1477,7 +1536,7 @@ export default function EoiLinkModal({
               <button onClick={() => setStep('actions')} disabled={submitting} className={cls.btn}>← Back</button>
               <button
                 onClick={handleMarkAccepted}
-                disabled={submitting || baEmpty || linkLoad !== 'ok' || !acceptedConfirmed || (isSplitContract ? (!agreedPriceLand.trim() || !agreedPriceBuild.trim()) : !agreedPrice.trim())}
+                disabled={submitting || (!isSpeculative && baEmpty) || linkLoad !== 'ok' || !acceptedConfirmed || (isSplitContract ? (!agreedPriceLand.trim() || !agreedPriceBuild.trim()) : !agreedPrice.trim())}
                 className="px-4 py-2 rounded text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? 'Processing...' : 'Confirm — Mark Accepted'}
