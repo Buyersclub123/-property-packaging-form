@@ -2190,7 +2190,8 @@ export default function DealSheetPage() {
                   if (
                     col.key === 'offerPrice' &&
                     record.hasEoiHistory === 'Yes' &&
-                    !record.linkedOpportunityId
+                    !record.linkedOpportunityId &&
+                    record.clientClosed !== 'SPECULATIVE EOI'
                   ) {
                     const historyUrl = `/eoi/compose?recordId=${record.id}&property=${encodeURIComponent(record.propertyAddress)}&contractType=${encodeURIComponent(record.contractTypeCO)}&acceptAcqTotal=${encodeURIComponent(record.acceptAcqTotal)}&packager=${encodeURIComponent(record.packager)}&sourcer=${encodeURIComponent(record.sourcer)}&viewHistory=true`;
                     cellContent = (

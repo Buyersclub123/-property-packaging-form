@@ -705,7 +705,17 @@ export default function EoiComposePage() {
           ? p.specialConditions.map((c: string) => c.replace(/^[\s]*[-\u2013\u2014\u2022]\s*/, '').trim()).filter(Boolean)
           : []);
         setNotes(p.notes || '');
-        setSpeculativeMessage(p.speculativeMessage || '');
+        // F81: if the previous send wasn't speculative but the record is now speculative,
+        // fetch the speculative message from Template Admin instead of using the empty payload value
+        if (p.speculativeMessage) {
+          setSpeculativeMessage(p.speculativeMessage);
+        } else if (!oppId) {
+          try {
+            const smRes = await fetch(`/api/eoi/templates?state=${state}&type=${propertyType}&_t=${Date.now()}`);
+            const smData = await smRes.json();
+            setSpeculativeMessage(smData.values?.speculative_message || '');
+          } catch { /* leave empty */ }
+        }
 
         // Price comes from the URL (set by the modal) — NOT from the stored payload.
         // The stored payload provides terms only. See F64.
