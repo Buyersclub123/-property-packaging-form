@@ -2066,30 +2066,14 @@ export default function DealSheetPage() {
                     } else if (updatingStatusId === record.id) {
                       cellContent = <span className="text-[10px] opacity-50">Saving...</span>;
                     } else {
-                      const rs = rawStatus(record.status);
-                      const showEoiBtn = (rs === '02_eoi' || rs === '03_contr_exchanged');
                       cellContent = (
-                        <div className="flex items-center gap-1">
-                          <span
-                            onDoubleClick={() => setEditingStatusId(record.id)}
-                            className="cursor-pointer truncate"
-                            title="Double-click to edit status"
-                          >
-                            {value}
-                          </span>
-                          {showEoiBtn && (
-                            <a
-                              href={`/eoi/compose?recordId=${encodeURIComponent(record.id)}&address=${encodeURIComponent(record.propertyAddress || '')}&type=${encodeURIComponent(record.type || '')}&agent=${encodeURIComponent(record.sellingAgent || '')}&client=${encodeURIComponent(record.clientClosed || '')}&ba=${encodeURIComponent(record.closingBA || '')}&price=${encodeURIComponent(record.closingPrice || record.closePrefill || record.acceptAcqTotal || '')}&oppId=${encodeURIComponent(record.linkedOpportunityId || '')}&agentName=${encodeURIComponent(record.agentNameCO || '')}&agentEmail=${encodeURIComponent(record.agentEmailCO || '')}&agentMobile=${encodeURIComponent(record.agentMobileCO || '')}&propertyType=${encodeURIComponent(record.propertyTypeCO || '')}&contractType=${encodeURIComponent(record.contractTypeCO || '')}&state=${encodeURIComponent(record.stateCO || '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="shrink-0 text-[9px] font-bold bg-blue-600 text-white rounded px-1 py-0.5 hover:bg-blue-700 no-underline"
-                              title="Send EOI for this property"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              EOI
-                            </a>
-                          )}
-                        </div>
+                        <span
+                          onDoubleClick={() => setEditingStatusId(record.id)}
+                          className="cursor-pointer truncate"
+                          title="Double-click to edit status"
+                        >
+                          {value}
+                        </span>
                       );
                     }
                   }
