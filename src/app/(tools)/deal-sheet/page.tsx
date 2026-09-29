@@ -241,6 +241,8 @@ export default function DealSheetPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string>('');
+  // F49: allLinks from the API — built from ALL records (all statuses), not just the loaded view
+  const [apiAllLinks, setApiAllLinks] = useState<Record<string, { id: string; address: string; status: string }[]>>({});
   // Time of the last successful sync with GHL — updated by the full load AND by
   // each successful 15s poll, so it means the same thing as the timestamp in
   // the Contract Team Reporting tool.
@@ -442,7 +444,7 @@ export default function DealSheetPage() {
   // Active statuses param for API fetches
   const [activeStatuses, setActiveStatuses] = useState<string>('01,02');
 
-  const fetchData = async (statuses?: string) => {
+  const fetchData = async (statuses?: string, forceFresh = false) => {
     setLoading(true);
     setRefreshing(true);
     setError(null);
@@ -450,6 +452,7 @@ export default function DealSheetPage() {
     try {
       const params = new URLSearchParams();
       params.set('statuses', statusParam);
+      if (forceFresh) params.set('fresh', '1');
       const res = await fetch(`/api/deal-sheet?${params.toString()}&_t=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) {
         const data = await res.json();
@@ -458,6 +461,7 @@ export default function DealSheetPage() {
       const data = await res.json();
       setRecords(data.records);
       setFetchedAt(data.fetchedAt);
+      if (data.allLinks) setApiAllLinks(data.allLinks);
       setLastRefresh(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -1009,10 +1013,12 @@ export default function DealSheetPage() {
     return new Set(ids);
   }, [idFilter]);
 
-  // opportunityId -> property records already linked to it. Built from all
-  // loaded records (not the filtered view) so the EOI modal can warn when an
-  // opportunity is about to be linked to a second property.
+  // F49: opportunityId -> property records already linked to it. Uses allLinks
+  // from the API (built from ALL records across all statuses) so the LINKED badge
+  // works even when the other property isn't in the current view. Falls back to
+  // local computation from loaded records if the API didn't return allLinks.
   const existingOpportunityLinks = useMemo(() => {
+    if (Object.keys(apiAllLinks).length > 0) return apiAllLinks;
     const map: Record<string, { id: string; address: string; status: string }[]> = {};
     for (const rec of records) {
       const oppId = rec.linkedOpportunityId;
@@ -1021,7 +1027,7 @@ export default function DealSheetPage() {
       map[oppId].push({ id: rec.id, address: rec.propertyAddress || '', status: rec.status || '' });
     }
     return map;
-  }, [records]);
+  }, [records, apiAllLinks]);
 
   // Count: EOI/Exchanged records with no linked opportunity
   const unlinkedEoiCount = useMemo(() => {
@@ -1696,8 +1702,9 @@ export default function DealSheetPage() {
             </span>
           )}
           <button
-            onClick={() => fetchData()}
+            onClick={() => fetchData(undefined, true)}
             className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
+            title="Force a fresh fetch from GHL (bypasses cache)"
           >
             {refreshing ? '...' : 'Refresh'}
           </button>

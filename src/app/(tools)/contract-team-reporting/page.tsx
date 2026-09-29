@@ -1940,7 +1940,14 @@ export default function ContractTeamReportingPage() {
         };
         compare = parseDate(aVal) - parseDate(bVal);
       } else {
-        compare = aVal.localeCompare(bVal);
+        // F33: if both values look like numbers, compare numerically
+        const aNum = parseFloat(aVal.replace(/[^0-9.\-]/g, ''));
+        const bNum = parseFloat(bVal.replace(/[^0-9.\-]/g, ''));
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          compare = aNum - bNum;
+        } else {
+          compare = aVal.localeCompare(bVal);
+        }
       }
       return level.dir === 'asc' ? compare : -compare;
     }
