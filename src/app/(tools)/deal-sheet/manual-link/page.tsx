@@ -1,3 +1,5 @@
+// F8: This page is no longer used — the EOI modal on the main Deal Sheet replaced it.
+// No links point here. Left in place intentionally — no risk, more risk trying to remove it.
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
