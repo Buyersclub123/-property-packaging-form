@@ -634,6 +634,7 @@ export default function EoiLinkModal({
       opportunityName: oppName,
       assignedBA: editBA.trim(),
       totalPurchasePrice: totalNewPrice,
+      offerPrice: !keepPriceAsIs && !isSplitContract ? newPrice.trim() : undefined,
       offerPriceLand: !keepPriceAsIs && isSplitContract ? newPriceLand.trim() : undefined,
       offerPriceBuild: !keepPriceAsIs && isSplitContract ? newPriceBuild.trim() : undefined,
       closingDate: isoToDDMMYYYY(editDateIso),
