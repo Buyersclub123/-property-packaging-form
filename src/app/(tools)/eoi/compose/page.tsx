@@ -193,18 +193,18 @@ const FIELD_INFO: Record<string, string[]> = {
   commission: ['Source: Manual entry', 'Does not write back'],
   settlement: ['Source: EOI Template Admin', 'Does not write back'],
   specialConditions: ['Source: EOI Template Admin', 'Does not write back'],
-  contractEntity: ['Source: Opportunity \u2192 Prop Team Info New', 'Field: Trust Name / SMSF Name', 'Does not write back'],
+  contractEntity: ['Source: Opportunity \u2192 Deal Information', 'Checks Trust Name, then SMSF Name, then Personal Name \u2014 uses first with a value', 'Does not write back'],
   p1Name: ['Source: Opportunity \u2192 Contact', 'Contact-inherited \u2014 cannot write back through the Opportunity to the Contact'],
   p1Email: ['Source: Opportunity \u2192 Contact', 'Contact-inherited \u2014 cannot write back'],
   p1Phone: ['Source: Opportunity \u2192 Contact', 'Contact-inherited \u2014 cannot write back'],
-  p1Address: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Postal Address', 'Writes back to Opportunity'],
+  p1Address: ['Source: Opportunity \u2192 Client Relations', 'Field: Postal Address', 'Writes back to Opportunity'],
   p2Name: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Partner Name', 'Writes back to Opportunity'],
   p2Email: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Partner Email', 'Writes back to Opportunity'],
   p2Phone: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Partner Phone', 'Writes back to Opportunity'],
   p2Address: ['Source: Opportunity \u2192 Opportunity Details', 'Field: Partner Address', 'Writes back to Opportunity'],
   p3Plus: ['No GHL fields for additional purchasers', 'Does not write back'],
-  solicitor: ['Source: Opportunity \u2192 Prop Team Info New', 'Fields: Solicitor Company / Name / Phone / Email', 'On send: Writes back to Opportunity'],
-  broker: ['Source: Opportunity \u2192 Isobel Team Info', 'Fields: Broker Company / Name / Phone / Email', 'On send: Writes back to Opportunity'],
+  solicitor: ['Source: Opportunity \u2192 Deal Information', 'Fields: Solicitor Company / Name / Phone / Email', 'On send: Writes back to Opportunity'],
+  broker: ['Source: Opportunity \u2192 Client Relations', 'Fields: Broker Company / Name / Phone / Email', 'On send: Writes back to Opportunity'],
   lvr: ['Source: Manual entry', 'Does not write back'],
   agentGroup: ['Source: Property Record (CO) \u2192 agent_email / agent_name / agent_mobile', 'On send: Writes back to CO'],
 };
@@ -1297,7 +1297,7 @@ export default function EoiComposePage() {
 
   function pSrc(idx: number, field: string): string {
     if (idx === 0) {
-      if (field === 'address') return 'Opportunity \u2192 Opportunity Details \u2192 Postal Address \u00b7 writes back';
+      if (field === 'address') return 'Opportunity \u2192 Client Relations \u2192 Postal Address \u00b7 writes back';
       return 'Opportunity \u2192 Contact \u00b7 contact-inherited \u00b7 does not write back';
     }
     if (idx === 1) {
@@ -1677,7 +1677,7 @@ export default function EoiComposePage() {
           <span style={{ color: '#999' }}>·</span>
           <strong>CC:</strong>
           {ccPropertyOn && <><span>property@buyersclub.com.au</span><span style={{ color: '#999' }}>·</span></>}
-          {ccBaOn && <span>{consultantName || 'Assigned BA'}{consultantEmail ? ` (${consultantEmail})` : ''} <span className="source-label" style={{ display: 'inline', color: '#8a7300' }}>(Opportunity &rarr; Prop Team Info New)</span></span>}
+          {ccBaOn && <span>{consultantName || 'Assigned BA'}{consultantEmail ? ` (${consultantEmail})` : ''} <span className="source-label" style={{ display: 'inline', color: '#8a7300' }}>(Opportunity &rarr; Deal Information)</span></span>}
           {globalCcList.map(email => (
             <><span key={email} style={{ color: '#999' }}>·</span><span>{email}</span></>
           ))}
@@ -1860,7 +1860,7 @@ export default function EoiComposePage() {
               <tr><td colSpan={2} style={formSectionSty}>PURCHASER/S</td></tr>
 
               {/* Contract Entity */}
-              {renderFormRow('contractEntity', 'Contract Entity', 'Opportunity \u2192 Prop Team Info New \u2192 Trust/SMSF Name \u00b7 does not write back', 'grey',
+              {renderFormRow('contractEntity', 'Contract Entity', 'Opportunity \u2192 Deal Information \u2192 Trust / SMSF / Personal Name (first with a value) \u00b7 does not write back', 'grey',
                 <textarea className="eoi-form-textarea" rows={1} value={contractEntity} onChange={e => setContractEntity(e.target.value)} onInput={autoGrow}
                   placeholder="e.g. The Smith Family Trust / John Smith Pty Ltd ATF Smith SMSF" />
               )}
@@ -1928,19 +1928,19 @@ export default function EoiComposePage() {
 
               {/* Solicitor fields */}
               <tr style={{ background: BG.green }}>
-                <td style={formLabelSty}>Company<span className="source-label">Opportunity &rarr; Prop Team Info New &rarr; Solicitor Company &middot; writes back</span></td>
+                <td style={formLabelSty}>Company<span className="source-label">Opportunity &rarr; Deal Information &rarr; Solicitor Company &middot; writes back</span></td>
                 <td style={formValueSty}><input className="eoi-form-input" value={solicitorCompany} onChange={e => setSolicitorCompany(e.target.value)} placeholder="Solicitor / conveyancer company" /></td>
               </tr>
               <tr style={{ background: BG.green }}>
-                <td style={formLabelSty}>Contact<span className="source-label">Opportunity &rarr; Prop Team Info New &rarr; Solicitor Name &middot; writes back</span></td>
+                <td style={formLabelSty}>Contact<span className="source-label">Opportunity &rarr; Deal Information &rarr; Solicitor Name &middot; writes back</span></td>
                 <td style={formValueSty}><input className="eoi-form-input" value={solicitorName} onChange={e => setSolicitorName(e.target.value)} placeholder="Contact name" /></td>
               </tr>
               <tr style={{ background: BG.green }}>
-                <td style={formLabelSty}>Phone<span className="source-label">Opportunity &rarr; Prop Team Info New &rarr; Solicitor Phone &middot; writes back</span></td>
+                <td style={formLabelSty}>Phone<span className="source-label">Opportunity &rarr; Deal Information &rarr; Solicitor Phone &middot; writes back</span></td>
                 <td style={formValueSty}><input className="eoi-form-input" value={solicitorPhone} onChange={e => setSolicitorPhone(e.target.value)} /></td>
               </tr>
               <tr style={{ background: BG.green }}>
-                <td style={formLabelSty}>Email<span className="source-label">Opportunity &rarr; Prop Team Info New &rarr; Solicitor Email &middot; writes back</span></td>
+                <td style={formLabelSty}>Email<span className="source-label">Opportunity &rarr; Deal Information &rarr; Solicitor Email &middot; writes back</span></td>
                 <td style={formValueSty}><input className="eoi-form-input" value={solicitorEmail} onChange={e => setSolicitorEmail(e.target.value)} /></td>
               </tr>
 
@@ -1960,19 +1960,19 @@ export default function EoiComposePage() {
 
               {/* Broker fields */}
               <tr style={{ background: BG.green }}>
-                <td style={formLabelSty}>Company<span className="source-label">Opportunity &rarr; Isobel Team Info &rarr; Broker Company &middot; writes back</span></td>
+                <td style={formLabelSty}>Company<span className="source-label">Opportunity &rarr; Client Relations &rarr; Broker Company &middot; writes back</span></td>
                 <td style={formValueSty}><input className="eoi-form-input" value={brokerCompany} onChange={e => setBrokerCompany(e.target.value)} placeholder="Broker company" /></td>
               </tr>
               <tr style={{ background: BG.green }}>
-                <td style={formLabelSty}>Contact<span className="source-label">Opportunity &rarr; Isobel Team Info &rarr; Broker Name &middot; writes back</span></td>
+                <td style={formLabelSty}>Contact<span className="source-label">Opportunity &rarr; Client Relations &rarr; Broker Name &middot; writes back</span></td>
                 <td style={formValueSty}><input className="eoi-form-input" value={brokerName} onChange={e => setBrokerName(e.target.value)} placeholder="Broker name" /></td>
               </tr>
               <tr style={{ background: BG.green }}>
-                <td style={formLabelSty}>Phone<span className="source-label">Opportunity &rarr; Isobel Team Info &rarr; Broker Phone &middot; writes back</span></td>
+                <td style={formLabelSty}>Phone<span className="source-label">Opportunity &rarr; Client Relations &rarr; Broker Phone &middot; writes back</span></td>
                 <td style={formValueSty}><input className="eoi-form-input" value={brokerPhone} onChange={e => setBrokerPhone(e.target.value)} /></td>
               </tr>
               <tr style={{ background: BG.green }}>
-                <td style={formLabelSty}>Email<span className="source-label">Opportunity &rarr; Isobel Team Info &rarr; Broker Email &middot; writes back</span></td>
+                <td style={formLabelSty}>Email<span className="source-label">Opportunity &rarr; Client Relations &rarr; Broker Email &middot; writes back</span></td>
                 <td style={formValueSty}><input className="eoi-form-input" value={brokerEmail} onChange={e => setBrokerEmail(e.target.value)} /></td>
               </tr>
 
@@ -2105,7 +2105,7 @@ export default function EoiComposePage() {
           <span>Assigned BA:</span>
           <input value={consultantName} onChange={(e) => setConsultantName(e.target.value)} placeholder="BA / Consultant name"
             style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', fontSize: 12, width: 200, background: '#fff3cd' }} />
-          <span className="source-label" style={{ display: 'inline' }}>Opportunity &rarr; Prop Team Info New</span>
+          <span className="source-label" style={{ display: 'inline' }}>Opportunity &rarr; Deal Information</span>
           <span style={{ marginLeft: 'auto' }}>Logged in as: {authEmail}</span>
         </div>
       </div>
