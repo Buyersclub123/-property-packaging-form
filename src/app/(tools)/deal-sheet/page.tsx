@@ -2213,7 +2213,7 @@ export default function DealSheetPage() {
                     );
                   }
 
-                  // D31: green styling for accepted offers in 02 EOI status
+                  // D31: green styling for accepted offers (02 EOI and 03 Contract Exchanged)
                   const offerGreen = col.key === 'offerPrice' && record.offerAccepted;
 
                   return (
