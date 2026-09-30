@@ -314,6 +314,7 @@ export default function DealSheetPage() {
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [statusBlockId, setStatusBlockId] = useState<string | null>(null); // F83 inline warning
+  const [speculativeBlockId, setSpeculativeBlockId] = useState<string | null>(null); // F89 speculative → 03 block
 
   // Polling state
   const lastPollTimestamp = useRef<number>(0);
@@ -2055,6 +2056,15 @@ export default function DealSheetPage() {
                               return;
                             }
 
+                            // F89 — Block speculative records from moving to 03 Contract Exchanged.
+                            // A speculative record has no client and cannot be exchanged.
+                            const isSpeculative = record.clientClosed === 'SPECULATIVE EOI';
+                            if (isSpeculative && newStatus === '03_contr_exchanged') {
+                              setEditingStatusId(null);
+                              setSpeculativeBlockId(record.id);
+                              return;
+                            }
+
                             // F83 — Block status changes away from 02/03 on linked records.
                             // The user must use the modal to unlink first so the disconnect
                             // is properly logged in EOI history and all fields are cleared.
@@ -2339,6 +2349,30 @@ export default function DealSheetPage() {
               <div className="flex justify-end">
                 <button
                   onClick={() => setStatusBlockId(null)}
+                  className="px-4 py-1.5 text-xs font-medium bg-amber-500 text-white rounded hover:bg-amber-600"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      }
+
+      {/* F89 — Speculative record cannot move to Contract Exchanged */}
+      {speculativeBlockId &&
+        ReactDOM.createPortal(
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center" style={{ zIndex: 99999 }}>
+            <div className="bg-white text-gray-900 rounded-lg shadow-xl max-w-md mx-4 p-6">
+              <h3 className="text-sm font-bold mb-3">Status Change Blocked</h3>
+              <p className="text-xs leading-relaxed mb-4">
+                A speculative record cannot move to Contract Exchanged — there is no client linked.
+                Link a client first via the pencil icon on the <strong>Client</strong> field, then change the status.
+              </p>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setSpeculativeBlockId(null)}
                   className="px-4 py-1.5 text-xs font-medium bg-amber-500 text-white rounded hover:bg-amber-600"
                 >
                   OK
