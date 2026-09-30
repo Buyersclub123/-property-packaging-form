@@ -1595,6 +1595,11 @@ export default function EoiLinkModal({
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400 mx-auto mb-2"></div>
                         Loading opportunities...
                       </div>
+                    ) : loadError ? (
+                      <div className="p-6 text-center text-xs text-red-400">
+                        {loadError}{' '}
+                        <button onClick={() => loadTier(loadingTier === null && loadedTiers.length === 0 ? 1 : (nextTier || 1))} className="underline">Retry</button>
+                      </div>
                     ) : (
                       <table className="w-full text-[11px] border-collapse">
                         <thead className={`sticky top-0 ${dark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
