@@ -216,6 +216,8 @@ export default function EoiLinkModal({
   const [editAction, setEditAction] = useState<string | null>(null);
   // D35/D37: delink reason for unlink flows
   const [delinkReason, setDelinkReason] = useState('');
+  const [delinkReasonOptions, setDelinkReasonOptions] = useState<string[]>([]);
+  const [delinkIsOther, setDelinkIsOther] = useState(false);
   // D28: new price fields for Increase Offer flow
   const [newPrice, setNewPrice] = useState('');
   const [keepPriceAsIs, setKeepPriceAsIs] = useState(false);
@@ -260,6 +262,16 @@ export default function EoiLinkModal({
         else setBaOptionsFailed(true);
       })
       .catch(() => setBaOptionsFailed(true));
+  }, []);
+
+  // Fetch delink reason options from Template Admin
+  useEffect(() => {
+    fetch('/api/eoi/delink-reasons')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        setDelinkReasonOptions(d.reasons || []);
+      })
+      .catch(() => {});
   }, []);
 
   // In edit mode: fetch the current linked opportunity to prefill confirm step.
@@ -777,7 +789,7 @@ export default function EoiLinkModal({
       opportunityName: selected?.name || record.clientClosed || '',
       assignedBA: editBA.trim(),
       totalPurchasePrice: '',
-      closingDate: '',
+      closingDate: record.closingDate || '',
       transitionType: 'client_edited',
       writeBaToOpportunity: false,
       offerStatus: 'offered',
@@ -1234,11 +1246,11 @@ export default function EoiLinkModal({
                 </button>
 
                 <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Unlink</div>
-                <button onClick={() => { setEditAction('unlink_lost'); setDelinkReason('Lost to another buyer'); setStep('unlink_lost'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                <button onClick={() => { setEditAction('unlink_lost'); setDelinkReason(''); setDelinkIsOther(false); setStep('unlink_lost'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
                   <span className="font-medium">Unlink — change status to 06 Close Lost</span>
-                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Lost to another buyer — clears offer data</span>
+                  <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Clears offer data</span>
                 </button>
-                <button onClick={() => { setEditAction('unlink_available'); setDelinkReason(''); setStep('unlink_available'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                <button onClick={() => { setEditAction('unlink_available'); setDelinkReason(''); setDelinkIsOther(false); setStep('unlink_available'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
                   <span className="font-medium">Unlink — change status to 01 Available</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Return to available — requires a reason</span>
                 </button>
@@ -1714,13 +1726,35 @@ export default function EoiLinkModal({
 
               <div className="mb-3">
                 <label className={`block text-xs font-medium mb-1 ${cls.sub}`}>Reason</label>
-                <input
-                  type="text"
-                  value={delinkReason}
-                  onChange={(e) => setDelinkReason(e.target.value)}
+                <select
+                  value={delinkIsOther ? '__other__' : delinkReason}
+                  onChange={(e) => {
+                    if (e.target.value === '__other__') {
+                      setDelinkIsOther(true);
+                      setDelinkReason('');
+                    } else {
+                      setDelinkIsOther(false);
+                      setDelinkReason(e.target.value);
+                    }
+                  }}
                   className={`w-full text-xs rounded px-2 py-1.5 ${cls.input}`}
-                  placeholder="Lost to another buyer"
-                />
+                >
+                  <option value="">Select a reason…</option>
+                  {delinkReasonOptions.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                  <option value="__other__">Other…</option>
+                </select>
+                {delinkIsOther && (
+                  <input
+                    type="text"
+                    value={delinkReason}
+                    onChange={(e) => setDelinkReason(e.target.value)}
+                    className={`w-full text-xs rounded px-2 py-1.5 mt-1.5 ${cls.input}`}
+                    placeholder="Enter reason…"
+                    autoFocus
+                  />
+                )}
               </div>
 
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded p-3 text-xs text-red-800 dark:text-red-300 space-y-2">
@@ -1767,7 +1801,7 @@ export default function EoiLinkModal({
                           method: 'system',
                           notes: 'Moved to 06 Close Lost',
                           offerStatusAtEvent: 'cleared',
-                          delinkReason: delinkReason.trim() || 'Lost to another buyer',
+                          delinkReason: delinkReason.trim(),
                         }),
                       });
                     } catch { /* best effort */ }
@@ -1776,7 +1810,7 @@ export default function EoiLinkModal({
                   }
                   setSubmitting(false);
                 }}
-                disabled={submitting}
+                disabled={submitting || !delinkReason.trim()}
                 className="px-4 py-2 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {submitting ? 'Processing...' : 'Confirm — Mark as Lost'}
@@ -1798,13 +1832,35 @@ export default function EoiLinkModal({
 
               <div className="mb-3">
                 <label className={`block text-xs font-medium mb-1 ${cls.sub}`}>Reason <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={delinkReason}
-                  onChange={(e) => setDelinkReason(e.target.value)}
+                <select
+                  value={delinkIsOther ? '__other__' : delinkReason}
+                  onChange={(e) => {
+                    if (e.target.value === '__other__') {
+                      setDelinkIsOther(true);
+                      setDelinkReason('');
+                    } else {
+                      setDelinkIsOther(false);
+                      setDelinkReason(e.target.value);
+                    }
+                  }}
                   className={`w-full text-xs rounded px-2 py-1.5 ${cls.input}`}
-                  placeholder="Enter a detailed reason for returning to available"
-                />
+                >
+                  <option value="">Select a reason…</option>
+                  {delinkReasonOptions.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                  <option value="__other__">Other…</option>
+                </select>
+                {delinkIsOther && (
+                  <input
+                    type="text"
+                    value={delinkReason}
+                    onChange={(e) => setDelinkReason(e.target.value)}
+                    className={`w-full text-xs rounded px-2 py-1.5 mt-1.5 ${cls.input}`}
+                    placeholder="Enter reason…"
+                    autoFocus
+                  />
+                )}
               </div>
 
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded p-3 text-xs text-red-800 dark:text-red-300 space-y-2">

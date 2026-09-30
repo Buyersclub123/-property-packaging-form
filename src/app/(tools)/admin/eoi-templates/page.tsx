@@ -501,6 +501,11 @@ export default function EoiTemplateAdminPage() {
   const [ccBaOn, setCcBaOn] = useState(true);
   const [ccBaOnSaved, setCcBaOnSaved] = useState(true);
 
+  // Delink reasons
+  const [delinkReasons, setDelinkReasons] = useState<string[]>([]);
+  const [delinkNewText, setDelinkNewText] = useState('');
+  const [delinkSaving, setDelinkSaving] = useState(false);
+
   // Audit log
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
 
@@ -578,6 +583,54 @@ export default function EoiTemplateAdminPage() {
   }, []);
 
   useEffect(() => { fetchCcList(); }, [fetchCcList]);
+
+  // ---- Delink reasons -------------------------------------------------------
+  const fetchDelinkReasons = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/eoi/delink-reasons?_t=${Date.now()}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setDelinkReasons(data.reasons || []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchDelinkReasons(); }, [fetchDelinkReasons]);
+
+  async function addDelinkReason() {
+    const text = delinkNewText.trim();
+    if (!text) return;
+    setDelinkSaving(true);
+    try {
+      const res = await fetch('/api/eoi/delink-reasons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        showToast(d.error || 'Failed to add reason');
+      } else {
+        setDelinkNewText('');
+        showToast('Reason added');
+        await fetchDelinkReasons();
+      }
+    } catch { showToast('Failed to add reason'); }
+    finally { setDelinkSaving(false); }
+  }
+
+  async function removeDelinkReason(text: string) {
+    setDelinkSaving(true);
+    try {
+      await fetch('/api/eoi/delink-reasons', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      showToast('Reason removed');
+      await fetchDelinkReasons();
+    } catch { showToast('Failed to remove reason'); }
+    finally { setDelinkSaving(false); }
+  }
 
   function addCcEmail() {
     const email = ccNewEmail.trim().toLowerCase();
@@ -844,6 +897,35 @@ export default function EoiTemplateAdminPage() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Delink Reasons */}
+        <div className="bg-white rounded border border-gray-200 p-4 mb-4">
+          <div className="text-xs font-bold mb-2">Delink Reasons</div>
+          <p className="text-[9px] text-gray-400 italic mb-2">
+            These reasons appear as a dropdown when unlinking a property from an opportunity. Displayed alphabetically. An &quot;Other&quot; free-text option is always available.
+          </p>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {delinkReasons.map(reason => (
+              <span key={reason} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-[10px] text-blue-800 border border-blue-200">
+                {reason}
+                <button onClick={() => removeDelinkReason(reason)} disabled={delinkSaving} className="text-blue-400 hover:text-red-500 font-bold leading-none disabled:opacity-50" title="Remove">&times;</button>
+              </span>
+            ))}
+            {delinkReasons.length === 0 && <span className="text-[10px] text-gray-400">No reasons defined yet.</span>}
+          </div>
+          <div className="flex gap-2 items-center">
+            <input
+              value={delinkNewText}
+              onChange={e => setDelinkNewText(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addDelinkReason()}
+              placeholder="Add a reason…"
+              className={`${inputCls} flex-1`}
+            />
+            <button onClick={addDelinkReason} disabled={!delinkNewText.trim() || delinkSaving} className={`${btnSecondary} disabled:opacity-50`}>
+              + Add
+            </button>
+          </div>
         </div>
 
         {view === 'table' ? (

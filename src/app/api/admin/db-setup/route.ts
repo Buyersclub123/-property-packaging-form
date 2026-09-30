@@ -342,6 +342,20 @@ export async function GET(request: Request) {
       log.push(`special_conditions already has ${scCount} rows — skipped seeding`);
     }
 
+    // ---- Seed delink reasons (only if not already present) ------------------
+    const drRows = await sql`
+      SELECT field_value FROM eoi_template_values
+      WHERE state = 'GLB' AND property_type = 'all' AND field_name = 'delink_reasons'`;
+    if (drRows.length === 0) {
+      const reasons = 'B&P, Client Decision, Finance, Vendor pulled out';
+      await sql`
+        INSERT INTO eoi_template_values (state, property_type, field_name, field_value, updated_by)
+        VALUES ('GLB', 'all', 'delink_reasons', ${reasons}, 'seed')`;
+      log.push('Seeded delink_reasons in eoi_template_values');
+    } else {
+      log.push('delink_reasons already exists — skipped seeding');
+    }
+
     return NextResponse.json({ ok: true, log });
   } catch (err) {
     console.error('db-setup error:', err);
