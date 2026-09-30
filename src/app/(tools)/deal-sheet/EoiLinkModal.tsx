@@ -1613,7 +1613,20 @@ export default function EoiLinkModal({
                               setEditBA(opp.assignedBA || '');
                               setEditDateIso(getTodayAESTIso());
                             }}>
-                              <td className="px-3 py-1.5 font-medium">{opp.name}</td>
+                              <td className="px-3 py-1.5 font-medium">
+                                {opp.name}
+                                {(existingLinks[opp.id] || []).some((r) => r.id !== record.id) && (
+                                  <span
+                                    className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-amber-500/20 text-amber-500 border border-amber-500/40"
+                                    title={`Already linked to: ${(existingLinks[opp.id] || [])
+                                      .filter((r) => r.id !== record.id)
+                                      .map((r) => r.address)
+                                      .join(', ')}`}
+                                  >
+                                    LINKED
+                                  </span>
+                                )}
+                              </td>
                               <td className={`px-3 py-1.5 ${cls.sub}`}>{opp.pipelineName || '-'}</td>
                               <td className={`px-3 py-1.5 ${cls.sub}`}>{opp.stageName || '-'}</td>
                               <td className="px-3 py-1.5">{opp.assignedBA || '-'}</td>
