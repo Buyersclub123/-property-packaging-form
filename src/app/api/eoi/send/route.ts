@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { getDb } from '@/lib/db';
 import { renderEoiEmailHtml, renderEoiSubject, EoiEmailData } from '@/lib/eoi-email';
+import { updateCachedRecord } from '@/lib/dealSheetCache';
 
 export const dynamic = 'force-dynamic';
 
@@ -445,6 +446,8 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify({ properties }),
           });
         }
+        // Update shared cache so the Deal Sheet reflects the write-back immediately
+        try { await updateCachedRecord(recordId); } catch { /* non-fatal */ }
       } catch (err) {
         console.error('EOI CO write-back failed (non-fatal):', err instanceof Error ? err.message : err);
       }
