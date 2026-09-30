@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { text, state, property_type } = body;
+  const { text, state, property_type, updated_by } = body;
 
   if (!text || !text.trim()) {
     return NextResponse.json({ error: 'Condition text is required' }, { status: 400 });
@@ -77,6 +77,13 @@ export async function POST(request: NextRequest) {
     INSERT INTO special_conditions (text, state, property_type, is_default, sort_order)
     VALUES (${text.trim()}, ${state || null}, ${property_type || null}, ${false}, ${0})
     RETURNING id`;
+
+  // Audit log
+  try {
+    await sql`
+      INSERT INTO eoi_audit_log (table_name, record_id, field_name, old_value, new_value, changed_by)
+      VALUES (${'special_conditions'}, ${result[0]?.id as number}, ${`${state}/${property_type}/condition_added`}, ${null}, ${text.trim()}, ${updated_by || 'unknown'})`;
+  } catch { /* non-fatal */ }
 
   return NextResponse.json({ ok: true, id: result[0]?.id });
 }

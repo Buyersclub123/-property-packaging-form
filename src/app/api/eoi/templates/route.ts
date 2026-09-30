@@ -65,28 +65,23 @@ export async function GET(request: NextRequest) {
        OR (state IS NULL AND property_type IS NULL)
     ORDER BY sort_order, id`;
 
-  // Recent audit log entries for this state/type
+  // Recent audit log entries — ALL states/types, not filtered
   const auditRows = await sql`
     SELECT field_name, old_value, new_value, changed_by, changed_at
     FROM eoi_audit_log
-    WHERE table_name = ${'eoi_template_values'}
+    WHERE table_name IN (${'eoi_template_values'}, ${'special_conditions'})
       AND old_value IS DISTINCT FROM new_value
     ORDER BY changed_at DESC
-    LIMIT ${20}`;
+    LIMIT ${50}`;
 
-  // Filter audit to this state/type by checking field_name format: "STATE/TYPE/field"
-  const auditLog = auditRows
-    .filter((r) => {
-      const fn = r.field_name as string;
-      return fn.startsWith(`${state}/${propertyType}/`);
-    })
-    .map((r) => ({
-      field_name: (r.field_name as string).split('/').pop(),
-      old_value: r.old_value,
-      new_value: r.new_value,
-      changed_by: r.changed_by,
-      changed_at: r.changed_at,
-    }));
+  // Keep the full state/type/field path so the UI can show context
+  const auditLog = auditRows.map((r) => ({
+    field_name: r.field_name as string,
+    old_value: r.old_value,
+    new_value: r.new_value,
+    changed_by: r.changed_by,
+    changed_at: r.changed_at,
+  }));
 
   return NextResponse.json({
     values,

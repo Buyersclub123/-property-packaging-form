@@ -224,7 +224,7 @@ function TableView({
       const res = await fetch('/api/eoi/conditions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: condNewText.trim(), state: condModal.state, property_type: condModal.ptype }),
+        body: JSON.stringify({ text: condNewText.trim(), state: condModal.state, property_type: condModal.ptype, updated_by: userEmail }),
       });
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
@@ -246,7 +246,7 @@ function TableView({
       await fetch('/api/eoi/conditions/order', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: condModal.state, property_type: condModal.ptype, conditions: payload }),
+        body: JSON.stringify({ state: condModal.state, property_type: condModal.ptype, conditions: payload, updated_by: userEmail }),
       });
       showToast('Conditions saved');
     } catch { showToast('Failed to save conditions'); }
@@ -508,6 +508,8 @@ export default function EoiTemplateAdminPage() {
 
   // Audit log
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [auditFilterState, setAuditFilterState] = useState('');
+  const [auditFilterType, setAuditFilterType] = useState('');
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -722,7 +724,7 @@ export default function EoiTemplateAdminPage() {
       await fetch('/api/eoi/conditions/order', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state, property_type: propertyType, conditions: payload }),
+        body: JSON.stringify({ state, property_type: propertyType, conditions: payload, updated_by: userEmail }),
       });
       showToast('Conditions saved');
       await fetchData();
@@ -756,7 +758,7 @@ export default function EoiTemplateAdminPage() {
       const res = await fetch('/api/eoi/conditions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: newConditionText.trim(), state, property_type: propertyType }),
+        body: JSON.stringify({ text: newConditionText.trim(), state, property_type: propertyType, updated_by: userEmail }),
       });
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
@@ -1101,29 +1103,83 @@ export default function EoiTemplateAdminPage() {
 
                 {/* ---- Audit Log section ---- */}
                 <div className="bg-white rounded border border-gray-200 p-4">
-                  <div className="text-xs font-bold mb-2">Audit Log</div>
-                  {auditLog.length === 0 ? (
-                    <div className="text-xs text-gray-400">No changes recorded yet.</div>
-                  ) : (
-                    <div className="space-y-1.5 max-h-[250px] overflow-y-auto">
-                      {auditLog.map((entry, i) => (
-                        <div key={i} className="text-[11px] text-gray-600">
-                          <span className="text-gray-400">
-                            {new Date(entry.changed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}
-                          </span>
-                          {' — '}
-                          <span className="font-medium">{entry.changed_by}</span>
-                          {' changed '}
-                          <span className="font-medium">{entry.field_name}</span>
-                          <div className="ml-4 text-[10px]">
-                            <span className="text-red-500 line-through">{entry.old_value || '(empty)'}</span>
-                            {' → '}
-                            <span className="text-green-600">{entry.new_value}</span>
-                          </div>
-                        </div>
-                      ))}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-bold">Audit Log</div>
+                    <div className="flex gap-1">
+                      <select
+                        value={auditFilterState}
+                        onChange={(e) => setAuditFilterState(e.target.value)}
+                        className="text-[10px] border border-gray-300 rounded px-1 py-0.5"
+                      >
+                        <option value="">All States</option>
+                        {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <select
+                        value={auditFilterType}
+                        onChange={(e) => setAuditFilterType(e.target.value)}
+                        className="text-[10px] border border-gray-300 rounded px-1 py-0.5"
+                      >
+                        <option value="">All Types</option>
+                        <option value="established">Established</option>
+                        <option value="new_single">New Single</option>
+                        <option value="house_and_land">H&L Split</option>
+                      </select>
                     </div>
-                  )}
+                  </div>
+                  {(() => {
+                    const filtered = auditLog.filter((entry) => {
+                      const parts = entry.field_name.split('/');
+                      if (auditFilterState && parts[0] !== auditFilterState) return false;
+                      if (auditFilterType && parts[1] !== auditFilterType) return false;
+                      return true;
+                    });
+                    return filtered.length === 0 ? (
+                      <div className="text-xs text-gray-400">No changes recorded{auditFilterState || auditFilterType ? ' for this filter' : ''}.</div>
+                    ) : (
+                      <div className="space-y-1.5 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 400px)', minHeight: '200px' }}>
+                        {filtered.map((entry, i) => {
+                          const parts = entry.field_name.split('/');
+                          const entryState = parts[0] || '';
+                          const entryType = parts[1] || '';
+                          const field = parts[2] || entry.field_name;
+                          const label = `${entryState} / ${entryType}`;
+                          const isCondAdded = field === 'condition_added';
+                          const isCondRemoved = field === 'condition_removed';
+                          return (
+                            <div key={i} className="text-[11px] text-gray-600">
+                              <span className="text-gray-400">
+                                {new Date(entry.changed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}
+                              </span>
+                              {' — '}
+                              <span className="font-medium">{entry.changed_by}</span>
+                              {isCondAdded ? (
+                                <div className="ml-4 text-[10px]">
+                                  <span className="text-green-600 font-medium">Added condition ({label}):</span>{' '}
+                                  <span className="text-green-600">{entry.new_value}</span>
+                                </div>
+                              ) : isCondRemoved ? (
+                                <div className="ml-4 text-[10px]">
+                                  <span className="text-red-500 font-medium">Removed condition ({label}):</span>{' '}
+                                  <span className="text-red-500">{entry.old_value}</span>
+                                </div>
+                              ) : (
+                                <>
+                                  {' changed '}
+                                  <span className="font-medium">{field}</span>
+                                  <span className="text-gray-400"> ({label})</span>
+                                  <div className="ml-4 text-[10px]">
+                                    <span className="text-red-500 line-through">{entry.old_value || '(empty)'}</span>
+                                    {' → '}
+                                    <span className="text-green-600">{entry.new_value}</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               </>
             )}
