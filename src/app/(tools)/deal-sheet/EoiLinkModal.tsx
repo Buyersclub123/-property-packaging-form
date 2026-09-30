@@ -904,7 +904,7 @@ export default function EoiLinkModal({
       closingDate: isoToDDMMYYYY(editDateIso),
       transitionType: 'reassigned',
       writeBaToOpportunity: changedBA,
-      ...(acceptedChoice === 'accepted' ? { offerStatus: 'accepted' } : {}),
+      ...(acceptedChoice === 'accepted' ? { offerStatus: 'accepted' } : acceptedChoice === 'offered' ? { offerStatus: 'offered' } : {}),
     });
     setSubmitting(false);
     if (!ok) { setSubmitError('Failed to update record'); return; }
@@ -934,7 +934,7 @@ export default function EoiLinkModal({
           sentBy: editBA.trim(),
           method: 'system',
           notes: `Reassigned from ${previousClientName || previousOppId || 'unknown'} to ${opp.name}`,
-          offerStatusAtEvent: acceptedChoice === 'accepted' ? 'accepted' : 'unchanged',
+          offerStatusAtEvent: acceptedChoice === 'accepted' ? 'accepted' : acceptedChoice === 'offered' ? 'offered' : 'unchanged',
           assignedBa: editBA.trim(),
           previousOpportunityId: previousOppId || null,
           previousClientName: previousClientName || null,
