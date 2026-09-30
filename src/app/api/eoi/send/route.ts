@@ -384,10 +384,12 @@ export async function POST(request: NextRequest) {
         properties.offer_status = effectiveOfferStatus;
         properties.has_eoi_history = 'Yes';
         if (isHL) {
-          // H&L: write calculated total to Offer Price
+          // H&L: write land, build, and total to GHL on every send (F87)
           if (emailData.landPrice && emailData.buildPrice) {
             const rawLand = parseFloat(emailData.landPrice.replace(/[^0-9.]/g, '')) || 0;
             const rawBuild = parseFloat(emailData.buildPrice.replace(/[^0-9.]/g, '')) || 0;
+            if (rawLand) properties.offer_price_land = String(Math.round(rawLand));
+            if (rawBuild) properties.offer_price_build = String(Math.round(rawBuild));
             if (rawLand + rawBuild > 0) {
               properties.offer_price = String(Math.round(rawLand + rawBuild));
             }
@@ -410,21 +412,11 @@ export async function POST(request: NextRequest) {
           properties.agent_mobile = emailData.agentPhone;
         }
 
-        // For increase/revision, also update offer_price on the CO
-        if (sendType === 'increase' || sendType === 'revision') {
+        // For non-H&L increase/revision, write offer_price
+        if (!isHL && (sendType === 'increase' || sendType === 'revision')) {
           const rawPrice = (offerPrice || '').replace(/[^0-9.]/g, '');
           if (rawPrice) {
-            if (isHL && emailData.landPrice && emailData.buildPrice) {
-              const rawLand = emailData.landPrice.replace(/[^0-9.]/g, '');
-              const rawBuild = emailData.buildPrice.replace(/[^0-9.]/g, '');
-              if (rawLand) properties.offer_price_land = rawLand;
-              if (rawBuild) properties.offer_price_build = rawBuild;
-              // Also write total to offer_price
-              const totalRaw = String(Math.round((parseFloat(rawLand) || 0) + (parseFloat(rawBuild) || 0)));
-              if (totalRaw !== '0') properties.offer_price = totalRaw;
-            } else {
-              properties.offer_price = rawPrice;
-            }
+            properties.offer_price = rawPrice;
           }
         }
 
@@ -434,6 +426,11 @@ export async function POST(request: NextRequest) {
           if (rawPrice) {
             properties.offer_price = rawPrice;
           }
+        }
+
+        // F88: if record is Accepted, update Close $ to match the new offer price
+        if (effectiveOfferStatus === 'accepted' && properties.offer_price) {
+          properties.closing_price = properties.offer_price;
         }
 
         if (Object.keys(properties).length > 0) {
