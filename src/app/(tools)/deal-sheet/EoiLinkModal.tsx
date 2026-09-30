@@ -1695,11 +1695,33 @@ export default function EoiLinkModal({
                   )}
 
                   <button
-                    onClick={() => { setReassignSelected(null); setReassignIsSpeculative(false); }}
+                    onClick={() => { setReassignSelected(null); setReassignIsSpeculative(false); setDupeAcknowledged(false); }}
                     className={`text-[10px] ${cls.sub} underline cursor-pointer mb-2`}
                   >
                     ← Pick a different opportunity
                   </button>
+
+                  {reassignSelected && (existingLinks[reassignSelected.id] || []).filter((r) => r.id !== record.id).length > 0 && (
+                    <div className={`rounded border border-amber-500 px-2 py-1.5 text-[11px] mt-2 ${dark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-800'}`}>
+                      <strong>This opportunity is already linked to another property:</strong>
+                      <ul className="list-disc ml-4 mt-1">
+                        {(existingLinks[reassignSelected.id] || []).filter((r) => r.id !== record.id).map((r) => (
+                          <li key={r.id}>
+                            {r.address || r.id}
+                            {r.status ? ` — ${r.status}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                      <label className="flex items-center gap-1.5 mt-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={dupeAcknowledged}
+                          onChange={(e) => setDupeAcknowledged(e.target.checked)}
+                        />
+                        <span>I understand — proceed anyway</span>
+                      </label>
+                    </div>
+                  )}
 
                   {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
                 </>
@@ -1713,7 +1735,7 @@ export default function EoiLinkModal({
                   {!reassignIsSpeculative && (
                     <button
                       onClick={() => handleReassignConfirm(false)}
-                      disabled={submitting || editBA.trim() === ''}
+                      disabled={submitting || editBA.trim() === '' || !!(reassignSelected && (existingLinks[reassignSelected.id] || []).filter((r) => r.id !== record.id).length > 0 && !dupeAcknowledged)}
                       className={cls.btnPrimary}
                     >
                       {submitting && !skipComposer ? 'Saving...' : 'Confirm & Prepare EOI'}
@@ -1721,7 +1743,7 @@ export default function EoiLinkModal({
                   )}
                   <button
                     onClick={() => { setSkipComposer(true); handleReassignConfirm(true); }}
-                    disabled={submitting || (!reassignIsSpeculative && editBA.trim() === '')}
+                    disabled={submitting || (!reassignIsSpeculative && editBA.trim() === '') || !!(!reassignIsSpeculative && reassignSelected && (existingLinks[reassignSelected.id] || []).filter((r) => r.id !== record.id).length > 0 && !dupeAcknowledged)}
                     className={cls.btnPrimary}
                   >
                     {submitting && skipComposer ? 'Saving...' : reassignIsSpeculative ? 'Confirm' : 'Confirm (link only)'}
