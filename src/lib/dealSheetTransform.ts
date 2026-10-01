@@ -225,7 +225,9 @@ export function transformRecord(record: GHLRecord) {
 
   // Cashback
   const cashbackType = p.cashback_rebate_type || '';
-  const cashbackValue = p.cashback_rebate_value || '';
+  const rawCB = p.cashback_rebate_value || '';
+  const cbNum = parseFloat(rawCB);
+  const cashbackValue = rawCB && !isNaN(cbNum) ? '$' + cbNum.toLocaleString('en-AU') : rawCB;
 
   // Offer / Closing fields
   const offerStatus = p.offer_status || '';
