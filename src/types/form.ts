@@ -366,8 +366,8 @@ export interface FormData {
   insuranceAmount?: string; // Annual insurance amount (B16)
   pbPciReport?: 'P&B' | 'PCI'; // Report type: P&B for established, PCI for new builds (B17)
   buildWindow?: string; // Build Window dropdown: 09 mo, 12 mo, 15 mo, 18 mo (B27) - editable on Step 7, Split Contract only
-  cashback1Month?: string; // Cashback 1 month dropdown: 1-18 (B28) - editable on Step 7, Split Contract only
-  cashback2Month?: string; // Cashback 2 month dropdown: 1-18 (B29) - editable on Step 7, Split Contract only
+  cashback1Month?: string; // Cashback 1 month dropdown: 0-18 (B28) - editable on Step 7, Split Contract only; auto 0 for rebate or $0 cashback
+  cashback2Month?: string; // Cashback 2 month dropdown: 0-18 (B29) - editable on Step 7, Split Contract only; auto 0 for rebate or $0 cashback
   
   // Depreciation (Years 1-10) - Diminishing Value amounts (B18-B27)
   depreciation?: {

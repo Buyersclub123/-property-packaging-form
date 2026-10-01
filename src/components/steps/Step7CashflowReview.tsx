@@ -26,6 +26,16 @@ const Field = ({ label, value, editable = false, children }: {
   </div>
 );
 
+// Cashback 1/2 month should be 0 when there is no cashback to time: rebate type, or cashback with a $0 value.
+// TBC / blank / non-zero values keep the normal defaults.
+const hasNoCashbackToTime = (purchasePrice: { cashbackRebateType?: string; cashbackRebateValue?: string } | undefined): boolean => {
+  const type = purchasePrice?.cashbackRebateType;
+  if (type === 'rebate') return true;
+  if (type !== 'cashback') return false;
+  const raw = String(purchasePrice?.cashbackRebateValue ?? '').replace(/[$,\s]/g, '');
+  return /^\d+(\.\d+)?$/.test(raw) && parseFloat(raw) === 0;
+};
+
 export function Step7CashflowReview() {
   const { formData, setCurrentStep, updateFormData, updateLotCashflowOverrides } = useFormStore();
   const [creating, setCreating] = useState(false);
@@ -118,13 +128,30 @@ export function Step7CashflowReview() {
     });
   }, [councilWaterRates, insuranceAmount, updateFormData]);
   const [buildWindow, setBuildWindow] = useState(formData.buildWindow || '09 mo');
-  const [cashback1Month, setCashback1Month] = useState(formData.cashback1Month || '5');
-  const [cashback2Month, setCashback2Month] = useState(formData.cashback2Month || '7');
+  // Projects: months are shared across lots, so only zero them when every lot has no cashback to time
+  const zeroCashbackMonths = isProject
+    ? lots.length > 0 && lots.every((lot) => hasNoCashbackToTime(lot.purchasePrice))
+    : hasNoCashbackToTime(formData.purchasePrice);
+  const [cashback1Month, setCashback1Month] = useState(formData.cashback1Month || (zeroCashbackMonths ? '0' : '5'));
+  const [cashback2Month, setCashback2Month] = useState(formData.cashback2Month || (zeroCashbackMonths ? '0' : '7'));
   const effectivePropertyDescription = isProject ? (selectedLot?.propertyDescription || {}) : (formData.propertyDescription || {});
   const effectivePurchasePrice = isProject ? (selectedLot?.purchasePrice || {}) : (formData.purchasePrice || {});
   const effectiveRentalAssessment = isProject ? (selectedLot?.rentalAssessment || {}) : (formData.rentalAssessment || {});
   const isDualOccupancy = decisionTree?.dualOccupancy === 'Yes';
   const isSplitContract = decisionTree?.contractTypeSimplified === 'Split Contract';
+
+  // Auto-set Cashback 1/2 month to 0 when there is no cashback to time; restore defaults when that stops being the case.
+  // Only re-runs when the condition changes, so a manual month choice is kept in the meantime.
+  useEffect(() => {
+    if (!isSplitContract) return;
+    if (zeroCashbackMonths) {
+      setCashback1Month('0');
+      setCashback2Month('0');
+    } else {
+      setCashback1Month((prev) => (prev === '0' ? '5' : prev));
+      setCashback2Month((prev) => (prev === '0' ? '7' : prev));
+    }
+  }, [zeroCashbackMonths, isSplitContract]);
   const isStrata = ['strata', 'owners_corp_community', 'survey_strata', 'built_strata'].includes(effectivePropertyDescription?.title || '');
 
   // Calculate values
@@ -677,6 +704,7 @@ export function Step7CashflowReview() {
                 className="w-full px-3 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="">Select month</option>
+                <option value="0">0</option>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map((month) => (
                   <option key={month} value={String(month)}>{month}</option>
                 ))}
@@ -690,6 +718,7 @@ export function Step7CashflowReview() {
                 className="w-full px-3 py-2 bg-blue-50 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
               >
                 <option value="">Select month</option>
+                <option value="0">0</option>
                 {Array.from({ length: 18 }, (_, i) => i + 1).map((month) => (
                   <option key={month} value={String(month)}>{month}</option>
                 ))}
