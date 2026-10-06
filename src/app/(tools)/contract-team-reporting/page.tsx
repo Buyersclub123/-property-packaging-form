@@ -1003,6 +1003,7 @@ export default function ContractTeamReportingPage() {
   const activeView = allViews.find((v) => v.id === activeViewId) ?? PRESET_VIEWS[0];
   activeViewRef.current = activeView;
   const [showViewMenu, setShowViewMenu] = useState(false);
+  const [viewBarCollapsed, setViewBarCollapsed] = useState(false);
 
   // --------------------------------------------------------------------------
   // VIEW BUILDER (hidden — Shift+double-click ⚙ to reveal)
@@ -2682,20 +2683,36 @@ export default function ContractTeamReportingPage() {
 
       {/* View description — computed 100% from the view config + API rules (never hardcoded per view).
           Shows the LIVE builder preview while building. */}
-      <div className={`px-4 py-0.5 text-[10px] ${t.headerText} opacity-70 border-b ${t.cellBorder}`}>
-        <span className="font-medium">
-          View: {effectiveView.name}
-          {(showViewBuilder || builderDraft) && <span className="text-amber-400"> (live preview)</span>}
-        </span>
-        {' | '}{describeView(effectiveView)}
-        {activePreset !== 'none' && (
+      <div className={`px-4 py-0.5 text-[10px] ${t.headerText} opacity-70 border-b ${t.cellBorder} flex items-start gap-1`}>
+        <button
+          onClick={() => setViewBarCollapsed(!viewBarCollapsed)}
+          className="shrink-0 mt-0.5 opacity-60 hover:opacity-100"
+          title={viewBarCollapsed ? 'Expand view details' : 'Collapse view details'}
+        >
+          {viewBarCollapsed ? '▶' : '▼'}
+        </button>
+        {viewBarCollapsed ? (
+          <span className="font-medium truncate">
+            View: {effectiveView.name}
+            {(showViewBuilder || builderDraft) && <span className="text-amber-400"> (live preview)</span>}
+          </span>
+        ) : (
           <span>
-            {' | Quick filter: '}
-            {activePreset === 'blankPropertyType' ? 'Type of Property blank (≠ Settled)'
-              : activePreset === 'blankBpDueDate' ? 'B&P Due Date blank'
-              : activePreset === 'blankBpRequested' ? 'B&P Requested blank'
-              : activePreset === 'bpDueNext5' ? 'B&P Due Date within 5 days'
-              : 'Settlement Date within 5 days'}
+            <span className="font-medium">
+              View: {effectiveView.name}
+              {(showViewBuilder || builderDraft) && <span className="text-amber-400"> (live preview)</span>}
+            </span>
+            {' | '}{describeView(effectiveView)}
+            {activePreset !== 'none' && (
+              <span>
+                {' | Quick filter: '}
+                {activePreset === 'blankPropertyType' ? 'Type of Property blank (≠ Settled)'
+                  : activePreset === 'blankBpDueDate' ? 'B&P Due Date blank'
+                  : activePreset === 'blankBpRequested' ? 'B&P Requested blank'
+                  : activePreset === 'bpDueNext5' ? 'B&P Due Date within 5 days'
+                  : 'Settlement Date within 5 days'}
+              </span>
+            )}
           </span>
         )}
       </div>
