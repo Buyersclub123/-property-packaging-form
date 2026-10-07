@@ -4,22 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SPIN Call Coach</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --yellow:#FFD60A; --yellow-soft:#FFF1A6; --grey:#1A1A1A; --ink:#1A1A1A; --muted:#7A7575;
-  --line:#EDEDED; --bg:#FAFAFA; --card:#FFFFFF; --green:#2E8B57; --amber:#D98E04; --red:#C0392B;
+  --yellow:#FBD721; --yellow-soft:#FFF6C7; --grey:#4C4C4C; --ink:#222; --muted:#6b6b6b;
+  --line:#E4E4E4; --bg:#F6F6F4; --card:#FFFFFF; --green:#2E8B57; --amber:#D98E04; --red:#C0392B;
 }
 *{box-sizing:border-box}
-body{margin:0;font-family:Poppins,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45}
+body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45}
 button,input,textarea{font:inherit}
-header{max-width:1280px;margin:0 auto;padding:14px 16px 10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:20;background:var(--bg)}
+header{background:var(--grey);color:#fff;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+.logo{font-family:"Playfair Display",Georgia,serif;font-weight:800;font-size:24px;letter-spacing:-.5px}
+.logo .b{color:#fff}.logo .c{color:var(--yellow)}
+.app-name{font-size:13px;opacity:.8;border-left:1px solid rgba(255,255,255,.3);padding-left:12px}
 header .spacer{flex:1}
-header input{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 10px;min-width:200px}
-header input::placeholder{color:var(--muted)}
+header input{background:#5d5d5d;border:1px solid #6d6d6d;color:#fff;border-radius:8px;padding:8px 10px;min-width:180px}
+header input::placeholder{color:#ccc}
 .btn{border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600}
 .btn-y{background:var(--yellow);color:var(--grey)}
-.btn-g{background:#fff;color:var(--grey);border:1px solid var(--line)}
+.btn-g{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4)}
 .btn-o{background:#fff;color:var(--grey);border:1px solid var(--line)}
 .wrap{max-width:1280px;margin:0 auto;padding:16px}
 h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
@@ -42,7 +45,7 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 .q{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:.15s}
 .q:hover{border-color:#cfcfcf}
 .q .box{flex:0 0 22px;height:22px;border-radius:6px;border:2px solid #bbb;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff}
-.q.done{background:#F2F2F2}
+.q.done{background:#F3F3F1}
 .q.done .box{background:var(--green);border-color:var(--green)}
 .q.done .t{color:var(--muted)}
 .field{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
@@ -98,7 +101,7 @@ summary{cursor:pointer;font-weight:600;color:var(--grey);font-size:14px}
 .sh-open{background:#777}.sh-problem{background:var(--grey)}.sh-implication{background:#C9A400;color:#2b2400}.sh-cost{background:#2E7D5B}.sh-holding{background:#A0522D}.sh-payoff{background:#2F5D8A}
 .pq{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:7px;cursor:pointer;background:#fff}
 .pq .box{flex:0 0 20px;height:20px;border-radius:5px;border:2px solid #bbb;margin-top:1px;color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center}
-.pq.done{background:#F2F2F2}.pq.done .box{background:var(--green);border-color:var(--green)}.pq.done .qt{color:var(--muted)}
+.pq.done{background:#F3F3F1}.pq.done .box{background:var(--green);border-color:var(--green)}.pq.done .qt{color:var(--muted)}
 .pq .why{display:block;font-size:12px;color:var(--muted);margin-top:3px}
 .goal{padding:8px 12px;border-radius:8px;background:var(--bg);margin-bottom:6px;font-style:italic}
 .empty{color:var(--muted);text-align:center;padding:40px 10px}
@@ -109,6 +112,7 @@ select{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 9
   header input{order:5;flex:1 1 100%}
   header .spacer{display:none}
   header .btn{padding:7px 10px;font-size:14px}
+  .logo{margin-right:auto}
   .prep-grid{grid-template-columns:minmax(0,1fr)!important}
   .prep-in{position:static!important}
   .prep-in textarea{min-height:220px!important}
@@ -118,6 +122,7 @@ select{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 9
   .mobilebar .btn{margin-left:auto}
   body{padding-bottom:60px}
   header input{min-width:0}
+  .app-name{display:none}
 }
 .lv{max-width:880px;margin:0 auto;padding:16px}
 .lv-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
@@ -173,6 +178,8 @@ select{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 9
 </head>
 <body>
 <header>
+  <div class="logo"><span class="b">buyers</span><span class="c">club</span></div>
+  <div class="app-name">SPIN Call Coach</div>
   <div class="spacer"></div>
   <input id="client" placeholder="Client name">
   <button class="btn btn-y" id="copyBtn">Copy summary</button>
