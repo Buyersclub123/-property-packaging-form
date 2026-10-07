@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPIN Call Coach</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --yellow:#FBD721; --yellow-soft:#FFF6C7; --grey:#4C4C4C; --ink:#222; --muted:#6b6b6b;
+  --line:#E4E4E4; --bg:#F6F6F4; --card:#FFFFFF; --green:#2E8B57; --amber:#D98E04; --red:#C0392B;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45}
+button,input,textarea{font:inherit}
+header{background:var(--grey);color:#fff;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+.logo{font-family:"Playfair Display",Georgia,serif;font-weight:800;font-size:24px;letter-spacing:-.5px}
+.logo .b{color:#fff}.logo .c{color:var(--yellow)}
+.app-name{font-size:13px;opacity:.8;border-left:1px solid rgba(255,255,255,.3);padding-left:12px}
+header .spacer{flex:1}
+header input{background:#5d5d5d;border:1px solid #6d6d6d;color:#fff;border-radius:8px;padding:8px 10px;min-width:180px}
+header input::placeholder{color:#ccc}
+.btn{border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600}
+.btn-y{background:var(--yellow);color:var(--grey)}
+.btn-g{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4)}
+.btn-o{background:#fff;color:var(--grey);border:1px solid var(--line)}
+.wrap{max-width:1280px;margin:0 auto;padding:16px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
+.personas{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px}
+.persona{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;text-align:left}
+.persona.on{border-color:var(--yellow);background:var(--yellow-soft)}
+.persona b{display:block;font-size:15px;color:var(--grey)}
+.persona span{font-size:12.5px;color:var(--muted)}
+.profile{background:var(--card);border-left:5px solid var(--yellow);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:14px;color:var(--grey)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
+.stages{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px}
+.stage{flex:0 0 auto;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:600;color:var(--grey);font-size:14px;white-space:nowrap}
+.stage .n{display:inline-block;width:20px;height:20px;border-radius:50%;background:var(--line);text-align:center;font-size:12px;line-height:20px;margin-right:6px}
+.stage.on{background:var(--grey);color:#fff;border-color:var(--grey)}
+.stage.on .n{background:var(--yellow);color:var(--grey)}
+.tip{background:var(--yellow-soft);border:1px solid #F2E08A;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:14px}
+.tip b{color:var(--grey)}
+.listen{font-size:13px;color:var(--muted);margin-top:6px}
+.qgroup{margin:14px 0 6px;font-weight:700;color:var(--grey);font-size:14px}
+.q{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:.15s}
+.q:hover{border-color:#cfcfcf}
+.q .box{flex:0 0 22px;height:22px;border-radius:6px;border:2px solid #bbb;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff}
+.q.done{background:#F3F3F1}
+.q.done .box{background:var(--green);border-color:var(--green)}
+.q.done .t{color:var(--muted)}
+.field{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.field label{display:block;font-weight:600;color:var(--grey);font-size:14px;margin-bottom:6px}
+.field input,.field textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:#fff}
+.field textarea{min-height:90px;resize:vertical}
+.meter{height:10px;background:var(--line);border-radius:99px;margin-top:10px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--yellow);transition:.3s}
+.small{font-size:13px;color:var(--muted);margin-top:6px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;position:sticky;top:76px}
+.ready{border-radius:10px;padding:10px 12px;font-weight:600;font-size:14px;margin-bottom:12px}
+.ready.r{background:#FBEAEA;color:var(--red)}.ready.a{background:#FFF3DC;color:var(--amber)}.ready.g{background:#E6F4EC;color:var(--green)}
+.log textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:60px;resize:vertical}
+.log .row{display:flex;gap:8px;margin-top:8px}
+.log .row .btn{flex:1}
+.need{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14px}
+.need .tag{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:5px;margin-bottom:4px}
+.tag.i{background:#EEE;color:var(--grey)}.tag.e{background:var(--yellow);color:var(--grey)}
+.need input{width:100%;border:1px solid var(--line);border-radius:7px;padding:7px 9px;margin-top:6px;font-size:13.5px}
+.need .x{float:right;border:0;background:none;color:#aaa;cursor:pointer;font-size:16px}
+.need .words{font-style:italic}
+details{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:600;color:var(--grey);font-size:14px}
+.ex{font-size:13px;margin-top:8px;padding:8px 10px;background:var(--bg);border-radius:8px}
+.ex .arrow{color:var(--muted)}
+.script{background:var(--grey);color:#fff;border-radius:10px;padding:14px;margin-bottom:12px;font-size:15px}
+.script b{color:var(--yellow)}
+.warn{background:#FBEAEA;color:var(--red);border-radius:10px;padding:12px 14px;margin-bottom:12px;font-weight:600;font-size:14px}
+.check li{margin-bottom:6px}
+.footer{font-size:12.5px;color:var(--muted);margin-top:24px;padding-top:12px;border-top:1px solid var(--line)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--grey);color:#fff;padding:10px 16px;border-radius:8px;opacity:0;transition:.3s;pointer-events:none;z-index:50}
+.toast.show{opacity:1}
+.mobilebar{display:none}
+.tabs{display:flex;gap:6px;max-width:1280px;margin:0 auto;padding:14px 16px 0}
+.tab{border:1px solid var(--line);background:var(--card);color:var(--grey);border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}
+.tab.on{background:var(--yellow);border-color:var(--yellow)}
+.hidden{display:none!important}
+.prep-grid{display:grid;grid-template-columns:400px minmax(0,1fr);gap:16px;align-items:start}
+.prep-in{position:sticky;top:76px}
+.prep-in textarea{width:100%;min-height:420px;border:1px solid var(--line);border-radius:10px;padding:12px;background:#fff;font-size:14px;resize:vertical}
+.prep-in .row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.prep-in .row .btn{flex:1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.card h3{margin:0 0 10px;font-size:15px;color:var(--grey)}
+.snap{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.snap div{background:var(--bg);border-radius:8px;padding:8px 10px}
+.snap small{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.snap b{font-size:14.5px;color:var(--ink)}
+.flag{border-left:4px solid var(--amber);background:#FFF8EA;border-radius:8px;padding:9px 12px;margin-bottom:8px;font-size:14px}
+.flag.r{border-color:var(--red);background:#FDF1F0}
+.sig{display:inline-block;background:var(--yellow-soft);border:1px solid #F2E08A;border-radius:999px;padding:3px 10px;font-size:12.5px;margin:0 6px 6px 0;color:var(--grey);font-weight:600}
+.stagehead{display:inline-block;color:#fff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.06em;padding:4px 10px;border-radius:6px;margin:14px 0 8px}
+.sh-open{background:#777}.sh-problem{background:var(--grey)}.sh-implication{background:#C9A400;color:#2b2400}.sh-cost{background:#2E7D5B}.sh-holding{background:#A0522D}.sh-payoff{background:#2F5D8A}
+.pq{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:7px;cursor:pointer;background:#fff}
+.pq .box{flex:0 0 20px;height:20px;border-radius:5px;border:2px solid #bbb;margin-top:1px;color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center}
+.pq.done{background:#F3F3F1}.pq.done .box{background:var(--green);border-color:var(--green)}.pq.done .qt{color:var(--muted)}
+.pq .why{display:block;font-size:12px;color:var(--muted);margin-top:3px}
+.goal{padding:8px 12px;border-radius:8px;background:var(--bg);margin-bottom:6px;font-style:italic}
+.empty{color:var(--muted);text-align:center;padding:40px 10px}
+select{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:#fff}
+@media print{header,.tabs,.prep-in,.mobilebar,.footer,.no-print{display:none!important}.prep-grid{display:block}body{background:#fff}.card{break-inside:avoid}}
+@media (max-width:900px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  header input{order:5;flex:1 1 100%}
+  header .spacer{display:none}
+  header .btn{padding:7px 10px;font-size:14px}
+  .logo{margin-right:auto}
+  .prep-grid{grid-template-columns:minmax(0,1fr)!important}
+  .prep-in{position:static!important}
+  .prep-in textarea{min-height:220px!important}
+  .snap{grid-template-columns:1fr 1fr!important}
+  .panel{position:static}
+  .mobilebar{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--grey);color:#fff;padding:10px 16px;gap:10px;align-items:center;z-index:30}
+  .mobilebar .btn{margin-left:auto}
+  body{padding-bottom:60px}
+  header input{min-width:0}
+  .app-name{display:none}
+}
+.lv{max-width:880px;margin:0 auto;padding:16px}
+.lv-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.lv-src{font-size:13px;color:var(--muted)}
+.lv-needs{margin-left:auto;font-weight:700;font-size:14px;padding:7px 12px;border-radius:999px}
+.lv-needs.r{background:#FBEAEA;color:var(--red)}.lv-needs.a{background:#FFF3DC;color:var(--amber)}.lv-needs.g{background:#E6F4EC;color:var(--green)}
+.lv-steps{display:flex;gap:4px;margin-bottom:12px}
+.lv-step{flex:1;border:0;background:transparent;cursor:pointer;padding:0;text-align:left}
+.lv-step i{display:block;height:6px;border-radius:99px;background:var(--line);margin-bottom:5px;overflow:hidden}
+.lv-step i b{display:block;height:100%;background:var(--green)}
+.lv-step span{font-size:12px;color:var(--muted);font-weight:600}
+.lv-step.on i{background:#d8d8d8}.lv-step.on span{color:var(--grey);font-weight:800}
+.lv-step.on i{outline:2px solid var(--yellow);outline-offset:1px}
+.lv-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;margin-bottom:12px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
+.lv-stage{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;gap:8px;align-items:center}
+.lv-stage .dot{width:10px;height:10px;border-radius:50%}
+.lv-tip{font-size:14px;color:var(--grey);background:var(--yellow-soft);border-radius:8px;padding:7px 10px;margin:10px 0 16px}
+.lv-q{font-size:25px;line-height:1.35;font-weight:600;color:var(--ink);min-height:100px}
+.lv-why{font-size:13px;color:var(--muted);margin-top:10px}
+.lv-done{display:inline-block;font-size:12px;font-weight:700;color:var(--green);margin-top:8px}
+.lv-extra{margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:14px}
+.lv-extra input{width:140px;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.lv-nav{display:flex;gap:8px;margin-top:20px}
+.lv-nav .btn{padding:12px 16px;font-size:15px}
+.lv-nav .next{flex:1;background:var(--grey);color:#fff}
+.lv-all{background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;margin-top:12px;padding:0;font-size:13px}
+.lv-list{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.lv-li{display:block;width:100%;text-align:left;border:0;background:none;padding:7px 8px;border-radius:7px;cursor:pointer;font-size:14px;color:var(--ink)}
+.lv-li:hover{background:var(--bg)}.lv-li.cur{background:var(--yellow-soft);font-weight:600}.lv-li.ask{color:var(--muted);text-decoration:line-through}
+.lv-capture{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.lv-cap-label{font-weight:700;color:var(--grey);font-size:14px;margin-bottom:8px}
+.lv-cap-row{display:flex;gap:8px}
+.lv-cap-row input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:11px 12px;font-size:15px}
+.lv-log{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 6px 5px 11px;font-size:13px;border:1px solid var(--line);background:var(--bg)}
+.chip.w{background:var(--yellow);border-color:var(--yellow);font-weight:600}
+.chip button{border:0;background:rgba(0,0,0,.08);border-radius:50%;width:18px;height:18px;line-height:16px;cursor:pointer;font-size:12px;padding:0;color:var(--grey)}
+.chip .up{border-radius:999px;width:auto;padding:0 7px;font-weight:700}
+.lv-keys{font-size:12px;color:var(--muted);margin:10px 2px}
+.lv-script{background:var(--grey);color:#fff;border-radius:10px;padding:14px;font-size:17px;line-height:1.45;margin:6px 0 12px}
+.lv-script b{color:var(--yellow)}
+.lv-check{margin:0;padding-left:20px;font-size:15px}.lv-check li{margin-bottom:6px}
+@media (max-width:700px){.lv-q{font-size:20px;min-height:80px}.lv-card{padding:16px}.lv-step span{font-size:10px}.lv-cap-row{flex-wrap:wrap}.lv-cap-row input{flex:1 1 100%}.lv-cap-row .btn{flex:1}.lv-needs{margin-left:0}}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="b">buyers</span><span class="c">club</span></div>
+  <div class="app-name">SPIN Call Coach</div>
+  <div class="spacer"></div>
+  <input id="client" placeholder="Client name">
+  <button class="btn btn-y" id="copyBtn">Copy summary</button>
+  <button class="btn btn-g" id="resetBtn">New call</button>
+</header>
+<div class="tabs"><button class="tab" data-view="prep">Call prep</button><button class="tab" data-view="live">Live call</button></div>
+
+<div class="wrap hidden" id="prepView">
+  <div class="prep-grid">
+    <div class="prep-in">
+      <h2>Paste the setter's booking notes</h2>
+      <textarea id="notesPaste" placeholder="Paste the full booking notes from your appointment setter here, including the brief at the top and the numbered answers."></textarea>
+      <div class="row">
+        <button class="btn btn-y" id="genBtn">Build my questions</button>
+        <button class="btn btn-o" id="clearPrep">Clear</button>
+      </div>
+      <div class="small">Nothing is sent anywhere. The notes are read in your browser only.</div>
+    </div>
+    <div id="prepOut"></div>
+  </div>
+</div>
+
+<div class="lv" id="liveView">
+  <div class="lv-top">
+    <select id="lvPersona"></select>
+    <span class="lv-src" id="lvSrc"></span>
+    <span class="lv-needs" id="lvNeeds"></span>
+  </div>
+  <div class="lv-steps" id="lvSteps"></div>
+  <div class="lv-card" id="lvCard"></div>
+  <div class="lv-capture">
+    <div class="lv-cap-label">What did they say? Type their words.</div>
+    <div class="lv-cap-row">
+      <input id="capIn" autocomplete="off" placeholder="e.g. We can't find anyone we trust">
+      <button class="btn btn-o" id="capProb">Problem</button>
+      <button class="btn btn-y" id="capWant">Want</button>
+    </div>
+    <div class="lv-log" id="lvLog"></div>
+  </div>
+  <div class="lv-keys">Keyboard: → next question, ← back. Enter logs what you typed.</div>
+  <div class="footer">
+    Compliance: explore super, tax and borrowing as problems only and refer specifics to the client's adviser, accountant or broker. Never promise capital growth, rent, yield, vacancy or cash flow outcomes. Dollar figures discussed are the client's own estimates.
+  </div>
+</div>
+<div id="mbar" class="hidden"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const FEE = 16900;
+
+const STAGES = [
+  {id:"problem", name:"Problem", tip:"<b>Uncover implied needs.</b> Ask about difficulties and dissatisfactions. Log what the client says in their own words. Do not pitch the service yet.", listen:"Listen for: I'm worried, it's hard to, we're not happy with, the problem is."},
+  {id:"implication", name:"Implication", tip:"<b>Make the problem bigger.</b> Only ask about problems the client has confirmed. Chain one consequence to the next until the problem feels bigger than the cost of solving it.", listen:"Listen for: the client describing knock on effects, stress, or what they'd lose."},
+  {id:"cost", name:"Cost", tip:"<b>Let the client put a dollar figure on the problem.</b> The number they say themselves is the one they believe. It should end up clearly bigger than the $16,900 fee. Never promise returns.", listen:"Listen for: the client quantifying overpaying, time, delay or a bad buy."},
+  {id:"holding", name:"Holding costs", tip:"<b>Raise it before the client does.</b> Get their weekly comfort number. Holding costs come with owning any property. The real problem is buying the wrong one. Never promise rent, yield or vacancy.", listen:"Listen for: fears about affordability, cutting back lifestyle, bad tenants, empty weeks."},
+  {id:"payoff", name:"Need payoff", tip:"<b>Let the client state the benefit.</b> Only ask once implications are built and you expect a yes. Ask how it would help, why it matters, and what else it would open up.", listen:"Listen for: I want, I need, we're looking for, it's important that. Log these as explicit needs."},
+  {id:"close", name:"Summarise and present", tip:"", listen:""}
+];
+
+const P = [
+{id:"p1",name:"Mum and Dad",short:"Home owners, 35 to 55",
+ profile:"Married, trades or business owners, $250k+ household income, equity and cash savings. Pressures: workplace, keeping up with the Joneses, rising cost of living, time poor. Hesitations: life changes, bad reviews.",
+ problem:["How comfortable are you with where your wealth will be in ten years if you keep doing exactly what you're doing now?","How happy are you with what your equity is actually doing for you at the moment?","How confident do you feel that you're ahead of rising living costs rather than just keeping pace?","What's made it hard to find the time to research and buy an investment property yourselves?","How satisfied are you with the return you're getting on the cash sitting in savings?","Have you ever looked at property and felt unsure which areas or deals you could trust?","How reliant is the household on one income or one business?"],
+ implication:["If your equity sits idle for another few years while prices keep rising, what does that do to your buying power when you do decide to move?","With the cost of living going up, what happens to your savings in real terms if they stay in the bank?","If the business or your job had a tough year, how would that affect the family's plans, the kids' schooling, and your retirement?","Being as time poor as you are, how likely is it that investing keeps getting pushed back? What has that already cost you?","If you bought in the wrong area because you didn't have the time to do the research properly, what would that mean for your finances and for the two of you?","When friends or family around you are building portfolios and you're not, how does that sit with you?","If you reach 55 with just the family home, what options does that leave you for retirement and for helping the kids?"],
+ cost:["On a property around the price you're looking at, what would paying $20,000 or $30,000 too much do to your equity from day one?","If you picked a property that grew even a little slower each year than a better one nearby, what could that difference add up to over ten years?","How many weekends and evenings do you think it would take the two of you to research, inspect and negotiate properly? What's that time worth to you and the family?","If you delayed another 12 months while prices moved, what do you estimate that would cost you on entry?","What would a bad buy cost you, not just in money, but in stress at home and your confidence to invest again?"],
+ holding:{problem:["When you picture holding an investment property alongside the family home, what worries you most about the ongoing costs?","What would you not want to give up to hold a property: holidays, the kids' activities, schooling?","What weekly out of pocket amount could you hold comfortably without changing how you live?","How concerned are you about bad tenants or the property sitting empty?","With how busy you both are, how would you feel about dealing with tenant or maintenance issues?"],
+  implication:["If you bought a property that cost more to hold than you planned, what would you have to cut back on first?","If it sat empty for a month or two, how would carrying two mortgages affect things at home?","If a bad tenant damaged the property or stopped paying, what would that do to your finances and your stress levels?","If holding costs started affecting the kids or your holidays, how long before you'd feel pressure to sell, and what would selling early cost you?","If a bad first experience put you off, what would that mean for the wealth plan you've described?"],
+  payoff:["If the property was chosen to fit the weekly amount you're comfortable with, how would that change how you feel about investing?","How would it help to buy in an area with strong rental demand and the kind of tenants you'd want?","Why is it important to you that the investment doesn't come at the cost of the family's lifestyle?","What would it mean to hold the property for the long term without it feeling like a strain?"]},
+ payoff:["If your equity was working for you in a well chosen investment property, how would that change how you feel about the next ten years?","How would it help the two of you to have someone handle the research, inspections and negotiation, so it doesn't eat into family time?","If you knew you were buying at the right price in the right area, why would that be important to you?","What would it mean for the kids' future to have a second asset building alongside the family home?","If you could get started in the next few months instead of next year, how would that help?","How would it feel to know you're building something rather than just keeping up?"],
+ needs:[["Our equity's just sitting there.","We want our equity working for us."],["We never get time to look at property.","We need someone to do the legwork for us."],["I'm worried about paying two mortgages.","It has to fit our budget without affecting the kids or our holidays."],["We don't know which areas are safe to buy in.","We want to buy in the right area at the right price."]]},
+
+{id:"p2",name:"Renter, Single, Trade",short:"Tradies, 20 to 35",
+ profile:"Single, renting, tradie on around $150k with overtime, cashed up through super, wants to invest and build wealth. Pressures: supervisor or boss, other trades, licences and unions, cash flow. Hesitations: bad reviews, time investment.",
+ problem:["How do you feel about paying rent that builds someone else's wealth instead of yours?","How secure does your income feel if the overtime dried up tomorrow?","What's stopped you from getting into the property market so far?","How confident are you that you'd pick the right property if you went it alone?","How much of your income is going out each week before you get to put anything aside?","How do you feel about relying on your body and your trade to earn for the next 30 years?","Have you had trouble getting a straight answer about what you can actually borrow?"],
+ implication:["If you keep renting for another five years, how much rent is that, and where does it leave you compared with mates who bought?","If prices keep climbing faster than you can save, what does that mean for when you'll realistically be able to buy?","If an injury or a quiet period cut your overtime, how would that affect your ability to save or borrow?","If you never build assets outside your trade, what happens when your body can't keep up with the work?","If you bought the wrong property on a tight cash flow, how long could you carry it, and what would it do to your stress levels?","If your money stays locked up with nothing working outside of work, how does that affect your goal of being your own boss one day?","Watching others your age getting ahead, what does waiting another few years cost you, financially and otherwise?"],
+ cost:["How much rent will you pay over the next three years if nothing changes? How does that compare to what you'd spend getting into the market properly?","On your first property, what would overpaying by $20,000 mean for your cash flow and how long you'd need to hold it?","If your first property turned out to be a poor performer, how much would that set back your plans for a second one?","How many days of work would you lose driving around inspecting and chasing agents? What's a day off the tools worth to you?","If you only get one shot at this with your savings, what's it worth to you to get the first one right?"],
+ holding:{problem:["Paying rent plus holding an investment, what's your biggest worry about cash flow?","How much of your budget depends on overtime being there?","What weekly amount could you put toward holding a property and still have a life?","What would you hate to give up to hold a property: the ute, weekends away, going out with mates?","How worried are you about a property sitting empty or getting a tenant who doesn't pay?"],
+  implication:["If overtime dropped off and the property cost more to hold than you expected, how would you cover it on one income?","If the property was vacant for a few weeks, where would that money come from?","If holding the property meant cutting back on everything else, how long could you keep that up?","If you had to sell early because the cash flow didn't work, what would the costs of buying and selling do to your savings?","If a bad tenant cost you thousands in repairs or lost rent, how would that affect your plans to buy a second property?"],
+  payoff:["If the property was matched to what you can comfortably hold, even without overtime, how would that help?","How would a property in an area where tenants are easy to find take the pressure off?","Why is it important to you to keep living your life while you build wealth?","What would it mean to have the first property holding its own so you can plan the next one?"]},
+ payoff:["If you owned an asset that was growing while you keep renting where you want to live, how would that change things for you?","How would it help to have an expert find and negotiate the property, so you don't lose days off the tools?","Why would it be important to you to get the first property right?","If your first property set you up to buy a second, what would that open up for you?","How would building wealth outside your trade help with your goal of being your own boss one day?","What would it mean to you to be ahead of your mates instead of watching them get ahead?"],
+ needs:[["Rent's just dead money.","I want to own something that grows."],["I rely on overtime to get by.","It has to work even without overtime."],["I can't afford for it to sit empty.","I want an area where tenants are easy to find."],["I've only got one shot with my savings.","I need to get the first one right."]]},
+
+{id:"p3",name:"Business Owners",short:"35+, paid via dividends",
+ profile:"Single or married, business owners paying themselves $150k+ through dividends. Pressures: themselves, the ATO, peers, industry changes, rising costs. Hesitations: cash flow and security.",
+ problem:["How much of your total wealth is tied up in the business right now?","How exposed do you feel to changes in your industry?","How confident are you that you're structured well from a tax point of view?","How easy has it been to get finance approved when your income comes through dividends?","How much time do you actually have to work on your own wealth, outside of working on the business?","How predictable is your cash flow from one quarter to the next?","What happens to your plans for wealth if the business can't be sold for what you hope?"],
+ implication:["If most of your wealth is in the business and the industry shifts, what does that mean for your family's security?","If the ATO or lenders see your income differently to how you see it, how does that limit what you can build outside the business?","If all your time goes into the business, what happens to your personal wealth plan in the meantime?","If cash flow tightens in a bad quarter, how would that flow through to your staff, your drawings, and your home life?","If you exit one day and the sale price falls short, what would you have to fall back on?","If you keep reinvesting everything into the business, when do you actually start building the generational wealth you want to leave?","How would it feel to have worked this hard and still have all your eggs in one basket?"],
+ cost:["What's an hour of your time worth in the business? How many hours would it take you to find, assess and negotiate the right property yourself?","If you took your eye off the business to do this, what could that cost in lost revenue or missed opportunities?","On a purchase of this size, what would overpaying by $20,000 to $40,000 do to the return you're expecting?","If you bought the wrong asset and needed to sell it later, what would the stamp duty, selling costs and lost time add up to?","You'd pay a specialist to handle anything else this important in your business. What makes this investment different?"],
+ holding:{problem:["With income coming through dividends, how predictable is the money you'd use to hold a property?","How much cash do you like to keep available for the business?","What worries you about taking on another ongoing commitment outside the business?","How much time would you realistically have to deal with tenants, agents or maintenance?","What concerns do you have about vacancy or the quality of tenants?"],
+  implication:["If the business had a slow quarter at the same time the property was vacant, how would you manage both?","If holding costs meant pulling cash out of the business, what would that do to your growth plans?","If property problems started taking your attention away from the business, what could that cost you?","If you bought something that needed constant maintenance or attracted poor tenants, how quickly would it become a burden rather than an asset?","If you had to sell at the wrong time because cash got tight, what would that cost you?"],
+  payoff:["If the property was selected to suit how your income actually comes in, how would that help you plan?","How would a lower maintenance property in a strong rental area protect your time for the business?","Why is it important to you that the investment never competes with the business for cash?","What would it mean to have an asset that grows in the background without needing you?"]},
+ payoff:["If you had wealth building outside the business, how would that change the way you think about risk in the business?","How would it help to hand the whole purchase to a specialist, so your time stays on what you do best?","Why is it important to you to build something your family can rely on regardless of how the business goes?","If you had property growing alongside the business, what would that mean for your exit options down the track?","How would working with a team that coordinates with your accountant and broker make this easier?","What would it mean to you to start building the legacy you've talked about now, rather than after you sell?"],
+ needs:[["Everything's tied up in the business.","I want wealth outside the business."],["My income's lumpy.","It needs to suit how my income actually comes in."],["I don't have time to manage this.","I want someone to handle it end to end."],["I don't want to pull cash from the business.","It can't compete with the business for cash."]]},
+
+{id:"p4",name:"Industry Employees",short:"IT, Healthcare, Construction",
+ profile:"25+, single or de facto, employees on $75k to $150k. Pressures: supervisor or boss, other workers, keeping licences, rising cost of living, work demands. Hesitations: life changes, bad reviews.",
+ problem:["How secure do you feel in your role right now?","How far does your salary stretch after rent or mortgage and living costs?","How clear are you on what your next step is to build wealth outside of your job?","How much does your future depend on the next promotion or pay rise?","What's made it hard to save a deposit?","How much time and energy do you have left after work to research investing?"],
+ implication:["If the promotion or pay rise takes longer than you hope, what does that do to your plans?","If living costs keep rising faster than your salary, where does that leave you in five years?","If your only wealth plan is your job, what happens if the industry changes or your role is restructured?","If you're too drained after work to look into investing, how long could it be before you start, and what could that cost you?","If you leave it until later to buy, how much harder does it become to get into the markets you want?","How would it affect your work life balance if money pressure keeps building over the next few years?"],
+ cost:["How long did it take you to save what you have now? How long would it take to earn back $20,000 lost by overpaying on a property?","If your first purchase underperformed, how many years could that add before you're in a position to buy again?","How much annual leave or weekend time would you need to spend searching and inspecting? What's that worth to you?","If prices move while you're still researching, what could another year of waiting cost you on entry?","With a tighter budget, how much room do you have for a mistake on this purchase?"],
+ holding:{problem:["On your salary, what worries you most about holding an investment property?","What weekly amount could you commit without feeling like you're going backwards?","What would you not be willing to give up to hold a property?","How would you cope if something unexpected came up, like a big repair?","How concerned are you about finding reliable tenants?"],
+  implication:["If holding costs ran higher than expected, how would that affect your ability to cover your own rent or mortgage?","If the property sat empty for a month, how would that sit alongside everything else you're paying?","If you had to cut back your lifestyle to hold it, how long before you'd start to regret the purchase?","If a large repair bill arrived with no buffer, what would you have to do?","If the stress of holding it spilled into work, how would that affect your performance and your chances of that promotion?"],
+  payoff:["If the property was chosen to fit the weekly amount you're comfortable with, how would that change things?","How would buying in an area with steady rental demand help you feel more secure?","Why is it important to you to build wealth without going backwards day to day?","What would it mean to have a property you can hold comfortably while your income grows?"]},
+ payoff:["If you had a plan to build wealth that didn't depend on your next promotion, how would that change how you feel about work?","How would it help to have someone do the research and legwork, given how much your job already takes out of you?","Why would buying at the right price matter so much on your budget?","If you were in the market this year instead of waiting, what would that mean for your goals?","How would having an investment working in the background help your work life balance?","What would it mean to you to know your savings went into the right property first time?"],
+ needs:[["My pay rises don't keep up with costs.","I want a plan that doesn't depend on my next promotion."],["I'm exhausted after work.","I need someone to do the research for me."],["There's no room for a mistake on my budget.","It has to be affordable and bought at the right price."],["What if a big repair comes up?","I want a lower maintenance property I can hold comfortably."]]},
+
+{id:"p5",name:"FIFO and Defence",short:"Future industry, 25+",
+ profile:"Single or de facto, around $150k (FIFO), often away from home. Pressures: supervisor or boss, other trades, keeping licences, rising cost of living, work demands. Hesitations: life changes.",
+ problem:["How much of your high income is actually turning into long term wealth?","When you're on roster, how hard is it to handle anything like property?","How long do you see yourself doing FIFO or staying in service?","How confident are you in buying property somewhere you can't inspect yourself?","How well does your current plan account for the income drop when you come off the mines or leave the service?","How much of what you earn tends to disappear on lifestyle while you're home?"],
+ implication:["If the high income years end before you've built assets, what does life look like after FIFO?","If being away makes it impossible to act on a good deal quickly, how many opportunities could you be missing?","If you buy remotely without the right help and get it wrong, how would you even know until it was too late?","If a posting, a relationship or kids change your plans, how would you feel about having nothing to show for these years?","If you keep spending the money you've made while you're home, how long before the sacrifice of being away stops feeling worth it?","What happens to your family plans if you have to stay on the roster longer than you want because the wealth isn't there yet?"],
+ cost:["What does an extra swing on the roster earn you? How many swings would it take to make up $20,000 lost on a bad purchase?","If you bought remotely without anyone on the ground and it turned out to be a poor property, what would it cost to get out of it?","How many of your days off would you give up to search, inspect and negotiate from a distance?","If a good deal came up while you were on site and you couldn't act, what could missing it cost you?","Given what you sacrifice to earn this money, what's it worth to make sure it's invested properly?"],
+ holding:{problem:["How comfortable would you be holding a property on your income after FIFO or after leaving the service?","Being away so much, how would you deal with a tenant or maintenance issue from site?","How worried are you about a property sitting empty while you're not around to follow it up?","What lifestyle things matter most to you when you're home that you wouldn't want to cut?","How confident are you in judging tenant demand in an area you can't visit?"],
+  implication:["If your income dropped after FIFO, how would you keep holding a property that was only affordable on your current pay?","If a problem came up while you were on roster, how long could it go unresolved, and what could that cost?","If the property sat empty and you didn't find out for weeks, what would that do to your cash flow?","If you picked an area with weak rental demand because you couldn't check it yourself, how long might you be stuck with it?","If holding the property meant cutting back on your time at home, would the whole plan still feel worth it?"],
+  payoff:["If the property was selected to be affordable on your income after FIFO, not just now, how would that help?","How would a property in a strong rental area with good management take the worry off while you're away?","Why is it important to you that this investment keeps working even when you can't be there?","What would it mean to come home and enjoy your time off instead of managing problems?"]},
+ payoff:["If someone on the ground handled the whole purchase while you're on roster, how would that help?","Why is it important to you that these high income years leave you with something to show for them?","If you had assets in place before you came off FIFO or left the service, what would that mean for life afterwards?","How would it feel to be able to act on the right deal even when you're on site?","What would it mean for your family plans to know the money is already working for you?","How would that change how you feel about the time you spend away?"],
+ needs:[["My money disappears when I'm home.","I want these years to leave me with something."],["I can't inspect anything from site.","I need someone on the ground doing it for me."],["My income won't always be this high.","It has to be affordable after FIFO too."],["I can't deal with tenant problems from site.","I want a strong rental area with good management."]]},
+
+{id:"p6",name:"Referrers",short:"Brokers, accountants, planners",
+ profile:"30+, business owners on $150k to $200k+. Pressures: direct competitors, the ATO, licensing bodies, banks, economic trends. Goals: turnover, business growth, additional revenue. Hesitation: negative feedback. Their client pays the $16,900, so focus on the value of a settled purchase to their business.",
+ problem:["When your clients are ready to invest in property, what gets in the way of them actually buying?","How often do your clients end up buying poor properties, or not buying at all, after you've done the groundwork?","How much turnover is being affected by tighter bank policy and economic conditions?","How are you differentiating yourself from competitors offering the same service?","How much of your revenue depends on one income stream?","What's your experience been with other property referral partners?"],
+ implication:["When clients stall after pre approval or planning, what does that do to your settlement numbers and your trail?","If a client buys a poor performing property, how does that affect their future borrowing, their next deal with you, and their trust in your advice?","If a competitor offers clients a complete property solution and you don't, how many clients could you lose over the next year?","If bank conditions stay tight, how does relying on a single revenue stream affect the growth targets you've set?","If a referral partner lets a client down, what does that do to your reputation and your reviews?","If your clients aren't building equity, what does that mean for the ongoing value you can bring to them over the next ten years?"],
+ cost:["What's a settled loan or a new property client worth to your business, upfront and over the life of the relationship?","How many clients a year stall after pre approval or planning? What does that add up to in lost revenue?","When a client questions the cost of professional help, how do you usually explain the cost of doing it without advice?","If a client overpays or buys poorly, how does that affect their next loan, their portfolio plan, and whether they refer others to you?","What would it be worth to have a partner who turns your pre approved clients into settled purchases?"],
+ holding:{problem:["How often do clients hold back from investing because they're worried about holding costs?","How many clients have you seen stretch themselves on a property that was hard to hold?","What concerns do your clients raise about vacancy and tenant quality?","How do you currently help clients judge whether a property will hold its own?"],
+  implication:["When a client's investment property costs more to hold than they expected, how does that affect their serviceability for the next loan?","If a client has a vacancy or a bad tenant, who do they tend to call first, and how does that reflect on you?","If a client sells early because holding costs got too much, what does that mean for the ongoing relationship and your trail?","If fear of holding costs stops clients investing at all, how much future business does that cost you?"],
+  payoff:["If your clients bought properties matched to their cash flow and strong rental areas, how would that help your business?","How would it help to have a partner who addresses holding cost worries before your clients commit?","Why is it important to you that your clients can hold their investments comfortably for the long term?","What would it mean for your pipeline if clients were in a position to buy their next property sooner?"]},
+ payoff:["If more of your pre approved clients actually settled, what would that mean for your turnover this year?","How would it help your reputation to refer clients to a partner who looks after them and reports back to you?","Why is it important to you that your clients buy well, not just buy?","If you could offer clients a complete property solution, how would that help you stand out from competitors?","What would a second revenue stream from referrals mean for your growth targets?","How would clients building equity help you keep working with them over the next ten years?"],
+ needs:[["Clients stall after pre approval.","I want more pre approved clients to settle."],["Clients worry about holding costs.","I need a partner who helps clients buy something they can hold."],["A bad partner could hurt my reputation.","I want a partner who looks after my clients and keeps me informed."],["Bank conditions are hurting turnover.","I want another revenue stream."]]}
+];
+
+const KEY = "bc_spin_call_v1";
+let S = {persona:"p1", stage:"problem", client:"", asked:{}, needs:[], cost:"", weekly:"", notes:""};
+try{ const saved = JSON.parse(localStorage.getItem(KEY)); if(saved) S = Object.assign(S, saved); }catch(e){}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const persona = () => P.find(p => p.id === S.persona);
+const money = n => "$" + Number(n).toLocaleString("en-AU");
+
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1800); }
+
+/* ================= LIVE CALL (focus mode) ================= */
+const LSTAGES = [
+  {id:"open", name:"Open", color:"#888", tip:"Build rapport. You've read the notes, so keep situation questions short."},
+  {id:"problem", name:"Problem", color:"#4C4C4C", tip:"Find what isn't working. Log it as a Problem. Don't pitch yet."},
+  {id:"implication", name:"Implication", color:"#C9A400", tip:"Only use these on problems they've confirmed. Make the problem bigger."},
+  {id:"cost", name:"Cost", color:"#2E7D5B", tip:"Let them put their own dollar figure on the problem. Note their number."},
+  {id:"holding", name:"Holding", color:"#A0522D", tip:"Raise holding costs before they do. Get their weekly comfort number."},
+  {id:"payoff", name:"Payoff", color:"#2F5D8A", tip:"Let them say the benefit. Log what they want as a Want."},
+  {id:"close", name:"Close", color:"#2E8B57", tip:""}
+];
+const GENERIC_OPEN = [
+  {q:"Thanks for making the time. I've read the notes from our team, so I won't make you repeat everything.", why:"Rapport"},
+  {q:"What's prompted you to look at investing now?", why:"Reason for now"}
+];
+function lq(stage){
+  if(S.liveQ && S.liveQ[stage] && S.liveQ[stage].length) return S.liveQ[stage];
+  const p = persona();
+  if(stage==="open") return GENERIC_OPEN;
+  if(stage==="holding") return [...p.holding.problem.map(q=>({q,why:"Holding: problem"})),...p.holding.implication.map(q=>({q,why:"Holding: implication"})),...p.holding.payoff.map(q=>({q,why:"Holding: need payoff"}))];
+  if(stage==="close") return [];
+  return (p[stage]||[]).map(q=>({q,why:""}));
+}
+const qkey = (st,i) => `L.${S.liveQ?"prep":S.persona}.${st}.${i}`;
+function curIdx(){ S.qi=S.qi||{}; return S.qi[S.stage]||0; }
+function stIndex(){ return LSTAGES.findIndex(s=>s.id===S.stage); }
+const wants = () => S.needs.filter(n=>n.explicit);
+const probs = () => S.needs.filter(n=>!n.explicit);
+
+function renderLive(){
+  if(!LSTAGES.some(s=>s.id===S.stage)) S.stage="open";
+  $("lvPersona").innerHTML = P.map(p=>`<option value="${p.id}" ${p.id===S.persona?"selected":""}>${esc(p.name)}</option>`).join("");
+  $("lvSrc").textContent = S.liveQ ? "Using questions from your call prep" : "Using the persona question bank";
+  const w = wants().length, cls = w>=3?"g":w===2?"a":"r";
+  $("lvNeeds").className = "lv-needs "+cls; $("lvNeeds").textContent = `Wants captured: ${w} of 3`;
+  $("lvSteps").innerHTML = LSTAGES.map(s => {
+    const qs=lq(s.id), done=qs.filter((_,i)=>S.asked[qkey(s.id,i)]).length, pct = s.id==="close" ? (S.stage==="close"?100:0) : (qs.length?done/qs.length*100:0);
+    return `<button class="lv-step ${s.id===S.stage?"on":""}" data-ls="${s.id}"><i><b style="width:${pct}%"></b></i><span>${esc(s.name)}</span></button>`;
+  }).join("");
+  const st = LSTAGES[stIndex()];
+  let h = "";
+  if(S.stage==="close"){ h = renderLiveClose(); }
+  else {
+    const qs = lq(S.stage), i = Math.min(curIdx(), Math.max(0,qs.length-1)), q = qs[i];
+    h += `<div class="lv-stage"><span class="dot" style="background:${st.color}"></span>${esc(st.name)} · question ${qs.length?i+1:0} of ${qs.length}</div>`;
+    h += `<div class="lv-tip">${esc(st.tip)}</div>`;
+    h += `<div class="lv-q">${q?esc(q.q):"No questions in this stage."}</div>`;
+    if(q && q.why) h += `<div class="lv-why">${esc(q.why)}</div>`;
+    if(q && S.asked[qkey(S.stage,i)]) h += `<div class="lv-done">✓ Asked</div>`;
+    if(S.stage==="cost"){ const v=Number(S.cost)||0; h += `<div class="lv-extra">Their estimate $ <input id="lvCost" inputmode="numeric" value="${esc(S.cost)}" placeholder="e.g. 45000"> <span>${!v?"":v>FEE?`<b style="color:var(--green)">${(v/FEE).toFixed(1)}× the fee. Move on.</b>`:`<b style="color:var(--red)">Below the fee. Keep building.</b>`}</span></div>`; }
+    if(S.stage==="holding") h += `<div class="lv-extra">Weekly comfort $ <input id="lvWeekly" inputmode="numeric" value="${esc(S.weekly)}" placeholder="e.g. 150"> <span class="small" style="margin:0">per week</span></div>`;
+    h += `<div class="lv-nav"><button class="btn btn-o" id="lvBack">← Back</button><button class="btn btn-o" id="lvSkip">Skip</button><button class="btn next" id="lvNext">Asked, next →</button></div>`;
+    h += `<button class="lv-all" id="lvAll">${S.showAll?"Hide list":`See all ${qs.length} in this stage`}</button>`;
+    if(S.showAll) h += `<div class="lv-list">${qs.map((x,j)=>`<button class="lv-li ${j===i?"cur":""} ${S.asked[qkey(S.stage,j)]?"ask":""}" data-li="${j}">${j+1}. ${esc(x.q)}</button>`).join("")}</div>`;
+  }
+  $("lvCard").innerHTML = h;
+  $("lvLog").innerHTML = [...S.needs].reverse().map(n => n.explicit
+    ? `<span class="chip w">Want: ${esc(n.explicit)}<button data-del="${n.id}" title="Remove">×</button></span>`
+    : `<span class="chip">Problem: ${esc(n.implied)}<button class="up" data-up2="${n.id}" title="They now want this solved">→ Want</button><button data-del="${n.id}" title="Remove">×</button></span>`).join("");
+  const c=$("lvCost"); if(c) c.addEventListener("change",e=>{S.cost=e.target.value.replace(/[^0-9]/g,"");save();renderLive();});
+  const wk=$("lvWeekly"); if(wk) wk.addEventListener("change",e=>{S.weekly=e.target.value.replace(/[^0-9]/g,"");save();});
+  const nt=$("lvNotes"); if(nt) nt.addEventListener("input",e=>{S.notes=e.target.value;save();});
+}
+
+function renderLiveClose(){
+  const ex = wants();
+  let h = `<div class="lv-stage"><span class="dot" style="background:#2E8B57"></span>Summarise and present</div>`;
+  if(ex.length<2) h += `<div class="warn" style="margin-top:12px">Only ${ex.length} want${ex.length===1?"":"s"} captured. Go back to Implication and Payoff before presenting or mentioning the fee.</div>`;
+  if(ex.length){
+    const list = ex.map(n=>n.explicit.replace(/[.\s]+$/,"")).map(s=>/^I\b/.test(s)?s:s.charAt(0).toLowerCase()+s.slice(1));
+    const joined = list.length>1 ? list.slice(0,-1).join("; ")+"; and "+list[list.length-1] : list[0];
+    h += `<div class="lv-script" style="margin-top:12px"><b>Say this:</b><br>"So what you've told me is: ${esc(joined)}. Have I got that right?"</div>`;
+  }
+  h += `<ol class="lv-check"><li>Confirm each want in their words.</li><li>Present only what meets a want they said.</li>${S.cost?`<li>Remind them of their own number: ${money(S.cost)}.</li>`:""}${S.weekly?`<li>Confirm the brief: about ${money(S.weekly)} a week to hold.</li>`:""}<li>Then introduce the ${money(FEE)} fee.</li><li>If they push back on price, go back to Implication. Don't discount.</li></ol>`;
+  h += `<div class="field" style="margin:14px 0 0"><label>Call notes</label><textarea id="lvNotes" placeholder="Anything else to record">${esc(S.notes)}</textarea></div>`;
+  h += `<div class="lv-nav"><button class="btn btn-o" id="lvBack">← Back</button><button class="btn next" id="lvCopy">Copy call summary</button></div>`;
+  return h;
+}
+
+function lvMove(d, mark){
+  if(S.stage==="close"){ if(d<0){ S.stage="payoff"; S.qi.payoff=Math.max(0,lq("payoff").length-1); } save(); renderLive(); return; }
+  const qs=lq(S.stage); let i=curIdx();
+  if(mark && qs[i]) S.asked[qkey(S.stage,i)]=true;
+  i+=d;
+  if(i>=qs.length){ const n=LSTAGES[stIndex()+1]; S.stage=n.id; S.qi[n.id]=S.qi[n.id]||0; }
+  else if(i<0){ const p=LSTAGES[stIndex()-1]; if(p){ S.stage=p.id; S.qi[p.id]=Math.max(0,lq(p.id).length-1); } }
+  else S.qi[S.stage]=i;
+  save(); renderLive();
+}
+function logNeed(type){
+  const v=$("capIn").value.trim(); if(!v){ toast("Type what they said first"); $("capIn").focus(); return; }
+  const n={id:Date.now().toString(36)}; if(type==="want") n.explicit=v; else n.implied=v;
+  S.needs.push(n); $("capIn").value=""; save(); renderLive();
+  toast(type==="want"?"Want logged":"Problem logged. Ask an implication question on it");
+}
+function renderAll(){ $("client").value=S.client; renderLive(); }
+
+document.addEventListener("click", e => {
+  const t=e.target;
+  if(t.closest("#lvNext")) return lvMove(1,true);
+  if(t.closest("#lvSkip")) return lvMove(1,false);
+  if(t.closest("#lvBack")) return lvMove(-1,false);
+  if(t.closest("#lvAll")){ S.showAll=!S.showAll; save(); return renderLive(); }
+  if(t.closest("#lvCopy")) return $("copyBtn").click();
+  const li=t.closest("[data-li]"); if(li){ S.qi[S.stage]=+li.dataset.li; save(); return renderLive(); }
+  const ls=t.closest("[data-ls]"); if(ls){ S.stage=ls.dataset.ls; S.qi=S.qi||{}; save(); return renderLive(); }
+  const d=t.closest("[data-del]"); if(d){ S.needs=S.needs.filter(n=>n.id!==d.dataset.del); save(); return renderLive(); }
+  const u=t.closest("[data-up2]"); if(u){ const n=S.needs.find(x=>x.id===u.dataset.up2); if(n){ $("capIn").value=""; $("capIn").placeholder=`What do they want instead of "${n.implied}"?`; $("capIn").focus(); S.upgrading=n.id; save(); } return; }
+});
+$("capProb").addEventListener("click",()=>logNeed("problem"));
+$("capWant").addEventListener("click",()=>{
+  if(S.upgrading){ const n=S.needs.find(x=>x.id===S.upgrading); const v=$("capIn").value.trim(); if(n&&v){ n.explicit=v; S.upgrading=null; $("capIn").value=""; $("capIn").placeholder="e.g. We can't find anyone we trust"; save(); renderLive(); toast("Upgraded to a want"); return; } }
+  logNeed("want");
+});
+$("capIn").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); (S.stage==="payoff"||S.upgrading)?$("capWant").click():logNeed("problem"); }});
+document.addEventListener("keydown",e=>{
+  if(S.view!=="live") return; if(/input|textarea|select/i.test(document.activeElement.tagName)) return;
+  if(e.key==="ArrowRight"){ e.preventDefault(); lvMove(1,true); } if(e.key==="ArrowLeft"){ e.preventDefault(); lvMove(-1,false); }
+});
+$("lvPersona").addEventListener("change",e=>{ S.persona=e.target.value; S.liveQ=null; S.qi={}; S.stage="open"; save(); renderLive(); });
+$("client").addEventListener("input", e => { S.client = e.target.value; save(); });
+$("resetBtn").addEventListener("click", () => {
+  if(!confirm("Start a new call? This clears the current call and prep.")) return;
+  S = {persona:S.persona, stage:"open", client:"", asked:{}, needs:[], cost:"", weekly:"", notes:"", view:S.view, qi:{}, liveQ:null, prepNotes:""};
+  save(); $("notesPaste").value=""; renderAll(); renderPrep(); toast("New call started");
+});
+$("copyBtn").addEventListener("click", () => {
+  const p=persona(), ex=wants(), im=probs();
+  const lines=[`SPIN CALL SUMMARY`,`Client: ${S.client||"Not recorded"}`,`Persona: ${p.name}`,`Date: ${new Date().toLocaleDateString("en-AU")}`,``,
+    `What they want (their words):`,...(ex.length?ex.map(n=>"• "+n.explicit):["• None logged"]),``,
+    `Problems raised:`,...(im.length?im.map(n=>"• "+n.implied):["• None"]),``,
+    `Their estimate of the cost of the problem: ${S.cost?money(S.cost):"Not recorded"}`,
+    `Weekly holding comfort number: ${S.weekly?money(S.weekly)+" per week":"Not recorded"}`,``,`Notes: ${S.notes||"None"}`].join("\n");
+  const done=()=>toast("Summary copied");
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(lines).then(done).catch(()=>fb(lines)); else fb(lines);
+  function fb(t){const a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{document.execCommand("copy");done();}catch(e){toast("Copy failed");}a.remove();}
+});
+
+/* ================= CALL PREP ================= */
+const GUIDE = {savings:75000, super:130000, income:120000};
+
+function setView(v){
+  S.view = v; save();
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.view===v));
+  $("prepView").classList.toggle("hidden", v!=="prep");
+  $("liveView").classList.toggle("hidden", v!=="live");
+  
+}
+
+function parseMoney(str){
+  const out=[]; if(!str) return out;
+  const re=/\$?\s*(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s*(k|m|mil|million)?(?![\d%])(?!\s*%)/gi; let m;
+  while((m=re.exec(str))){
+    let n=parseFloat(m[1].replace(/,/g,"")); const suf=(m[2]||"").toLowerCase();
+    if(suf==="k") n*=1e3; else if(suf.startsWith("m")) n*=1e6;
+    else { if(/^(19|20)\d\d$/.test(m[1])) continue; if(n<1000) continue; }
+    out.push(Math.round(n));
+  }
+  return out;
+}
+const fm = n => n==null ? "" : (n>=1e6 ? "$"+(n/1e6).toFixed(2).replace(/\.?0+$/,"")+"m" : "$"+Math.round(n/1000)+"k");
+const join2 = a => a.length<2 ? (a[0]||"") : a.slice(0,-1).join(", ")+" and "+a[a.length-1];
+
+function extract(raw){
+  const text = raw.replace(/\r/g,"");
+  const lines = text.split("\n");
+  const isQ = l => /^\s*\d{1,2}\s*[.)]\s*[A-Za-z(]/.test(l) || /meeting booked/i.test(l);
+  function sec(re){
+    const i = lines.findIndex(l => re.test(l)); if(i<0) return "";
+    const rest = lines[i].split("?").slice(1).join("?").replace(/\([^)]*\)?/g,"").replace(/^[\s)\-:]+/,"").trim();
+    const got = rest ? [rest] : [];
+    for(let j=i+1;j<lines.length;j++){ if(isQ(lines[j])) break; if(lines[j].trim()) got.push(lines[j].trim()); }
+    return got.join("\n").replace(/^-+$/gm,"").trim();
+  }
+  const firstQ = lines.findIndex(l => /^\s*1\s*[.)]/.test(l));
+  const brief = (firstQ>0 ? lines.slice(0,firstQ) : []).join("\n").replace(/^\s*brief:?\s*/i,"").trim();
+  const c = {raw:text, brief, lower:text.toLowerCase()};
+  c.steps = sec(/steps have you taken/i);
+  c.challenge = sec(/biggest challenge/i);
+  c.name = sec(/full name/i).replace(/\(.*?\)/g,"").trim();
+  c.based = sec(/where are you based/i);
+  c.housing = sec(/renting or mortgage/i);
+  c.valSec = sec(/VAL\s*&\s*owing(?!\s*&)/i);
+  c.invest = sec(/current investments/i);
+  c.invVal = sec(/VAL\s*&\s*owing\s*&\s*rental/i);
+  c.rel = sec(/married,\s*single|defacto|de facto/i);
+  c.ageSec = sec(/^\s*\d+\s*[.)]\s*age/i);
+  c.income = sec(/^\s*\d+\s*[.)]\s*income/i);
+  c.tax = sec(/taxes are completed/i);
+  c.savSec = sec(/^\s*\d+\s*[.)]\s*savings/i);
+  c.superSec = sec(/^\s*\d+\s*[.)]\s*super/i);
+  c.kidsSec = sec(/^\s*\d+\s*[.)]\s*children/i);
+  c.liab = sec(/^\s*\d+\s*[.)]\s*liabilities/i);
+  c.financeBlock = sec(/stop you from getting finance/i);
+  const mt = lines.find(l => /meeting booked/i.test(l)); c.meeting = mt ? mt.replace(/meeting booked( for)?/i,"").trim() : "";
+
+  const names = c.name || (brief.match(/^([A-Z][a-z]+(?:\s+(?:and|&)\s+[A-Z][a-z]+)?)/)||[])[1] || "";
+  c.firsts = names.split(/\s+(?:and|&)\s+|\s*,\s*/).map(x => x.trim().split(/\s+/)[0]).filter(Boolean);
+  c.couple = c.firsts.length>1 || /engaged|married|defacto|de facto|partner|wife|husband/i.test(c.rel+" "+brief);
+  c.hello = c.firsts.length ? join2(c.firsts) : "";
+
+  const v = parseMoney(c.valSec); c.value=v[0]; c.owing=v[1];
+  const r = (c.valSec.match(/(\d+(?:\.\d+)?)\s*%/)||[])[1]; c.rate = r?parseFloat(r):null;
+  if(c.value && c.owing!=null){ c.equity=c.value-c.owing; c.usable=Math.max(0,c.value*0.8-c.owing); }
+  c.homeowner = /mortgage|own(ed)? home|purchased home|homeowner/i.test(c.housing+" "+brief);
+  c.renting = /rent/i.test(c.housing) && !/mortgage/i.test(c.housing);
+  c.firstInvest = /^\s*no\b/i.test(c.invest) || /no (current )?invest/i.test(c.lower);
+  c.savings = parseMoney(c.savSec)[0];
+  c.superBal = parseMoney(c.superSec)[0];
+  const ages = (c.ageSec.match(/\b(1[89]|[2-7]\d)\b/g)||[]).map(Number); c.ages=ages;
+  // kids
+  const kc = c.kidsSec.match(/(\d+)\s*(dependants?|dependents?|kids?|children|child)/i);
+  c.kidsCount = kc ? +kc[1] : 0;
+  const kAges = c.kidsSec.split("\n").filter(l => !(kc && l.includes(kc[0]))).join(" ").match(/\b(1[0-8]|[0-9])\b/g);
+  c.kidsAges = kAges ? kAges.map(Number) : [];
+  if(!c.kidsCount && c.kidsAges.length) c.kidsCount = c.kidsAges.length;
+  if(/^\s*(no|nil|none|0)\b/i.test(c.kidsSec)) { c.kidsCount=0; c.kidsAges=[]; }
+  // relationship
+  const relTxt=(c.rel+" "+brief).toLowerCase();
+  c.relationship = /engaged/.test(relTxt)?"Engaged":/married/.test(relTxt)?"Married":/de ?facto/.test(relTxt)?"De facto":/single/.test(relTxt)?"Single":"";
+  const wd = text.match(/(?:getting married|wedding)[^.\n]*?((?:\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{4})/i);
+  c.wedding = wd ? wd[1].replace(/\s+/g," ") : (/getting married|wedding/i.test(text) ? "the coming year" : "");
+  // income
+  const incLines=c.income.split("\n");
+  const yearVals=[], otherVals=[];
+  incLines.forEach(l => { const m=parseMoney(l); if(!m.length) return; (/\b20\d\d\b/.test(l)?yearVals:otherVals).push(...m); });
+  c.allIncome=[...yearVals,...otherVals];
+  if(yearVals.length>=2 && Math.max(...yearVals)>Math.min(...yearVals)*1.15) c.growth={from:Math.min(...yearVals),to:Math.max(...yearVals)};
+  const mx=Math.max(0,...c.allIncome), mn=c.allIncome.length?Math.min(...c.allIncome):0;
+  c.unequal = c.couple && c.allIncome.length>=2 && mn<60000 && mx>=100000;
+  c.business = /pty|abn|own business|business owner|self.?employed|sole trader|dividend|company/i.test(c.income+" "+brief);
+  const trade = (c.income+" "+brief).match(/electrician|sparky|plumber|carpenter|chippy|builder|tiler|mechanic|welder|concreter|painter|landscaper|bricklayer|brickie|roofer|fitter|plasterer|glazier|joiner|cabinet maker|tradie|hvac|refrigeration/i);
+  c.trade = trade ? trade[0].toLowerCase() : "";
+  c.fifo = /fifo|mine|mining|defence|army|navy|raaf|adf/i.test(c.lower);
+  c.referrer = /mortgage broker|accountant|financial planner|referral partner/i.test(c.income+" "+brief);
+  c.liabYes = c.liab && !/^\s*(no|nil|none)\b/i.test(c.liab);
+  c.financeIssue = c.financeBlock && !/^\s*(no|nil|none)\b/i.test(c.financeBlock);
+  // goals
+  c.generational = /generation|pass (them |it )?on|legacy|kids|children's future|hand down/i.test(brief) && /generation|pass|legacy|hand down/i.test(brief);
+  c.dualKey = /dual.?key|duplex|dual occ|granny|secondary dwelling/i.test(c.lower);
+  c.holdLong = /hold|long.?term|never sell|keep/i.test(brief);
+  c.useEquity = /equity/i.test(brief);
+  c.cashflow = /cash ?flow|positive|passive income|income/i.test(brief);
+  c.trust = /trust|scam|burn|rip/i.test(c.challenge);
+  c.timeIssue = /time|busy/i.test(c.challenge);
+  c.knowIssue = /know|where to start|confus|overwhelm|understand|research/i.test(c.challenge);
+  c.early = !c.steps || /enquir|nothing|none|research|looked|just started|not much/i.test(c.steps);
+  c.kidsTxt = c.kidsAges.length ? join2(c.kidsAges.map(String)) : "";
+  c.kidsWord = c.kidsCount===1?"your little one":c.kidsAges.length&&Math.max(...c.kidsAges)<10?"the little ones":"the kids";
+  return c;
+}
+
+function scorePersona(c){
+  const s={p1:0,p2:0,p3:0,p4:0,p5:0,p6:0};
+  if(c.referrer) s.p6+=10;
+  if(c.fifo) s.p5+=6;
+  if(c.homeowner) s.p1+=3; if(c.couple) s.p1+=2; if(c.kidsCount) s.p1+=3;
+  if(c.business) s.p3+=4; if(c.trade) {s.p1+=1; s.p2+=1;}
+  if(c.renting) s.p2+=4; if(!c.couple) s.p2+=2; if(c.ages.length && c.ages[0]<36) s.p2+=1;
+  if(!c.business && !c.trade && !c.fifo) s.p4+=3;
+  return Object.entries(s).sort((a,b)=>b[1]-a[1]);
+}
+
+function buildPrep(c){
+  const Q={open:[],problem:[],implication:[],cost:[],holding:[],payoff:[]}, sigs=[], flags=[], needs=[], implied=[];
+  const add=(st,q,why)=>Q[st].push({q,why});
+  const you = c.couple?"you both":"you";
+  const why = t => t;
+
+  // OPENING
+  if(c.hello) add("open", `${c.hello}, thanks for making the time.${c.relationship==="Engaged"?" Congratulations on the engagement.":""} I've read the notes from our team, so I won't make ${you} repeat everything.`, "Rapport. Shows you've done your homework");
+  if(c.brief) add("open", `The notes say the goal is ${c.generational?"generational wealth":"to invest"}${c.dualKey?", ideally with a dual key you'd hold long term":""}. In your own words, what's prompted ${you} to look at this now?`, "Confirms the goal in their words and gets the reason for now");
+  else add("open", "What's prompted you to look at investing now?", "Reason for now");
+
+  if(c.early){ sigs.push("Early stage");
+    add("problem", `You mentioned you've ${/enquir/i.test(c.steps)?"only enquired so far":"not taken many steps yet"}. What's held ${you} back from moving forward until now?`, `From notes: "${c.steps||"no steps listed"}"`);
+    add("implication", `If another year goes by at this stage, what does that mean for the plan ${you} have described?`, "Builds urgency on delay");
+  }
+  if(c.trust){ sigs.push("Trust is the main barrier"); implied.push(c.challenge.split("\n")[0]);
+    add("problem", `You said the biggest challenge has been finding a business you can trust. What's happened that's made that so hard?`, `From notes: "${c.challenge.split("\n")[0]}"`);
+    add("problem", `What would a business need to show ${you} to earn that trust?`, "They tell you how to sell to them");
+    add("implication", `If you can't find someone you trust, what does that do to your timeline?`, "Trust delay");
+    add("implication", `If ${you} went with the wrong business, what would that cost you, financially and in your confidence to try again?`, "Raises the stakes of choosing badly");
+    add("payoff", `If you had a team that was upfront about the numbers and the risks, and handled it end to end, how would that change how ${you} feel about starting?`, "Turns trust into an explicit need");
+    needs.push("We need a team we can trust to be upfront and handle it properly.");
+  }
+  if(c.timeIssue){ sigs.push("Time poor");
+    add("problem","How much time do you realistically have to research, inspect and negotiate?", `From notes: "${c.challenge.split("\n")[0]}"`);
+    add("implication","If the search keeps getting pushed back by work and family, what has that already cost you?","Time cost");
+  }
+  if(c.knowIssue){ sigs.push("Unsure where to start");
+    add("problem","Which part of the process feels least clear to you right now?", `From notes: "${c.challenge.split("\n")[0]}"`);
+    add("implication","If you made a decision without being sure of the numbers, what could that lead to?","Risk of a wrong buy");
+  }
+  if(c.generational){ sigs.push("Generational wealth goal");
+    add("problem", `When you say generational wealth, what does that look like for ${c.kidsWord}${c.kidsTxt?` (${c.kidsTxt})`:""} in 20 or 30 years?`, `From the brief: generational wealth${c.kidsCount?`, ${c.kidsCount} kids`:""}`);
+    add("problem", `How clear is the plan to get from one property today to a portfolio you can pass on?`, "Exposes the gap in the plan");
+    add("implication", `If the first property isn't one you'd be happy to hold for 30 years, what does that do to the plan of passing it on?`, "Wrong first buy breaks the long term plan");
+    if(c.kidsAges.length) add("implication", `${c.kidsCount>1?"The kids are":"Your child is"} ${c.kidsTxt} now. If you start in five years instead of today, how much less time does that give the portfolio to grow before they're adults?`, "Time in the market, tied to their kids' ages");
+    add("payoff", `If the first purchase was chosen as a long term hold you'd be proud to hand down, why would that matter to ${you}?`, "Explicit need: a property worth passing on");
+    needs.push("We want a property we can hold and pass on to the kids.");
+  }
+  if(c.dualKey){ sigs.push("Wants a dual key");
+    add("problem", `What's drawn ${you} to a dual key in particular?`, "From the brief: dual key");
+    add("problem", `How much do you know about how lenders and future buyers look at dual keys?`, "Opens the risks without you stating them");
+    add("implication", `Some lenders treat dual keys differently. If finance limited where or what you could buy, how would that affect the plan?`, "Finance risk of dual key");
+    add("implication", `If you bought a dual key where there wasn't demand for both sides, what would two vacancies do to your holding costs?`, "Vacancy risk on two tenancies");
+    add("cost", `If a dual key turned out harder to sell or refinance down the track, what could that cost you when you want to release equity for the next one?`, "Cost of the wrong dual key");
+    add("payoff", `If the dual key was checked for rental demand on both sides and for how lenders would treat it, how would that help the long term plan?`, "Explicit need: the right dual key");
+    needs.push("If it's a dual key, it has to suit lenders and have tenant demand on both sides.");
+  }
+  if(c.homeowner && c.value){ sigs.push("Has equity");
+    add("problem", `Your home is worth around ${fm(c.value)} with ${fm(c.owing)} owing. How much of that equity have ${you} thought about putting to work?`, `From notes: ${c.valSec.split("\n")[0]}`);
+    add("implication", `If that equity sits in the home for a few more years while prices move, what does that do to the plan?`, "Idle equity");
+    add("payoff", `If that equity was working in the right property, how would that change how ${you} feel about the next ten years?`, "Explicit need: equity working");
+    needs.push("We want our equity working for us.");
+  }
+  if(c.business){ sigs.push("Business owner");
+    add("problem", `How much of ${c.couple?"the family's":"your"} wealth is tied up in the business right now?`, `From notes: ${(c.income.split("\n").find(l=>/business|pty|abn/i.test(l))||"business owner").trim()}`);
+    add("problem", `How predictable is the business income from one quarter to the next?`, "Cash flow security");
+    add("implication", `If everything stays in the business and the home, what happens to the family if the business has a bad year?`, "All eggs in one basket");
+    add("cost", `What's an hour of your time worth in the business? How many hours would it take to find, assess and negotiate the right property yourself?`, "Puts a dollar value on their time");
+    add("payoff", `How would it help to hand the whole purchase to a specialist, so your time stays in the business?`, "Explicit need: done for them");
+    needs.push("We want someone to handle it end to end so the business doesn't suffer.");
+  }
+  if(c.trade){ sigs.push("Trade ("+c.trade+")");
+    add("problem", `How do you feel about relying on the tools to earn for the next 30 years?`, `From notes: ${c.trade}`);
+    add("implication", `If an injury kept you off the tools for a few months, how would that affect the ${c.business?"business, ":""}the mortgage and ${c.kidsCount?"the kids":"your plans"}?`, "Income risk of a trade");
+    add("cost", `How many days off the tools would you lose inspecting properties and chasing agents? What's a day worth to you?`, "Time off the tools has a price");
+    add("payoff", `If you had assets earning in the background, what would that mean for how long you need to stay on the tools?`, "Explicit need: wealth outside the trade");
+  }
+  if(c.growth){ sigs.push("Income growing");
+    add("problem", `Income is on track to go from ${fm(c.growth.from)} to ${fm(c.growth.to)}. How confident are you that it holds?`, `From notes: ${fm(c.growth.from)} then ${fm(c.growth.to)}`);
+    add("implication", `Lenders often look at the last couple of years of returns. If they assessed you on ${fm(c.growth.from)} rather than ${fm(c.growth.to)}, how might that limit what you could buy now?`, "Serviceability timing. Broker to confirm");
+    add("payoff", `If the plan worked on today's numbers and grew as the business does, how would that help?`, "Explicit need: a plan that fits now");
+    flags.push({t:`Income jumps from ${fm(c.growth.from)} to ${fm(c.growth.to)}. Have the broker confirm which year's figures a lender would use.`});
+  }
+  if(c.unequal){ sigs.push("One main income");
+    add("problem", `How reliant is the household on the one main income?`, `From notes: ${fm(Math.max(...c.allIncome))} versus ${fm(Math.min(...c.allIncome))}`);
+    add("implication", `If that income dropped for a few months, how would the mortgage, ${c.kidsCount?"the kids ":""}and an investment all get covered?`, "Single income risk");
+  }
+  if(c.wedding){ sigs.push("Wedding coming up");
+    add("problem", `With the wedding ${/\d/.test(c.wedding)?"on "+c.wedding:"coming up"}, how are ${you} balancing that cost with investing?`, `From the brief: wedding ${c.wedding}`);
+    add("implication", `If wedding costs and holding costs land in the same year, what would have to give?`, "Competing costs");
+    add("payoff", `If the purchase was timed and set up so it doesn't compete with the wedding budget, how would that help?`, "Explicit need: fits around the wedding");
+    needs.push("It has to fit alongside the wedding without stretching us.");
+    flags.push({t:`Wedding ${/\d/.test(c.wedding)?"on "+c.wedding:"coming up"}. Ask about the wedding budget and timing before discussing purchase timing.`});
+  }
+  if(c.kidsCount && c.kidsAges.length && Math.max(...c.kidsAges)<10){ sigs.push("Young kids");
+    add("problem", `With ${c.kidsCount===1?"a little one":(["","","two","three","four"][c.kidsCount]||c.kidsCount)+" little ones"} at ${c.kidsTxt}, how much time do ${you} realistically have to research and inspect properties?`, `From notes: kids aged ${c.kidsTxt}`);
+    add("implication", `If the search eats into weekends with the kids, how long before it gets pushed back again?`, "Family time cost");
+  }
+  if(c.firstInvest){ sigs.push("First investment");
+    add("problem", `As this would be your first investment, what worries ${you} most about getting it wrong?`, "No current investments");
+    add("cost", `On a property around the price you'd be looking at, what would paying $20,000 or $30,000 too much do to your plans?`, "Cost of overpaying");
+    add("implication", `If the first one underperformed, how would that affect your confidence to buy the second?`, "First buy sets up the next");
+    needs.push("We need to get the first one right.");
+  }
+  if(c.renting){ sigs.push("Renting");
+    add("problem","How do you feel about paying rent that builds someone else's wealth?","Renting");
+    add("cost","How much rent will you pay over the next three years if nothing changes?","Cost of renting");
+  }
+  if(c.fifo){ sigs.push("FIFO or Defence");
+    add("problem","How long do you see yourself on the roster, and what happens to income after that?","FIFO or Defence");
+    add("implication","If the high income years end before you've built assets, what does life look like after?","Income window");
+  }
+  // HOLDING always
+  add("holding", `What weekly out of pocket amount could ${you} hold comfortably without changing how you live?`, "Their comfort number becomes the brief");
+  add("holding", `What would ${you} not want to give up to hold an investment property${c.kidsCount?": holidays, the kids' activities, schooling":""}?`, "Lifestyle protection");
+  add("holding", `How concerned are ${you} about bad tenants or the property sitting empty${c.dualKey?", especially with two tenancies to fill":""}?`, "Tenant and vacancy fears");
+  if(c.savings!=null){
+    add("holding", `You've got around ${fm(c.savings)} in ${/offset/i.test(c.savSec)?"the offset":"savings"}. How comfortable would ${you} feel holding an investment with that buffer?`, `From notes: ${c.savSec.split("\n")[0]}`);
+    add("holding", `If a vacancy or a big repair came up in the first year, where would that money come from?`, "Buffer risk");
+  }
+  add("payoff", `If the property was chosen to fit the weekly amount ${c.couple?"you're both":"you're"} comfortable with, in an area tenants want, how would that take the pressure off?`, "Explicit need: affordable to hold");
+  needs.push("It has to be a property we can hold comfortably each week.");
+  add("payoff", `If we found a property that ticked all of that, what would it mean for ${you}${c.kidsCount?" and the kids":""}?`, "Final need payoff before you summarise");
+
+  // FLAGS
+  if(c.savings!=null && c.savings<GUIDE.savings) flags.push({t:`Savings of ${fm(c.savings)} is below the ${fm(GUIDE.savings)} guideline. Confirm with the broker how deposit, costs and a buffer would be funded.`, r:true});
+  if(c.superBal!=null && c.superBal<GUIDE.super) flags.push({t:`Super of ${fm(c.superBal)}${/combined/i.test(c.superSec)?" combined":""} is below the ${fm(GUIDE.super)} guideline. Not a super strategy client on current numbers.`});
+  if(c.rate && c.rate>=5.5) flags.push({t:`Home loan rate is ${c.rate}%. Worth the broker reviewing before any equity release.`});
+  if(c.usable!=null) flags.push({t:`Rough equity check: about ${fm(c.equity)} total equity, roughly ${fm(c.usable)} usable at 80% of value. Estimate only. The broker must confirm.`});
+  if(c.financeIssue) flags.push({t:`Possible finance issue noted: "${c.financeBlock}"`, r:true});
+  if(c.liabYes) flags.push({t:`Liabilities noted: "${c.liab}". Factor into holding cost questions.`});
+  if(/pty|abn|own business/i.test(c.income) && c.tax && /no/i.test(c.tax)) flags.push({t:"Tax returns not completed for this financial year. Likely to affect finance timing.", r:true});
+
+  return {Q, sigs, flags, needs:[...new Set(needs)], implied};
+}
+
+function renderPrep(){
+  const raw = S.prepNotes||""; const out=$("prepOut");
+  if(!raw.trim()){ out.innerHTML=`<div class="card empty">Paste the notes and press <b>Build my questions</b>. You'll get a client snapshot, things to check before the call, and SPIN questions written for this client.</div>`; return; }
+  const c = extract(raw), ranked = scorePersona(c);
+  const pid = S.prepPersona || ranked[0][0];
+  const R = buildPrep(c); PREP = {c, R, pid};
+  const pName = id => P.find(p=>p.id===id).name;
+  const snap = [
+    ["Client", c.name||c.hello||"Not found"], ["Location", c.based||"Not found"],
+    ["Relationship", c.relationship||"Not found"], ["Age", c.ages.length?c.ages.join(", "):"Not found"],
+    ["Home value", c.value?fm(c.value):"Not found"], ["Owing", c.owing!=null?fm(c.owing):"Not found"],
+    ["Savings", c.savings!=null?fm(c.savings):"Not found"], ["Super", c.superBal!=null?fm(c.superBal):"Not found"],
+    ["Income", c.allIncome.length?c.allIncome.map(fm).join(" / "):"Not found"], ["Kids", c.kidsCount?`${c.kidsCount}${c.kidsTxt?` (${c.kidsTxt})`:""}`:"None noted"],
+    ["Investments", c.firstInvest?"None yet":(c.invest||"Not found")], ["Meeting", c.meeting||"Not found"]
+  ];
+  let h = `<div class="card"><h3>Client snapshot</h3><div class="snap">${snap.map(s=>`<div><small>${esc(s[0])}</small><b>${esc(s[1])}</b></div>`).join("")}</div>
+   ${c.brief?`<div class="small" style="margin-top:10px"><b>Brief:</b> ${esc(c.brief.replace(/\n+/g," "))}</div>`:""}</div>`;
+  h += `<div class="card"><h3>Persona match</h3><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+     <select id="prepPersona">${P.map(p=>`<option value="${p.id}" ${p.id===pid?"selected":""}>${esc(p.name)}</option>`).join("")}</select>
+     <span class="small" style="margin:0">Best match: <b>${esc(pName(ranked[0][0]))}</b>${ranked[1][1]>0?`, also fits <b>${esc(pName(ranked[1][0]))}</b>`:""}</span></div>
+     <div style="margin-top:10px">${R.sigs.map(s=>`<span class="sig">${esc(s)}</span>`).join("")}</div></div>`;
+  if(R.flags.length) h += `<div class="card"><h3>Check before the call</h3>${R.flags.map(f=>`<div class="flag ${f.r?"r":""}">${esc(f.t)}</div>`).join("")}</div>`;
+  h += `<div class="card"><h3>Explicit needs to aim for</h3><div class="small" style="margin:0 0 8px">Don't say these. Ask the questions so the client says them in their own words.</div>${R.needs.map(n=>`<div class="goal">"${esc(n)}"</div>`).join("")}</div>`;
+  const labels={open:"Open",problem:"Problem",implication:"Implication",cost:"Cost of the problem",holding:"Holding costs, tenants and vacancy",payoff:"Need payoff"};
+  h += `<div class="card"><h3>Your questions for this call</h3><div class="small" style="margin:0">Tap to tick off as you ask. Only use implication questions on problems the client confirms.</div>`;
+  Object.keys(labels).forEach(k => { if(!R.Q[k].length) return;
+    h += `<div class="stagehead sh-${k}">${labels[k]}</div>` + R.Q[k].map((x,i)=>{ const id=`prep.${k}.${i}`, d=(S.prepAsked||{})[id];
+      return `<div class="pq ${d?"done":""}" data-pq="${id}"><div class="box">${d?"✓":""}</div><div class="qt">${esc(x.q)}<span class="why">${esc(x.why)}</span></div></div>`; }).join("");
+  });
+  h += `</div><div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+     <button class="btn btn-y" id="toLive">Load into live call</button>
+     <button class="btn btn-o" id="copyPrep">Copy prep sheet</button>
+     <button class="btn btn-o" onclick="window.print()">Print</button></div>
+     <div class="small">Questions are generated from the setter's notes using the SPIN method. Equity and finance figures are rough estimates only and must be confirmed by the client's broker. Never promise growth, rent, yield or cash flow.</div>`;
+  out.innerHTML = h;
+  $("prepPersona").addEventListener("change", e => { S.prepPersona=e.target.value; save(); renderPrep(); });
+  $("toLive").addEventListener("click", () => {
+    S.persona = pid; S.client = c.name||c.hello||S.client; S.stage="open"; S.qi={}; S.asked={}; S.showAll=false;
+    S.liveQ = JSON.parse(JSON.stringify(R.Q));
+    S.notes = "Prep from booking notes. Signals: "+R.sigs.join(", ")+".";
+    R.implied.forEach(t => { if(t && !S.needs.some(n=>n.implied===t)) S.needs.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5), implied:t}); });
+    save(); renderAll(); setView("live"); window.scrollTo({top:0}); toast("Loaded into live call");
+  });
+  $("copyPrep").addEventListener("click", () => {
+    const t = [`CALL PREP: ${c.name||c.hello}`, `Persona: ${pName(pid)}`, `Signals: ${R.sigs.join(", ")}`, ``, `CHECK BEFORE THE CALL`, ...R.flags.map(f=>"• "+f.t), ``, `EXPLICIT NEEDS TO AIM FOR`, ...R.needs.map(n=>"• "+n), ``,
+      ...Object.keys(labels).flatMap(k => R.Q[k].length ? [labels[k].toUpperCase(), ...R.Q[k].map((x,i)=>`${i+1}. ${x.q}`), ``] : [])].join("\n");
+    const done=()=>toast("Prep sheet copied");
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(()=>{});
+  });
+}
+let PREP=null;
+
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => setView(t.dataset.view)));
+$("notesPaste").value = S.prepNotes||"";
+$("genBtn").addEventListener("click", () => { S.prepNotes=$("notesPaste").value; S.prepPersona=null; S.prepAsked={}; save(); renderPrep(); if(innerWidth<900) $("prepOut").scrollIntoView({behavior:"smooth"}); });
+$("clearPrep").addEventListener("click", () => { S.prepNotes=""; S.prepPersona=null; S.prepAsked={}; $("notesPaste").value=""; save(); renderPrep(); });
+document.addEventListener("click", e => { const q=e.target.closest("[data-pq]"); if(!q) return; S.prepAsked=S.prepAsked||{}; const id=q.dataset.pq; if(S.prepAsked[id]) delete S.prepAsked[id]; else S.prepAsked[id]=true; save(); q.classList.toggle("done"); q.querySelector(".box").textContent=S.prepAsked[id]?"✓":""; });
+renderPrep();
+
+renderAll();
+setView(S.view||'prep');
+</script>
+</body>
+</html>

@@ -82,6 +82,11 @@ export const teams: TeamTile[] = [
     description: 'Client deal tracking.',
     subTiles: [
       {
+        name: 'SPIN Call Coach',
+        description: 'SPIN call prep and live-call question coach',
+        href: '/team/sales/spin-call-coach',
+      },
+      {
         name: 'Client Deals Log',
         description: 'Client deals tracking',
         comingSoon: true,
