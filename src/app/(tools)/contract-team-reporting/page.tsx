@@ -346,6 +346,7 @@ const FULL_FC_COLUMNS: ColumnDef[] = [
   { key: 'registeredAddress', label: 'Registered Address', width: 220 },
   { key: 'name', label: 'Opportunity Name', width: 220 },
   { key: 'smsfName', label: 'SMSF Name', width: 140 },
+  { key: 'contactPhone', label: 'Contact Phone', width: 130 },
   { key: 'owner', label: 'Owner', width: 120 },
   { key: 'followers', label: 'Followers', width: 160 },
   { key: 'assignedBA', label: 'Assigned BA', width: 120 },
@@ -375,7 +376,6 @@ const FULL_FC_COLUMNS: ColumnDef[] = [
   { key: 'brokerCompany', label: 'Broker Company', width: 140 },
   { key: 'personalName', label: 'Personal Name', width: 160 },
   { key: 'contactEmail', label: 'Contact Email', width: 180 },
-  { key: 'contactPhone', label: 'Contact Phone', width: 130 },
 ];
 
 const SETTLEMENT_COLUMNS: ColumnDef[] = [
