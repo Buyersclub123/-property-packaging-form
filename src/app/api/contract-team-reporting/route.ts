@@ -311,6 +311,7 @@ function transformOpportunity(
     ghlLink: opp.id
       ? `https://app.gohighlevel.com/v2/location/${GHL_LOCATION_ID}/opportunities/${opp.id}?tab=Opportunity+details`
       : '',
+    exchangeEmail: opp.id ? `/exchange-email/compose?oppId=${encodeURIComponent(opp.id)}` : '',
     pipelineId: opp.pipelineId || '',
     pipelineName: PIPELINE_NAMES[opp.pipelineId] || opp.pipelineId || '',
     pipelineStageId: opp.pipelineStageId || '',
@@ -375,6 +376,12 @@ function transformOpportunity(
     partnerPhone: customFieldValues['partnerPhone'] || '',
     smsfName: customFieldValues['smsfName'] || '',
     trustName: customFieldValues['trustName'] || '',
+    accountantName: customFieldValues['accountantName'] || '',
+    accountantCompany: customFieldValues['accountantCompany'] || '',
+    accountantEmail: customFieldValues['accountantEmail'] || '',
+    accountantPhone: customFieldValues['accountantPhone'] || '',
+    propertyManager: customFieldValues['propertyManager'] || '',
+    propertyManagerDetails: customFieldValues['propertyManagerDetails'] || '',
     stage: stageName,
   };
 

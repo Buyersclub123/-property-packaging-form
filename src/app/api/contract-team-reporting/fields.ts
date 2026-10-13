@@ -61,6 +61,12 @@ export const FIELD_MAP: Record<string, string> = {
   'gpStrUSjZVHE4xyolRvH': 'partnerPhone',
   'wWJMsF5GadaOEEVuPsGP': 'smsfName',
   'EbDMmXJTBxkkWFBDChy5': 'trustName',
+  'TNvzBboSKQizt9wNSqus': 'accountantName',
+  'eq4QfKuI5201IPAFlSzq': 'accountantEmail',
+  'pl9pUdSc00bF4JeUdCgf': 'accountantPhone',
+  'trxorFuw4WPqKZT8f78U': 'accountantCompany',
+  'SQwuifVkGaYglkBUGseP': 'propertyManager',
+  'UgtJu3I87HQLVdt918BZ': 'propertyManagerDetails',
 };
 
 // Reverse map: friendly name → field ID
@@ -2950,7 +2956,7 @@ export const CO_FIELDS_READ_ONLY = true;
 export const READ_ONLY_FIELDS = new Set([
   // System / computed
   'id', 'name', 'opportunityName', 'pipelineStage', 'pipelineName', 'pipelineId', 'pipelineStageId',
-  'assignedTo', 'owner', 'followers', 'daysSinceStageChange', 'stage', 'ghlLink', 'status',
+  'assignedTo', 'owner', 'followers', 'daysSinceStageChange', 'stage', 'ghlLink', 'exchangeEmail', 'status',
   'monetaryValue', 'createdAt', 'updatedAt', 'lastStageChangeAt',
   'co_record_id', 'co_linked_opportunity_id',
   // Contact fields (item 23)
@@ -3099,6 +3105,13 @@ const OPPORTUNITY_FIELD_LABELS: Record<string, string> = {
   partnerPhone: 'Partner Phone',
   smsfName: 'SMSF Name',
   trustName: 'TRUST Name',
+  accountantName: 'Accountant Name',
+  accountantCompany: 'Accountant Company',
+  accountantEmail: 'Accountant Email',
+  accountantPhone: 'Accountant Mobile',
+  propertyManager: 'Property Manager',
+  propertyManagerDetails: 'Property Manager Details',
+  exchangeEmail: 'Exchange Email',
   contactEmail: 'Contact Email',
   contactPhone: 'Contact Phone',
   contactName: 'Contact Name',

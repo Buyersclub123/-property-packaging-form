@@ -257,6 +257,7 @@ const DEFAULT_COLUMN_SETTINGS: Record<string, ColumnSettings> = {
   pipelineName: { isFYI: true },
   daysSinceStageChange: { isFYI: true },
   ghlLink: { isFYI: true },
+  exchangeEmail: { isFYI: true },
   bpRequested: { color: 'Yellow', endStateValues: ['Yes'] },
   bpDueDate: { color: 'Yellow' },
   bpRequestedExtensionDate: { color: 'Yellow' },
@@ -2997,6 +2998,18 @@ export default function ContractTeamReportingPage() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           Open
+                        </a>
+                      );
+                    } else if (col.key === 'exchangeEmail' && rawValue) {
+                      cellContent = (
+                        <a
+                          href={rawValue}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Draft email
                         </a>
                       );
                     } else {
