@@ -59,6 +59,7 @@ interface DealRecord {
   agentMobileCO: string;
   hasEoiHistory: string;
   offerAccepted: string;
+  quickRecord: string;
 }
 
 interface ColumnDef {
@@ -140,6 +141,7 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
   { key: 'clientClosed', label: 'Client', width: 70 },
   { key: 'closingDate', label: 'Close Date', width: 80 },
   { key: 'closingPrice', label: 'Close $', width: 75 },
+  { key: 'quickRecord', label: 'Quick', width: 50 },
   { key: 'id', label: 'Record ID', width: 120 },
 ];
 
@@ -312,6 +314,15 @@ export default function DealSheetPage() {
 
   // Per-row status editing
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
+  // Quick record tool (D6/D22): hidden until the record count is double-clicked; copy mode shows a ⧉ per row
+  const [quickToolVisible, setQuickToolVisible] = useState(false);
+  const [quickCopyMode, setQuickCopyMode] = useState(false);
+  useEffect(() => {
+    if (!quickCopyMode) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setQuickCopyMode(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [quickCopyMode]);
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [statusBlockId, setStatusBlockId] = useState<string | null>(null); // F83 inline warning
   const [speculativeBlockId, setSpeculativeBlockId] = useState<string | null>(null); // F89 speculative → 03 block
@@ -1332,9 +1343,22 @@ export default function DealSheetPage() {
             className="h-7 w-auto"
           />
           <h1 className="text-lg font-bold">Deal Sheet</h1>
-          <span className="text-xs opacity-60">
+          <span
+            className="text-xs opacity-60 select-none"
+            onDoubleClick={() => setQuickToolVisible((v) => !v)}
+            title="Double-click to show/hide the Quick record tool"
+          >
             {sortedRecords.length} records
           </span>
+          {quickToolVisible && (
+            <button
+              onClick={() => setQuickCopyMode((v) => !v)}
+              className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${quickCopyMode ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
+              title="Create a quick property record — copy a row or start blank"
+            >
+              Quick record
+            </button>
+          )}
           <a
             href="/deal-sheet/reports"
             target="_blank"
@@ -1769,11 +1793,25 @@ export default function DealSheetPage() {
         </div>
       </div>
 
+      {/* Quick record copy-mode bar */}
+      {quickCopyMode && (
+        <div className={`flex items-center gap-3 px-4 py-1.5 text-xs ${t.headerBg} border-b ${t.cellBorder} ${t.headerText}`}>
+          <span>Quick record: click <strong>⧉</strong> on a row to copy that property, or</span>
+          <div className="flex items-center gap-2">
+            <a href="/deal-sheet/quick-record" className="px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-medium hover:bg-blue-700">Start blank</a>
+            <button onClick={() => setQuickCopyMode(false)} className={`px-2 py-1 rounded text-[11px] ${t.inputBg} ${t.headerText} hover:opacity-80`} title="Cancel (Esc)">×</button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="border-collapse text-xs" style={{ userSelect: resizingCol !== null ? 'none' : 'auto' }}>
           <thead className="sticky top-0 z-10">
             <tr>
+              {quickCopyMode && (
+                <th className={`${t.headerBg} border ${t.cellBorder} px-1 py-1.5 text-center ${t.headerText}`} style={{ width: 28, minWidth: 28, maxWidth: 28 }} title="Copy to quick record">⧉</th>
+              )}
               {columns.map((col, idx) => (
                 <th
                   key={col.key}
@@ -2008,6 +2046,18 @@ export default function DealSheetPage() {
                 key={record.id}
                 className={`${t.hoverBg} ${isNewRecord(record.createdAt) ? 'border-l-2 border-l-green-400' : ''}`}
               >
+                {quickCopyMode && (
+                  <td className={`border ${t.cellBorder} px-1 py-1 text-center`} style={{ width: 28, minWidth: 28, maxWidth: 28 }}>
+                    <a
+                      href={`/deal-sheet/quick-record?copyFrom=${encodeURIComponent(record.id)}`}
+                      className="text-blue-400 hover:text-blue-300 font-bold"
+                      title={`Copy "${record.propertyAddress}" to a new quick record`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      ⧉
+                    </a>
+                  </td>
+                )}
                 {columns.map((col) => {
                   const value = record[col.key] || '';
                   let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;
@@ -2093,10 +2143,13 @@ export default function DealSheetPage() {
                       cellContent = (
                         <span
                           onDoubleClick={() => setEditingStatusId(record.id)}
-                          className="cursor-pointer truncate"
+                          className="cursor-pointer block"
                           title="Double-click to edit status"
                         >
-                          {value}
+                          <span className="block truncate">{value}</span>
+                          {record.quickRecord === 'Yes' && (
+                            <span className="inline-block mt-0.5 px-1 rounded text-[9px] font-bold bg-amber-500 text-black leading-4" title="Quick record — not packaged, no email/PDF">QUICK</span>
+                          )}
                         </span>
                       );
                     }
@@ -2152,7 +2205,7 @@ export default function DealSheetPage() {
                   }
 
                   // PDF link — clickable icon
-                  if (col.key === 'pdfLink' && value) {
+                  if (col.key === 'pdfLink' && value && record.quickRecord !== 'Yes') {
                     cellContent = (
                       <a
                         href={value}
@@ -2168,7 +2221,7 @@ export default function DealSheetPage() {
                   }
 
                   // Folder link — show folder icon if available
-                  if (col.key === 'propertyAddress' && record.folderLink) {
+                  if (col.key === 'propertyAddress' && record.folderLink && record.quickRecord !== 'Yes') {
                     cellContent = (
                       <div className="flex items-center gap-1">
                         <a

@@ -10,6 +10,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useFormStore } from '@/store/formStore';
+import { DuplicateAddressDialog } from '@/components/DuplicateAddressDialog';
+import type { DuplicateAddressMatch } from '@/components/DuplicateAddressDialog';
 import { getStashData } from '@/lib/stash';
 import { geocodeAddress } from '@/lib/geocoder';
 import { YesNo, RiskOverlays } from '@/types/form';
@@ -173,152 +175,38 @@ function LGADisplay({ isEditable: externalIsEditable }: { isEditable?: boolean }
     }
   }, [stashData?.lga, formData.address.lga, isEditable, address.lgaManuallyCleared]); // updateAddress is a stable Zustand action, doesn't need to be in deps
   
+  const [lgaLookupError, setLgaLookupError] = useState<string | null>(null);
+  const lgaPostcodeOk = /^\d{4}$/.test((address.postCode || '').trim());
+
+  // LGA is never typed. Resolved server-side via /api/lookups/resolve-lga:
+  // Geoscape Administrative Boundaries (primary) → Geoscape address LGA → Stash. Requires Suburb + State + 4-digit Post Code.
   const handleLookupLGA = async () => {
-    if (!address.suburbName || !address.state) {
-      alert('Please enter Suburb and State first');
+    if (!address.suburbName || !address.state || !lgaPostcodeOk) {
+      setLgaLookupError('Enter Suburb, State and a 4-digit Post Code to resolve the LGA.');
       return;
     }
-
     setIsLookingUpLGA(true);
+    setLgaLookupError(null);
     try {
-      const addressUpdates: any = {};
-      
-      // First, check if we have Stash data with LGA
-      if (stashData?.lga) {
-        addressUpdates.lga = stashData.lga;
-        // Also populate postcode if missing
-        if (!address.postCode && stashData.postCode) {
-          addressUpdates.postCode = stashData.postCode;
-        }
-        updateAddress(addressUpdates);
-        setIsLookingUpLGA(false);
-        return;
-      }
-
-      // Try Stash API with suburb/state - Stash API returns LGA (but may not return postcode for suburb-only queries)
-      let stashLGA = null;
-      try {
-        const { getStashData } = await import('@/lib/stash');
-        // Try with suburb and state - Stash might be able to find LGA
-        const stashQuery = `${address.suburbName}, ${address.state}`;
-        const stashResult = await getStashData(stashQuery);
-        if (stashResult?.lga) {
-          stashLGA = stashResult.lga;
-          addressUpdates.lga = stashResult.lga;
-          // Also populate postcode if Stash provides it
-          if (!address.postCode && stashResult.postCode) {
-            addressUpdates.postCode = stashResult.postCode;
-          }
-          // Also fix suburb capitalization if needed
-          if (stashResult.suburbName && stashResult.suburbName !== address.suburbName) {
-            addressUpdates.suburbName = stashResult.suburbName
-              .split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-              .join(' ');
-          }
-          // Don't return early - continue to Geoscape to get postcode if Stash didn't provide it
-        }
-      } catch (stashError) {
-        console.log('Stash API lookup failed, trying Geoscape:', stashError);
-      }
-
-      // Fallback: Try Geoscape with suburb/state to get postcode
-      const { geocodeAddress } = await import('@/lib/geocoder');
-      const geocodeQuery = `${address.suburbName}, ${address.state}`;
-      console.log('LGA Lookup: Calling Geoscape with:', geocodeQuery);
-      const geocodeResult = await geocodeAddress(geocodeQuery);
-      console.log('LGA Lookup: Geoscape result:', geocodeResult);
-      console.log('LGA Lookup: Best match postcode:', geocodeResult.bestMatch?.postCode);
-      console.log('LGA Lookup: All suggestions:', geocodeResult.suggestions);
-      
-      // Try to get postcode from best match or first suggestion
-      let foundPostcode = null;
-      let foundSuburb = null;
-      
-      if (geocodeResult.bestMatch?.postCode) {
-        foundPostcode = geocodeResult.bestMatch.postCode;
-      } else if (geocodeResult.suggestions && geocodeResult.suggestions.length > 0) {
-        // Check all suggestions for postcode
-        for (const suggestion of geocodeResult.suggestions) {
-          if (suggestion.postCode) {
-            foundPostcode = suggestion.postCode;
-            break;
-          }
-        }
-      }
-      
-      if (geocodeResult.bestMatch?.suburbName) {
-        foundSuburb = geocodeResult.bestMatch.suburbName;
-      } else if (geocodeResult.suggestions && geocodeResult.suggestions.length > 0) {
-        foundSuburb = geocodeResult.suggestions[0]?.suburbName;
-      }
-      
-      if (foundPostcode && !address.postCode) {
-        console.log('LGA Lookup: Populating postcode:', foundPostcode);
-        addressUpdates.postCode = foundPostcode;
-      } else if (!address.postCode) {
-        console.log('LGA Lookup: Postcode not found in any Geoscape suggestions');
-      }
-      
-      // Fix suburb capitalization if needed
-      if (foundSuburb) {
-        const correctedSuburb = foundSuburb
-          .split(' ')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
-        if (correctedSuburb !== address.suburbName) {
-          addressUpdates.suburbName = correctedSuburb;
-        }
-      }
-
-      // If we got LGA from Stash but still need postcode, try Geoscape with full address
-      if (stashLGA && !address.postCode && address.streetNumber && address.streetName) {
-        const fullAddress = `${address.streetNumber} ${address.streetName}, ${address.suburbName} ${address.state}`;
-        const fullGeocodeResult = await geocodeAddress(fullAddress);
-        if (fullGeocodeResult.bestMatch?.postCode) {
-          addressUpdates.postCode = fullGeocodeResult.bestMatch.postCode;
-        }
-      }
-
-      // Try Geoscape with full address if available (more likely to have LGA)
-      let lga = null;
-      if (!stashLGA && address.streetNumber && address.streetName) {
-        const fullAddress = `${address.streetNumber} ${address.streetName}, ${address.suburbName} ${address.state}`;
-        const fullGeocodeResult = await geocodeAddress(fullAddress);
-        if (fullGeocodeResult.bestMatch?.lga) {
-          lga = fullGeocodeResult.bestMatch.lga;
-          addressUpdates.lga = lga;
-          // Also get postcode from full address if still missing
-          if (!address.postCode && fullGeocodeResult.bestMatch.postCode) {
-            addressUpdates.postCode = fullGeocodeResult.bestMatch.postCode;
-          }
-        }
-      }
-
-      // Update all fields at once
-      console.log('LGA Lookup: Address updates to apply:', addressUpdates);
-      if (Object.keys(addressUpdates).length > 0) {
-        updateAddress(addressUpdates);
-        console.log('LGA Lookup: Address updated successfully');
+      const res = await fetch('/api/lookups/resolve-lga', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suburb: address.suburbName, state: address.state, postCode: address.postCode }),
+      });
+      const data = await res.json();
+      if (data.success && data.lga) {
+        updateAddress({ lga: data.lga, lgaManuallyCleared: false });
       } else {
-        // No updates found
-        console.log('LGA Lookup: No updates to apply');
-        if (!stashLGA && !lga) {
-          alert('LGA lookup unavailable for suburb/state only. Please:\n1. Click "Check Stash" with a full address, OR\n2. Enter LGA manually');
-        }
+        updateAddress({ lga: '', lgaManuallyCleared: true });
+        setLgaLookupError(data.error || 'Could not resolve LGA for this suburb and postcode.');
       }
     } catch (error) {
       console.error('Error looking up LGA:', error);
-      alert('Error looking up LGA. Please use "Check Stash" with a full address, or enter manually.');
+      setLgaLookupError('LGA lookup failed. Please try again.');
     } finally {
       setIsLookingUpLGA(false);
     }
   };
-  
-  const googleSearchQuery = address.suburbName && address.state 
-    ? `LGA of ${address.suburbName} ${address.state}`
-    : 'Local Government Area';
-  const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(googleSearchQuery)}`;
   
   return (
     <div>
@@ -327,21 +215,12 @@ function LGADisplay({ isEditable: externalIsEditable }: { isEditable?: boolean }
         <input
           type="text"
           value={lgaValue}
-          onChange={(e) => {
-            const newValue = e.target.value;
-            // If user clears the field, mark it as manually cleared
-            if (newValue === '' && formData.address.lga) {
-              updateAddress({ lga: '', lgaManuallyCleared: true });
-            } else {
-              updateAddress({ lga: newValue, lgaManuallyCleared: false });
-            }
-          }}
-          className="input-field flex-1"
-          placeholder={stashData?.lga ? "Auto-populated from Stash" : "Enter LGA manually"}
-          readOnly={!isEditable}
+          className="input-field flex-1 bg-gray-50"
+          placeholder={lgaPostcodeOk ? 'Click "Lookup LGA" to resolve' : 'Enter Suburb, State and Post Code, then Lookup LGA'}
+          readOnly
           required
         />
-        {isEditable && address.suburbName && address.state && (
+        {(isEditable || !lgaValue) && address.suburbName && address.state && (
           <button
             type="button"
             onClick={handleLookupLGA}
@@ -352,6 +231,9 @@ function LGADisplay({ isEditable: externalIsEditable }: { isEditable?: boolean }
           </button>
         )}
       </div>
+      {lgaLookupError && (
+        <p className="text-xs text-red-600 mt-1">{lgaLookupError}</p>
+      )}
       {stashData?.lga && (
         <p className="text-xs text-green-600 mt-1">✓ LGA from Stash: {stashData.lga}</p>
       )}
@@ -465,6 +347,10 @@ export function Step0AddressAndRisk() {
   const { address, riskOverlays, sourcer, sellingAgentName, sellingAgentEmail, sellingAgentMobile, clearInGhl } = formData;
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [packagingEnabled, setPackagingEnabled] = useState(false);
+  // Duplicate-address prompt (shared with the quick-record tool). mode: 'info' after Check Stash, 'confirm' before Continue with Packaging
+  const [dupPrompt, setDupPrompt] = useState<{ matches: DuplicateAddressMatch[]; mode: 'info' | 'confirm' } | null>(null);
+  const dupWarnedForRef = useRef<string | null>(null); // address already warned about — show the prompt once per address
+  const lgaReady = !!(address.lga && address.lga.trim());
   const [addressFieldsEditable, setAddressFieldsEditable] = useState(address.addressFieldsEditable || false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [sourcerOptions, setSourcerOptions] = useState<string[]>([]);
@@ -770,6 +656,26 @@ export function Step0AddressAndRisk() {
       const geocodeResult = await geocodeAddress(queryAddress);
       console.log('Geoscape response:', geocodeResult);
       
+      // Start the GHL duplicate-address check now so it runs alongside Stash (result handled after Stash)
+      const dupCheckAddress = geocodeResult.bestMatch?.formattedAddress || queryAddress;
+      // Shown as soon as it returns (does not wait for Stash); never blocks the flow.
+      if (dupCheckAddress) {
+        fetch('/api/ghl/check-address', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ propertyAddress: dupCheckAddress }),
+        })
+          .then(async (res) => {
+            if (!res.ok) { console.error('GHL check failed with status:', res.status, await res.text()); return; }
+            const checkResult = await res.json();
+            if (checkResult.exists && checkResult.matchingRecords && checkResult.matchingRecords.length > 0 && dupWarnedForRef.current !== dupCheckAddress) {
+              dupWarnedForRef.current = dupCheckAddress;
+              setDupPrompt({ matches: checkResult.matchingRecords, mode: 'info' });
+            }
+          })
+          .catch((e) => console.error('GHL address check error (non-blocking):', e));
+      }
+
       // Step 2: Call Stash API for planning/risk data (use validated address if available)
       const stashQueryAddress = geocodeResult.bestMatch?.formattedAddress || queryAddress;
       console.log('Calling getStashData with:', stashQueryAddress);
@@ -856,46 +762,6 @@ export function Step0AddressAndRisk() {
         addressUpdates.addressSource = 'stash'; // Set default to Stash address
         updateAddress(addressUpdates);
         
-        // Check GHL for existing address at the same time
-        const verifiedAddress = addressUpdates.propertyAddress || address.propertyAddress;
-        if (verifiedAddress) {
-          console.log('Starting GHL address check for:', verifiedAddress);
-          try {
-            const checkResponse = await fetch('/api/ghl/check-address', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ propertyAddress: verifiedAddress }),
-            });
-            
-            console.log('GHL check response status:', checkResponse.status);
-            
-            if (!checkResponse.ok) {
-              console.error('GHL check failed with status:', checkResponse.status);
-              const errorText = await checkResponse.text();
-              console.error('GHL check error response:', errorText);
-              return; // Don't block, just log
-            }
-            
-            const checkResult = await checkResponse.json();
-            console.log('GHL check result:', checkResult);
-            
-            if (checkResult.exists && checkResult.matchingRecords && checkResult.matchingRecords.length > 0) {
-              const matches = checkResult.matchingRecords;
-              const matchInfo = matches.map((m: any) => 
-                `Address: ${m.address}\nPackager: ${m.packager || 'N/A'}\nSourcer: ${m.sourcer || 'N/A'}`
-              ).join('\n\n');
-              
-              alert(`⚠️ This address already exists in GHL:\n\n${matchInfo}\n\nYou can still proceed, but this may be a duplicate.`);
-            } else {
-              console.log('GHL check: No matching addresses found');
-            }
-          } catch (ghlError) {
-            // Don't block the flow if GHL check fails - just log it
-            console.error('GHL address check error (non-blocking):', ghlError);
-          }
-        } else {
-          console.log('GHL check skipped: No verified address available');
-        }
       } else {
         console.log('WARNING: No address components returned from Geoscape. Address may be invalid.');
         setStashError('Address not found. Please check the address and try again.');
@@ -943,6 +809,22 @@ export function Step0AddressAndRisk() {
       // Only auto-populate LGA if it's not already set AND user hasn't manually cleared it
       if (stashResponse.lga && !formData.address.lga && !formData.address.lgaManuallyCleared) {
         updateAddress({ lga: stashResponse.lga });
+      } else if (!stashResponse.lga && !formData.address.lga) {
+        // Stash has no LGA for this area — resolve via Geoscape Administrative Boundaries (same chain as Lookup LGA)
+        try {
+          const addr = useFormStore.getState().formData.address;
+          if (addr.suburbName && addr.state && /^\d{4}$/.test((addr.postCode || '').trim())) {
+            const lgaRes = await fetch('/api/lookups/resolve-lga', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ suburb: addr.suburbName, state: addr.state, postCode: addr.postCode }),
+            });
+            const lgaData = await lgaRes.json();
+            if (lgaData.success && lgaData.lga) updateAddress({ lga: lgaData.lga, lgaManuallyCleared: false });
+          }
+        } catch (lgaErr) {
+          console.error('LGA auto-resolve after Stash failed:', lgaErr);
+        }
       }
       
       // Generate Google Maps link
@@ -1002,6 +884,19 @@ export function Step0AddressAndRisk() {
     });
   };
 
+  // Show Sourcer and Selling Agent fields. Folder is created at final submission when the address is complete.
+  const enablePackaging = () => {
+    setPackagingEnabled(true);
+    setTimeout(() => {
+      const fieldsSection = document.querySelector('[data-fields-section]');
+      if (fieldsSection) {
+        fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollBy({ top: -200, behavior: 'smooth' });
+      }
+    }, 100);
+  };
+
   const handleContinueWithPackaging = async () => {
     // If already enabled, just return
     if (packagingEnabled) {
@@ -1025,32 +920,14 @@ export function Step0AddressAndRisk() {
 
       const checkResult = await checkResponse.json();
 
-      if (checkResult.exists && checkResult.matchingRecords && checkResult.matchingRecords.length > 0) {
-        // Address already exists - show warning but don't block
-        const matches = checkResult.matchingRecords;
-        const matchInfo = matches.map((m: any) => 
-          `Address: ${m.address}\nPackager: ${m.packager || 'N/A'}\nSourcer: ${m.sourcer || 'N/A'}`
-        ).join('\n\n');
-        
-        alert(
-          `Note: This address already exists in GHL:\n\n${matchInfo}\n\nYou can continue. Folder will be created when you submit the form.`
-        );
+      if (checkResult.exists && checkResult.matchingRecords && checkResult.matchingRecords.length > 0 && dupWarnedForRef.current !== propertyAddress) {
+        // Address already exists and the user has not been warned for this address yet — confirm before enabling packaging
+        dupWarnedForRef.current = propertyAddress;
+        setDupPrompt({ matches: checkResult.matchingRecords, mode: 'confirm' });
+        return;
       }
 
-      // Show Sourcer and Selling Agent fields
-      // Folder will be created at final submission (Step 5) when address is complete
-      setPackagingEnabled(true);
-      
-      // Scroll up a bit to make the fields below more visible
-      setTimeout(() => {
-        const fieldsSection = document.querySelector('[data-fields-section]');
-        if (fieldsSection) {
-          fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } else {
-          // Fallback: scroll up by 200px
-          window.scrollBy({ top: -200, behavior: 'smooth' });
-        }
-      }, 100);
+      enablePackaging();
     } catch (error) {
       console.error('Error checking address:', error);
       // Don't block progression if check fails - just show fields
@@ -1127,6 +1004,19 @@ export function Step0AddressAndRisk() {
     }
     if (!sellingAgentMobile || sellingAgentMobile.trim() === '') {
       setValidationError('Selling Agent Mobile is required. Please enter a mobile number or "TBC".');
+      setTimeout(() => {
+        const fieldsSection = document.querySelector('[data-fields-section]');
+        if (fieldsSection) {
+          fieldsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+      return;
+    }
+
+    // LGA is required (same rule as MultiStepForm step-1 validation; resolved via Check Stash / Lookup LGA, never typed)
+    const currentLga = useFormStore.getState().formData.address.lga;
+    if (!currentLga || currentLga.trim() === '') {
+      setValidationError('LGA (Local Government Area) is required to proceed. Click "Check Stash" with the full address, or "Lookup LGA" after entering Suburb, State and Post Code.');
       setTimeout(() => {
         const fieldsSection = document.querySelector('[data-fields-section]');
         if (fieldsSection) {
@@ -1252,6 +1142,14 @@ export function Step0AddressAndRisk() {
 
   return (
     <div>
+      {dupPrompt && (
+        <DuplicateAddressDialog
+          matches={dupPrompt.matches}
+          confirmLabel={dupPrompt.mode === 'confirm' ? 'Yes, continue' : 'OK, understood'}
+          onConfirm={() => { const mode = dupPrompt.mode; setDupPrompt(null); if (mode === 'confirm') enablePackaging(); }}
+          onCancel={() => setDupPrompt(null)}
+        />
+      )}
       <h2 className="text-2xl font-bold mb-6">Property Address & Risk Assessment</h2>
       <p className="text-gray-600 mb-6">
         Enter the property address to check risk overlays from Stash Property.
@@ -1645,7 +1543,13 @@ export function Step0AddressAndRisk() {
         </div>
       </div>
 
-      {/* Risk Overlays Section */}
+      {/* Everything below is locked until an LGA has been resolved (Check Stash / Lookup LGA). */}
+      {!lgaReady && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-900">
+          <strong>LGA required.</strong> Resolve the LGA first — click <strong>Check Stash</strong> with the full address, or <strong>Lookup LGA</strong> after entering Suburb, State and Post Code. The rest of this page unlocks once the LGA is set.
+        </div>
+      )}
+      <fieldset disabled={!lgaReady} className={!lgaReady ? 'opacity-50 pointer-events-none select-none' : ''}>
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Property Risk Overlays</h3>
         <p className="text-gray-600 mb-4 text-sm">
@@ -2302,6 +2206,7 @@ export function Step0AddressAndRisk() {
           </div>
         </div>
       )}
+      </fieldset>
     </div>
   );
 }

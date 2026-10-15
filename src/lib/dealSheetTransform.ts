@@ -256,15 +256,21 @@ export function transformRecord(record: GHLRecord) {
   const closingDate = p.closing_date || '';
   const linkedOpportunityId = p.linked_opportunity_id || '';
 
+  // Quick record flag (checkbox — GHL may return a string or an array of selected options)
+  // GHL stores the option key lower-cased ("yes") even though the option value is "Yes".
+  const rawQuick: unknown = p.quick_record;
+  const quickValues = (Array.isArray(rawQuick) ? rawQuick : [rawQuick]).map((x) => String(x ?? '').toLowerCase());
+  const quickRecord = quickValues.includes('yes') ? 'Yes' : '';
+
   // Folder link
   const folderLink = p.folder_link || '';
 
   // PDF link (populated from Redis in the API route, not from GHL)
   const pdfLink = '';
 
-  // Portal link (only when QA approved)
+  // Portal link (only when QA approved; never for quick records — D1)
   let portalLink = '';
-  if (packagerApproved.toLowerCase() === 'approved' && qaApproved.toLowerCase() === 'approved' && propertyAddress) {
+  if (!quickRecord && packagerApproved.toLowerCase() === 'approved' && qaApproved.toLowerCase() === 'approved' && propertyAddress) {
     const SCENARIO_5_WEBHOOK = 'https://hook.eu1.make.com/g9pcjs2imabfea3viiy6213ejgrdprn1';
     const MODULE_1_WEBHOOK = 'https://hook.eu1.make.com/bkq23g13n4ae6spskdbwpru7hleol6sl';
     const API_URL = 'https://property-review-form.vercel.app';
@@ -321,6 +327,7 @@ export function transformRecord(record: GHLRecord) {
     agentMobileCO: agentMobile,
     hasEoiHistory: p.has_eoi_history || '',
     offerAccepted,
+    quickRecord,
   };
 }
 

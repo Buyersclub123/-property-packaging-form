@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { geocodeAddress } from '@/lib/geocoder';
-import { getStashData } from '@/lib/stash';
+import { resolveLga } from '@/lib/resolveLga';
 import { listAllInvestmentHighlightsV2, lgaMatches } from '@/lib/investmentHighlightsV2';
 
 /**
@@ -24,40 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const query = `${suburb.trim()}, ${state.trim()}`;
-    let lga: string | null = null;
-
-    // Step 1a: Try Stash API first (same as property form)
-    try {
-      const stashResult = await getStashData(query);
-      if (stashResult?.lga && typeof stashResult.lga === 'string' && stashResult.lga.trim()) {
-        lga = stashResult.lga.trim();
-        console.log('[resolve-lga] LGA from Stash:', lga);
-      }
-    } catch (stashErr) {
-      console.log('[resolve-lga] Stash API failed, trying Geoscape:', stashErr);
-    }
-
-    // Step 1b: Fallback to Geoscape geocodeAddress (same as property form)
-    if (!lga) {
-      try {
-        const geocodeResult = await geocodeAddress(query);
-        if (geocodeResult.bestMatch?.lga) {
-          lga = geocodeResult.bestMatch.lga.trim();
-          console.log('[resolve-lga] LGA from Geoscape bestMatch:', lga);
-        } else if (geocodeResult.suggestions?.length > 0) {
-          for (const suggestion of geocodeResult.suggestions) {
-            if (suggestion.lga) {
-              lga = suggestion.lga.trim();
-              console.log('[resolve-lga] LGA from Geoscape suggestion:', lga);
-              break;
-            }
-          }
-        }
-      } catch (geoErr) {
-        console.log('[resolve-lga] Geoscape fallback failed:', geoErr);
-      }
-    }
+    const lga = await resolveLga(suburb, state);
 
     if (!lga) {
       return NextResponse.json({
