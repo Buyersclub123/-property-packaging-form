@@ -103,6 +103,11 @@ export const teams: TeamTile[] = [
         description: 'Access AMAP research reports',
         href: '/team/research/amap-reports',
       },
+      {
+        name: 'Purchase Analytics',
+        description: 'Client property purchases 2019–2026',
+        href: '/team/research/purchase-analytics',
+      },
     ],
   },
   {

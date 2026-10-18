@@ -10,6 +10,11 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_STASH_WEBHOOK_URL: process.env.NEXT_PUBLIC_STASH_WEBHOOK_URL,
   },
+  experimental: {
+    outputFileTracingIncludes: {
+      '/api/purchase-analytics/data/[file]': ['./data/purchase-analytics/*.csv'],
+    },
+  },
   // Improve chunk loading reliability
   webpack: (config, { isServer }) => {
     if (!isServer) {
