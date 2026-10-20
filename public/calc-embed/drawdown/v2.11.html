@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Build Drawdown Calculator — Buyers Club</title>
+<!-- v2.11 — one button in Edit mode to take a state back to '+ set up'.
+     v2.10 — emptying a state (no stages, every % blank/0) and clicking Done takes it back to '+ set up';
+     blank values show blank (never NaN).
+     v2.9 — settings load/save through the site's API (/api/drawdown/settings) and the user from /api/auth/me.
+     v2.8 — months is the default unit everywhere (settlement gap default unit was weeks).
+     v2.7 — rent start gap removed from the calculator inputs; it comes from the state's settings.
+     v2.6 — settings file labels windows "09 mo" style, matching the Google Sheet and packaging tool.
+     v2.5 — month 1 = land only: no build interest until month 2 (a claim timed in month 1 starts in month 2).
+     v2.4 — single weekly rent field; settings change log (name from login) replaces the 'Updated by' box; import/export
+     hidden until tested; add build window applies to the state being edited only; line break in the intro.
+     v2.3 — removed "Total interest to first rent" from Section 5 (not in the sheet, not requested).
+     v2.2 — settings version removed from the footer (Settings link kept).
+     v2.1 — every setting is per state (no global settings): rent start gap + settlement gap with days/weeks/months;
+     states locked until Edit; tick one build window to enter, the others are worked out in proportion; custom build windows
+     (with 'also add to' other states); disable a state by setting all % to 0 (no Remove button); build window list depends on
+     the state; import/export moved to the bottom; new settings file layout (one column per window).
+     v2.0 — Settings page: stage tables by state (builder deposit, stages, months per build window, settlement gap),
+     default rent start, version stamp; import/export CSV in the Google Sheet's 'Build Stage Lookup' layout; new states can be
+     set up. Saving is to this browser until Devin connects the shared Vercel database (see SettingsStore).
+     v1.4 — rent start default = 4.33 weeks (1 month after Practical Completion). Matches the Google Sheet's Table 3;
+     the sheet's extra land-only month is treated as a sheet bug (to be fixed when the sheet is aligned).
+     v1.3 — rent start default = 8.67 weeks (2 months after Practical Completion), like for like with the Google Sheet.
+     v1.2 — state must be chosen (no default); builder deposit fixed by state and shown in Table 1; 9-month default;
+     stamp duty toggle moved to Section 5; helper text under Section 4; removed '(optional)'.
+     v1.1 — removed the land loan interest row from Table 3 (builder's schedule only).
+     v1.0 — recreates the "Drawdown & schedule" tab of the Split Contract CF spreadsheet (v2.9), with agreed fixes:
+     part-month interest, all drawn stages accrue to the end of the rent-start month, rent start = weeks after
+     Practical Completion, one stamp duty rate table per state. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --yellow:#FFD60A; --yellow-soft:#FFF1A6; --charcoal:#1A1A1A; --body:#3B3838;
+    --cream:#F8F4E8; --grey-lt:#F2F2F2; --grey-md:#E0E0E0; --green:#34A853; --red:#D93025; --white:#FFFFFF;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:'Poppins',system-ui,sans-serif;color:var(--body);background:#FAFAFA;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 16px 60px}
+
+  header{background:var(--charcoal);color:#fff;padding:22px 0;margin-bottom:22px}
+  .header-inner{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand-logo{background:#fff;border-radius:9px;padding:8px 13px;display:flex;align-items:center;flex-shrink:0}
+  .brand-logo img{height:24px;display:block}
+  .brand h1{font-size:19px;margin:0;font-weight:700;letter-spacing:-0.3px;line-height:1.1}
+  .brand span{font-size:12px;color:#bbb;font-weight:500}
+  .pdf-btn{background:var(--yellow);color:var(--charcoal);border:none;font-family:inherit;font-weight:700;font-size:13px;padding:10px 18px;border-radius:100px;cursor:pointer}
+  .pdf-btn:hover{filter:brightness(.95)}
+
+  .intro{background:var(--cream);border:1px solid #ECE6D2;border-radius:14px;padding:14px 20px;margin-bottom:22px;font-size:13px}
+  .intro b{color:var(--charcoal)}
+
+  h2.section{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--charcoal);font-weight:700;margin:0 0 14px;display:flex;align-items:center;gap:9px}
+  .stepnum{background:var(--yellow);color:var(--charcoal);border-radius:100px;min-width:22px;height:22px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
+
+  .inputs{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:26px;align-items:start}
+  @media(max-width:1100px){.inputs{grid-template-columns:1fr 1fr}}
+  .card{background:#fff;border:1px solid #EDEDED;border-radius:14px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h3{margin:0 0 14px;font-size:13px;font-weight:700;color:var(--charcoal);text-transform:uppercase;letter-spacing:.6px}
+
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:12.5px;font-weight:600;color:var(--charcoal);margin-bottom:6px}
+  .field .hint{font-size:11px;color:#999;font-weight:500;margin-top:4px}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .amount-input{display:flex;align-items:center;border:1.5px solid var(--grey-md);border-radius:9px;padding:0 10px;background:#fff;transition:border-color .15s}
+  .amount-input:focus-within{border-color:var(--yellow)}
+  .amount-input .unit{font-weight:700;color:var(--charcoal);font-size:14px}
+  .amount-input input{border:none;outline:none;padding:9px 5px;font-family:inherit;font-size:15px;font-weight:700;color:var(--charcoal);width:100%;background:transparent;min-width:0}
+  input.text,select{width:100%;border:1.5px solid var(--grey-md);border-radius:9px;padding:9px 10px;font-family:inherit;font-size:14px;font-weight:600;color:var(--charcoal);background:#fff;outline:none}
+  input.text:focus,select:focus{border-color:var(--yellow)}
+  select{cursor:pointer}
+
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}
+  .toggle-row .tl{font-size:12.5px;font-weight:600;color:var(--charcoal)}
+  .switch{position:relative;width:42px;height:24px;flex-shrink:0}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;cursor:pointer;inset:0;background:var(--grey-md);border-radius:24px;transition:.2s}
+  .slider:before{content:"";position:absolute;height:18px;width:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .switch input:checked + .slider{background:var(--charcoal)}
+  .switch input:checked + .slider:before{transform:translateX(18px)}
+
+  .warn{background:#FFF4E5;border:1px solid #F5C77E;color:#8A4B00;border-radius:10px;padding:9px 13px;font-size:12px;font-weight:600;margin-bottom:14px}
+  .warn:empty{display:none}
+
+  .empty{background:#fff;border:1.5px dashed var(--grey-md);border-radius:14px;padding:40px;text-align:center;color:#999;font-weight:600}
+
+  .block{margin-bottom:26px}
+  .row2{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start}
+  @media(max-width:1000px){.row2{grid-template-columns:1fr}}
+
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{font-weight:700;color:var(--charcoal);text-align:right;padding:8px 9px;border-bottom:2px solid var(--charcoal);white-space:nowrap;font-size:11.5px}
+  td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--grey-lt);white-space:nowrap}
+  th.l,td.l{text-align:left}
+  td.desc{white-space:normal;min-width:220px}
+  tr.total td{font-weight:800;color:var(--charcoal);border-top:2px solid var(--charcoal);border-bottom:none}
+  td.hl{background:var(--cream);font-weight:700}
+  td.from-dep{background:#FBE3CF;font-weight:700}
+  .muted{color:#999}
+
+  .kv{display:grid;grid-template-columns:1fr auto;gap:0}
+  .kv div{padding:7px 2px;border-bottom:1px solid var(--grey-lt);font-size:12.5px}
+  .kv div:nth-child(even){text-align:right;font-weight:700;color:var(--charcoal)}
+  .kv .tot{font-weight:800 !important;color:var(--charcoal);border-top:2px solid var(--charcoal);border-bottom:none}
+
+  .status{display:flex;align-items:center;gap:10px;margin-top:12px;padding:12px 14px;border-radius:10px;font-weight:700;font-size:13.5px}
+  .status.ok{background:rgba(52,168,83,.12);color:#1E7A3A}
+  .status.bad{background:rgba(217,48,37,.12);color:#A8261C}
+
+  .sched-wrap + .sched-wrap{margin-top:16px}
+  table.sched td,table.sched th{text-align:right;padding:6px 7px;font-size:12px}
+  table.sched th.l,table.sched td.l{text-align:left;min-width:150px}
+  table.sched .mnum th{border-bottom:none;padding-top:0;color:#999;font-weight:600}
+  table.sched .phase td{font-size:10.5px;font-weight:600;padding:3px 4px;text-align:center}
+  .ph-build{background:#E7ECF7;color:#3A4A6B}
+  .ph-rent{background:var(--green);color:#fff}
+  table.sched tr.cost td{border-top:2px solid var(--charcoal);font-weight:700}
+  table.sched tr.cb td.v{color:var(--green);font-weight:700}
+  table.sched tr.bal td{font-weight:800;color:var(--charcoal);border-top:2px solid var(--charcoal);border-bottom:2px solid var(--charcoal)}
+  table.sched tr.bal td.neg{background:var(--red);color:#fff}
+
+  .sched-note{font-size:11px;color:#999;margin:8px 4px 0}
+  .print-head{display:none}
+  .set-link{color:#999}
+  #settingsView .hint{font-size:11px;color:#999;font-weight:500}
+  .set-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+  .set-head h2{margin:0 0 4px;font-size:20px;color:var(--charcoal)}
+  .set-meta{font-size:12px}
+  .set-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .btn{background:var(--charcoal);color:#fff;border:none;font-family:inherit;font-weight:700;font-size:12.5px;padding:9px 15px;border-radius:100px;cursor:pointer}
+  .btn.yellow{background:var(--yellow);color:var(--charcoal)}
+  .btn.ghost{background:#fff;color:var(--charcoal);border:1.5px solid var(--grey-md)}
+  .btn.danger{color:var(--red)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  label.btn{display:inline-block}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+  .chip{border:1.5px solid var(--grey-md);background:#fff;border-radius:100px;padding:7px 14px;font-family:inherit;font-weight:700;font-size:12.5px;cursor:pointer;color:var(--charcoal)}
+  .chip.on{background:var(--yellow);border-color:var(--yellow)}
+  .chip.off{border-style:dashed;color:#999}
+  .dot-bad{color:var(--red)}
+  .set-grid{display:grid;grid-template-columns:1fr 1fr 1.3fr .7fr;gap:14px;margin-bottom:10px}
+  @media(max-width:1000px){.set-grid{grid-template-columns:1fr 1fr}}
+  .gap-row{display:flex;gap:6px}
+  .gap-row .amount-input{flex:1}
+  select.unit-sel{width:auto;padding:8px 6px;font-size:12.5px}
+  #settingsView input:disabled,#settingsView select:disabled{background:#F7F7F7;color:#555;cursor:not-allowed}
+  #settingsView .amount-input:has(input:disabled){background:#F7F7F7}
+  .card.editing{border:2px solid var(--yellow)}
+  .base-note{background:var(--cream);border-radius:9px;padding:9px 12px;font-size:12px;margin:4px 0 10px}
+  th.base-col,td.base-col{background:#FFF8D6}
+  label.tick{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;cursor:pointer;margin-bottom:3px}
+  span.derived{display:inline-block;min-width:60px;text-align:right;color:#555;font-weight:600}
+  .log{display:grid;grid-template-columns:auto auto 1fr;gap:4px 18px;font-size:12px;max-height:180px;overflow:auto}
+  table.set-table td{padding:5px 6px}
+  table.set-table input.text{padding:6px 8px;font-size:13px}
+  input.cell{width:76px;border:1.5px solid var(--grey-md);border-radius:7px;padding:6px 7px;font-family:inherit;font-size:13px;font-weight:600;text-align:right;outline:none}
+  input.cell:focus{border-color:var(--yellow)}
+  .icon{border:none;background:none;color:#bbb;cursor:pointer;font-size:14px}
+  .icon:hover{color:var(--red)}
+  .good{color:#1E7A3A}.bad{color:var(--red)}
+  .set-errors{background:#FDECEA;border:1px solid #F3B4AE;color:#A8261C;border-radius:10px;padding:9px 13px;font-size:12px;font-weight:600;margin-bottom:14px}
+  .set-errors:empty{display:none}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:16px}
+  .modal-box{background:#fff;border-radius:14px;max-width:640px;width:100%;max-height:85vh;overflow:auto;padding:22px}
+  .diff{font-size:12px;background:var(--grey-lt);border-radius:8px;padding:10px 12px;margin:8px 0 14px;max-height:280px;overflow:auto;line-height:1.6}
+  footer{margin-top:30px;font-size:11px;color:#999;line-height:1.6}
+  footer b{color:#777}
+
+  @media print{
+    @page{size:A4 landscape;margin:10mm}
+    html,body{background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .row2{grid-template-columns:1.5fr 1fr !important;gap:10px}
+    .block.page-break{break-before:page}
+    .kv div{padding:3px 2px;font-size:10px}
+    td{padding:2.5px 7px}
+    th{padding:4px 7px}
+    table.sched td,table.sched th{padding:2px 4px !important}
+    table.sched .phase td{padding:2px 3px !important;font-size:8px}
+    h2.section{break-after:avoid;margin-bottom:6px;font-size:11px}
+    .block.keep{break-inside:avoid}
+    .card h3{margin-bottom:4px !important}
+    .status{margin-top:6px;padding:6px 10px;font-size:11px}
+    .card{padding:8px 12px !important}
+    .kv div{padding:2px 2px !important}
+    .print-head{padding-bottom:5px}
+    header,.inputs,.intro,.no-print,#settingsView,.modal{display:none !important}
+    .wrap{max-width:none;padding:0}
+    .print-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--yellow);padding-bottom:8px;margin-bottom:12px}
+    .print-head img{height:26px}
+    .print-head .ph-title{font-size:16px;font-weight:800;color:var(--charcoal)}
+    .print-head .ph-meta{font-size:10.5px;color:var(--body);text-align:right;line-height:1.5}
+    .card{box-shadow:none;border:1px solid #DDD;padding:12px;break-inside:avoid}
+    .block{margin-bottom:10px}
+    .print-head{margin-bottom:8px}
+    .card{border-radius:8px}
+    table{font-size:10px}
+    table.sched td,table.sched th{font-size:9px;padding:3px 4px}
+    td.desc{min-width:0}
+    h2.section{margin-bottom:8px}
+    .warn{display:none}
+    footer{font-size:8.5px;margin-top:10px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-logo"><img alt="Buyers Club" src="data:image/png;base64,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"></div>
+      <div><h1>Build Drawdown Calculator</h1><span>Mortgage cost through the build window</span></div>
+    </div>
+    <button class="pdf-btn" id="pdfBtn" onclick="window.print()">⬇ Save / print as PDF</button>
+  </div>
+</header>
+
+<div class="wrap">
+<div id="calcView">
+
+  <div class="print-head">
+    <div>
+      <img alt="Buyers Club" src="data:image/png;base64,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">
+      <div class="ph-title">Build Drawdown &amp; Schedule</div>
+    </div>
+    <div class="ph-meta" id="printMeta"></div>
+  </div>
+
+  <div class="intro">
+    Shows how the loan is drawn as each build stage is claimed, the interest-only cost month by month, and the client's cash position until the first rent is received.<br>
+    <b>The months are indicative only. They are not a build timetable.</b>
+  </div>
+
+  <!-- ============ INPUTS ============ -->
+  <div class="inputs">
+    <div class="card">
+      <h3>Property &amp; client</h3>
+      <div class="field"><label for="propName">Property name / address</label><input class="text" id="propName" placeholder="e.g. Lot 12, 4 Smith St"></div>
+      <div class="field"><label for="clientName">Client name</label><input class="text" id="clientName"></div>
+      <div class="field"><label for="preparedBy">Prepared by</label><input class="text" id="preparedBy"></div>
+      <div class="field"><label for="prepDate">Date</label><input class="text" id="prepDate" type="date"></div>
+      <div class="field"><label for="state">State</label><select id="state"></select></div>
+    </div>
+
+    <div class="card">
+      <h3>Purchase &amp; loan</h3>
+      <div class="field"><label for="land">Land cost</label><div class="amount-input"><span class="unit">$</span><input id="land" inputmode="numeric" data-money></div></div>
+      <div class="field"><label for="build">Build cost</label><div class="amount-input"><span class="unit">$</span><input id="build" inputmode="numeric" data-money></div></div>
+      <div class="two-col">
+        <div class="field"><label for="lvr">LVR</label><div class="amount-input"><input id="lvr" inputmode="decimal" value="90"><span class="unit">%</span></div></div>
+        <div class="field"><label for="depPct">Deposit</label><div class="amount-input"><input id="depPct" inputmode="decimal" value="12"><span class="unit">%</span></div></div>
+      </div>
+      <div class="field"><label for="rate">Interest rate</label><div class="amount-input"><input id="rate" inputmode="decimal" value="6.5"><span class="unit">%</span></div></div>
+    </div>
+
+    <div class="card">
+      <h3>Build &amp; rent</h3>
+      <div class="two-col">
+        <div class="field"><label for="window">Build window</label>
+          <select id="window" disabled><option value="">Select state first</option></select></div>
+        <div class="field"><label for="startMonth">Start month</label><select id="startMonth"></select></div>
+      </div>
+      <div class="field"><label for="rent">Weekly rent</label><div class="amount-input"><span class="unit">$</span><input id="rent" inputmode="numeric" data-money></div></div>
+    </div>
+
+    <div class="card">
+      <h3>Cashback &amp; buffer</h3>
+      <div class="two-col">
+        <div class="field"><label for="cb1">Cashback 1</label><div class="amount-input"><span class="unit">$</span><input id="cb1" inputmode="numeric" data-money></div></div>
+        <div class="field"><label for="cb1m">Paid in</label><select id="cb1m"></select></div>
+      </div>
+      <div class="two-col">
+        <div class="field"><label for="cb2">Cashback 2</label><div class="amount-input"><span class="unit">$</span><input id="cb2" inputmode="numeric" data-money></div></div>
+        <div class="field"><label for="cb2m">Paid in</label><select id="cb2m"></select></div>
+      </div>
+      <div class="field"><label for="buffer">Client's cash buffer</label><div class="amount-input"><span class="unit">$</span><input id="buffer" inputmode="numeric" data-money></div></div>
+    </div>
+  </div>
+
+  <div id="warnings" class="warn"></div>
+  <div id="emptyState" class="empty">Choose the state and enter the land and build cost to see the drawdown schedule.</div>
+
+  <div id="results" style="display:none">
+
+    <!-- 1. Inputs & deposits summary -->
+    <div class="block">
+      <h2 class="section"><span class="stepnum">1</span>Inputs &amp; deposits summary</h2>
+      <div class="row2">
+        <div class="card">
+          <table>
+            <thead><tr><th class="l"></th><th>Total cost</th><th>Deposit %</th><th>Deposit $</th><th>Loan %</th><th>Loan $</th></tr></thead>
+            <tbody id="t1"></tbody>
+          </table>
+          <table style="margin-top:14px">
+            <thead><tr><th class="l">Build deposit</th><th>Build deposit $</th><th>Builder deposit (stage 0)</th><th>Balance applied to stage claims</th></tr></thead>
+            <tbody id="t1b"></tbody>
+          </table>
+        </div>
+        <div class="card"><div class="kv" id="assump"></div></div>
+      </div>
+    </div>
+
+    <!-- 2. Stamp duty savings -->
+    <div class="block">
+      <h2 class="section"><span class="stepnum">2</span>Stamp duty savings — single contract v split contract</h2>
+      <div class="card">
+        <table>
+          <thead><tr><th class="l">Contract type</th><th>Value for stamp duty</th><th>Stamp duty</th><th>Transfer fee</th><th>Mortgage fee</th><th>Total</th></tr></thead>
+          <tbody id="t2"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 3. Build schedule details -->
+    <div class="block">
+      <h2 class="section"><span class="stepnum">3</span>Build schedule details</h2>
+      <div class="card">
+        <table>
+          <thead><tr><th class="l">Stage</th><th class="l">Description</th><th>Claim %</th><th>Claim $</th><th>Paid from deposit</th><th>Paid by lender</th><th>Monthly interest</th><th>Months charged</th><th>Total interest</th></tr></thead>
+          <tbody id="t3"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 4. Schedule -->
+    <div class="block page-break">
+      <h2 class="section"><span class="stepnum">4</span>Land &amp; build schedule cash flow</h2>
+      <div class="card" id="schedule"></div>
+      <div class="sched-note">Figures show the interest accrued (charged) each month, not when it's paid. Where a stage is claimed part-way through a month, interest accrues only for that part of the month.</div>
+    </div>
+
+    <!-- 5. Cash flow status -->
+    <div class="block keep">
+      <h2 class="section"><span class="stepnum">5</span>Cash flow status check</h2>
+      <div class="row2">
+        <div class="card">
+          <h3 style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.6px">Cash balance starting position</h3>
+          <div class="kv" id="t5a"></div>
+        </div>
+        <div class="card">
+          <div class="toggle-row no-print" style="padding:0 0 10px;margin-bottom:10px;border-bottom:1px solid var(--grey-lt)"><span class="tl">Include stamp duty saving in cash balance</span>
+            <label class="switch"><input type="checkbox" id="sdToggle"><span class="slider"></span></label></div>
+          <h3 style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.6px">Cash balance position</h3>
+          <div class="kv" id="t5b"></div>
+          <div id="statusBox"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer id="footer"></footer>
+</div>
+
+<!-- ============ SETTINGS PAGE ============ -->
+<div id="settingsView" style="display:none">
+  <div class="set-head">
+    <div><h2>Settings — build stages by state</h2><div class="set-meta" id="setMeta"></div></div>
+    <div class="set-actions"><button class="btn ghost" id="setBack">← Back to calculator</button></div>
+  </div>
+  <div class="chips" id="setTabs"></div>
+  <div id="setState"></div>
+  <div class="card" style="margin-top:18px">
+    <div id="setErrors" class="set-errors"></div>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <button class="btn yellow" id="setSave" disabled>Save settings</button>
+      <button class="btn ghost" id="setDiscard">Discard changes</button>
+      <button class="btn ghost" id="setDefaults">Load built-in defaults</button>
+      <span class="muted" id="setDirty" style="font-size:12px;font-weight:600"></span>
+      <span class="good" id="setNotice" style="font-size:12px;font-weight:600"></span>
+    </div>
+    <h3 style="margin:18px 0 6px">Change log</h3>
+    <div class="log" id="setLog"></div>
+  </div>
+  <div class="card" style="margin-top:18px" id="ioCard">
+    <h3>Import / export settings file</h3>
+    <div class="set-actions" style="margin-bottom:12px">
+      <label class="btn ghost">Import CSV<input type="file" id="setImport" accept=".csv,text/csv" hidden></label>
+      <button class="btn ghost" id="setExport">Export CSV</button>
+    </div>
+    <div class="hint" style="font-size:12px;line-height:1.6">
+      The settings file can come from this page (Export) or from the Google Sheet's <b>Build Stage Lookup</b> tab (in the sheet: File → Download → CSV, current sheet).
+      Import shows every change before anything is applied; then click Save settings. An import replaces all state templates.<br>
+      The export uses the new layout (one column per build window). It will paste into the Google Sheet once the sheet has been updated to match; the current sheet only has 9/12/15/18-month columns.
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="modal"><div class="modal-box">
+  <h3 style="margin:0 0 12px;color:var(--charcoal)" id="modalTitle">Import settings</h3>
+  <div id="modalBody"></div>
+  <div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn ghost" id="modalCancel">Cancel</button><button class="btn yellow" id="modalApply">Apply</button></div>
+</div></div>
+
+</div>
+
+<script>
+/* ===================== SETTINGS (everything is per state — no global settings) ===================== */
+// The calculator reads everything from SETTINGS. Built-in defaults below are copied from the Google Sheet's
+// 'Build Stage Lookup' tab (v2.9) and are used until settings are saved (and as a fallback if they can't be loaded).
+// Each state has its own build windows. Stage months (s) count from land settlement (month 1), part months allowed,
+// and are stored in months for every window. One window per state is the "base": its months are entered, the other
+// windows are worked out in proportion (e.g. from 12: 9-month = x0.75).
+// Stage 0 is the builder's deposit (paid by the client, no interest). The last stage is Practical Completion.
+// A state with every % at 0 is disabled (not offered in the calculator).
+const ALL_STATES = {NSW:'New South Wales', VIC:'Victoria', QLD:'Queensland', SA:'South Australia', WA:'Western Australia',
+                    TAS:'Tasmania', ACT:'Australian Capital Territory', NT:'Northern Territory'};
+const SHOW_IMPORT_EXPORT = false;              // import/export hidden until tested
+const MAX_STAGES = 6;                         // the Google Sheet's Drawdown tab has rows for stages 1–6
+const UNITS = {days: 12/365, weeks: 12/52, months: 1};   // months per unit
+
+function stdState(stages){
+  return {windows:[9,12,15,18], baseWindow:12, baseUnit:'months',
+          rentGap:{value:1, unit:'months'}, settlementGap:{value:0, unit:'months'}, stages};
+}
+const DEFAULT_SETTINGS = {
+  meta: {version: 1, updated: '2026-10-12', updatedBy: 'Built-in defaults (Google Sheet v2.9)',
+         history: [{version: 1, updated: '2026-10-12', by: 'Built-in defaults (Google Sheet v2.9)'}]},
+  states: {
+    NSW: stdState([
+      {d:'Deposit', p:5},
+      {d:'Base', p:15, s:{9:1.5,12:2,15:2.5,18:3}},
+      {d:'Frame', p:20, s:{9:3.75,12:5,15:6.25,18:7.5}},
+      {d:'Enclosed', p:35, s:{9:6,12:8,15:10,18:12}},
+      {d:'Fixing', p:20, s:{9:7.5,12:10,15:12.5,18:15}},
+      {d:'Balance', p:5, s:{9:9,12:12,15:15,18:18}}]),
+    VIC: stdState([
+      {d:'Deposit', p:5},
+      {d:'Base Stage', p:10, s:{9:1.5,12:2,15:2.5,18:3}},
+      {d:'Frame Stage', p:15, s:{9:3.75,12:5,15:6.25,18:7.5}},
+      {d:'Lockup Stage', p:35, s:{9:6,12:8,15:10,18:12}},
+      {d:'Fixing Stage', p:25, s:{9:7.5,12:10,15:12.5,18:15}},
+      {d:'Completion', p:10, s:{9:9,12:12,15:15,18:18}}]),
+    QLD: stdState([
+      {d:'Deposit', p:5},
+      {d:'Base', p:15, s:{9:1.5,12:2,15:2.5,18:3}},
+      {d:'Frame', p:20, s:{9:3.75,12:5,15:6.25,18:7.5}},
+      {d:'Enclosed', p:25, s:{9:6,12:8,15:10,18:12}},
+      {d:'Fixing', p:20, s:{9:7.5,12:10,15:12.5,18:15}},
+      {d:'Practical Completion', p:15, s:{9:9,12:12,15:15,18:18}}]),
+    SA: stdState([
+      {d:'Deposit', p:5},
+      {d:'Footings Poured', p:15, s:{9:1.5,12:2,15:2.5,18:3}},
+      {d:'Substantial completion of wall and frame', p:20, s:{9:3,12:4,15:5,18:6}},
+      {d:'Substantial completion of external walls and roof covering', p:20, s:{9:4.5,12:6,15:7.5,18:9}},
+      {d:'Substantial completion of internal linings', p:20, s:{9:6,12:8,15:10,18:12}},
+      {d:'Substantial completion of second fix carpentry (including built in cupboards)', p:10, s:{9:7.5,12:10,15:12.5,18:15}},
+      {d:'Practical Completion', p:10, s:{9:9,12:12,15:15,18:18}}]),
+    WA: stdState([
+      {d:'Initial Deposit (not to exceed 6.5%)', p:6.5},
+      {d:'Concrete Slab', p:13.5, s:{9:1.5,12:2,15:2.5,18:3}},
+      {d:'Plate Height', p:30, s:{9:3.75,12:5,15:6.25,18:7.5}},
+      {d:'Roof Cover', p:25, s:{9:5.625,12:7.5,15:9.375,18:11.25}},
+      {d:'Lock Up', p:15, s:{9:7.5,12:10,15:12.5,18:15}},
+      {d:'Practical Completion', p:10, s:{9:9,12:12,15:15,18:18}}])
+  }
+};
+
+// Where settings are kept: the site's shared settings API (Redis), same origin, no key.
+//   GET  /api/drawdown/settings -> { settings: <object>|null, updatedAt, updatedBy }   (null = use built-in defaults)
+//   POST /api/drawdown/settings  body { settings: <object> } -> same shape (server stamps updatedAt / updatedBy)
+//   GET  /api/auth/me            -> { email: "first.last@buyersclub.com.au"|null, source }
+// If the API can't be reached (e.g. the file opened locally for testing), settings fall back to this browser only.
+function nameFromEmail(email){
+  const local = String(email || '').split('@')[0];
+  return local ? local.split(/[._-]+/).filter(Boolean).map(p => p[0].toUpperCase() + p.slice(1)).join(' ') : '';
+}
+const SettingsStore = {
+  shared: false,
+  userName: null,
+  serverMeta: null,                            // { updatedAt, updatedBy } from the API
+  async init(){
+    try{
+      const r = await fetch('/api/auth/me', {cache: 'no-store'});
+      if(r.ok){ const j = await r.json(); if(j && j.email) this.userName = nameFromEmail(j.email); }
+    }catch(e){ /* not signed in / local file */ }
+  },
+  async load(){
+    try{
+      const r = await fetch('/api/drawdown/settings', {cache: 'no-store'});
+      if(r.ok && (r.headers.get('content-type') || '').includes('json')){
+        const j = await r.json();
+        this.shared = true; this.serverMeta = {updatedAt: j.updatedAt || null, updatedBy: j.updatedBy || null};
+        return j.settings || null;
+      }
+    }catch(e){ /* API not reachable */ }
+    this.shared = false;
+    try{ const raw = localStorage.getItem('bc_drawdown_settings_v21'); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+  },
+  async save(s){
+    if(this.shared){
+      const r = await fetch('/api/drawdown/settings', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({settings: s})});
+      if(!r.ok) throw new Error(`the server returned ${r.status}`);
+      const j = await r.json().catch(() => ({}));
+      this.serverMeta = {updatedAt: j.updatedAt || null, updatedBy: j.updatedBy || null};
+      return;
+    }
+    localStorage.setItem('bc_drawdown_settings_v21', JSON.stringify(s));
+  }
+};
+
+let SETTINGS = clone(DEFAULT_SETTINGS);
+let SETTINGS_SOURCE = 'built-in';             // 'built-in' | 'saved'
+
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function round2(v){ return Math.round(v*100)/100; }
+// Unit value → months. Anything within 0.01 of a whole month counts as that month (4.33 weeks = 1 month).
+function toM(v, unit){ const m = (Number(v) || 0) * (UNITS[unit] || 1), r = Math.round(m); return Math.abs(m - r) < 0.01 ? r : Math.round(m*1000)/1000; }
+function fromM(m, unit){ return Math.round((Number(m) / (UNITS[unit] || 1)) * 100)/100; }
+function gapM(g){ return g ? toM(g.value, g.unit) : 0; }
+// Value for an input box: blank instead of NaN / null.
+function bx(v){ return v === null || v === undefined || (typeof v === 'number' && isNaN(v)) ? '' : v; }
+function sortedWindows(st){ return (st.windows || []).slice().sort((a, b) => a - b); }
+function isDisabled(st){ return (st.stages || []).every(x => !(Number(x.p) > 0)); }
+// Work out every other window from the base window, in proportion to the window length.
+function scaleFromBase(st){
+  const b = st.baseWindow;
+  st.stages.slice(1).forEach(x => {
+    const v = Number(x.s?.[b]);
+    st.windows.forEach(w => { if(w !== b) x.s[w] = v > 0 ? Math.round(v * w / b * 10000)/10000 : NaN; });
+  });
+}
+
+// Problems that would stop a state being used. Disabled states (all % = 0) are not checked further.
+function validateState(code, st){
+  const e = [];
+  if(!ALL_STATES[code]) e.push(`Unknown state code "${code}".`);
+  if(isDisabled(st)) return e;
+  const wins = st.windows || [];
+  if(!wins.length) e.push('Add at least one build window.');
+  if(wins.some(w => !(w > 0))) e.push('Build windows must be more than 0 months.');
+  if(new Set(wins).size !== wins.length) e.push('The same build window appears twice.');
+  if(!wins.includes(st.baseWindow)) e.push('Tick the build window the timings are entered for.');
+  ['rentGap', 'settlementGap'].forEach(k => { if(!(Number(st[k]?.value) >= 0)) e.push(`${k === 'rentGap' ? 'Rent start gap' : 'Settlement gap'} must be 0 or more.`); });
+  const stages = st.stages || [];
+  if(!stages.length || !(Number(stages[0].p) >= 0)) e.push('Builder deposit (stage 0) % is missing.');
+  const claims = stages.slice(1);
+  if(!claims.length) e.push('Add at least one build stage.');
+  if(claims.length > MAX_STAGES) e.push(`No more than ${MAX_STAGES} build stages (the Google Sheet has rows for 6).`);
+  claims.forEach((x, i) => {
+    const n = i + 1;
+    if(!String(x.d || '').trim()) e.push(`Stage ${n}: description is missing.`);
+    if(!(Number(x.p) > 0)) e.push(`Stage ${n}: claim % must be more than 0.`);
+    if(!(Number(x.s?.[st.baseWindow]) > 0)) e.push(`Stage ${n}: timing for the ${st.baseWindow}-month build is missing.`);
+  });
+  wins.forEach(w => {
+    for(let i = 1; i < claims.length; i++){
+      if(Number(claims[i].s?.[w]) < Number(claims[i-1].s?.[w])) { e.push(`${w}-month build: stage ${i+1} is claimed before stage ${i}.`); break; }
+    }
+  });
+  const total = stages.reduce((a, x) => a + (Number(x.p) || 0), 0);
+  if(Math.abs(total - 100) > 0.001) e.push(`Claims add up to ${round2(total)}% (including the builder deposit), not 100%.`);
+  return e;
+}
+function validateSettings(s){
+  const out = {global:[], states:{}};
+  Object.entries(s.states || {}).forEach(([code, st]) => { const e = validateState(code, st); if(e.length) out.states[code] = e; });
+  if(!Object.entries(s.states || {}).some(([c, st]) => !isDisabled(st))) out.global.push('At least one state must be enabled.');
+  out.ok = !out.global.length && !Object.keys(out.states).length;
+  return out;
+}
+
+// States offered in the calculator: set up, enabled and valid.
+function readyStates(){ return Object.keys(ALL_STATES).filter(k => SETTINGS.states[k] && !isDisabled(SETTINGS.states[k]) && !validateState(k, SETTINGS.states[k]).length); }
+
+/* ---------- Settings file (CSV) ---------- */
+// One row per stage. Columns: State, Stage #, Stage Description, Percent, one column per build window ("9 mo", "12 mo"…,
+// month each stage is claimed), then the per-state settings on each state's stage 0 row, then the version stamp.
+// The Google Sheet's Build Stage Lookup tab will be restructured to this layout. Until then an export won't paste into
+// the current sheet, but importing FROM the current sheet (its 09/12/15/18 layout) still works.
+const SET_COLS = ['Base window', 'Base unit', 'Rent gap', 'Rent gap unit', 'Settlement gap', 'Settlement gap unit'];
+
+function settingsToCSV(s){
+  const codes = Object.keys(ALL_STATES).filter(k => s.states[k]);
+  const allW = [...new Set(codes.flatMap(k => s.states[k].windows))].sort((a, b) => a - b);
+  const head = ['State', 'Stage #', 'Stage Description', 'Percent', ...allW.map(winLabel), ...SET_COLS, '', 'Setting', 'Value'];
+  const rows = [head];
+  codes.forEach(code => {
+    const st = s.states[code];
+    st.stages.forEach((x, i) => {
+      const r = [code, i, x.d, round2(Number(x.p) || 0).toFixed(2) + '%'];
+      allW.forEach(w => r.push(i === 0 || !st.windows.includes(w) ? '' : x.s[w]));
+      if(i === 0) r.push(st.baseWindow, st.baseUnit, st.rentGap.value, st.rentGap.unit, st.settlementGap.value, st.settlementGap.unit);
+      else SET_COLS.forEach(() => r.push(''));
+      r.push('', '', '');
+      rows.push(r);
+    });
+  });
+  const meta = [['Settings version', s.meta.version], ['Last updated', s.meta.updated], ['Updated by', s.meta.updatedBy]];
+  meta.forEach(([k, v], i) => { const r = rows[i + 1] || (rows[i + 1] = head.map(() => '')); r[head.length - 2] = k; r[head.length - 1] = v; });
+  return rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+}
+// Window column labels match the Google Sheet and the packaging tool: "09 mo", "12 mo", "06 mo", "6.5 mo".
+function winLabel(w){ return (Number.isInteger(w) && w < 10 ? '0' + w : String(w)) + ' mo'; }
+function csvCell(v){ const s = String(v ?? ''); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+
+function parseCSV(text){
+  const rows = []; let row = [], cell = '', q = false;
+  for(let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if(q){ if(ch === '"'){ if(text[i+1] === '"'){ cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if(ch === '"') q = true;
+    else if(ch === ','){ row.push(cell); cell = ''; }
+    else if(ch === '\n' || ch === '\r'){ if(ch === '\r' && text[i+1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if(cell !== '' || row.length){ row.push(cell); rows.push(row); }
+  return rows;
+}
+function parsePct(v){
+  const s = String(v ?? '').trim(); if(!s) return NaN;
+  const n = parseFloat(s.replace(/[%,\s]/g, '')); if(isNaN(n)) return NaN;
+  return s.includes('%') ? n : (n <= 1 ? n * 100 : n);
+}
+function parseNum(v){ const n = parseFloat(String(v ?? '').replace(/[,\s]/g, '')); return isNaN(n) ? NaN : n; }
+const unitOf = v => { const u = String(v || '').trim().toLowerCase(); return UNITS[u] ? u : null; };
+
+// Reads this tool's export, the v2.0 export, or the current Google Sheet's Build Stage Lookup tab (09/12/15/18 layout).
+// Rows for states without real stages ('Not defined', '-') are skipped, so those states stay "not set up".
+function csvToSettings(text){
+  const rows = parseCSV(text.replace(/^﻿/, ''));
+  const h = rows.findIndex(r => String(r[0]).trim().toLowerCase() === 'state' && String(r[1]).trim().toLowerCase().startsWith('stage'));
+  if(h < 0) throw new Error('This file doesn\'t look like a settings file or the Build Stage Lookup tab (no "State / Stage #" header row).');
+  const head = rows[h].map(x => String(x).trim()), col = name => head.findIndex(x => x.toLowerCase() === name.toLowerCase());
+  const winCols = head.map((x, i) => { const m = x.match(/^0?(\d+(?:\.\d+)?)\s*mo$/i); return m ? {w: parseFloat(m[1]), i} : null; }).filter(Boolean);
+  if(!winCols.length) throw new Error('No build window columns ("9 mo", "12 mo"…) found.');
+  const oldLayout = col('# payments 10') >= 0;                  // the current sheet: a '# payments' column after each window
+  const notes = [];
+  const s = {meta:{version:'', updated:'', updatedBy:''}, states:{}};
+  const kc = col('Setting'), vc = col('Value');
+  if(kc >= 0 && vc >= 0) rows.slice(h + 1).forEach(r => {
+    const k = String(r[kc] || '').trim().toLowerCase(), v = String(r[vc] ?? '').trim();
+    if(k === 'settings version') s.meta.version = v;
+    if(k === 'last updated') s.meta.updated = v;
+    if(k === 'updated by') s.meta.updatedBy = v;
+  });
+  const byState = {};
+  rows.slice(h + 1).forEach(r => {
+    const code = String(r[0] || '').trim().toUpperCase();
+    if(!ALL_STATES[code]) return;
+    const n = parseInt(String(r[1]).trim(), 10);
+    if(isNaN(n)) return;                                         // 'Tenant' rows etc.
+    const d = String(r[2] || '').trim(), p = parsePct(r[3]);
+    if(!d || d === '-' || isNaN(p)) return;                      // blank / 'Not defined' rows
+    const s2 = {}; winCols.forEach(({w, i}) => { const v = parseNum(r[i]); if(!isNaN(v)) s2[w] = v; });
+    const pay9 = oldLayout ? parseNum(r[winCols[0].i + 1]) : NaN;
+    (byState[code] = byState[code] || []).push({n, d, p: round2(p), s: s2, pay9, row: r});
+  });
+  Object.entries(byState).forEach(([code, list]) => {
+    list.sort((a, b) => a.n - b.n);
+    const dep = list.find(x => x.n === 0), claims = list.filter(x => x.n > 0);
+    if(!dep){ notes.push(`${code}: no stage 0 (builder deposit) row, so ${code} was skipped.`); return; }
+    const wins = winCols.map(c => c.w).filter(w => claims.length && claims.every(x => x.s[w] > 0));
+    const get = name => { const i = col(name); return i >= 0 ? dep.row[i] : ''; };
+    const st = {windows: wins.length ? wins : winCols.map(c => c.w), stages: [{d: dep.d, p: dep.p}].concat(claims.map(x => ({d: x.d, p: x.p, s: x.s})))};
+    const bw = parseNum(get('Base window'));
+    st.baseWindow = st.windows.includes(bw) ? bw : (st.windows.includes(12) ? 12 : st.windows[0]);
+    st.baseUnit = unitOf(get('Base unit')) || 'months';
+    if(col('Rent gap') >= 0 && !isNaN(parseNum(get('Rent gap')))) st.rentGap = {value: parseNum(get('Rent gap')), unit: unitOf(get('Rent gap unit')) || 'months'};
+    else {
+      // Old layout: build interest on Practical Completion runs (payments - 1) months past its claim month.
+      const pc = claims[claims.length - 1];
+      const m = pc && !isNaN(pc.pay9) ? pc.pay9 - 1 : 1;
+      st.rentGap = {value: m, unit: 'months'};
+      notes.push(`${code}: rent start gap not in the file; worked out from the Practical Completion row as ${m} month${m === 1 ? '' : 's'}.`);
+    }
+    const sgOld = col('Settlement gap (wks)');
+    if(col('Settlement gap') >= 0 && !isNaN(parseNum(get('Settlement gap')))) st.settlementGap = {value: parseNum(get('Settlement gap')), unit: unitOf(get('Settlement gap unit')) || 'months'};
+    else st.settlementGap = {value: sgOld >= 0 && !isNaN(parseNum(dep.row[sgOld])) ? parseNum(dep.row[sgOld]) : 0, unit: sgOld >= 0 ? 'weeks' : 'months'};   // only the v2.0 file stored weeks
+    s.states[code] = st;
+  });
+  if(oldLayout){
+    const ref9 = parseNum(rows[h+1]?.[col('09 mon ref')]);
+    if(!isNaN(ref9) && ref9 !== 10) notes.push(`The sheet's rent start month (${ref9} for a 9-month build) is a month later than its stage interest runs. That's the known sheet issue (a land-only month), so it was ignored.`);
+  }
+  return {settings: s, notes};
+}
+
+function diffSettings(a, b){
+  const out = [], fmtG = g => `${g.value} ${g.unit}`;
+  Object.keys(ALL_STATES).forEach(code => {
+    const x = a.states[code], y = b.states[code];
+    if(!x && !y) return;
+    if(!x){ out.push(`${code}: newly set up (${y.stages.length - 1} stages, ${sortedWindows(y).join('/')}-month builds)`); return; }
+    if(!y){ out.push(`${code}: not in the file (will no longer be set up)`); return; }
+    if(isDisabled(x) !== isDisabled(y)) out.push(`${code}: ${isDisabled(y) ? 'disabled' : 'enabled'}`);
+    const xw = sortedWindows(x).join('/'), yw = sortedWindows(y).join('/');
+    if(xw !== yw) out.push(`${code}: build windows ${xw} → ${yw}`);
+    if(x.baseWindow !== y.baseWindow) out.push(`${code}: base window ${x.baseWindow} → ${y.baseWindow} months`);
+    if(gapM(x.rentGap) !== gapM(y.rentGap)) out.push(`${code}: rent start gap ${fmtG(x.rentGap)} → ${fmtG(y.rentGap)}`);
+    if(gapM(x.settlementGap) !== gapM(y.settlementGap)) out.push(`${code}: settlement gap ${fmtG(x.settlementGap)} → ${fmtG(y.settlementGap)}`);
+    const len = Math.max(x.stages.length, y.stages.length);
+    for(let i = 0; i < len; i++){
+      const p = x.stages[i], q = y.stages[i], lbl = i === 0 ? `${code} builder deposit` : `${code} stage ${i}`;
+      if(!p){ out.push(`${lbl}: added (${q.d}, ${q.p}%)`); continue; }
+      if(!q){ out.push(`${lbl}: removed (${p.d})`); continue; }
+      if(p.d !== q.d) out.push(`${lbl}: description "${p.d}" → "${q.d}"`);
+      if(round2(p.p) !== round2(q.p)) out.push(`${lbl}: ${p.p}% → ${q.p}%`);
+      if(i > 0) sortedWindows(y).filter(w => x.windows.includes(w)).forEach(w => { if(round2(p.s[w]) !== round2(q.s[w])) out.push(`${lbl}: ${w}-month build, month ${p.s[w]} → ${q.s[w]}`); });
+    }
+  });
+  return out;
+}
+
+/* ===================== STAMP DUTY ===================== */
+// General (investment) transfer duty + transfer registration fee + mortgage registration fee.
+// Verified against each state's revenue office and land titles office, FY 2026-27 (checked 12 Oct 2026).
+// brackets: [upTo, base, ratePer100]; duty = base + (per $100 or part over the previous threshold) * ratePer100.
+// NSW thresholds are indexed every 1 July; update them for 2027-28. TAS / ACT / NT are not set up.
+const DUTY = {
+  NSW: {brackets:[[18000,0,1.25],[38000,225,1.5],[103000,525,1.75],[387000,1662,3.5],[1290000,11602,4.5],[3870000,52237,5.5],[Infinity,194137,7]],
+        min:20, transferFee: V => 182.73, mortgageFee: 182.73},
+  VIC: {duty: V => V<=25000 ? V*0.014 : V<=130000 ? 350+(V-25000)*0.024 : V<=960000 ? 2870+(V-130000)*0.06 : V<=2000000 ? V*0.055 : 110000+(V-2000000)*0.065,
+        transferFee: V => Math.ceil(Math.min(3614, 104.3 + 2.34*Math.floor(V/1000)) - 1e-9), mortgageFee: 129.2},
+  QLD: {brackets:[[5000,0,0],[75000,0,1.5],[540000,1050,3.5],[1000000,17325,4.5],[Infinity,38025,5.75]],
+        transferFee: V => 248.04 + (V > 180000 ? Math.ceil((V-180000)/10000 - 1e-9)*46.56 : 0), mortgageFee: 248.04},
+  SA:  {brackets:[[12000,0,1],[30000,120,2],[50000,480,3],[100000,1080,3.5],[200000,2830,4],[250000,6830,4.25],[300000,8955,4.75],[500000,11330,5],[Infinity,21330,5.5]],
+        transferFee: V => V<=5000 ? 204 : V<=20000 ? 228 : V<=40000 ? 251 : V<=50000 ? 353 : 353 + Math.ceil((V-50000)/10000 - 1e-9)*105, mortgageFee: 204},
+  WA:  {brackets:[[120000,0,1.9],[150000,2280,2.85],[360000,3135,3.8],[725000,11115,4.75],[Infinity,28453,5.15]],
+        transferFee: V => V<=85000 ? 225.1 : V<=120000 ? 235.1 : V<=200000 ? 255.1 : 255.1 + Math.ceil((V-200000)/100000 - 1e-9)*20, mortgageFee: 225.1}
+};
+const DUTY_ASAT = 'as at 1 July 2026 (FY 2026-27)';
+
+/* ===================== HELPERS ===================== */
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const $ = id => document.getElementById(id);
+const money = v => (v < 0 ? '-$' : '$') + Math.round(Math.abs(v)).toLocaleString('en-AU');
+const pct = v => (Math.round(v*100)/100).toLocaleString('en-AU',{maximumFractionDigits:2}) + '%';
+const num = id => { const v = parseFloat(String($(id).value).replace(/[^0-9.\-]/g,'')); return isNaN(v) ? 0 : v; };
+const isBlank = id => String($(id).value).trim() === '';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const months2 = v => (Math.round(v*100)/100).toLocaleString('en-AU',{maximumFractionDigits:2});
+function store(k, v){ try{ localStorage.setItem('bc_drawdown_'+k, v); }catch(e){} }
+function recall(k){ try{ return localStorage.getItem('bc_drawdown_'+k); }catch(e){ return null; } }
+
+function stampDuty(state, V){
+  const t = DUTY[state];
+  if(!t || !(V > 0)) return {duty:0, transfer:0, mortgage:0, total:0, missing: !t};
+  let duty = 0, prev = 0;
+  if(t.duty) duty = t.duty(V);
+  else for(const [upTo, base, rate] of t.brackets){
+    if(V <= upTo){ duty = base + Math.ceil((V - prev)/100 - 1e-9) * rate; break; }
+    prev = upTo;
+  }
+  if(t.min) duty = Math.max(t.min, duty);
+  const transfer = t.transferFee(V), mortgage = t.mortgageFee;
+  return {duty, transfer, mortgage, total: duty + transfer + mortgage};
+}
+
+/* ===================== CALCULATION ===================== */
+// Timing: month m covers time (m-1) to m, counted from land settlement. A claim in "month s" from the stage table is
+// drawn at time s-1 (plus the state's settlement gap), so a part month (e.g. 1.5) is charged half a month of interest.
+// Rent is first received `weeks` after Practical Completion. The schedule ends with that month, and the land loan
+// and every drawn stage accrue interest to the end of it.
+function calc(inp){
+  const st = SETTINGS.states[inp.state], w = inp.window, r = inp.rate/100;
+  const setM = gapM(st.settlementGap);
+  const landLoan = inp.land * inp.lvr/100, buildLoan = inp.build * inp.lvr/100;
+  const landDep = inp.land * inp.depPct/100, buildDep = inp.build * inp.depPct/100;
+  const builderPct = st.stages[0].p, builderDep = inp.build * builderPct/100;
+  let remaining = Math.max(0, buildDep - builderDep);
+  const balanceForStages = remaining;
+
+  const stages = st.stages.slice(1).map((x, i) => {
+    const claim = inp.build * x.p/100;
+    const fromDep = Math.min(remaining, claim);
+    remaining -= fromDep;
+    const lender = claim - fromDep;
+    return {n:i+1, d:x.d, p:x.p, claim, fromDep, lender, drawT: Math.max(1, x.s[w] - 1 + setM),   // month 1 is the land settlement month: no build claims until month 2
+    monthly: lender * r/12};
+  });
+  const pcT = Math.max(...stages.map(x => x.drawT));
+  const rentT = pcT + gapM(st.rentGap);            // rent start gap comes from the state's settings
+  const M = Math.floor(rentT + 1e-9) + 1;            // last month shown = month first rent is received
+  stages.forEach(x => { x.months = M - x.drawT; x.total = x.monthly * x.months; });
+  const landMonthly = landLoan * r/12;
+
+  const rentMonthly = inp.rent * 52/12;
+  const sd = {single: stampDuty(inp.state, inp.land + inp.build), split: stampDuty(inp.state, inp.land)};
+  sd.saving = sd.single.total - sd.split.total;
+
+  const rows = [];
+  let bal = inp.buffer + (inp.sdOn ? sd.saving : 0);
+  for(let m = 1; m <= M; m++){
+    const stageInt = stages.map(x => x.monthly * Math.min(1, Math.max(0, m - x.drawT)));
+    const cost = landMonthly + stageInt.reduce((a,b) => a+b, 0);
+    let cb = 0;
+    if(inp.cb1 > 0 && inp.cb1m === m) cb += inp.cb1;
+    if(inp.cb2 > 0 && inp.cb2m === m) cb += inp.cb2;
+    const rent = m === M ? rentMonthly : 0;
+    bal = bal + cb + rent - cost;
+    rows.push({m, label: MONTHS[(inp.startMonth + m - 1) % 12], land: landMonthly, stageInt, cost, cb, rent, bal});
+  }
+  const lowest = Math.min(...rows.map(x => x.bal));
+  return {inp, st, name: ALL_STATES[inp.state], builderPct, landLoan, buildLoan, landDep, buildDep, builderDep, balanceForStages, stages, M, pcT, rentT,
+          landMonthly, landTotal: landMonthly * M, rentMonthly, sd, rows, lowest, extra: lowest < 0 ? -lowest : 0};
+}
+
+/* ===================== CALCULATOR UI ===================== */
+function readInputs(){
+  return {
+    state: $('state').value, window: +$('window').value, startMonth: +$('startMonth').value,
+    land: num('land'), build: num('build'), lvr: num('lvr'), depPct: num('depPct'), rate: num('rate'),
+    rent: num('rent'),
+    cb1: num('cb1'), cb1m: +$('cb1m').value, cb2: num('cb2'), cb2m: +$('cb2m').value,
+    buffer: num('buffer'), sdOn: $('sdToggle').checked
+  };
+}
+
+function fillMonthSelect(sel, M, startMonth, keep){
+  const prev = keep ? sel.value : '';
+  sel.innerHTML = '<option value="0">—</option>' + Array.from({length:M}, (_,i) =>
+    `<option value="${i+1}">Month ${i+1} (${MONTHS[(startMonth+i)%12]})</option>`).join('');
+  if(prev && +prev <= M) sel.value = prev;
+}
+
+function fillStateSelect(){
+  const sel = $('state'), prev = sel.value;
+  sel.innerHTML = '<option value="" disabled selected>Select state…</option>' +
+    readyStates().map(k => `<option value="${k}">${ALL_STATES[k]} (${k})</option>`).join('');
+  if(prev && readyStates().includes(prev)) sel.value = prev;
+  fillWindowSelect();
+}
+
+// Build windows depend on the state: greyed out until a state is chosen, then that state's windows.
+// Keeps the current window if the new state has it, otherwise 9 months if available, otherwise the shortest.
+function fillWindowSelect(){
+  const sel = $('window'), prev = +sel.value, code = $('state').value, st = SETTINGS.states[code];
+  if(!st || !readyStates().includes(code)){ sel.innerHTML = '<option value="">Select state first</option>'; sel.disabled = true; return; }
+  const wins = sortedWindows(st);
+  sel.innerHTML = wins.map(w => `<option value="${w}">${months2(w)} months</option>`).join('');
+  sel.disabled = false;
+  sel.value = wins.includes(prev) ? prev : wins.includes(9) ? 9 : wins[0];
+}
+
+// Choosing a state sets its build windows.
+function onStateChange(){ fillWindowSelect(); render(); }
+
+function render(){
+  const inp = readInputs();
+  const stateOk = readyStates().includes(inp.state) && SETTINGS.states[inp.state].windows.includes(inp.window);
+  const ready = stateOk && inp.land > 0 && inp.build > 0;
+
+  // Schedule length for the cashback month pickers (needs the state and build window).
+  const M = stateOk ? calc(Object.assign({}, inp, {land: inp.land || 1, build: inp.build || 1})).M : 0;
+  fillMonthSelect($('cb1m'), M, inp.startMonth, true);
+  fillMonthSelect($('cb2m'), M, inp.startMonth, true);
+  inp.cb1m = +$('cb1m').value; inp.cb2m = +$('cb2m').value;
+
+  const warns = [];
+  if(ready && inp.depPct < SETTINGS.states[inp.state].stages[0].p) warns.push(`The deposit % is lower than the builder deposit (${pct(SETTINGS.states[inp.state].stages[0].p)}). The builder deposit is still paid in full by the client.`);
+  if(inp.cb1 > 0 && !inp.cb1m) warns.push('Choose the month Cashback 1 is paid.');
+  if(inp.cb2 > 0 && !inp.cb2m) warns.push('Choose the month Cashback 2 is paid.');
+  $('warnings').innerHTML = warns.map(esc).join('<br>');
+
+  $('emptyState').style.display = ready ? 'none' : '';
+  $('results').style.display = ready ? '' : 'none';
+  renderMeta(inp);
+  if(!ready) return;
+
+  const c = calc(inp);
+
+  // 1
+  $('t1').innerHTML = [
+    ['Land', inp.land, c.landDep, c.landLoan], ['Build', inp.build, c.buildDep, c.buildLoan]
+  ].map(([l,t,d,L]) => `<tr><td class="l">${l}</td><td>${money(t)}</td><td>${pct(inp.depPct)}</td><td>${money(d)}</td><td>${pct(inp.lvr)}</td><td>${money(L)}</td></tr>`).join('')
+  + `<tr class="total"><td class="l">Totals</td><td>${money(inp.land+inp.build)}</td><td>${pct(inp.depPct)}</td><td>${money(c.landDep+c.buildDep)}</td><td>${pct(inp.lvr)}</td><td>${money(c.landLoan+c.buildLoan)}</td></tr>`
+  + `<tr><td class="l">Builder deposit (stage 0)</td><td>${money(inp.build)}</td><td>${pct(c.builderPct)}</td><td class="hl">${money(c.builderDep)}</td><td class="muted">—</td><td class="muted">—</td></tr>`;
+  $('t1b').innerHTML = `<tr><td class="l">Build</td><td>${money(c.buildDep)}</td><td>${money(c.builderDep)}</td><td class="hl">${money(c.balanceForStages)}</td></tr>`;
+  const cbText = [inp.cb1 > 0 && inp.cb1m ? `${money(inp.cb1)} in month ${inp.cb1m}` : '', inp.cb2 > 0 && inp.cb2m ? `${money(inp.cb2)} in month ${inp.cb2m}` : ''].filter(Boolean).join(' + ') || '—';
+  $('assump').innerHTML = [
+    ['State', c.name], ['Build window', inp.window + ' months'], ['Start month', MONTHS[inp.startMonth]],
+    ['Interest rate (interest only)', pct(inp.rate)], ['First rent received', `${c.st.rentGap.value} ${Number(c.st.rentGap.value) === 1 ? c.st.rentGap.unit.replace(/s$/, '') : c.st.rentGap.unit} after Practical Completion`],
+    ['Weekly rent', money(inp.rent)], ['Cashback', cbText], ["Client's cash buffer", money(inp.buffer)]
+  ].map(([k,v]) => `<div>${k}</div><div>${esc(v)}</div>`).join('');
+
+  // 2
+  if(c.sd.single.missing){
+    $('t2').innerHTML = `<tr><td class="l muted" colspan="6">Stamp duty rates are not set up for ${esc(c.name)}, so no saving is shown.</td></tr>`;
+  } else {
+    const sdRow = (l, V, s) => `<tr><td class="l">${l}</td><td>${money(V)}</td><td>${money(s.duty)}</td><td>${money(s.transfer)}</td><td>${money(s.mortgage)}</td><td>${money(s.total)}</td></tr>`;
+    $('t2').innerHTML = sdRow('Single contract (land + build)', inp.land + inp.build, c.sd.single)
+      + sdRow('Split contract (land only)', inp.land, c.sd.split)
+      + `<tr class="total"><td class="l">Saving${inp.sdOn ? '' : ' <span class="muted" style="font-weight:500">(not included in cash balance)</span>'}</td><td></td><td></td><td></td><td></td><td>${money(c.sd.saving)}</td></tr>`;
+  }
+
+  // 3
+  let t3 = `<tr><td class="l">0</td><td class="l desc">${esc(c.st.stages[0].d)}</td><td>${pct(c.builderPct)}</td><td>${money(c.builderDep)}</td><td class="hl">${money(c.builderDep)}</td><td>$0</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td></tr>`;
+  c.stages.forEach(x => {
+    t3 += `<tr><td class="l">${x.n}</td><td class="l desc">${esc(x.d)}</td><td>${pct(x.p)}</td><td>${money(x.claim)}</td><td class="${x.fromDep > 0 ? 'from-dep' : ''}">${money(x.fromDep)}</td><td>${money(x.lender)}</td><td>${money(x.monthly)}</td><td>${months2(x.months)}</td><td>${money(x.total)}</td></tr>`;
+  });
+  const stageTot = c.stages.reduce((a,x) => a + x.total, 0);
+  t3 += `<tr class="total"><td class="l" colspan="3">Total</td><td>${money(inp.build)}</td><td>${money(c.builderDep + c.stages.reduce((a,x)=>a+x.fromDep,0))}</td><td>${money(c.stages.reduce((a,x)=>a+x.lender,0))}</td><td></td><td></td><td>${money(stageTot)}</td></tr>`;
+  $('t3').innerHTML = t3;
+
+  // 4 — split into blocks of 12 months so it fits the page
+  let html = '';
+  for(let start = 0; start < c.rows.length; start += 12){
+    const rows = c.rows.slice(start, start + 12);
+    const cell = (v, cls='') => `<td class="v ${cls}">${v ? money(v) : ''}</td>`;
+    html += `<div class="sched-wrap"><table class="sched"><thead>
+      <tr><th class="l">Stage</th>${rows.map(x => `<th>${x.label}</th>`).join('')}</tr>
+      <tr class="mnum"><th class="l"></th>${rows.map(x => `<th>${x.m}</th>`).join('')}</tr></thead><tbody>
+      <tr class="phase"><td class="l"></td>${rows.map(x => x.m === c.M ? '<td class="ph-rent">Rental starts</td>' : '<td class="ph-build">Build phase</td>').join('')}</tr>
+      <tr><td class="l"><b>Land loan interest</b></td>${rows.map(x => cell(x.land)).join('')}</tr>
+      ${c.stages.map((s,i) => `<tr><td class="l">${s.n}. ${esc(s.d.length > 28 ? s.d.slice(0,27)+'…' : s.d)}</td>${rows.map(x => cell(x.stageInt[i])).join('')}</tr>`).join('')}
+      <tr class="cost"><td class="l">Month cost</td>${rows.map(x => cell(x.cost)).join('')}</tr>
+      <tr class="cb"><td class="l"><b>Cashback payments</b></td>${rows.map(x => cell(x.cb)).join('')}</tr>
+      <tr class="cb"><td class="l"><b>Rental income</b></td>${rows.map(x => cell(x.rent)).join('')}</tr>
+      <tr class="bal"><td class="l">Cash balance</td>${rows.map(x => `<td class="${x.bal < 0 ? 'neg' : ''}">${money(x.bal)}</td>`).join('')}</tr>
+      </tbody></table></div>`;
+  }
+  $('schedule').innerHTML = html;
+
+  // 5
+  const startPos = (inp.sdOn ? c.sd.saving : 0) + inp.buffer;
+  $('t5a').innerHTML = `<div>Stamp duty savings${inp.sdOn ? '' : ' <span class="muted">(not included)</span>'}</div><div>${money(inp.sdOn ? c.sd.saving : 0)}</div>
+    <div>Client's cash buffer</div><div>${money(inp.buffer)}</div>
+    <div class="tot">Total</div><div class="tot">${money(startPos)}</div>`;
+  $('t5b').innerHTML = `<div>Lowest cash balance</div><div>${money(c.lowest)}</div>
+    <div>Extra buffer needed to stay positive</div><div>${money(c.extra)}</div>`;
+  $('statusBox').innerHTML = c.lowest < 0
+    ? `<div class="status bad">⚠ Increase cash buffer by ${money(c.extra)}</div>`
+    : `<div class="status ok">✓ Sufficient buffer</div>`;
+}
+
+function renderMeta(inp){
+  const d = $('prepDate').value ? new Date($('prepDate').value + 'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'}) : '';
+  const parts = [
+    ['Property', $('propName').value], ['Client', $('clientName').value], ['Prepared by', $('preparedBy').value], ['Date', d],
+    ['State', inp.state ? ALL_STATES[inp.state] : '']
+  ].filter(x => String(x[1]).trim()).map(([k,v]) => `<b>${k}:</b> ${esc(v)}`);
+  $('printMeta').innerHTML = parts.join('<br>');
+  document.title = 'Build Drawdown' + ($('propName').value.trim() ? ' — ' + $('propName').value.trim() : '') + ' — Buyers Club';
+}
+
+function renderFooter(){
+  $('footer').innerHTML = `<b>Stamp duty:</b> general transfer duty rates and land titles fees ${esc(DUTY_ASAT)}. Investment purchase; excludes concessions, surcharges and foreign purchaser duty.<br>
+    <b>Important:</b> figures are estimates for illustration only and assume interest-only repayments on drawn funds. Stage timing is indicative, not a build timetable. This is not financial or credit advice. — Buyers Club
+    <span class="no-print"> · <a href="#settings" class="set-link">Settings</a></span>`;
+}
+
+/* ===================== SETTINGS PAGE ===================== */
+// DRAFT = the settings being edited. Each state is locked until Edit is clicked; Done keeps the changes in the draft,
+// Cancel puts the state back as it was. "Save settings" commits the whole draft and stamps a new version.
+let DRAFT = null, DIRTY = false, SEL = null, EDITING = null, EDIT_SNAPSHOT = null, PENDING_IMPORT = null;
+
+function showView(){
+  const onSettings = location.hash === '#settings';
+  if(onSettings && !DRAFT){ DRAFT = clone(SETTINGS); DIRTY = false; EDITING = null; SEL = Object.keys(ALL_STATES).find(k => DRAFT.states[k]) || 'NSW'; }
+  $('calcView').style.display = onSettings ? 'none' : '';
+  $('settingsView').style.display = onSettings ? '' : 'none';
+  $('pdfBtn').style.display = onSettings ? 'none' : '';
+  if(onSettings) renderSettings();
+}
+
+function unitSelect(attr, unit, disabled){
+  return `<select class="unit-sel" ${attr} ${disabled ? 'disabled' : ''}>${Object.keys(UNITS).map(u => `<option value="${u}" ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select>`;
+}
+
+function renderSettings(){
+  $('setMeta').innerHTML = `Using <b>v${esc(SETTINGS.meta.version)}</b> · last updated ${esc(SETTINGS.meta.updated || '—')} by ${esc(SETTINGS.meta.updatedBy || '—')}
+    · <span class="muted">${SETTINGS_SOURCE === 'saved' ? 'saved settings' : 'built-in defaults'}${SettingsStore.shared ? '' : ' — not connected to the site, so saving is to this browser only'}</span>`;
+  renderTabs();
+  renderStateEditor();
+  refreshValidation();
+  const log = (SETTINGS.meta.history || [{version: SETTINGS.meta.version, updated: SETTINGS.meta.updated, by: SETTINGS.meta.updatedBy}]).slice().reverse();
+  $('setLog').innerHTML = log.map(h => `<div>v${esc(h.version)}</div><div>${esc(h.updated || '')}</div><div>${esc(h.by || '')}</div>`).join('');
+  $('ioCard').style.display = SHOW_IMPORT_EXPORT ? '' : 'none';
+}
+
+function renderTabs(){
+  const v = validateSettings(DRAFT);
+  $('setTabs').innerHTML = Object.keys(ALL_STATES).map(k => {
+    const st = DRAFT.states[k];
+    const tag = !st ? ' <span class="muted">+ set up</span>' : isDisabled(st) ? ' <span class="muted">· disabled</span>' : '';
+    return `<button class="chip ${k === SEL ? 'on' : ''} ${st && !isDisabled(st) ? '' : 'off'}" data-state="${k}">${k}${v.states[k] ? ' <span class="dot-bad">●</span>' : ''}${tag}</button>`;
+  }).join('');
+}
+
+function renderStateEditor(){
+  const st = DRAFT.states[SEL], el = $('setState');
+  if(!st){
+    const opts = Object.keys(ALL_STATES).filter(k => DRAFT.states[k]).map(k => `<option value="${k}">${k}</option>`).join('');
+    el.innerHTML = `<div class="card"><h3>${esc(ALL_STATES[SEL])} (${SEL}) — not set up</h3>
+      <p class="muted" style="margin:0 0 12px">Start from another state's template and edit it, or start blank.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        ${opts ? `<select id="copyFrom" style="width:auto">${opts}</select><button class="btn" data-act="copy">Copy this state's template</button>` : ''}
+        <button class="btn ghost" data-act="blank">Start blank</button></div>
+      <p class="muted" style="margin:12px 0 0;font-size:11.5px">Stamp duty rates for ${SEL} are not set up in the calculator, so Section 2 will show no saving for this state.</p></div>`;
+    return;
+  }
+  const ed = EDITING === SEL, dis = ed ? '' : 'disabled';
+  const wins = sortedWindows(st), claims = st.stages.slice(1);
+  const total = st.stages.reduce((a, x) => a + (Number(x.p) || 0), 0);
+  el.innerHTML = `<div class="card ${ed ? 'editing' : ''}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <h3 style="margin:0">${esc(ALL_STATES[SEL])} (${SEL})${isDisabled(st) ? ' <span class="muted" style="text-transform:none">— disabled (all % are 0)</span>' : ''}</h3>
+      <div style="display:flex;gap:8px">${ed
+        ? `<button class="btn ghost danger" data-act="unset">Back to "+ set up"</button><button class="btn yellow" data-act="done">Done</button><button class="btn ghost" data-act="cancel">Cancel</button>`
+        : `<button class="btn" data-act="edit">✎ Edit</button>`}</div></div>
+    <div class="set-grid">
+      <div class="field"><label>Settlement gap</label><div class="gap-row"><div class="amount-input"><input data-f="sgap" value="${esc(bx(st.settlementGap.value))}" inputmode="decimal" ${dis}></div>${unitSelect('data-f="sgapu"', st.settlementGap.unit, !ed)}</div>
+        <div class="hint">Extra time after land settlement before the stage timings below start. 0 = as per the table.</div></div>
+      <div class="field"><label>Practical Completion to first rent</label><div class="gap-row"><div class="amount-input"><input data-f="rgap" value="${esc(bx(st.rentGap.value))}" inputmode="decimal" ${dis}></div>${unitSelect('data-f="rgapu"', st.rentGap.unit, !ed)}</div>
+        <div class="hint">Pre-fills the calculator for this state.</div></div>
+      <div class="field"><label>Builder deposit (stage 0)</label><input class="text" data-f="d" data-i="0" value="${esc(bx(st.stages[0].d))}" ${dis}></div>
+      <div class="field"><label>Builder deposit %</label><div class="amount-input"><input data-f="p" data-i="0" value="${esc(bx(st.stages[0].p))}" inputmode="decimal" ${dis}><span class="unit">%</span></div></div>
+    </div>
+    ${ed ? `<div class="base-note">Tick the build window you want to enter. Its column is entered in
+      ${unitSelect('data-f="baseu"', st.baseUnit, false)} from land settlement; the other windows are worked out in proportion to their length.</div>` : ''}
+    <div style="overflow-x:auto"><table class="set-table"><thead><tr><th class="l">Stage</th><th class="l">Description</th><th>Claim %</th>
+      ${wins.map(w => `<th class="${w === st.baseWindow ? 'base-col' : ''}">
+        ${ed ? `<label class="tick"><input type="checkbox" data-f="base" data-w="${w}" ${w === st.baseWindow ? 'checked' : ''}> enter</label>` : ''}
+        ${w}-month build<br><span class="muted">${w === st.baseWindow ? (ed ? st.baseUnit : 'months') + ' · entered' : 'months · worked out'}</span>
+        ${ed && w !== st.baseWindow ? `<button class="icon" title="Remove the ${w}-month window" data-act="delwin" data-w="${w}">✕</button>` : ''}</th>`).join('')}
+      ${ed ? '<th></th>' : ''}</tr></thead><tbody>
+      ${claims.map((x, j) => { const i = j + 1; return `<tr><td class="l">${i}</td>
+        <td class="l"><input class="text" data-f="d" data-i="${i}" value="${esc(x.d)}" ${dis}></td>
+        <td><input class="cell" data-f="p" data-i="${i}" value="${esc(bx(x.p))}" inputmode="decimal" ${dis}></td>
+        ${wins.map(w => w === st.baseWindow
+          ? `<td class="base-col"><input class="cell" data-f="s" data-i="${i}" value="${esc(!(Number(x.s[w]) > 0) ? '' : (ed ? fromM(x.s[w], st.baseUnit) : x.s[w]))}" inputmode="decimal" ${dis}></td>`
+          : `<td><span class="derived" data-i="${i}" data-w="${w}">${isNaN(Number(x.s[w])) ? '—' : months2(x.s[w])}</span></td>`).join('')}
+        ${ed ? `<td><button class="icon" title="Remove stage ${i}" data-act="del" data-i="${i}">✕</button></td>` : ''}</tr>`; }).join('')}
+      <tr class="total"><td class="l" colspan="2">Total claimed (including builder deposit)</td><td id="setTotal"><span class="${Math.abs(total - 100) > 0.001 && !isDisabled(st) ? 'bad' : 'good'}">${round2(total)}%</span></td><td colspan="${wins.length + (ed ? 1 : 0)}"></td></tr>
+    </tbody></table></div>
+    ${ed ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn ghost" data-act="add" ${claims.length >= MAX_STAGES ? 'disabled' : ''}>+ Add stage</button>
+      <button class="btn ghost" data-act="addwin">+ Add build window</button></div>
+      <div class="hint" style="margin-top:8px">The last stage is treated as Practical Completion. Up to ${MAX_STAGES} stages (the Google Sheet has rows for 6). To disable ${SEL}, set every % to 0.</div>` : ''}
+  </div>`;
+}
+
+function refreshValidation(){
+  const v = validateSettings(DRAFT);
+  const st = DRAFT.states[SEL];
+  if(st && $('setTotal')){
+    const total = st.stages.reduce((a, x) => a + (Number(x.p) || 0), 0);
+    $('setTotal').innerHTML = `<span class="${Math.abs(total - 100) > 0.001 && !isDisabled(st) ? 'bad' : 'good'}">${round2(total)}%</span>`;
+  }
+  const msgs = v.global.slice();
+  Object.entries(v.states).forEach(([k, e]) => e.forEach(m => msgs.push(`${k}: ${m}`)));
+  $('setErrors').innerHTML = msgs.length ? `<b>Fix before saving:</b><br>${msgs.map(esc).join('<br>')}` : '';
+  $('setSave').disabled = !v.ok || !DIRTY || !!EDITING;
+  $('setDirty').textContent = EDITING ? `Click Done on ${EDITING} before saving.` : DIRTY ? 'Unsaved changes' : '';
+  renderTabs();
+}
+
+function refreshDerived(){
+  const st = DRAFT.states[SEL];
+  document.querySelectorAll('#setState .derived').forEach(sp => {
+    const v = Number(st.stages[+sp.dataset.i]?.s?.[+sp.dataset.w]);
+    sp.textContent = isNaN(v) ? '—' : months2(v);
+  });
+}
+
+function onSettingsInput(e){
+  const t = e.target, f = t.dataset.f;
+  if(!f || EDITING !== SEL) return;
+  const st = DRAFT.states[SEL], i = +t.dataset.i;
+  if(f === 'sgap') st.settlementGap.value = parseNum(t.value);
+  else if(f === 'rgap') st.rentGap.value = parseNum(t.value);
+  else if(f === 'd') st.stages[i].d = t.value;
+  else if(f === 'p') st.stages[i].p = parseNum(t.value);
+  else if(f === 's'){ st.stages[i].s[st.baseWindow] = t.value.trim() === '' ? NaN : toM(parseNum(t.value), st.baseUnit); scaleFromBase(st); refreshDerived(); }
+  else return;
+  DIRTY = true; refreshValidation();
+}
+
+function onSettingsChange(e){
+  const t = e.target, f = t.dataset.f;
+  if(!f || EDITING !== SEL) return;
+  const st = DRAFT.states[SEL];
+  if(f === 'sgapu') st.settlementGap.unit = t.value;
+  else if(f === 'rgapu') st.rentGap.unit = t.value;
+  else if(f === 'baseu') st.baseUnit = t.value;
+  else if(f === 'base'){ if(!t.checked){ t.checked = true; return; } st.baseWindow = +t.dataset.w; }
+  else return;
+  DIRTY = true; renderStateEditor(); refreshValidation();
+}
+
+function onSettingsClick(e){
+  const chip = e.target.closest('[data-state]');
+  if(chip){
+    if(EDITING && chip.dataset.state !== EDITING){ alert(`Click Done or Cancel on ${EDITING} first.`); return; }
+    SEL = chip.dataset.state; renderSettings(); return;
+  }
+  const b = e.target.closest('[data-act]'); if(!b) return;
+  const act = b.dataset.act, st = DRAFT.states[SEL];
+  if(act === 'edit'){ EDITING = SEL; EDIT_SNAPSHOT = clone(st); }
+  else if(act === 'unset'){
+    if(!confirm(`Clear ${SEL}'s template and set it back to "+ set up"? It's only final when you Save settings.`)) return;
+    delete DRAFT.states[SEL]; DIRTY = true; EDITING = null; EDIT_SNAPSHOT = null;
+  }
+  else if(act === 'done'){
+    // Undo a set-up: no stages left and every % blank or 0 -> back to "+ set up".
+    if(st.stages.length <= 1 && st.stages.every(x => !(Number(x.p) > 0))){ delete DRAFT.states[SEL]; DIRTY = true; }
+    EDITING = null; EDIT_SNAPSHOT = null;
+  }
+  else if(act === 'cancel'){ DRAFT.states[SEL] = EDIT_SNAPSHOT; if(!EDIT_SNAPSHOT) delete DRAFT.states[SEL]; EDITING = null; EDIT_SNAPSHOT = null; }
+  else if(act === 'copy'){ DRAFT.states[SEL] = clone(DRAFT.states[$('copyFrom').value]); EDITING = SEL; EDIT_SNAPSHOT = null; DIRTY = true; }
+  else if(act === 'blank'){ DRAFT.states[SEL] = stdState([{d:'Deposit', p:5}, {d:'', p:NaN, s:{}}]); EDITING = SEL; EDIT_SNAPSHOT = null; DIRTY = true; }
+  else if(act === 'add'){ if(st.stages.length - 1 < MAX_STAGES){ st.stages.push({d:'', p:NaN, s:{}}); DIRTY = true; } }
+  else if(act === 'del'){ st.stages.splice(+b.dataset.i, 1); DIRTY = true; }
+  else if(act === 'delwin'){ const w = +b.dataset.w; if(!confirm(`Remove the ${w}-month build window from ${SEL}?`)) return; st.windows = st.windows.filter(x => x !== w); st.stages.slice(1).forEach(x => delete x.s[w]); DIRTY = true; }
+  else if(act === 'addwin'){ openAddWindow(); return; }
+  else return;
+  renderSettings();
+}
+
+/* ----- Add build window (to the state being edited) ----- */
+function openAddWindow(){
+  $('modalTitle').textContent = `Add a build window to ${SEL}`;
+  $('modalBody').innerHTML = `<div class="field"><label for="newWin">Build window length</label>
+      <div class="amount-input" style="max-width:200px"><input id="newWin" inputmode="decimal" placeholder="e.g. 6"><span class="unit">months</span></div>
+      <div class="hint">The stage timings are worked out in proportion from the ticked window.</div></div>`;
+  $('modalApply').textContent = 'Add window'; $('modalApply').disabled = false;
+  $('modalApply').onclick = () => {
+    const w = round2(parseNum($('newWin').value)), st = DRAFT.states[SEL];
+    if(!(w > 0)){ alert('Enter the build window length in months.'); return; }
+    if(st.windows.includes(w)){ alert(`${SEL} already has a ${w}-month window.`); return; }
+    st.windows.push(w); st.windows.sort((a, b) => a - b);
+    st.stages.slice(1).forEach(x => { const v = Number(x.s[st.baseWindow]); x.s[w] = v > 0 ? Math.round(v * w / st.baseWindow * 10000)/10000 : NaN; });
+    closeModal(); DIRTY = true; renderSettings();
+    $('setNotice').textContent = `Added the ${w}-month window to ${SEL}.`;
+  };
+  $('modal').style.display = 'flex'; $('newWin').focus();
+}
+function closeModal(){ $('modal').style.display = 'none'; $('modalBody').onclick = null; PENDING_IMPORT = null; }
+
+async function saveSettings(){
+  const who = SettingsStore.userName || 'Unknown user';
+  if(EDITING){ alert(`Click Done on ${EDITING} first.`); return; }
+  const v = validateSettings(DRAFT); if(!v.ok) return;
+  const version = (parseInt(SETTINGS.meta.version, 10) || 0) + 1, updated = new Date().toISOString().slice(0,10);
+  DRAFT.meta = {version, updated, updatedBy: who, history: [...(SETTINGS.meta.history || []), {version, updated, by: who}]};
+  try{ await SettingsStore.save(DRAFT); }catch(err){ alert('Could not save the settings: ' + err.message); return; }
+  SETTINGS = clone(DRAFT); SETTINGS_SOURCE = 'saved'; DIRTY = false;
+  applySettingsToCalculator(); renderSettings();
+  $('setNotice').textContent = `Saved as v${SETTINGS.meta.version}.`;
+}
+
+function exportSettings(){
+  const blob = new Blob(['﻿' + settingsToCSV(DIRTY ? DRAFT : SETTINGS)], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Build stage settings v${SETTINGS.meta.version}${DIRTY ? ' (unsaved changes)' : ''}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function importFile(file){
+  if(EDITING){ alert(`Click Done or Cancel on ${EDITING} first.`); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const {settings, notes} = csvToSettings(String(reader.result));
+      const v = validateSettings(settings);
+      const changes = diffSettings(DRAFT, settings);
+      PENDING_IMPORT = settings;
+      const errs = v.global.concat(...Object.entries(v.states).map(([k, e]) => e.map(m => `${k}: ${m}`)));
+      $('modalTitle').textContent = 'Import settings';
+      $('modalBody').innerHTML = `<p style="margin-top:0">File version: <b>${esc(settings.meta.version || 'not stamped')}</b>${settings.meta.updated ? ` · updated ${esc(settings.meta.updated)}` : ''}${settings.meta.updatedBy ? ` by ${esc(settings.meta.updatedBy)}` : ''}</p>
+        <p>States in the file: <b>${Object.keys(settings.states).join(', ') || 'none'}</b>. The file replaces all state templates.</p>
+        ${notes.length ? `<div class="warn">${notes.map(esc).join('<br>')}</div>` : ''}
+        ${errs.length ? `<div class="warn" style="background:#FDECEA;border-color:#F3B4AE;color:#A8261C"><b>Can't import. Fix these in the file first:</b><br>${errs.map(esc).join('<br>')}</div>` : ''}
+        <b>Changes compared with what's on screen (${changes.length}):</b>
+        <div class="diff">${changes.length ? changes.map(esc).join('<br>') : 'No changes.'}</div>`;
+      $('modalApply').textContent = 'Apply to settings';
+      $('modalApply').disabled = !!errs.length || !changes.length;
+      $('modalApply').onclick = applyImport;
+      $('modal').style.display = 'flex';
+    }catch(err){ alert('Could not read the file: ' + err.message); }
+  };
+  reader.readAsText(file);
+}
+
+function applyImport(){
+  const meta = DRAFT.meta;
+  DRAFT = clone(PENDING_IMPORT); DRAFT.meta = meta;   // version is stamped when saved
+  closeModal(); DIRTY = true;
+  if(!DRAFT.states[SEL]) SEL = Object.keys(ALL_STATES).find(k => DRAFT.states[k]) || SEL;
+  renderSettings();
+  $('setNotice').textContent = 'Imported. Review the changes, then Save settings.';
+}
+
+function applySettingsToCalculator(){ fillStateSelect(); renderFooter(); render(); }
+
+/* ===================== START ===================== */
+async function init(){
+  try{
+    await SettingsStore.init();
+    const saved = await SettingsStore.load();
+    if(saved && saved.states && validateSettings(saved).ok){
+      // Months is the standard unit: a gap of 0 saved in weeks/days shows as 0 months.
+      Object.values(saved.states).forEach(st => ['rentGap', 'settlementGap'].forEach(k => { if(st[k] && !Number(st[k].value)) st[k].unit = 'months'; }));
+      SETTINGS = saved; SETTINGS_SOURCE = 'saved';
+    }
+  }catch(e){ /* fall back to built-in defaults */ }
+
+  $('startMonth').innerHTML = MONTHS.map((m,i) => `<option value="${i}">${m}</option>`).join('');
+  $('startMonth').value = new Date().getMonth();
+  $('prepDate').value = new Date().toISOString().slice(0,10);
+
+  document.querySelectorAll('#calcView input, #calcView select').forEach(el => el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', render));
+  $('state').addEventListener('change', onStateChange);
+  document.querySelectorAll('[data-money]').forEach(el => {
+    el.addEventListener('blur', () => { const v = num(el.id); el.value = isBlank(el.id) ? '' : v.toLocaleString('en-AU'); });
+  });
+
+  $('settingsView').addEventListener('input', onSettingsInput);
+  $('settingsView').addEventListener('change', onSettingsChange);
+  $('settingsView').addEventListener('click', onSettingsClick);
+  $('setSave').addEventListener('click', saveSettings);
+  $('setExport').addEventListener('click', exportSettings);
+  $('setImport').addEventListener('change', e => { if(e.target.files[0]) importFile(e.target.files[0]); e.target.value = ''; });
+  $('setDiscard').addEventListener('click', () => { if(DIRTY && !confirm('Discard your unsaved changes?')) return; DRAFT = clone(SETTINGS); DIRTY = false; EDITING = null; $('setNotice').textContent = ''; renderSettings(); });
+  $('setDefaults').addEventListener('click', () => { if(EDITING){ alert(`Click Done or Cancel on ${EDITING} first.`); return; } if(!confirm('Load the built-in defaults? You can review them before saving.')) return; const meta = DRAFT.meta; DRAFT = clone(DEFAULT_SETTINGS); DRAFT.meta = meta; DIRTY = true; renderSettings(); });
+  $('setBack').addEventListener('click', () => { if((DIRTY || EDITING) && !confirm('You have unsaved changes. Leave the settings page anyway?')) return; DRAFT = null; DIRTY = false; EDITING = null; location.hash = ''; });
+  $('modalCancel').addEventListener('click', closeModal);
+  window.addEventListener('hashchange', showView);
+  window.addEventListener('beforeunload', e => { if(DIRTY || EDITING){ e.preventDefault(); e.returnValue = ''; } });
+
+  applySettingsToCalculator();
+  showView();
+}
+init();
+</script>
+</body>
+</html>

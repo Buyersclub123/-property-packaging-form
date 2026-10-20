@@ -10,10 +10,25 @@ import {
   populateHLSpreadsheet,
   createShortcut,
   setFilePermissions,
-  getFileName
+  getFileName,
+  writeBuildStageLookup
 } from '@/lib/googleDrive';
 import { constructAndSanitizeFolderName, constructFullAddress } from '@/lib/addressFormatter';
 import { serverLog } from '@/lib/serverLogger';
+import { loadDrawdownSettings, toBuildStageRows } from '@/lib/drawdownSettings';
+
+/**
+ * Split Contract sheets only: copy the Build Drawdown Calculator settings into the
+ * new sheet's "Build Stage Lookup" tab. Non-fatal - a failure is logged and packaging continues.
+ */
+async function writeDrawdownLookupSafe(spreadsheetId: string): Promise<void> {
+  try {
+    const settings = await loadDrawdownSettings();
+    await writeBuildStageLookup(spreadsheetId, toBuildStageRows(settings));
+  } catch (error) {
+    console.error(`[BUILD STAGE LOOKUP] Failed for ${spreadsheetId} (continuing):`, error);
+  }
+}
 
 /**
  * API route to create a property folder by copying the Master Folder Template
@@ -89,6 +104,9 @@ export async function POST(request: Request) {
         // Populate the sheet
         await populateHLSpreadsheet(copied.id, formData);
         console.log(`✓ Populated cashflow spreadsheet with form data`);
+        if (contractTypeLower === 'split contract') {
+          await writeDrawdownLookupSafe(copied.id);
+        }
 
         const folderLink = `https://drive.google.com/drive/folders/${existingFolderId}`;
         return NextResponse.json({
@@ -322,6 +340,9 @@ export async function POST(request: Request) {
 
               await populateHLSpreadsheet(copied.id, lotFormData);
               console.log(`✓ Populated CF spreadsheet for ${lotPrefixForSheet || 'lot'}: ${copied.id}`);
+              if (contractTypeLower === 'split contract') {
+                await writeDrawdownLookupSafe(copied.id);
+              }
             }
 
             try {
@@ -349,6 +370,9 @@ export async function POST(request: Request) {
             
             await populateHLSpreadsheet(keptSheet.id, formData);
             console.log(`✓ Populated CF spreadsheet with form data`);
+            if (contractTypeLower === 'split contract') {
+              await writeDrawdownLookupSafe(keptSheet.id);
+            }
           } catch (populateError) {
             console.error('Error populating sheet:', populateError);
             throw populateError; // Re-throw so we can see it in logs

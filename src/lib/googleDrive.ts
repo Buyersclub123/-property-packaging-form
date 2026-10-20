@@ -1050,6 +1050,44 @@ export async function populateHLSpreadsheet(
 }
 
 /**
+ * Write the Build Drawdown Calculator settings into the "Build Stage Lookup" tab
+ * of a (new) Split Contract cashflow sheet. Row 1 holds a fixed instruction and is
+ * never touched: values are cleared from A2:Z200 and rewritten from A2 as plain values.
+ * Creates the tab if the template doesn't have it.
+ */
+export async function writeBuildStageLookup(
+  spreadsheetId: string,
+  rows: (string | number)[][]
+): Promise<void> {
+  const sheets = getSheetsClientFromCredentials();
+  const TAB_NAME = 'Build Stage Lookup';
+
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
+  const hasTab = (meta.data.sheets || []).some(s => s.properties?.title === TAB_NAME);
+  if (!hasTab) {
+    console.warn(`[BUILD STAGE LOOKUP] Tab "${TAB_NAME}" missing in ${spreadsheetId} - creating it`);
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: TAB_NAME } } }] },
+    });
+  }
+
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `'${TAB_NAME}'!A2:Z200`,
+  });
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `'${TAB_NAME}'!A2`,
+    valueInputOption: 'RAW',
+    requestBody: { values: rows },
+  });
+
+  console.log(`[BUILD STAGE LOOKUP] ✓ Wrote ${rows.length} rows to "${TAB_NAME}" in ${spreadsheetId}`);
+}
+
+/**
  * Set file permissions (anyone with link can view)
  */
 export async function setFilePermissions(
