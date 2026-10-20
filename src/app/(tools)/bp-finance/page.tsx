@@ -1,7 +1,5 @@
 'use client';
 
-if (typeof document !== 'undefined') document.title = 'B&P & Finance Tool — Retired';
-
 // This tool has been retired and replaced by the Contract Team Reporting Tool,
 // which includes the B&P view plus all other contract team reports.
 

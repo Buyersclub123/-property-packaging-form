@@ -3,8 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getUserEmail, saveUserEmail, validateUserEmail } from '@/lib/userAuth';
 
-if (typeof document !== 'undefined') document.title = 'EOI Template Admin';
-
 // ============================================================================
 // CONSTANTS
 // ============================================================================

@@ -1,7 +1,9 @@
 import '../styles/globals.css';
 
-export const metadata = {
-  title: 'Buyers Club Tools',
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: { default: 'BC Tools', template: '%s' },
   description: 'Internal tools portal',
   icons: {
     icon: '/logo.jpg',

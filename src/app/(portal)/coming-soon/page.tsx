@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+export const metadata = { title: 'Coming Soon' };
+
 export default function ComingSoonPage() {
   return (
     <div className="min-h-full bg-brand-cream flex items-center justify-center p-6">

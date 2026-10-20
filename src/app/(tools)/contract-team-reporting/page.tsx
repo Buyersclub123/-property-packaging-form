@@ -5,8 +5,6 @@ import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } fro
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, CO_FIELDS_READ_ONLY, READ_ONLY_FIELDS } from '@/app/api/contract-team-reporting/fields';
 
-if (typeof document !== 'undefined') document.title = 'Contract Team Reporting Tool';
-
 // ============================================================================
 // USER MAP
 // ============================================================================

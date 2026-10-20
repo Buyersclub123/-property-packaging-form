@@ -1,7 +1,5 @@
 'use client';
 
-if (typeof document !== 'undefined') document.title = 'Contract Team Reports Tool — Retired';
-
 // This tool has been retired and replaced by the Contract Team Reporting Tool.
 // The previous implementation is in git history (last version: commit 912f4e86).
 // Same pattern as /bp-finance — the tool is not reachable, only the notice.

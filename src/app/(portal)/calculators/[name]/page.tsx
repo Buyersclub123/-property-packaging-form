@@ -15,6 +15,10 @@ export function generateStaticParams() {
   return Object.keys(CALCULATORS).map((name) => ({ name }));
 }
 
+export function generateMetadata({ params }: { params: { name: string } }) {
+  return { title: CALCULATORS[params.name]?.title ?? 'Calculators' };
+}
+
 export default function CalculatorPage({ params }: { params: { name: string } }) {
   const calc = CALCULATORS[params.name];
   if (!calc) notFound();

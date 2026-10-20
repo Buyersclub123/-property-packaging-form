@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 
-if (typeof document !== 'undefined') document.title = 'GHL & Custom Object Data';
-
 // ============================================================================
 // TYPES
 // ============================================================================

@@ -9,8 +9,6 @@ import { useEffect, useMemo, useState } from 'react';
 // multi-property buyers or accidental duplicates).
 // ============================================================================
 
-if (typeof document !== 'undefined') document.title = 'Duplicate Opportunity Links';
-
 interface DealRecord {
   id: string;
   type: string;

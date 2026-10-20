@@ -199,10 +199,6 @@ export default function ReportsPage() {
   const [opsGroupBy, setOpsGroupBy] = useState<'packager' | 'sourcer'>('packager');
 
   useEffect(() => {
-    if (typeof document !== 'undefined') document.title = 'Reports — Deal Sheet';
-  }, []);
-
-  useEffect(() => {
     async function fetchData() {
       try {
         const res = await fetch(`/api/deal-sheet?statuses=all&_t=${Date.now()}`, { cache: 'no-store' });

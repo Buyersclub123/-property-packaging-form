@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+export const metadata = { title: 'SPIN Call Coach' };
+
 export default function SpinCallCoachPage() {
   return (
     <main className="min-h-screen bg-[#FAFAFA]">

@@ -6,8 +6,6 @@ import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import EoiLinkModal, { EoiLinkPayload, EoiUpdatePayload } from './EoiLinkModal';
 
 // Set page title
-if (typeof document !== 'undefined') document.title = 'Deal Sheet';
-
 // ============================================================================
 // TYPES
 // ============================================================================

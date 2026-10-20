@@ -23,8 +23,6 @@ import {
   getTerms,
 } from './templates';
 
-if (typeof document !== 'undefined') document.title = 'EOI Sending — DEMO';
-
 interface DealRecord {
   id: string;
   type: string;

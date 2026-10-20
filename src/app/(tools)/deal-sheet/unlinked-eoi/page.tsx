@@ -11,8 +11,6 @@ import { useEffect, useMemo, useState } from 'react';
 // D2 event store.
 // ============================================================================
 
-if (typeof document !== 'undefined') document.title = 'Unlinked EOI Records';
-
 interface DealRecord {
   id: string;
   type: string;

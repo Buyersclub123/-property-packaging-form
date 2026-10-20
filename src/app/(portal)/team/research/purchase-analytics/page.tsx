@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+export const metadata = { title: 'Purchase Analytics' };
+
 export default function PurchaseAnalyticsPage() {
   return (
     <main className="min-h-screen bg-[#FAFAFA]">

@@ -166,12 +166,6 @@ export default function MatchingPage() {
   const [manualSearch, setManualSearch] = useState('');
   const [exceptionSearch, setExceptionSearch] = useState('');
 
-  useEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.title = 'Opportunity Matching';
-    }
-  }, []);
-
   async function loadData(selectedTier: number) {
     setLoading(true);
     setError(null);

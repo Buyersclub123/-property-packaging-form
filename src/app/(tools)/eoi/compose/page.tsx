@@ -22,8 +22,6 @@ import { getUserEmail, saveUserEmail, validateUserEmail } from '@/lib/userAuth';
 import { handleMobileInput, normalizeMobileForStorage } from '@/lib/phoneFormatter';
 import type { EoiEmailData } from '@/lib/eoi-email';
 
-if (typeof document !== 'undefined') document.title = 'Buyers Club — Expression of Interest';
-
 // ---- types ------------------------------------------------------------------
 
 type AuState = 'NSW' | 'VIC' | 'QLD' | 'WA' | 'SA' | 'TAS';
