@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useAutoResize } from '@/hooks/useAutoResize';
 import { ReportDropdown, type ReportOption } from './ReportDropdown';
 import { useFormStore } from '@/store/formStore';
+import { InvestmentHighlightsCharCount } from '@/components/InvestmentHighlightsCharCount';
+import { INVESTMENT_HIGHLIGHTS_MAX_CHARS, ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
 
 /**
  * InvestmentHighlightsField Component (Phase 4C)
@@ -65,6 +67,9 @@ export function InvestmentHighlightsField({
   const [newValidPeriod, setNewValidPeriod] = useState('');
   const [newMainBody, setNewMainBody] = useState('');
   const [showSaveForm, setShowSaveForm] = useState(false);
+  // Set when AI output exceeded GHL's limit: sheet save was skipped, user must trim then save
+  const [overLimitPending, setOverLimitPending] = useState(false);
+  const [pendingPdf, setPendingPdf] = useState<{ link: string; fileId: string } | null>(null);
   
   // PDF upload states
   const [uploadingPdf, setUploadingPdf] = useState(false);
@@ -259,6 +264,10 @@ export function InvestmentHighlightsField({
       alert('Please fill in Report Name, Valid Period, and Main Body');
       return;
     }
+    if (ihCharsOver(newMainBody) > 0) {
+      alert(ihLimitError(newMainBody));
+      return;
+    }
     
     // Build combined validPeriod from split fields
     const builtValidPeriod = extractedFromYear === extractedToYear
@@ -280,7 +289,9 @@ export function InvestmentHighlightsField({
           validFromYear: extractedFromYear,
           validToMonth: extractedToMonth,
           validToYear: extractedToYear,
-          mainBody: newMainBody,
+          mainBody: normaliseIh(newMainBody),
+          pdfDriveLink: pendingPdf?.link || undefined,
+          pdfFileId: pendingPdf?.fileId || undefined,
           updatedBy: userEmail || 'form-step5',
         }),
       });
@@ -292,15 +303,17 @@ export function InvestmentHighlightsField({
       
       alert('Investment highlights saved successfully!');
       setShowSaveForm(false);
+      setOverLimitPending(false);
+      setPendingPdf(null);
       setMatchStatus('found');
       setReportName(newReportName);
       setValidPeriod(builtValidPeriod);
       // Update display with saved content
-      const combined = newMainBody;
+      const combined = normaliseIh(newMainBody);
       onChange(combined);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Save error:', err);
-      alert('Failed to save investment highlights. Please try again.');
+      alert(err?.message || 'Failed to save investment highlights. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -545,7 +558,12 @@ export function InvestmentHighlightsField({
         throw new Error(err?.message || 'AI formatting failed. Please try again.');
       }
       
+      formattedMainBody = normaliseIh(formattedMainBody);
+      const charsOver = ihCharsOver(formattedMainBody);
+      
       // Step 3: Organize PDF into CURRENT/LEGACY folders and save to sheet
+      // If the AI output exceeds GHL's limit, still file the PDF but skip the sheet write —
+      // the user must trim the text and save it manually.
       setUploadProgress('Organizing PDF...');
       
       const response = await fetch('/api/investment-highlights/organize-pdf', {
@@ -559,6 +577,7 @@ export function InvestmentHighlightsField({
           state,
           userEmail: userEmail || 'unknown',
           mainBody: formattedMainBody, // Pass formatted Main Body (not raw text)
+          skipSheetWrite: charsOver > 0,
         }),
       });
       
@@ -577,6 +596,19 @@ export function InvestmentHighlightsField({
       
       // Populate the form field with formatted content
       onChange(formattedMainBody);
+      
+      if (charsOver > 0) {
+        setPendingPdf({ link: result.webViewLink || '', fileId: result.fileId || '' });
+        setNewReportName(extractedReportName);
+        setNewMainBody(formattedMainBody);
+        setOverLimitPending(true);
+        setShowSaveForm(true);
+        setShowVerification(false);
+        setReportNameVerified(false);
+        setValidPeriodVerified(false);
+        alert(`⚠️ The AI produced ${charsOver.toLocaleString()} characters more than GHL's ${INVESTMENT_HIGHLIGHTS_MAX_CHARS.toLocaleString()} limit.\n\nThe PDF has been filed, but the text was NOT saved to the database. Trim the Main Body below until the counter is green, then click "Save to Google Sheet".`);
+        return;
+      }
       
       // Success - update UI
       setMatchStatus('found');
@@ -632,7 +664,7 @@ export function InvestmentHighlightsField({
     const currentValue = target.value;
     
     const newValue = currentValue.substring(0, start) + cleaned + currentValue.substring(end);
-    onChange(newValue);
+    onChange(normaliseIh(newValue));
   };
 
   return (
@@ -994,8 +1026,14 @@ export function InvestmentHighlightsField({
           </div>
         )}
         
-        {showSaveForm && matchStatus === 'not-found' && (
+        {showSaveForm && (matchStatus === 'not-found' || overLimitPending) && (
           <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-md space-y-3">
+            {overLimitPending && (
+              <div className="p-3 bg-amber-50 border border-amber-300 rounded-md text-sm text-amber-800">
+                The AI text is over GHL&apos;s {INVESTMENT_HIGHLIGHTS_MAX_CHARS.toLocaleString()}-character limit, so it was not saved to the database.
+                Trim the Main Body below until the counter turns green, then click &quot;Save to Google Sheet&quot;.
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Report Name
@@ -1067,15 +1105,16 @@ export function InvestmentHighlightsField({
               </label>
               <textarea
                 value={newMainBody}
-                onChange={(e) => setNewMainBody(e.target.value)}
+                onChange={(e) => setNewMainBody(normaliseIh(e.target.value))}
                 placeholder="Key investment highlights and infrastructure developments"
                 className="w-full p-2 border rounded-md"
-                rows={4}
+                rows={overLimitPending ? 20 : 4}
               />
+              <InvestmentHighlightsCharCount value={newMainBody} className="mt-1" />
             </div>
             <button
               onClick={handleSave}
-              disabled={loading || !newReportName || !extractedFromMonth || !extractedFromYear || !extractedToMonth || !extractedToYear || !newMainBody}
+              disabled={loading || !newReportName || !extractedFromMonth || !extractedFromYear || !extractedToMonth || !extractedToYear || !newMainBody || ihCharsOver(newMainBody) > 0}
               className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
             >
               {loading ? 'Saving...' : 'Save to Google Sheet'}
@@ -1087,7 +1126,7 @@ export function InvestmentHighlightsField({
       <textarea
         ref={textareaRef}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value.replace(/\r\n?/g, '\n'))}
         onPaste={handlePaste}
         disabled={disabled || loading || showSaveForm}
         className={`input-field ${showSaveForm ? 'bg-gray-100 cursor-not-allowed' : ''}`}
@@ -1101,9 +1140,12 @@ export function InvestmentHighlightsField({
         required
       />
       
-      <p className="text-xs text-gray-500">
-        You can edit the content above as needed.
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">
+          You can edit the content above as needed.
+        </p>
+        <InvestmentHighlightsCharCount value={value} />
+      </div>
     </div>
   );
 }

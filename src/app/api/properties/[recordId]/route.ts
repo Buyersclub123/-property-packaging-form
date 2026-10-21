@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
 
 /**
  * GHL API Configuration
@@ -1107,7 +1108,14 @@ export async function PUT(
     // Content Sections
     if (includeIfProvided(formData.contentSections?.whyThisProperty)) ghlRecord.why_this_property = formData.contentSections.whyThisProperty;
     if (includeIfProvided(formData.contentSections?.proximity)) ghlRecord.proximity = formData.contentSections.proximity;
-    if (includeIfProvided(formData.contentSections?.investmentHighlights)) ghlRecord.investment_highlights = formData.contentSections.investmentHighlights;
+    if (includeIfProvided(formData.contentSections?.investmentHighlights)) {
+      // GHL rejects Investment Highlights over 12,000 chars — fail early with a clear message
+      const investmentHighlights = normaliseIh(formData.contentSections.investmentHighlights);
+      if (ihCharsOver(investmentHighlights) > 0) {
+        return NextResponse.json({ success: false, error: ihLimitError(investmentHighlights) }, { status: 400 });
+      }
+      ghlRecord.investment_highlights = investmentHighlights;
+    }
 
     // Agent Info
     if (includeIfProvided(formData.sellingAgentName)) ghlRecord.agent_name = formData.sellingAgentName;

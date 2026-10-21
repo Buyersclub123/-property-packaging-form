@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
+import { InvestmentHighlightsCharCount } from '@/components/InvestmentHighlightsCharCount';
+import { INVESTMENT_HIGHLIGHTS_MAX_CHARS, ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
 
 type ActiveTab = 'market-performance' | 'investment-highlights';
 
@@ -176,6 +178,10 @@ export default function MarketPerformancePage() {
   const [ihNewExtractedName, setIhNewExtractedName] = useState('');
   const [ihNewShowMetadata, setIhNewShowMetadata] = useState(false);
   const [ihNewUploadedFileId, setIhNewUploadedFileId] = useState('');
+  // Set when AI output for a new report exceeded GHL's limit: PDF filed, sheet write skipped, user must trim then save
+  const [ihNewOverLimitBody, setIhNewOverLimitBody] = useState<string | null>(null);
+  const [ihNewPendingPdf, setIhNewPendingPdf] = useState<{ link: string; fileId: string } | null>(null);
+  const [ihNewSavingTrimmed, setIhNewSavingTrimmed] = useState(false);
 
   const V2_MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -546,6 +552,10 @@ export default function MarketPerformancePage() {
     if (!ihSelectedReport) return;
     const composedBody = composeMainBody();
     if (!composedBody.trim()) return;
+    if (ihCharsOver(composedBody) > 0) {
+      setIhMessage({ type: 'error', text: ihLimitError(composedBody) });
+      return;
+    }
 
     setIhSaving(true);
     setIhMessage(null);
@@ -751,8 +761,13 @@ export default function MarketPerformancePage() {
         throw new Error('AI formatting failed. Please try again.');
       }
 
+      formattedMainBody = normaliseIh(formattedMainBody);
+      const charsOver = ihCharsOver(formattedMainBody);
+
       // Step 2: Organize PDF into CURRENT/LEGACY folders and save to sheet
       // (organize-pdf handles saving to V2 sheet — same as Step 5)
+      // If the AI output exceeds GHL's limit, still file the PDF but skip the sheet write —
+      // the user must trim the text and save it manually.
       setIhNewProgress('Organizing PDF...');
 
       const response = await fetch('/api/investment-highlights/organize-pdf', {
@@ -766,6 +781,7 @@ export default function MarketPerformancePage() {
           state: ihNewState,
           userEmail: userEmail || 'admin',
           mainBody: formattedMainBody,
+          skipSheetWrite: charsOver > 0,
         }),
       });
 
@@ -774,32 +790,91 @@ export default function MarketPerformancePage() {
         throw new Error(errorData.error || 'Failed to organize PDF');
       }
 
-      // Success
-      setIhMessage({ type: 'success', text: `Created and processed: ${ihResolvedLga} (${ihNewState})` });
-      await loadIhReports();
+      if (charsOver > 0) {
+        const organizeResult = await response.json();
+        setIhNewPendingPdf({ link: organizeResult.webViewLink || '', fileId: organizeResult.fileId || '' });
+        setIhNewOverLimitBody(formattedMainBody);
+        setIhMessage({ type: 'error', text: `The AI produced ${charsOver.toLocaleString()} characters more than GHL's ${INVESTMENT_HIGHLIGHTS_MAX_CHARS.toLocaleString()} limit. The PDF has been filed, but the text was NOT saved. Trim it below until the counter is green, then click "Save trimmed report".` });
+        return;
+      }
 
-      // Reset add-new form
-      setIhShowAddNew(false);
-      setIhNewSuburb('');
-      setIhNewState('');
-      setIhResolvedLga(null);
-      setIhExistingMatch(null);
-      setIhNewPdfFile(null);
-      setIhNewShowMetadata(false);
-      setIhNewUploadedFileId('');
-      setIhNewFromMonth(''); setIhNewFromYear('');
-      setIhNewToMonth(''); setIhNewToYear('');
-      setIhNewExtractedName('');
-
-      // Auto-select the new report
-      const newReport: IHReport = { suburbs: ihNewSuburb.trim(), state: ihNewState, reportName: ihResolvedLga, validPeriod: builtValidPeriod };
-      await handleSelectIhReport(newReport);
+      await finishIhCreateNew(builtValidPeriod);
     } catch (err: any) {
       console.error('PDF processing error:', err);
       setIhMessage({ type: 'error', text: err.message || 'Failed to create LGA report' });
     } finally {
       setIhCreatingLga(false);
       setIhNewProgress('');
+    }
+  };
+
+  // Shared tail of the add-new flow: refresh list, reset the form, open the new report
+  const finishIhCreateNew = async (builtValidPeriod: string) => {
+    if (!ihResolvedLga) return;
+    setIhMessage({ type: 'success', text: `Created and processed: ${ihResolvedLga} (${ihNewState})` });
+    await loadIhReports();
+
+    const newReport: IHReport = { suburbs: ihNewSuburb.trim(), state: ihNewState, reportName: ihResolvedLga, validPeriod: builtValidPeriod };
+
+    // Reset add-new form
+    setIhShowAddNew(false);
+    setIhNewSuburb('');
+    setIhNewState('');
+    setIhResolvedLga(null);
+    setIhExistingMatch(null);
+    setIhNewPdfFile(null);
+    setIhNewShowMetadata(false);
+    setIhNewUploadedFileId('');
+    setIhNewFromMonth(''); setIhNewFromYear('');
+    setIhNewToMonth(''); setIhNewToYear('');
+    setIhNewExtractedName('');
+    setIhNewOverLimitBody(null);
+    setIhNewPendingPdf(null);
+
+    // Auto-select the new report
+    await handleSelectIhReport(newReport);
+  };
+
+  // Save the user-trimmed text for a new report whose AI output was over GHL's limit
+  const handleIhSaveTrimmedNew = async () => {
+    if (!ihResolvedLga || !ihNewState || ihNewOverLimitBody === null) return;
+    const body = normaliseIh(ihNewOverLimitBody);
+    if (ihCharsOver(body) > 0) {
+      setIhMessage({ type: 'error', text: ihLimitError(body) });
+      return;
+    }
+    const builtValidPeriod = ihNewFromYear === ihNewToYear
+      ? `${ihNewFromMonth} - ${ihNewToMonth} ${ihNewToYear}`
+      : `${ihNewFromMonth} ${ihNewFromYear} - ${ihNewToMonth} ${ihNewToYear}`;
+
+    setIhNewSavingTrimmed(true);
+    setIhMessage(null);
+    try {
+      const res = await fetch('/api/investment-highlights-v2/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lga: ihResolvedLga,
+          state: ihNewState,
+          suburb: ihNewSuburb.trim(),
+          reportName: ihResolvedLga,
+          validFromMonth: ihNewFromMonth,
+          validFromYear: ihNewFromYear,
+          validToMonth: ihNewToMonth,
+          validToYear: ihNewToYear,
+          mainBody: body,
+          pdfDriveLink: ihNewPendingPdf?.link || '',
+          pdfFileId: ihNewPendingPdf?.fileId || '',
+          updatedBy: userEmail || 'admin',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      await finishIhCreateNew(builtValidPeriod);
+    } catch (err: any) {
+      setIhMessage({ type: 'error', text: err.message || 'Failed to save trimmed report' });
+    } finally {
+      setIhNewSavingTrimmed(false);
     }
   };
 
@@ -1616,6 +1691,8 @@ export default function MarketPerformancePage() {
                     setIhNewState('');
                     setIhResolvedLga(null);
                     setIhExistingMatch(null);
+                    setIhNewOverLimitBody(null);
+                    setIhNewPendingPdf(null);
                   }}
                   className="text-gray-400 hover:text-gray-600 text-lg"
                 >
@@ -1748,17 +1825,44 @@ export default function MarketPerformancePage() {
                         </div>
                       )}
 
-                      <button
-                        onClick={handleIhCreateNew}
-                        disabled={ihCreatingLga || !ihNewFromMonth || !ihNewFromYear || !ihNewToMonth || !ihNewToYear}
-                        className={`w-full px-5 py-2.5 rounded-md text-sm font-medium text-white ${
-                          ihCreatingLga || !ihNewFromMonth || !ihNewFromYear || !ihNewToMonth || !ihNewToYear
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-green-600 hover:bg-green-700'
-                        }`}
-                      >
-                        {ihCreatingLga ? (ihNewProgress || 'Processing...') : 'Process PDF & Create LGA Report'}
-                      </button>
+                      {ihNewOverLimitBody !== null ? (
+                        <div className="space-y-2">
+                          <div className="p-3 bg-amber-50 border border-amber-300 rounded-md text-sm text-amber-800">
+                            The AI text is over GHL&apos;s {INVESTMENT_HIGHLIGHTS_MAX_CHARS.toLocaleString()}-character limit, so it was not saved.
+                            Trim it below until the counter turns green, then click &quot;Save trimmed report&quot;.
+                          </div>
+                          <textarea
+                            value={ihNewOverLimitBody}
+                            onChange={(e) => setIhNewOverLimitBody(normaliseIh(e.target.value))}
+                            rows={24}
+                            className="w-full p-3 border border-amber-300 rounded-md text-sm font-mono leading-relaxed"
+                          />
+                          <InvestmentHighlightsCharCount value={ihNewOverLimitBody} />
+                          <button
+                            onClick={handleIhSaveTrimmedNew}
+                            disabled={ihNewSavingTrimmed || ihCharsOver(ihNewOverLimitBody) > 0}
+                            className={`w-full px-5 py-2.5 rounded-md text-sm font-medium text-white ${
+                              ihNewSavingTrimmed || ihCharsOver(ihNewOverLimitBody) > 0
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-green-600 hover:bg-green-700'
+                            }`}
+                          >
+                            {ihNewSavingTrimmed ? 'Saving...' : 'Save trimmed report'}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleIhCreateNew}
+                          disabled={ihCreatingLga || !ihNewFromMonth || !ihNewFromYear || !ihNewToMonth || !ihNewToYear}
+                          className={`w-full px-5 py-2.5 rounded-md text-sm font-medium text-white ${
+                            ihCreatingLga || !ihNewFromMonth || !ihNewFromYear || !ihNewToMonth || !ihNewToYear
+                              ? 'bg-gray-400 cursor-not-allowed'
+                              : 'bg-green-600 hover:bg-green-700'
+                          }`}
+                        >
+                          {ihCreatingLga ? (ihNewProgress || 'Processing...') : 'Process PDF & Create LGA Report'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2079,7 +2183,7 @@ export default function MarketPerformancePage() {
                     }
                   }}
                   value={ihEditingMainBody ? ihEditedMainBody : (ihCurrentData.mainBody || '(empty)')}
-                  onChange={ihEditingMainBody ? (e) => setIhEditedMainBody(e.target.value) : undefined}
+                  onChange={ihEditingMainBody ? (e) => setIhEditedMainBody(e.target.value.replace(/\r\n?/g, '\n')) : undefined}
                   onInput={ihEditingMainBody ? (e) => {
                     const target = e.target as HTMLTextAreaElement;
                     target.style.height = 'auto';
@@ -2091,11 +2195,16 @@ export default function MarketPerformancePage() {
                       : 'bg-gray-50 border-gray-200 text-gray-600 cursor-default'
                   }`}
                 />
+                <InvestmentHighlightsCharCount value={ihEditingMainBody ? ihEditedMainBody : ihCurrentData.mainBody} className="mt-1" />
                 {ihEditingMainBody && (
                   <div className="flex items-center gap-3 mt-3">
                     <button
                       onClick={async () => {
                         if (!ihSelectedReport || !ihEditedMainBody.trim()) return;
+                        if (ihCharsOver(ihEditedMainBody) > 0) {
+                          setIhMessage({ type: 'error', text: ihLimitError(ihEditedMainBody) });
+                          return;
+                        }
                         setIhSavingMainBody(true);
                         setIhMessage(null);
                         try {
@@ -2105,7 +2214,7 @@ export default function MarketPerformancePage() {
                             body: JSON.stringify({
                               reportName: ihSelectedReport.reportName,
                               state: ihSelectedReport.state,
-                              mainBody: ihEditedMainBody,
+                              mainBody: normaliseIh(ihEditedMainBody),
                               userEmail,
                               suburbs: ihEditedSuburbs.join(', '),
                               validPeriod: ihEditedValidPeriod,
@@ -2126,9 +2235,9 @@ export default function MarketPerformancePage() {
                           setIhSavingMainBody(false);
                         }
                       }}
-                      disabled={ihSavingMainBody || !ihEditedMainBody.trim()}
+                      disabled={ihSavingMainBody || !ihEditedMainBody.trim() || ihCharsOver(ihEditedMainBody) > 0}
                       className={`px-5 py-2 rounded-md text-sm font-medium text-white ${
-                        ihSavingMainBody || !ihEditedMainBody.trim()
+                        ihSavingMainBody || !ihEditedMainBody.trim() || ihCharsOver(ihEditedMainBody) > 0
                           ? 'bg-gray-400 cursor-not-allowed'
                           : 'bg-blue-600 hover:bg-blue-700'
                       }`}
@@ -2305,15 +2414,16 @@ export default function MarketPerformancePage() {
               <div className="flex items-center gap-4 pt-4 mt-6 border-t">
                 <button
                   onClick={handleIhSave}
-                  disabled={ihSaving || !ihHasChanges}
+                  disabled={ihSaving || !ihHasChanges || ihCharsOver(composeMainBody()) > 0}
                   className={`px-6 py-2.5 rounded-md font-medium text-white ${
-                    ihSaving || !ihHasChanges
+                    ihSaving || !ihHasChanges || ihCharsOver(composeMainBody()) > 0
                       ? 'bg-gray-400 cursor-not-allowed'
                       : 'bg-blue-600 hover:bg-blue-700'
                   }`}
                 >
                   {ihSaving ? 'Saving...' : 'Save Changes'}
                 </button>
+                {ihHasChanges && <InvestmentHighlightsCharCount value={composeMainBody()} />}
                 <button
                   onClick={handleIhClear}
                   className="px-6 py-2.5 rounded-md font-medium text-gray-700 border border-gray-300 hover:bg-gray-50"

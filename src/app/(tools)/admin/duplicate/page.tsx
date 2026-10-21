@@ -9,6 +9,7 @@ import { Step6InsuranceCalculator } from '@/components/steps/Step6InsuranceCalcu
 import { Step6WashingtonBrown } from '@/components/steps/Step6WashingtonBrown';
 import { Step7CashflowReview } from '@/components/steps/Step7CashflowReview';
 import { Step5Proximity } from '@/components/steps/Step5Proximity';
+import { ihCharsOver, ihLimitError } from '@/lib/investmentHighlightsLimit';
 
 // --- Types ---
 
@@ -1080,6 +1081,13 @@ export default function DuplicatePage() {
   // Submit: Create new GHL record
   const handleSubmit = async () => {
     if (submitting) return;
+    {
+      const ih = useFormStore.getState().formData.contentSections?.investmentHighlights;
+      if (ihCharsOver(ih) > 0) {
+        setError(ihLimitError(ih));
+        return;
+      }
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -2454,7 +2462,8 @@ export default function DuplicatePage() {
                       {!isLastStep && (() => {
                         const isContentStep = section.id === 'content';
                         const contentReviewed = storeFormData.contentSections?.contentReviewed;
-                        const blocked = isContentStep && !contentReviewed;
+                        const ihOver = isContentStep && ihCharsOver(storeFormData.contentSections?.investmentHighlights) > 0;
+                        const blocked = isContentStep && (!contentReviewed || ihOver);
                         return (
                           <div className="flex flex-col items-end gap-1">
                             <button
@@ -2464,7 +2473,8 @@ export default function DuplicatePage() {
                             >
                               Next
                             </button>
-                            {blocked && <span className="text-xs text-amber-600">Tick the review checkbox above to proceed</span>}
+                            {ihOver && <span className="text-xs text-red-600">{ihLimitError(storeFormData.contentSections?.investmentHighlights)}</span>}
+                            {blocked && !ihOver && <span className="text-xs text-amber-600">Tick the review checkbox above to proceed</span>}
                           </div>
                         );
                       })()}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { logInvestmentHighlightsActivity } from '@/lib/investmentHighlightsLogger';
 import { saveInvestmentHighlightsV2 } from '@/lib/investmentHighlightsV2';
+import { ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
 import fs from 'fs';
 import path from 'path';
 
@@ -239,6 +240,12 @@ export async function POST(request: NextRequest) {
     // Step 7: Save to V2 Google Sheet (skip if called from editor which manages its own sheet writes)
     logOrganizePdf(`Step 7: skipSheetWrite=${!!skipSheetWrite} reportName="${reportName}" state="${state}" validPeriod="${validPeriod}" mainBodyLen=${(mainBody||'').length}`);
     if (!skipSheetWrite) {
+      // GHL rejects Investment Highlights over 12,000 chars — refuse to store anything that would later fail
+      if (ihCharsOver(mainBody) > 0) {
+        logOrganizePdf(`Sheet save REFUSED: mainBody over GHL limit (${(mainBody || '').length} chars)`);
+        return NextResponse.json({ success: false, error: ihLimitError(mainBody) }, { status: 400 });
+      }
+
       // Parse validPeriod into split fields for V2
       let validFromMonth = '', validFromYear = '', validToMonth = '', validToYear = '';
       const fullMatch = validPeriod.match(/^([A-Za-z]+)\s+(\d{4})\s*-\s*([A-Za-z]+)\s+(\d{4})$/i);
@@ -259,7 +266,7 @@ export async function POST(request: NextRequest) {
           validFromYear,
           validToMonth,
           validToYear,
-          mainBody: mainBody || '',
+          mainBody: normaliseIh(mainBody),
           pdfDriveLink: webViewLink,
           pdfFileId: fileId,
           updatedBy: userEmail || 'organize-pdf',

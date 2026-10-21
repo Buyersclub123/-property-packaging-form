@@ -19,6 +19,7 @@ import { Step4Review } from './steps/Step4Review';
 import { Step9PhotoDocuments } from './steps/Step9PhotoDocuments';
 import { getUserEmail } from '@/lib/userAuth';
 import { useSubjectLine } from '@/hooks/useSubjectLine';
+import { ihCharsOver, ihLimitError } from '@/lib/investmentHighlightsLimit';
 
 // Steps numbered starting from 1
 const STEPS = [
@@ -869,6 +870,11 @@ export function MultiStepForm({ userEmail, mode = 'create', initialData, recordI
         
         if (!contentSections.investmentHighlights || contentSections.investmentHighlights.trim() === '') {
           setValidationError('Investment Highlights are required. Please fill in this field.');
+          return false;
+        }
+
+        if (ihCharsOver(contentSections.investmentHighlights) > 0) {
+          setValidationError(ihLimitError(contentSections.investmentHighlights));
           return false;
         }
         

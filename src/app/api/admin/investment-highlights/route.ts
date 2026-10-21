@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSheetsClient } from '@/lib/googleSheets';
+import { ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS || '';
 const TAB_NAME = 'Investment Highlights V2';
@@ -150,6 +151,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // GHL rejects Investment Highlights over 12,000 chars — refuse to store anything that would later fail
+    const normalisedMainBody = normaliseIh(mainBody);
+    if (ihCharsOver(normalisedMainBody) > 0) {
+      return NextResponse.json({ success: false, error: ihLimitError(normalisedMainBody) }, { status: 400 });
+    }
+
     if (!SHEET_ID) {
       return NextResponse.json(
         { success: false, error: 'GOOGLE_SHEET_ID_INVESTMENT_HIGHLIGHTS not configured' },
@@ -190,7 +197,7 @@ export async function POST(request: NextRequest) {
 
     // Update: column I (Main Body), L (Updated By), M (Updated At)
     const updates: { range: string; values: string[][] }[] = [
-      { range: `'${TAB_NAME}'!I${actualRowNumber}`, values: [[mainBody.trim()]] },
+      { range: `'${TAB_NAME}'!I${actualRowNumber}`, values: [[normalisedMainBody.trim()]] },
       { range: `'${TAB_NAME}'!L${actualRowNumber}`, values: [[userEmail]] },
       { range: `'${TAB_NAME}'!M${actualRowNumber}`, values: [[now]] },
     ];

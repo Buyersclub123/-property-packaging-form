@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
 
 /**
  * GHL API Configuration
@@ -35,6 +36,12 @@ export async function POST(request: Request) {
         { success: false, error: 'Form data is required' },
         { status: 400 }
       );
+    }
+
+    // GHL rejects Investment Highlights over 12,000 chars — fail early with a clear message
+    const investmentHighlights = normaliseIh(formData.contentSections?.investmentHighlights);
+    if (ihCharsOver(investmentHighlights) > 0) {
+      return NextResponse.json({ success: false, error: ihLimitError(investmentHighlights) }, { status: 400 });
     }
 
     // Helper function to parse currency string to number
@@ -95,7 +102,7 @@ export async function POST(request: Request) {
       lot_number: formData.address?.lotNumber || '',
       why_this_property: formData.contentSections?.whyThisProperty || '',
       proximity: formData.contentSections?.proximity || '',
-      investment_highlights: formData.contentSections?.investmentHighlights || '',
+      investment_highlights: investmentHighlights,
       google_map: formData.address?.googleMap || '',
       // Project fields
       project_identifier: formData.projectIdentifier || '',

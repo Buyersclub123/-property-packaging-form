@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveInvestmentHighlightsV2, lookupInvestmentHighlightsV2 } from '@/lib/investmentHighlightsV2';
+import { ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
 
 /**
  * POST /api/investment-highlights-v2/save
@@ -78,6 +79,12 @@ export async function POST(request: NextRequest) {
         { error: 'Main body content is required' },
         { status: 400 }
       );
+    }
+
+    // GHL rejects Investment Highlights over 12,000 chars — refuse to store anything that would later fail
+    mainBody = normaliseIh(mainBody);
+    if (ihCharsOver(mainBody) > 0) {
+      return NextResponse.json({ error: ihLimitError(mainBody) }, { status: 400 });
     }
 
     if (!updatedBy) {

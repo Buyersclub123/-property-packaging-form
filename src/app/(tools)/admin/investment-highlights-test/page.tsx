@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { InvestmentHighlightsCharCount } from '@/components/InvestmentHighlightsCharCount';
+import { ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -66,6 +68,10 @@ export default function InvestmentHighlightsTestPage() {
   };
 
   const handleSave = async () => {
+    if (ihCharsOver(saveMainBody) > 0) {
+      setSaveError(ihLimitError(saveMainBody));
+      return;
+    }
     setSaveLoading(true);
     setSaveError('');
     setSaveResult(null);
@@ -82,7 +88,7 @@ export default function InvestmentHighlightsTestPage() {
           validFromYear: saveFromYear,
           validToMonth: saveToMonth,
           validToYear: saveToYear,
-          mainBody: saveMainBody,
+          mainBody: normaliseIh(saveMainBody),
           updatedBy: saveUpdatedBy,
         }),
       });
@@ -285,11 +291,12 @@ export default function InvestmentHighlightsTestPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Main Body (Report Content)</label>
             <textarea
               value={saveMainBody}
-              onChange={(e) => setSaveMainBody(e.target.value)}
+              onChange={(e) => setSaveMainBody(e.target.value.replace(/\r\n?/g, '\n'))}
               placeholder="Paste or type the investment highlights content here..."
               rows={8}
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono"
             />
+            <InvestmentHighlightsCharCount value={saveMainBody} className="mt-1" />
           </div>
 
           <div className="mb-4">
@@ -305,7 +312,7 @@ export default function InvestmentHighlightsTestPage() {
 
           <button
             onClick={handleSave}
-            disabled={saveLoading || !saveLGA || !saveState || !saveFromMonth || !saveFromYear || !saveToMonth || !saveToYear || !saveMainBody || !saveUpdatedBy}
+            disabled={saveLoading || !saveLGA || !saveState || !saveFromMonth || !saveFromYear || !saveToMonth || !saveToYear || !saveMainBody || !saveUpdatedBy || ihCharsOver(saveMainBody) > 0}
             className="w-full bg-green-600 text-white rounded px-4 py-2 text-sm font-medium hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             {saveLoading ? 'Saving...' : existsCheck?.exists ? 'Update Existing Report' : 'Create New Report'}
