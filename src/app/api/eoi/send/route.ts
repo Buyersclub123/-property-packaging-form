@@ -5,6 +5,7 @@ import { renderEoiEmailHtml, renderEoiSubject, EoiEmailData } from '@/lib/eoi-em
 import { updateCachedRecord } from '@/lib/dealSheetCache';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 const FROM_EMAIL = 'property@buyersclub.com.au';
 
@@ -24,7 +25,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
 
   interface AttachmentPayload {
-    base64: string;
+    driveFileId: string;
+    size: number;
     mimeType: string;
     autoName: string;
     type: string;
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest) {
     emailData,
     renderedHtml: clientRenderedHtml,
     attachments,
+    attachmentsFolderId,
     changes,
     manualCc,
     preserveOfferStatus,
@@ -62,6 +65,7 @@ export async function POST(request: NextRequest) {
     emailData: EoiEmailData;
     renderedHtml?: string;
     attachments?: AttachmentPayload[];
+    attachmentsFolderId?: string;
     changes?: { field: string; label: string; from: string; to: string }[];
     manualCc?: string;
     preserveOfferStatus?: string;
@@ -170,7 +174,7 @@ export async function POST(request: NextRequest) {
       ${sentBy || 'unknown'}, 'pending', 'email', ${JSON.stringify(
         {
           ...(attachments && attachments.length > 0
-            ? { ...emailData, attachments: attachments.map(a => ({ type: a.type, forLabel: a.forLabel, autoName: a.autoName, mimeType: a.mimeType, size: Math.round(a.base64.length * 3 / 4) })) }
+            ? { ...emailData, attachments: attachments.map(a => ({ type: a.type, forLabel: a.forLabel, autoName: a.autoName, mimeType: a.mimeType, size: a.size, driveFileId: a.driveFileId })), ...(attachmentsFolderId ? { attachmentsFolderId } : {}) }
             : emailData),
           ...(initiatedBy && initiatedBy !== sentBy ? { initiatedBy } : {}),
           ...(manualCc ? { manualCc } : {}),
@@ -276,6 +280,24 @@ export async function POST(request: NextRequest) {
       let rawMessage: string;
 
       if (attachments && attachments.length > 0) {
+        // Fetch attachment bytes from Drive (uploaded directly by the browser to bypass Vercel's body limit)
+        const driveAuth = new google.auth.JWT({
+          email: credentials.client_email,
+          key: credentials.private_key,
+          scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+        });
+        const drive = google.drive({ version: 'v3', auth: driveAuth });
+        const attachmentBodies: string[] = [];
+        for (const att of attachments) {
+          if (!att.driveFileId) throw new Error(`Attachment "${att.autoName}" has no Drive file ID`);
+          const fileRes = await drive.files.get(
+            { fileId: att.driveFileId, alt: 'media', supportsAllDrives: true },
+            { responseType: 'arraybuffer' },
+          );
+          const b64 = Buffer.from(fileRes.data as ArrayBuffer).toString('base64');
+          attachmentBodies.push(b64.replace(/(.{76})/g, '$1\r\n'));
+        }
+
         // Multipart/mixed — HTML body + file attachments
         const boundary = '----=_Part_EOI';
         const headers = [
@@ -299,16 +321,16 @@ export async function POST(request: NextRequest) {
         );
 
         // Attachment parts
-        for (const att of attachments) {
+        attachments.forEach((att, i) => {
           parts.push(
             `--${boundary}`,
             `Content-Type: ${att.mimeType}; name="${att.autoName}"`,
             `Content-Disposition: attachment; filename="${att.autoName}"`,
             'Content-Transfer-Encoding: base64',
             '',
-            att.base64,
+            attachmentBodies[i],
           );
-        }
+        });
 
         // Closing boundary
         parts.push(`--${boundary}--`);
@@ -328,15 +350,11 @@ export async function POST(request: NextRequest) {
         ];
         rawMessage = messageParts.join('\r\n');
       }
-      const encodedMessage = Buffer.from(rawMessage)
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-
+      // Media upload (message/rfc822) — supports messages up to Gmail's 35 MB limit,
+      // unlike the JSON `raw` field which is capped at a few MB
       await gmail.users.messages.send({
         userId: 'me',
-        requestBody: { raw: encodedMessage },
+        media: { mimeType: 'message/rfc822', body: rawMessage },
       });
 
       deliveryStatus = 'sent';

@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
       offer_price, offer_price_land, offer_price_build, offer_status_at_event,
       agent_email, client_name, assigned_ba, close_date,
       sent_by, sent_at, delivery_status, method,
-      initiated_by, delink_reason, changes, notes
+      initiated_by, delink_reason, changes, notes,
+      payload->>'attachmentsFolderId' AS attachments_folder_id
     FROM eoi_sends
     WHERE record_id = ${recordId}
     ORDER BY sent_at DESC`;

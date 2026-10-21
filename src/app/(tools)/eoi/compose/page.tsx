@@ -62,6 +62,7 @@ interface SendHistoryItem {
   delink_reason: string;
   changes: { field: string; label: string; from: string; to: string }[] | null;
   notes: string;
+  attachments_folder_id: string | null;
 }
 
 // ---- attachment types -------------------------------------------------------
@@ -71,7 +72,10 @@ const ATTACHMENT_TYPES: AttachmentType[] = ['ID', 'Deposit Receipt', 'Finance Co
 
 interface Attachment {
   file: File;
-  base64: string;
+  driveFileId: string | null;
+  status: 'uploading' | 'done' | 'error';
+  progress: number;
+  error?: string;
   mimeType: string;
   type: AttachmentType;
   forLabel: string;
@@ -85,16 +89,26 @@ function buildAutoName(type: AttachmentType, forLabel: string, fileName: string)
   return `${type} - ${forLabel}${ext}`;
 }
 
-/** Read a File as base64 (strips the data URI prefix) */
-function readFileAsBase64(file: File): Promise<string> {
+/** PUT a File to a Drive resumable upload URL, reporting progress. Resolves with the Drive file ID. */
+function uploadFileToDrive(file: File, uploadUrl: string, onProgress: (pct: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(',')[1] || '');
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const id = JSON.parse(xhr.responseText)?.id;
+          if (id) return resolve(id);
+        } catch { /* fall through */ }
+        reject(new Error('Drive did not return a file ID'));
+      } else {
+        reject(new Error(`Drive upload failed (HTTP ${xhr.status})`));
+      }
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.send(file);
   });
 }
 
@@ -106,6 +120,7 @@ function formatFileSize(bytes: number): string {
 }
 
 const MAX_TOTAL_ATTACHMENT_SIZE = 18 * 1024 * 1024; // 18MB — Gmail 25MB minus base64 overhead
+const WARN_TOTAL_ATTACHMENT_SIZE = 15 * 1024 * 1024; // amber warning threshold
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -446,6 +461,8 @@ export default function EoiComposePage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingType, setPendingType] = useState<AttachmentType>('ID');
   const [pendingFor, setPendingFor] = useState('');
+  const [attachmentsFolderId, setAttachmentsFolderId] = useState<string | null>(null);
+  const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Info panel toggle
@@ -992,9 +1009,10 @@ export default function EoiComposePage() {
   function handleFileSelected(file: File) {
     const totalSize = attachments.reduce((sum, a) => sum + a.file.size, 0) + file.size;
     if (totalSize > MAX_TOTAL_ATTACHMENT_SIZE) {
-      alert(`Total attachment size would exceed 18 MB (Gmail limit minus encoding overhead). Remove an attachment first or choose a smaller file.`);
+      setAttachmentNotice(`Attachments can't exceed 18 MB in total — adding "${file.name}" would make it ${formatFileSize(totalSize)}. Compress the file or send it separately.`);
       return;
     }
+    setAttachmentNotice(null);
     setPendingFile(file);
     setPendingType('ID');
     setPendingFor('');
@@ -1002,19 +1020,32 @@ export default function EoiComposePage() {
 
   async function confirmAttachment() {
     if (!pendingFile) return;
-    const base64 = await readFileAsBase64(pendingFile);
-    const autoName = buildAutoName(pendingType, pendingFor, pendingFile.name);
-    setAttachments(prev => [...prev, {
-      file: pendingFile,
-      base64,
-      mimeType: pendingFile.type || 'application/octet-stream',
-      type: pendingType,
-      forLabel: pendingFor,
-      autoName,
-    }]);
+    const file = pendingFile;
+    const autoName = buildAutoName(pendingType, pendingFor, file.name);
+    const mimeType = file.type || 'application/octet-stream';
+    const entry: Attachment = { file, driveFileId: null, status: 'uploading', progress: 0, mimeType, type: pendingType, forLabel: pendingFor, autoName };
+    setAttachments(prev => [...prev, entry]);
     setPendingFile(null);
     setPendingType('ID');
     setPendingFor('');
+
+    const update = (patch: Partial<Attachment>) =>
+      setAttachments(prev => prev.map(a => (a.file === file ? { ...a, ...patch } : a)));
+
+    try {
+      const sessionRes = await fetch('/api/eoi/attachments/upload-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: autoName, mimeType, size: file.size, propertyAddress, folderId: attachmentsFolderId }),
+      });
+      const session = await sessionRes.json().catch(() => ({}));
+      if (!sessionRes.ok || !session.uploadUrl) throw new Error(session.error || `Upload session failed (HTTP ${sessionRes.status})`);
+      if (session.folderId && !attachmentsFolderId) setAttachmentsFolderId(session.folderId);
+      const driveFileId = await uploadFileToDrive(file, session.uploadUrl, pct => update({ progress: pct }));
+      update({ driveFileId, status: 'done', progress: 100 });
+    } catch (err) {
+      update({ status: 'error', error: err instanceof Error ? err.message : 'Upload failed' });
+    }
   }
 
   function removeAttachment(idx: number) {
@@ -1031,6 +1062,8 @@ export default function EoiComposePage() {
     if (isHL && !editBuildDeposit.trim()) missing.push('Build Deposit');
     if (oppId && !lvr.trim()) missing.push('LVR');
     if (missing.length > 0) { alert(`Required fields missing: ${missing.join(', ')}`); return; }
+    if (attachments.some(a => a.status === 'uploading')) { alert('Please wait for attachments to finish uploading.'); return; }
+    if (attachments.some(a => a.status === 'error')) { alert('One or more attachments failed to upload. Remove them and try again.'); return; }
 
     setSending(true);
     setSendResult(null);
@@ -1063,15 +1096,23 @@ export default function EoiComposePage() {
           preserveOfferStatus: preserveOfferStatus || undefined,
           changes: changes !== undefined ? changes : undefined,
           attachments: attachments.length > 0 ? attachments.map(a => ({
-            base64: a.base64,
+            driveFileId: a.driveFileId,
+            size: a.file.size,
             mimeType: a.mimeType,
             autoName: a.autoName,
             type: a.type,
             forLabel: a.forLabel,
           })) : undefined,
+          attachmentsFolderId: attachments.length > 0 ? attachmentsFolderId : undefined,
         }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { ok: boolean; sendId?: number; deliveryStatus?: string; error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { ok: false, error: `HTTP ${res.status} ${res.statusText}: ${text.slice(0, 120)}` };
+      }
       setSendResult(data);
     } catch (err) {
       setSendResult({ ok: false, error: err instanceof Error ? err.message : 'Send failed' });
@@ -1353,6 +1394,13 @@ export default function EoiComposePage() {
                           {' · '}
                           <a href={`/api/eoi/view-send?sendId=${h.id}`} target="_blank" rel="noopener noreferrer"
                             style={{ color: 'var(--blue, #3b82f6)', fontSize: 11, textDecoration: 'underline' }}>View EOI</a>
+                          {h.attachments_folder_id && (
+                            <>
+                              {' · '}
+                              <a href={`https://drive.google.com/drive/folders/${h.attachments_folder_id}`} target="_blank" rel="noopener noreferrer"
+                                style={{ color: 'var(--blue, #3b82f6)', fontSize: 11, textDecoration: 'underline' }}>Attachments</a>
+                            </>
+                          )}
                         </>
                       )}
                       <br />
@@ -1614,8 +1662,9 @@ export default function EoiComposePage() {
           </select>
         </div>
         <div className="toolbar-group" style={{ borderRight: 'none', gap: 8 }}>
-          <button className="primary" onClick={handleSend} disabled={sending || !agentEmail || !!sendResult?.ok}>
-            {sendResult?.ok ? 'EOI Sent' : sending ? 'Sending...' : 'Send EOI'}
+          <button className="primary" onClick={handleSend} disabled={sending || !agentEmail || !!sendResult?.ok || attachments.some(a => a.status !== 'done')}
+            title={attachments.some(a => a.status === 'uploading') ? 'Waiting for attachments to upload' : attachments.some(a => a.status === 'error') ? 'Remove failed attachments first' : undefined}>
+            {sendResult?.ok ? 'EOI Sent' : sending ? 'Sending...' : attachments.some(a => a.status === 'uploading') ? 'Uploading...' : 'Send EOI'}
           </button>
           <button onClick={() => window.close()} style={{ background: '#666', color: '#fff', border: '1px solid #555' }}>
             Close
@@ -1999,6 +2048,15 @@ export default function EoiComposePage() {
                 onChange={e => { if (e.target.files?.[0]) handleFileSelected(e.target.files[0]); e.target.value = ''; }} />
             </div>
 
+            {attachmentNotice && (
+              <div className="send-fail" style={{ padding: '8px 12px', borderRadius: 4, marginBottom: 10, fontSize: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <span>{attachmentNotice}</span>
+                <button onClick={() => setAttachmentNotice(null)}
+                  style={{ background: 'transparent', border: 'none', color: '#721c24', cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+                  title="Dismiss">&times;</button>
+              </div>
+            )}
+
             {/* Pending attachment — type + for selection */}
             {pendingFile && (
               <div style={{ background: '#f9f9f9', border: '1px solid #ddd', borderRadius: 4, padding: 10, marginBottom: 10, fontSize: 12 }}>
@@ -2068,6 +2126,8 @@ export default function EoiComposePage() {
                 <div>
                   <span style={{ fontWeight: 600 }}>{a.autoName}</span>
                   <span style={{ color: '#888', marginLeft: 8 }}>({formatFileSize(a.file.size)})</span>
+                  {a.status === 'uploading' && <span style={{ color: '#888', marginLeft: 8 }}>Uploading… {a.progress}%</span>}
+                  {a.status === 'error' && <span style={{ color: '#c0392b', marginLeft: 8 }}>Upload failed: {a.error} — remove and try again</span>}
                 </div>
                 <button onClick={() => removeAttachment(idx)}
                   style={{ background: 'transparent', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
@@ -2078,6 +2138,16 @@ export default function EoiComposePage() {
             {attachments.length === 0 && !pendingFile && (
               <div style={{ color: '#999', fontSize: 11, textAlign: 'center', padding: 8 }}>No attachments</div>
             )}
+
+            {attachments.length > 0 && (() => {
+              const total = attachments.reduce((sum, a) => sum + a.file.size, 0);
+              const warn = total >= WARN_TOTAL_ATTACHMENT_SIZE;
+              return (
+                <div style={{ marginTop: 8, fontSize: 11, color: warn ? '#9a6700' : '#888', fontWeight: warn ? 600 : 400 }}>
+                  {formatFileSize(total)} of 18 MB used{warn ? ' — approaching the limit' : ''}
+                </div>
+              );
+            })()}
           </div>
 
         </div>
@@ -2147,6 +2217,19 @@ export default function EoiComposePage() {
                       >
                         View EOI
                       </a>
+                      {h.attachments_folder_id && (
+                        <>
+                          {' · '}
+                          <a
+                            href={`https://drive.google.com/drive/folders/${h.attachments_folder_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: 'var(--blue, #3b82f6)', fontSize: 11, textDecoration: 'underline' }}
+                          >
+                            Attachments
+                          </a>
+                        </>
+                      )}
                     </>
                   )}
                   <br />

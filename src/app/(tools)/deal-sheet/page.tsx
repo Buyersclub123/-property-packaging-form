@@ -312,8 +312,7 @@ export default function DealSheetPage() {
 
   // Per-row status editing
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
-  // Quick record tool (D6/D22): hidden until the record count is double-clicked; copy mode shows a ⧉ per row
-  const [quickToolVisible, setQuickToolVisible] = useState(false);
+  // Quick record tool (D6/D22): copy mode shows a ⧉ per row
   const [quickCopyMode, setQuickCopyMode] = useState(false);
   useEffect(() => {
     if (!quickCopyMode) return;
@@ -1341,22 +1340,16 @@ export default function DealSheetPage() {
             className="h-7 w-auto"
           />
           <h1 className="text-lg font-bold">Deal Sheet</h1>
-          <span
-            className="text-xs opacity-60 select-none"
-            onDoubleClick={() => setQuickToolVisible((v) => !v)}
-            title="Double-click to show/hide the Quick record tool"
-          >
+          <span className="text-xs opacity-60 select-none">
             {sortedRecords.length} records
           </span>
-          {quickToolVisible && (
-            <button
-              onClick={() => setQuickCopyMode((v) => !v)}
-              className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${quickCopyMode ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
-              title="Create a quick property record — copy a row or start blank"
-            >
-              Quick record
-            </button>
-          )}
+          <button
+            onClick={() => setQuickCopyMode((v) => !v)}
+            className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${quickCopyMode ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
+            title="Create a quick property record — copy a row or start blank"
+          >
+            Quick record
+          </button>
           <a
             href="/deal-sheet/reports"
             target="_blank"
