@@ -362,6 +362,7 @@ export async function resolveLinkedOpportunityNames(
               Version: '2021-07-28',
               Accept: 'application/json',
             },
+            cache: 'no-store',
           }
         );
         if (!res.ok) return null;

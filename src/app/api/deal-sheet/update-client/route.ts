@@ -132,6 +132,7 @@ export async function POST(request: NextRequest) {
         try {
           const oppRes = await fetch(`${GHL_API_BASE}/opportunities/${outgoingOppId}?locationId=${LOCATION_ID}`, {
             headers: { Authorization: `Bearer ${BEARER_TOKEN}`, Version: '2021-07-28' },
+            cache: 'no-store',
           });
           if (oppRes.ok) {
             const o = await oppRes.json();

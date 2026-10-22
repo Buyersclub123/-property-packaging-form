@@ -105,7 +105,8 @@ export async function ghlFetch(url: string, init?: RequestInit, source = 'unknow
 
     const t0 = Date.now();
     try {
-      const response = await fetch(url, init);
+      // Never let Next.js serve a cached GHL response (project rule: no stale data).
+      const response = await fetch(url, { cache: 'no-store', ...init });
       recordStat(source, url, response.status, attempt, Date.now() - t0);
 
       if (response.ok) return response;

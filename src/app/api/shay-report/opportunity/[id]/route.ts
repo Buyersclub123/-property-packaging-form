@@ -46,6 +46,7 @@ export async function GET(
           Authorization: `Bearer ${BEARER_TOKEN}`,
           Version: '2021-07-28',
         },
+        cache: 'no-store',
       }
     );
 

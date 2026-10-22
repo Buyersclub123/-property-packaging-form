@@ -8,6 +8,12 @@ import {
 import { sendCtrAlert } from './alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { getRedisClient } from '@/lib/redis';
+import {
+  REPORTING_PIPELINE_IDS as PIPELINE_IDS,
+  PIPELINE_NAMES,
+  PIPELINE_ID,
+  findMissingPipelines,
+} from '@/lib/ghlPipelines';
 
 // Shared fetch: one GHL pull per window, served to every open tab.
 // Freshness matches the page's own 60s auto-refresh so nobody sees older data than today.
@@ -25,13 +31,6 @@ const GHL_BASE_URL = process.env.GHL_BASE_URL || 'https://services.leadconnector
 const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
-
-const PIPELINE_IDS = [
-  'zgBRaMnACpskyf1wHCEV', // 06. FINANCE Pipeline
-  'XMKCHlqekS7IU87PNLKB', // 07. CONSTRUCTION Pipeline
-  'RDd4Kczt5mEuUhHfRr7C', // 05. CONTRACTS Pipeline
-  'zrb34FRmPnbIyAGFDeXJ', // 04. PROPERTY TEAM Pipeline
-];
 
 interface GHLCustomField {
   id: string;
@@ -110,13 +109,6 @@ const FALLBACK_USER_MAP: Record<string, string> = {
 
 let userMapCache: Record<string, string> = {};
 
-const PIPELINE_NAMES: Record<string, string> = {
-  'zgBRaMnACpskyf1wHCEV': 'Finance',
-  'XMKCHlqekS7IU87PNLKB': 'Construction',
-  'RDd4Kczt5mEuUhHfRr7C': 'Contracts',
-  'zrb34FRmPnbIyAGFDeXJ': 'Property Team',
-};
-
 let stageNameCache: Record<string, string> = {};
 
 async function fetchUsers(): Promise<void> {
@@ -129,6 +121,7 @@ async function fetchUsers(): Promise<void> {
           Version: GHL_API_VERSION,
           Accept: 'application/json',
         },
+        cache: 'no-store',
       },
       'ctr-users'
     );
@@ -156,12 +149,15 @@ async function fetchPipelineStages(): Promise<void> {
           Authorization: `Bearer ${GHL_API_TOKEN}`,
           Version: GHL_API_VERSION,
         },
+        cache: 'no-store',
       },
       'ctr-stages'
     );
     if (!response.ok) return;
     const data = await response.json();
     if (data.pipelines) {
+      // Replace, don't merge: stages deleted in GHL must not linger.
+      stageNameCache = {};
       for (const pipeline of data.pipelines) {
         if (pipeline.stages) {
           for (const stage of pipeline.stages) {
@@ -169,9 +165,25 @@ async function fetchPipelineStages(): Promise<void> {
           }
         }
       }
+      // A pipeline this tool is configured for no longer exists in GHL
+      // (e.g. deleted/restructured by someone in GHL). Alert and fail loudly —
+      // never report on a partial set of pipelines as if it were complete.
+      const missing = findMissingPipelines(data.pipelines);
+      if (missing.length > 0) {
+        const names = missing.map((id) => `${PIPELINE_NAMES[id] || 'Unknown'} (${id})`).join(', ');
+        sendCtrAlert({
+          type: 'configured-pipeline-missing',
+          subject: 'A pipeline the tool reports on no longer exists in GHL',
+          reason: `The tool is configured to report on these pipelines but GHL no longer returns them: ${names}.`,
+          impact: 'The Contract Team Reporting Tool cannot load until this is resolved.',
+          action: 'Check Settings → Pipelines in GHL. If the pipeline was deliberately removed, update src/lib/ghlPipelines.ts. If it was deleted by mistake, restore it from GHL Audit Logs (60-day window).',
+        });
+        throw new Error(`Configured pipeline(s) missing from GHL: ${names}`);
+      }
     }
   } catch (e) {
     console.error('Failed to fetch pipeline stages:', e);
+    if (e instanceof Error && e.message.startsWith('Configured pipeline(s) missing')) throw e;
   }
 }
 
@@ -443,7 +455,7 @@ async function buildReport(): Promise<ReportRecord[]> {
     .filter((opp) => opp.status === 'open')
     .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys))
     .filter((r) => {
-      if (r.pipelineId === 'zgBRaMnACpskyf1wHCEV' && r.pipelineStage.toLowerCase() === 'settled') return false;
+      if (r.pipelineId === PIPELINE_ID.FINANCE && r.pipelineStage.toLowerCase() === 'settled') return false;
       // Construction HANDOVER is NOT excluded here: Build Deposit Status has to
       // include it to match the original report. Views that should leave it out
       // (PM Intro Tracking, Full F&C) carry their own stage filter.
@@ -573,6 +585,7 @@ async function fetchAllOpportunities(): Promise<GHLOpportunity[]> {
           Authorization: `Bearer ${GHL_API_TOKEN}`,
           Version: GHL_API_VERSION,
         },
+        cache: 'no-store',
       }, 'ctr-opportunities');
 
       if (!response.ok) {

@@ -101,10 +101,11 @@ function stageRank(stageName: string): number {
   return 1;
 }
 
+// Two tiers since the Contracts pipeline was folded into Property Team (Oct 2026).
+const MAX_TIER = 2;
 const TIER_LABELS: Record<number, string> = {
   1: 'Property Team pipeline',
-  2: '+ Contracts pipeline',
-  3: '+ Finance & Construction',
+  2: '+ Finance & Construction',
 };
 
 function getTodayAESTIso(): string {
@@ -404,7 +405,7 @@ export default function EoiLinkModal({
   }, [allOpps, search]);
 
   const maxLoadedTier = loadedTiers.length > 0 ? Math.max(...loadedTiers) : 0;
-  const nextTier = maxLoadedTier < 3 ? maxLoadedTier + 1 : null;
+  const nextTier = maxLoadedTier < MAX_TIER ? maxLoadedTier + 1 : null;
 
   // Other property records already linked to the chosen opportunity.
   const duplicateLinks = useMemo(() => {

@@ -88,6 +88,7 @@ export async function PUT(request: NextRequest) {
             Version: '2021-07-28',
             'Content-Type': 'application/json',
           },
+          cache: 'no-store',
         });
         if (oppRes.ok) {
           const opp = await oppRes.json();

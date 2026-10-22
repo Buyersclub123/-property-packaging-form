@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
+import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
 import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, CO_FIELDS_READ_ONLY, READ_ONLY_FIELDS } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
@@ -335,8 +336,8 @@ function viewSortLevels(v: ViewDef): SortLevel[] {
   return v.sortDir ? [{ column: v.sortBy, dir: v.sortDir }] : [];
 }
 
-const FINANCE_PIPELINE_ID = 'zgBRaMnACpskyf1wHCEV';
-const CONSTRUCTION_PIPELINE_ID = 'XMKCHlqekS7IU87PNLKB';
+const FINANCE_PIPELINE_ID = PIPELINE_ID.FINANCE;
+const CONSTRUCTION_PIPELINE_ID = PIPELINE_ID.CONSTRUCTION;
 
 const FULL_FC_COLUMNS: ColumnDef[] = [
   { key: 'ghlLink', label: 'GHL', width: 50 },
@@ -689,12 +690,10 @@ function getReportFieldLabel(key: string): string {
 // it can never drift from what the view actually does.
 // ----------------------------------------------------------------------------
 
-const ALL_PIPELINES: { id: string; name: string }[] = [
-  { id: FINANCE_PIPELINE_ID, name: 'Finance' },
-  { id: CONSTRUCTION_PIPELINE_ID, name: 'Construction' },
-  { id: 'RDd4Kczt5mEuUhHfRr7C', name: 'Contracts' },
-  { id: 'zrb34FRmPnbIyAGFDeXJ', name: 'Property Team' },
-];
+const ALL_PIPELINES: { id: string; name: string }[] = REPORTING_PIPELINE_IDS.map((id) => ({
+  id,
+  name: PIPELINE_NAMES[id],
+}));
 
 // Stage exclusions baked into the API (route.ts) — keyed by pipeline id.
 const API_STAGE_EXCLUSIONS: Record<string, string> = {

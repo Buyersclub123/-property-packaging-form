@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { FIELD_MAP, ARRAY_FIELDS } from '@/app/api/contract-team/fields';
 import { GHLRecord, GHLSearchResponse as COGHLSearchResponse } from '@/lib/dealSheetTransform';
+import { REPORTING_PIPELINE_IDS as PIPELINE_IDS, PIPELINE_NAMES } from '@/lib/ghlPipelines';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,20 +9,6 @@ const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = '2021-07-28';
-
-const PIPELINE_IDS = [
-  'zgBRaMnACpskyf1wHCEV',
-  'XMKCHlqekS7IU87PNLKB',
-  'RDd4Kczt5mEuUhHfRr7C',
-  'zrb34FRmPnbIyAGFDeXJ',
-];
-
-const PIPELINE_NAMES: Record<string, string> = {
-  'zgBRaMnACpskyf1wHCEV': 'Finance',
-  'XMKCHlqekS7IU87PNLKB': 'Construction',
-  'RDd4Kczt5mEuUhHfRr7C': 'Contracts',
-  'zrb34FRmPnbIyAGFDeXJ': 'Property Team',
-};
 
 const FALLBACK_USER_MAP: Record<string, string> = {
   ZTfbfK0bOGIDsla2JJ2d: 'Will Eaton',

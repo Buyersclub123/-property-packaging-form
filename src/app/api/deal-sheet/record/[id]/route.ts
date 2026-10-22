@@ -39,6 +39,7 @@ export async function GET(
           'Version': GHL_API_VERSION,
           'Content-Type': 'application/json',
         },
+        cache: 'no-store',
       }
     );
 

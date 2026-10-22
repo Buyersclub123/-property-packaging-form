@@ -31,6 +31,7 @@ export async function updateCachedRecord(recordId: string): Promise<void> {
           'Version': GHL_API_VERSION,
           'Content-Type': 'application/json',
         },
+        cache: 'no-store',
       }
     );
 

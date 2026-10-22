@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -8,13 +9,8 @@ const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 
-// The 4 pipelines this tool reports on (same as the main reporting route)
-const PIPELINE_IDS = new Set([
-  'zgBRaMnACpskyf1wHCEV', // Finance
-  'XMKCHlqekS7IU87PNLKB', // Construction
-  'RDd4Kczt5mEuUhHfRr7C', // Contracts
-  'zrb34FRmPnbIyAGFDeXJ', // Property Team
-]);
+// The pipelines this tool reports on (same as the main reporting route)
+const PIPELINE_IDS = new Set(REPORTING_PIPELINE_IDS);
 
 export async function GET() {
   try {

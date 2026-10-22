@@ -142,6 +142,7 @@ async function fetchUsers(): Promise<void> {
           Version: '2021-07-28',
           Accept: 'application/json',
         },
+        cache: 'no-store',
       }
     );
     if (!response.ok) return;
@@ -176,6 +177,7 @@ async function fetchPipelineStages(): Promise<void> {
           Authorization: `Bearer ${GHL_API_TOKEN}`,
           Version: '2021-07-28',
         },
+        cache: 'no-store',
       }
     );
     if (!response.ok) return;
