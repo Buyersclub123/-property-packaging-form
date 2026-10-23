@@ -98,3 +98,25 @@ CREATE TABLE IF NOT EXISTS client_portal_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_portal_token ON client_portal_entries(token);
 CREATE INDEX IF NOT EXISTS idx_portal_opp ON client_portal_entries(opportunity_id);
+
+-- GHL configuration monitor: hourly snapshots of pipelines/stages/fields and
+-- the change events diffed between them (see src/lib/ghlConfigMonitor.ts)
+CREATE TABLE IF NOT EXISTS ghl_config_snapshots (
+  id          SERIAL PRIMARY KEY,
+  taken_at    TIMESTAMPTZ DEFAULT NOW(),
+  payload     JSONB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ghl_config_changes (
+  id              SERIAL PRIMARY KEY,
+  detected_at     TIMESTAMPTZ DEFAULT NOW(),
+  entity_type     VARCHAR(20) NOT NULL,
+  change_type     VARCHAR(30) NOT NULL,
+  scope           VARCHAR(200),
+  entity_id       VARCHAR(100),
+  entity_name     VARCHAR(300),
+  before_value    JSONB,
+  after_value     JSONB,
+  acknowledged_at TIMESTAMPTZ,
+  acknowledged_by VARCHAR(100)
+);
+CREATE INDEX IF NOT EXISTS idx_ghl_changes_unacked ON ghl_config_changes(acknowledged_at) WHERE acknowledged_at IS NULL;

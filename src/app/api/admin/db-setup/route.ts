@@ -274,6 +274,31 @@ export async function GET(request: Request) {
     await sql`CREATE INDEX IF NOT EXISTS idx_portal_opp ON client_portal_entries(opportunity_id)`;
     log.push('Table client_portal_entries: OK');
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS ghl_config_snapshots (
+        id          SERIAL PRIMARY KEY,
+        taken_at    TIMESTAMPTZ DEFAULT NOW(),
+        payload     JSONB NOT NULL
+      )`;
+    log.push('Table ghl_config_snapshots: OK');
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS ghl_config_changes (
+        id              SERIAL PRIMARY KEY,
+        detected_at     TIMESTAMPTZ DEFAULT NOW(),
+        entity_type     VARCHAR(20) NOT NULL,
+        change_type     VARCHAR(30) NOT NULL,
+        scope           VARCHAR(200),
+        entity_id       VARCHAR(100),
+        entity_name     VARCHAR(300),
+        before_value    JSONB,
+        after_value     JSONB,
+        acknowledged_at TIMESTAMPTZ,
+        acknowledged_by VARCHAR(100)
+      )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_ghl_changes_unacked ON ghl_config_changes(acknowledged_at) WHERE acknowledged_at IS NULL`;
+    log.push('Table ghl_config_changes: OK');
+
     // Helper: COUNT(*) returns bigint as a string through Neon HTTP driver.
     async function tableCount(table: 'eoi_template_values' | 'special_conditions'): Promise<number> {
       const rows = table === 'eoi_template_values'

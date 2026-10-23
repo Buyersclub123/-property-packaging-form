@@ -248,6 +248,19 @@ export const teams: TeamTile[] = [
         href: '/admin/investment-highlights-test',
         newTab: true,
       },
+      {
+        name: 'GHL Config Changes',
+        description: 'Pipeline, stage and field changes detected in GHL',
+        href: '/admin/ghl-changes',
+        newTab: true,
+      },
+      {
+        name: 'Access Policies (Cloudflare)',
+        description: 'Who can access which section of this portal',
+        href: 'https://dash.cloudflare.com/e042ae740af8318d0a2ed0fe46c8eefc/one/access-controls/apps',
+        newTab: true,
+        external: true,
+      },
     ],
   },
 ];

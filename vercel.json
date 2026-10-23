@@ -27,6 +27,14 @@
     {
       "path": "/api/deal-sheet/sync-report",
       "schedule": "0 8 * * 1-5"
+    },
+    {
+      "path": "/api/ghl-monitor/check",
+      "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/ghl-monitor/digest",
+      "schedule": "0 7 * * *"
     }
   ]
 }
