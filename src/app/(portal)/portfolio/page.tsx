@@ -70,7 +70,28 @@ const dmyTime = (s: string) => {
 };
 
 type SortKey = 'properties' | 'totalCost' | 'valuation' | 'growth' | 'lastPurchase' | 'firstPurchase' | 'name';
-type GroupFilter = 'all' | 'inflight' | 'historical' | 'noContact';
+type GroupFilter = 'all' | 'inflight' | 'historical' | 'noContact' | 'createOpp';
+
+const NO_CONSULTANT = 'No consultant';
+const isCreateOpp = (p: PortfolioProperty) => /^create opportunity/i.test(p.action);
+const consultantKey = (c: PortfolioClient) => c.consultants.map((x) => x.name).join(' / ') || NO_CONSULTANT;
+
+interface ConsultantSummaryRow { key: string; count: number; properties: number; cost: number; priced: number; valuation: number; valued: number }
+
+function summarise(items: { key: string; properties: number; cost: number; priced: number; valuation: number; valued: number }[]): ConsultantSummaryRow[] {
+  const m = new Map<string, ConsultantSummaryRow>();
+  for (const i of items) {
+    const r = m.get(i.key) || { key: i.key, count: 0, properties: 0, cost: 0, priced: 0, valuation: 0, valued: 0 };
+    r.count++;
+    r.properties += i.properties;
+    r.cost += i.cost;
+    r.priced += i.priced;
+    r.valuation += i.valuation;
+    r.valued += i.valued;
+    m.set(i.key, r);
+  }
+  return [...m.values()].sort((a, b) => (a.key === NO_CONSULTANT ? 1 : b.key === NO_CONSULTANT ? -1 : b.count - a.count || a.key.localeCompare(b.key)));
+}
 
 function GradePill({ p }: { p: PortfolioProperty }) {
   if (!p.grade) return <span className="text-gray-400" title={p.gradeFacts.join(' · ')}>-</span>;
@@ -322,6 +343,50 @@ function SourcesBar({ data, onReload }: { data: PortfolioData; onReload: () => v
   );
 }
 
+function ConsultantTable({ title, countLabel, note, rows, selected, onSelect }: {
+  title: string; countLabel: string; note: string; rows: ConsultantSummaryRow[]; selected: string; onSelect: (key: string) => void;
+}) {
+  const total = rows.reduce(
+    (t, r) => ({ count: t.count + r.count, properties: t.properties + r.properties, cost: t.cost + r.cost, priced: t.priced + r.priced, valuation: t.valuation + r.valuation, valued: t.valued + r.valued }),
+    { count: 0, properties: 0, cost: 0, priced: 0, valuation: 0, valued: 0 },
+  );
+  const cell = (r: { properties: number; cost: number; priced: number; valuation: number; valued: number }) => (
+    <>
+      <td className="p-1.5 text-right">{r.priced ? money(r.cost) : <Dash />}{r.priced < r.properties && <span className="text-gray-400"> ({r.priced} of {r.properties} priced)</span>}</td>
+      <td className="p-1.5 text-right">{r.valued ? money(r.valuation) : <Dash />}{r.valued > 0 && r.valued < r.properties && <span className="text-gray-400"> ({r.valued} of {r.properties} valued)</span>}</td>
+    </>
+  );
+  return (
+    <div className="mb-4 max-w-[900px] rounded border bg-white p-3 text-xs">
+      <div className="mb-1 flex items-baseline gap-2">
+        <span className="text-sm font-semibold text-brand-charcoal">{title}</span>
+        <span className="text-gray-500">{note}</span>
+        {selected && <button onClick={() => onSelect('')} className="ml-auto rounded border px-2 py-0.5 hover:bg-gray-50">Clear consultant filter</button>}
+      </div>
+      <table className="w-full">
+        <thead className="text-left text-gray-500">
+          <tr><th className="p-1.5">Consultant</th><th className="p-1.5 text-right">{countLabel}</th><th className="p-1.5 text-right">Total cost</th><th className="p-1.5 text-right">Total valuation</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key} onClick={() => onSelect(selected === r.key ? '' : r.key)} title="Click to filter the client list"
+              className={`cursor-pointer border-t hover:bg-blue-50 ${selected === r.key ? 'bg-blue-100' : ''} ${r.key === NO_CONSULTANT ? 'italic text-gray-600' : ''}`}>
+              <td className="p-1.5">{r.key}</td>
+              <td className="p-1.5 text-right">{r.count.toLocaleString()}</td>
+              {cell(r)}
+            </tr>
+          ))}
+          <tr className="border-t-2 font-semibold">
+            <td className="p-1.5">Total</td>
+            <td className="p-1.5 text-right">{total.count.toLocaleString()}</td>
+            {cell(total)}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function PortfolioPage() {
   const [data, setData] = useState<PortfolioData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -331,6 +396,7 @@ export default function PortfolioPage() {
   const [sortBy, setSortBy] = useState<SortKey>('properties');
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
+  const [consultant, setConsultant] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -349,7 +415,8 @@ export default function PortfolioPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { setLimit(PAGE_SIZE); }, [search, group, sortBy]);
+  useEffect(() => { setLimit(PAGE_SIZE); }, [search, group, sortBy, consultant]);
+  useEffect(() => { setConsultant(''); }, [group]);
 
   const clients = useMemo(() => {
     if (!data) return [];
@@ -358,6 +425,12 @@ export default function PortfolioPage() {
       if (group === 'inflight' && !c.opportunities.some((o) => o.properties.some((p) => p.source === 'inflight'))) return false;
       if (group === 'historical' && c.opportunities.some((o) => o.properties.some((p) => p.source === 'inflight'))) return false;
       if (group === 'noContact' && c.hasGhlContact) return false;
+      if (group === 'createOpp' && !c.opportunities.some((o) => o.properties.some(isCreateOpp))) return false;
+      if (consultant) {
+        if (group === 'createOpp') {
+          if (!c.opportunities.some((o) => o.properties.some((p) => isCreateOpp(p) && (p.mdlConsultant || NO_CONSULTANT) === consultant))) return false;
+        } else if (consultantKey(c) !== consultant) return false;
+      }
       if (!q) return true;
       return (
         c.name.toLowerCase().includes(q) ||
@@ -388,7 +461,22 @@ export default function PortfolioPage() {
       }
     });
     return sorted;
-  }, [data, search, group, sortBy]);
+  }, [data, search, group, sortBy, consultant]);
+
+  const noContactByConsultant = useMemo(() => summarise(
+    (data?.clients || []).filter((c) => !c.hasGhlContact).map((c) => ({
+      key: consultantKey(c), properties: c.rollup.properties, cost: c.rollup.totalCost, priced: c.rollup.priced, valuation: c.rollup.totalValuation, valued: c.rollup.valued,
+    })),
+  ), [data]);
+
+  const createOppByConsultant = useMemo(() => summarise(
+    (data?.clients || []).flatMap((c) => c.opportunities.flatMap((o) => o.properties))
+      .filter((p) => isCreateOpp(p) && !p.fellOver)
+      .map((p) => ({
+        key: p.mdlConsultant || NO_CONSULTANT, properties: 1,
+        cost: p.totalPrice ?? 0, priced: p.totalPrice !== null ? 1 : 0, valuation: p.valuation ?? 0, valued: p.valuation !== null ? 1 : 0,
+      })),
+  ), [data]);
 
   return (
     <main className="min-h-screen bg-[#FAFAFA]">
@@ -436,6 +524,7 @@ export default function PortfolioPage() {
                 <option value="inflight">Has an in-flight purchase</option>
                 <option value="historical">Historical only</option>
                 <option value="noContact">No GHL contact yet</option>
+                <option value="createOpp">Has &apos;Create opportunity&apos; rows</option>
               </select>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)} className="rounded border px-1 py-1">
                 <option value="properties">Sort: most properties</option>
@@ -448,6 +537,17 @@ export default function PortfolioPage() {
               </select>
               <span className="text-gray-500">{clients.length.toLocaleString()} clients</span>
             </div>
+
+            {group === 'noContact' && (
+              <ConsultantTable title="Clients without a GHL contact, by consultant" countLabel="Clients"
+                note="Consultant from the Master Deal List (All Deals row link). Fell-over rows not counted."
+                rows={noContactByConsultant} selected={consultant} onSelect={setConsultant} />
+            )}
+            {group === 'createOpp' && (
+              <ConsultantTable title="'Create opportunity' rows, by consultant" countLabel="Rows"
+                note="Historical rows with Action 'Create opportunity + record'. Consultant from the Master Deal List. Fell-over rows not counted."
+                rows={createOppByConsultant} selected={consultant} onSelect={setConsultant} />
+            )}
 
             <div className="overflow-hidden rounded border bg-white">
               <table className="w-full text-sm">
