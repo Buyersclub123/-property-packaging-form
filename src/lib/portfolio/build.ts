@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
-import type { LoadedRow, LoadedSources, LoadedWorkbook, GhlOpportunity, SheetRow } from './sources';
+import type { LoadedRow, LoadedSources, LoadedWorkbook, GhlOpportunity, GhlUsers, SheetRow } from './sources';
+import { MDL_VALUATION_DATE, MDL_VALUATION_DATE_NOTE } from './sources';
 import type {
   DataIssue, PortfolioClient, PortfolioData, PortfolioOpportunity, PortfolioProperty, PortfolioRollup, SourceKind,
 } from './types';
@@ -32,6 +33,15 @@ function parseDate(v: unknown): { text: string; time: number | null; bad: boolea
 }
 
 const dateTime = (s: string) => parseDate(s).time;
+
+function monthsBetween(from: string, to: string): number | null {
+  const a = from.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const b = to.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!a || !b) return null;
+  return (+b[3] - +a[3]) * 12 + (+b[2] - +a[2]) - (+b[1] < +a[1] ? 1 : 0);
+}
+
+const aud = (n: number) => `$${Math.round(n).toLocaleString('en-AU')}`;
 
 function entityFromName(name: string): string {
   const m = name.match(/\b(SMSF|PERS|TRUST)\b/i);
@@ -69,9 +79,9 @@ function gradeFacts(kind: SourceKind, v: SheetRow, grade: string): string[] {
   return [str(v.confidence), str(v.notes)].filter(Boolean);
 }
 
-interface Built { property: PortfolioProperty; opp: GhlOpportunity | undefined; clientName: string }
+interface Built { property: PortfolioProperty; opp: GhlOpportunity | undefined; clientName: string; mdlRow: number | null }
 
-export function buildPortfolio(src: LoadedSources): PortfolioData {
+export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioData {
   const oppById = new Map(src.opportunities.opportunities.map((o) => [o.id, o]));
   const recordByOpp = new Map<string, { id: string; address: string }>();
   for (const r of src.propertyRecords.records) {
@@ -79,8 +89,13 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
     if (linked) recordByOpp.set(linked, { id: r.id, address: str(r.properties?.property_address) });
   }
 
+  const asAt = new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: '2-digit', year: 'numeric' });
   const issues: DataIssue[] = [];
   const built: Built[] = [];
+  const ownerName = (o: GhlOpportunity | undefined) => {
+    if (!o?.assignedTo || users.error) return '';
+    return users.names.get(o.assignedTo) ?? `GHL user not found (${o.assignedTo})`;
+  };
 
   const toProperty = (wb: LoadedWorkbook, row: LoadedRow): Built => {
     const v = row.values;
@@ -136,6 +151,41 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
       || (action.match(/Link existing record (\S+)/)?.[1] ?? '');
     const linked = oppId ? recordByOpp.get(oppId) : undefined;
 
+    let mdlConsultant = '';
+    let mdlRow: number | null = null;
+    let valuation: number | null = null;
+    let valuationSource = '';
+    let valuationDate = '';
+    let valuationDateNote = '';
+    const mdlRef = str(v.master_deal_list).match(/All Deals row (\d+)/);
+    if (mdlRef) {
+      const m = src.masterDealList.rows.get(Number(mdlRef[1]));
+      if (!m) {
+        issues.push({ ...at, kind: 'mdl_row_missing', message: `master_deal_list points at All Deals row ${mdlRef[1]}, which is not in ${src.masterDealList.name}` });
+      } else {
+        mdlConsultant = m.consultant;
+        if (m.valuationRaw) issues.push({ ...at, kind: 'unparsed_price', message: `Master Deal List row ${m.row} valuation "${m.valuationRaw}" is not a number` });
+        if (m.valuation !== null) {
+          mdlRow = m.row;
+          valuation = m.valuation;
+          valuationSource = `Master Deal List, All Deals row ${m.row}`;
+          valuationDate = MDL_VALUATION_DATE;
+          valuationDateNote = MDL_VALUATION_DATE_NOTE;
+        }
+      }
+    }
+    const cost = prices.total.value;
+    const growth = valuation !== null && cost !== null ? valuation - cost : null;
+    const growthPct = growth !== null && cost ? growth / cost : null;
+    const valuationTime = dateTime(valuationDate);
+    const heldYears = valuationTime !== null && contract.time !== null ? (valuationTime - contract.time) / (365.25 * 86_400_000) : null;
+    const growthPa = valuation !== null && cost && heldYears !== null && heldYears >= 1 ? Math.pow(valuation / cost, 1 / heldYears) - 1 : null;
+    const ratio = valuation !== null && cost ? valuation / cost : null;
+    const valuationOutlier = ratio !== null && (ratio < 0.5 || ratio > 3);
+    if (valuationOutlier && valuation !== null && cost !== null && ratio !== null) {
+      issues.push({ ...at, kind: 'valuation_outlier', message: `valuation ${aud(valuation)} is ${Math.round(ratio * 100)}% of the purchase price ${aud(cost)} (${valuationSource})` });
+    }
+
     if (oppId && !opp) {
       issues.push({ ...at, kind: 'opportunity_not_in_snapshot', message: `opportunity ${oppId} is not in ${src.opportunities.name}` });
     }
@@ -143,6 +193,7 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
     return {
       opp,
       clientName,
+      mdlRow,
       property: {
         key: `${kind}:${row.tab}:${row.rowNumber}`,
         source: kind,
@@ -175,6 +226,18 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
         fileRecordRef,
         linkedRecordId: linked?.id ?? null,
         linkedRecordAddress: linked?.address ?? '',
+        valuation,
+        valuationDate,
+        valuationDateNote,
+        valuationSource,
+        valuationAgeMonths: valuationDate ? monthsBetween(valuationDate, asAt) : null,
+        valuationOutlier,
+        growth,
+        growthPct,
+        growthPa,
+        heldYears,
+        heldMonths: contract.time !== null ? monthsBetween(contract.text, asAt) : null,
+        mdlConsultant,
       },
     };
   };
@@ -200,6 +263,19 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
     }
   }
 
+  const mdlUse = new Map<number, Built[]>();
+  for (const b of built) if (b.mdlRow !== null) mdlUse.set(b.mdlRow, [...(mdlUse.get(b.mdlRow) || []), b]);
+  for (const [row, shared] of mdlUse) {
+    if (shared.length < 2) continue;
+    for (const b of shared) {
+      issues.push({
+        kind: 'mdl_row_shared', message: `Master Deal List All Deals row ${row} is linked from ${shared.length} rows - its valuation is shown on each`,
+        client: b.opp?.contact?.name || b.clientName, opportunityId: b.property.opportunityId, address: b.property.address,
+        file: b.property.file, tab: b.property.tab, rowNumber: b.property.rowNumber,
+      });
+    }
+  }
+
   const clients = new Map<string, PortfolioClient>();
   const opps = new Map<string, PortfolioOpportunity>();
   for (const b of built) {
@@ -214,6 +290,7 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
         email: b.opp?.contact?.email || '',
         hasGhlContact: !!contactId,
         opportunities: [],
+        consultants: [],
         rollup: emptyRollup(),
       };
       clients.set(clientKey, client);
@@ -229,6 +306,7 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
         pipeline: stage?.[0] ?? '',
         stage: stage?.[1] ?? '',
         status: b.opp?.status ?? '',
+        owner: ownerName(b.opp),
         properties: [],
       };
       opps.set(oppKey, opp);
@@ -238,19 +316,48 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
   }
 
   const list = [...clients.values()];
-  for (const c of list) c.rollup = rollup(c);
+  for (const c of list) {
+    c.rollup = rollup(c, asAt);
+    const names = new Map<string, string>();
+    for (const o of c.opportunities) {
+      if (o.id) {
+        if (o.owner) names.set(o.owner, 'GHL opportunity owner');
+      } else {
+        for (const p of o.properties) if (p.mdlConsultant && !names.has(p.mdlConsultant)) names.set(p.mdlConsultant, 'Master Deal List');
+      }
+    }
+    c.consultants = [...names].map(([name, source]) => ({ name, source }));
+  }
   list.sort((a, b) => b.rollup.properties - a.rollup.properties || a.name.localeCompare(b.name));
 
   const all = built.map((b) => b.property);
   const counted = all.filter((p) => !p.fellOver);
   return {
     builtAt: new Date().toISOString(),
+    asAt,
+    consultantError: users.error ?? null,
     sourceDir: src.sourceDir,
     sources: [
       { kind: 'inflight', name: src.inflight.name, modifiedAt: src.inflight.modifiedAt, tabs: src.inflight.tabs },
       { kind: 'historical', name: src.historical.name, modifiedAt: src.historical.modifiedAt, tabs: src.historical.tabs },
       { kind: 'opportunities', name: src.opportunities.name, modifiedAt: src.opportunities.modifiedAt, takenAt: src.opportunities.takenAt, count: src.opportunities.opportunities.length },
       { kind: 'propertyRecords', name: src.propertyRecords.name, modifiedAt: src.propertyRecords.modifiedAt, count: src.propertyRecords.records.length },
+      {
+        kind: 'masterDealList', name: src.masterDealList.name, modifiedAt: src.masterDealList.modifiedAt, count: src.masterDealList.rows.size,
+        note: `Valuation on ${src.masterDealList.valued.toLocaleString()} rows; no valuation date in the file - dated ${MDL_VALUATION_DATE} (${MDL_VALUATION_DATE_NOTE}). Linked via the historical master_deal_list "All Deals row N"; in-flight rows have no link.`,
+      },
+      {
+        kind: 'unconditionals', name: src.unconditionals.name, modifiedAt: src.unconditionals.modifiedAt,
+        note: src.unconditionals.valuationColumns.length
+          ? `Valuation column found but not read yet: ${src.unconditionals.valuationColumns.join('; ')}`
+          : `Checked ${src.unconditionals.tabs} tabs: no valuation column - 0 valuations taken.`,
+      },
+      {
+        kind: 'ghlUsers', name: 'GHL users (live, read-only)', modifiedAt: new Date().toISOString(), count: users.names.size,
+        note: users.error
+          ? `Consultant names not loaded: ${users.error}`
+          : 'Sales consultant = opportunity owner. Rows with no opportunity: Master Deal List Consultant via "All Deals row N" (the Unconditionals tracker has no row link, so it is not used).',
+      },
     ],
     clients: list,
     issues,
@@ -260,29 +367,62 @@ export function buildPortfolio(src: LoadedSources): PortfolioData {
       priced: counted.filter((p) => p.totalPrice !== null).length,
       totalCost: counted.reduce((s, p) => s + (p.totalPrice ?? 0), 0),
       fellOver: all.length - counted.length,
+      valued: counted.filter((p) => p.valuation !== null).length,
+      totalValuation: counted.reduce((s, p) => s + (p.valuation ?? 0), 0),
+      growthCost: counted.reduce((s, p) => s + (p.growth !== null ? p.totalPrice ?? 0 : 0), 0),
+      growth: counted.reduce((s, p) => s + (p.growth ?? 0), 0),
     },
   };
 }
 
 function emptyRollup(): PortfolioRollup {
-  return { properties: 0, priced: 0, totalCost: 0, firstPurchase: '', lastPurchase: '', undated: 0, inFlight: 0, historical: 0, fellOver: 0 };
+  return {
+    properties: 0, priced: 0, totalCost: 0, firstPurchase: '', lastPurchase: '', undated: 0, inFlight: 0, historical: 0, fellOver: 0,
+    valued: 0, totalValuation: 0, growthCost: 0, growth: null, growthPct: null, growthPa: null, newestValuationDate: '', valuationAgeMonths: null,
+  };
 }
 
-function rollup(c: PortfolioClient): PortfolioRollup {
+function rollup(c: PortfolioClient, asAt: string): PortfolioRollup {
   const r = emptyRollup();
   let first: number | null = null;
   let last: number | null = null;
+  let newest: number | null = null;
+  let growthSum = 0;
+  let paCost = 0;
+  let paValue = 0;
+  let paYearsWeighted = 0;
   for (const o of c.opportunities) {
     for (const p of o.properties) {
       if (p.fellOver) { r.fellOver++; continue; }
       r.properties++;
       if (p.source === 'inflight') r.inFlight++; else r.historical++;
       if (p.totalPrice !== null) { r.priced++; r.totalCost += p.totalPrice; }
+      if (p.valuation !== null) {
+        r.valued++;
+        r.totalValuation += p.valuation;
+        const vt = dateTime(p.valuationDate);
+        if (vt !== null && (newest === null || vt > newest)) { newest = vt; r.newestValuationDate = p.valuationDate; }
+        if (p.growth !== null && p.totalPrice !== null) {
+          r.growthCost += p.totalPrice;
+          growthSum += p.growth;
+          if (p.heldYears !== null && p.heldYears >= 1) {
+            paCost += p.totalPrice;
+            paValue += p.valuation;
+            paYearsWeighted += p.heldYears * p.totalPrice;
+          }
+        }
+      }
       const t = dateTime(p.contractDate);
       if (t === null) { r.undated++; continue; }
       if (first === null || t < first) { first = t; r.firstPurchase = p.contractDate; }
       if (last === null || t > last) { last = t; r.lastPurchase = p.contractDate; }
     }
   }
+  if (r.growthCost) {
+    r.growth = growthSum;
+    r.growthPct = growthSum / r.growthCost;
+  }
+  if (paCost) r.growthPa = Math.pow(paValue / paCost, 1 / (paYearsWeighted / paCost)) - 1;
+  if (r.newestValuationDate) r.valuationAgeMonths = monthsBetween(r.newestValuationDate, asAt);
   return r;
 }

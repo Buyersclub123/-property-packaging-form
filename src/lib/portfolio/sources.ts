@@ -1,12 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
+import { ghlFetch } from '@/lib/ghlFetch';
 import type { SourceKind, SourceTab } from './types';
 
 // Demo mode reads the unloaded files from JT's Google Drive for desktop folder (dev server only).
 // Live GHL / Drive API is backlog item 8.
 export const SOURCE_DIR = process.env.PORTFOLIO_SOURCE_DIR || 'G:\\My Drive\\Purchase Data Reconstruction';
 export const SNAPSHOT_DATE = '2026-10-27';
+
+// JT 28/10: the Master Deal List has no valuation date; treat its valuations as dated at the file enrichment date.
+export const MDL_VALUATION_DATE = '28/09/2026';
+export const MDL_VALUATION_DATE_NOTE = 'date assumed – file date';
 
 const HEADER_ROW = 2; // header is on row 3 of every data tab
 
@@ -41,6 +46,7 @@ export interface GhlOpportunity {
   id: string;
   name: string;
   pipelineStageId: string;
+  assignedTo?: string | null;
   status: string;
   contactId: string;
   contact?: { id: string; name: string | null; email: string | null } | null;
@@ -65,7 +71,15 @@ export interface LoadedSources {
   historical: LoadedWorkbook;
   opportunities: LoadedOpportunities;
   propertyRecords: LoadedPropertyRecords;
+  masterDealList: LoadedMasterDealList;
+  unconditionals: LoadedUnconditionals;
 }
+
+export interface MdlRow { row: number; valuation: number | null; valuationRaw: string; address: string; stage: string; consultant: string }
+
+export interface LoadedMasterDealList { name: string; modifiedAt: string; rows: Map<number, MdlRow>; valued: number }
+
+export interface LoadedUnconditionals { name: string; modifiedAt: string; tabs: number; valuationColumns: string[] }
 
 function statOrThrow(file: string): fs.Stats {
   try {
@@ -173,6 +187,107 @@ function loadPropertyRecords(): LoadedPropertyRecords {
   return { name, modifiedAt: statOrThrow(file).mtime.toISOString(), records: d as GhlPropertyRecord[] };
 }
 
+function singleFile(folder: string, pattern: RegExp): string {
+  let names: string[];
+  try {
+    names = fs.readdirSync(folder);
+  } catch (e) {
+    throw new Error(`Cannot list ${folder}: ${(e as Error).message}`);
+  }
+  const hits = names.filter((n) => pattern.test(n));
+  if (!hits.length) throw new Error(`No file matching ${pattern} in ${folder}`);
+  if (hits.length > 1) throw new Error(`More than one file matches ${pattern} in ${folder}: ${hits.join('; ')}`);
+  return hits[0];
+}
+
+function openWorkbook(file: string, name: string): XLSX.WorkBook {
+  try {
+    return XLSX.read(fs.readFileSync(file), { type: 'buffer' });
+  } catch (e) {
+    throw new Error(`Cannot open ${name}: ${(e as Error).message}`);
+  }
+}
+
+function loadMasterDealList(): LoadedMasterDealList {
+  const folder = path.join(SOURCE_DIR, '01 Source extracts');
+  const name = singleFile(folder, /^Buyers Club Master Deal List.*\.xlsx$/);
+  const file = path.join(folder, name);
+  const stat = statOrThrow(file);
+  const sheet = openWorkbook(file, name).Sheets['All Deals'];
+  if (!sheet) throw new Error(`${name}: tab "All Deals" not found`);
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
+  const header = (aoa[0] || []).map((c) => String(c).trim());
+  const col = (h: string) => {
+    const i = header.indexOf(h);
+    if (i < 0) throw new Error(`${name} / All Deals: column "${h}" missing on row 1`);
+    return i;
+  };
+  const vi = col('Valuation');
+  const ai = col('Address');
+  const si = col('Stage');
+  const ci = col('Consultant');
+  const rows = new Map<number, MdlRow>();
+  let valued = 0;
+  aoa.slice(1).forEach((r, i) => {
+    const raw = r[vi];
+    const valuation = typeof raw === 'number' ? raw : null;
+    if (valuation !== null) valued++;
+    rows.set(i + 2, {
+      row: i + 2,
+      valuation,
+      valuationRaw: valuation === null ? String(raw ?? '').trim() : '',
+      address: String(r[ai] ?? '').trim(),
+      stage: String(r[si] ?? '').trim(),
+      consultant: String(r[ci] ?? '').trim(),
+    });
+  });
+  return { name, modifiedAt: stat.mtime.toISOString(), rows, valued };
+}
+
+// The tracker has no valuation column today; it is still read so a new one is noticed rather than ignored.
+function loadUnconditionals(): LoadedUnconditionals {
+  const folder = path.join(SOURCE_DIR, '01 Source extracts');
+  const name = singleFile(folder, /^PROPERTY TEAM UNCONDITIONALS.*\.xlsx$/);
+  const file = path.join(folder, name);
+  const stat = statOrThrow(file);
+  const wb = openWorkbook(file, name);
+  const valuationColumns: string[] = [];
+  for (const tab of wb.SheetNames) {
+    const top = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[tab], { header: 1, defval: '' }).slice(0, 3);
+    top.forEach((r, i) => r.forEach((c) => {
+      const s = String(c).trim();
+      if (s.length <= 40 && /^(latest )?valuation\b(?! ordered)/i.test(s)) valuationColumns.push(`${tab} row ${i + 1}: "${s}"`);
+    }));
+  }
+  return { name, modifiedAt: stat.mtime.toISOString(), tabs: wb.SheetNames.length, valuationColumns };
+}
+
+export interface GhlUsers { names: Map<string, string>; error?: string }
+
+// Read-only GET of the GHL users list: names for opportunity owner ids (= sales consultant). Live on each request.
+export async function loadGhlUsers(): Promise<GhlUsers> {
+  const token = process.env.GHL_BEARER_TOKEN;
+  const locationId = process.env.GHL_LOCATION_ID;
+  if (!token || !locationId) return { names: new Map(), error: 'GHL_BEARER_TOKEN / GHL_LOCATION_ID not set' };
+  const base = process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com';
+  try {
+    const res = await ghlFetch(
+      `${base}/users/?locationId=${locationId}`,
+      {
+        headers: { Authorization: `Bearer ${token}`, Version: process.env.GHL_API_VERSION || '2021-07-28', Accept: 'application/json' },
+        signal: AbortSignal.timeout(30_000),
+      },
+      'portfolio',
+    );
+    if (!res.ok) return { names: new Map(), error: `GHL users request returned HTTP ${res.status}` };
+    const body = (await res.json()) as { users?: { id: string; name?: string; firstName?: string; lastName?: string }[] };
+    const names = new Map((body.users || []).map((u) => [u.id, u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim()]));
+    return { names };
+  } catch (e) {
+    return { names: new Map(), error: `GHL users request failed: ${(e as Error).message}` };
+  }
+}
+
 export function loadSources(): LoadedSources {
   return {
     sourceDir: SOURCE_DIR,
@@ -180,5 +295,7 @@ export function loadSources(): LoadedSources {
     historical: loadWorkbook('historical'),
     opportunities: loadOpportunities(),
     propertyRecords: loadPropertyRecords(),
+    masterDealList: loadMasterDealList(),
+    unconditionals: loadUnconditionals(),
   };
 }

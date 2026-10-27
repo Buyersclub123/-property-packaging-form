@@ -3,12 +3,13 @@ export type SourceKind = 'inflight' | 'historical';
 export interface SourceTab { tab: string; rows: number; included: boolean; note?: string }
 
 export interface SourceFileInfo {
-  kind: SourceKind | 'opportunities' | 'propertyRecords';
+  kind: SourceKind | 'opportunities' | 'propertyRecords' | 'masterDealList' | 'unconditionals' | 'ghlUsers';
   name: string;
   modifiedAt: string;
   takenAt?: string;
   count?: number;
   tabs?: SourceTab[];
+  note?: string;
 }
 
 export interface PortfolioProperty {
@@ -43,6 +44,18 @@ export interface PortfolioProperty {
   fileRecordRef: string;
   linkedRecordId: string | null;
   linkedRecordAddress: string;
+  valuation: number | null;
+  valuationDate: string;
+  valuationDateNote: string;
+  valuationSource: string;
+  valuationAgeMonths: number | null;
+  valuationOutlier: boolean;
+  growth: number | null;
+  growthPct: number | null;
+  growthPa: number | null;
+  heldYears: number | null;
+  heldMonths: number | null;
+  mdlConsultant: string;
 }
 
 export interface PortfolioOpportunity {
@@ -52,6 +65,7 @@ export interface PortfolioOpportunity {
   pipeline: string;
   stage: string;
   status: string;
+  owner: string;
   properties: PortfolioProperty[];
 }
 
@@ -65,6 +79,14 @@ export interface PortfolioRollup {
   inFlight: number;
   historical: number;
   fellOver: number;
+  valued: number;
+  totalValuation: number;
+  growthCost: number;
+  growth: number | null;
+  growthPct: number | null;
+  growthPa: number | null;
+  newestValuationDate: string;
+  valuationAgeMonths: number | null;
 }
 
 export interface PortfolioClient {
@@ -74,6 +96,7 @@ export interface PortfolioClient {
   email: string;
   hasGhlContact: boolean;
   opportunities: PortfolioOpportunity[];
+  consultants: { name: string; source: string }[];
   rollup: PortfolioRollup;
 }
 
@@ -82,7 +105,10 @@ export type DataIssueKind =
   | 'duplicate_opportunity'
   | 'opportunity_not_in_snapshot'
   | 'unparsed_date'
-  | 'unparsed_price';
+  | 'unparsed_price'
+  | 'valuation_outlier'
+  | 'mdl_row_missing'
+  | 'mdl_row_shared';
 
 export interface DataIssue {
   kind: DataIssueKind;
@@ -97,9 +123,21 @@ export interface DataIssue {
 
 export interface PortfolioData {
   builtAt: string;
+  asAt: string;
+  consultantError: string | null;
   sourceDir: string;
   sources: SourceFileInfo[];
   clients: PortfolioClient[];
   issues: DataIssue[];
-  totals: { clients: number; properties: number; priced: number; totalCost: number; fellOver: number };
+  totals: {
+    clients: number;
+    properties: number;
+    priced: number;
+    totalCost: number;
+    fellOver: number;
+    valued: number;
+    totalValuation: number;
+    growthCost: number;
+    growth: number;
+  };
 }
