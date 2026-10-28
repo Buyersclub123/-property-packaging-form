@@ -558,7 +558,7 @@ export default function InboxMiningPage() {
   return (
     <>
     <TopNavBar />
-    <main className="min-h-screen bg-[#FAFAFA] text-brand-charcoal">
+    <main className="min-h-screen bg-white text-brand-charcoal">
     <div className="mx-auto max-w-[1600px] px-4 py-6">
       <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Inbox Mining — demo (phase a)</h1>
       <div className="mt-2 rounded border border-blue-200 bg-blue-50/40 px-3 py-2 text-xs text-brand-charcoal">
@@ -585,7 +585,7 @@ export default function InboxMiningPage() {
           </select>
         </label>
         <label className="flex items-center gap-1"><input type="checkbox" checked={rerun} onChange={(e) => setRerun(e.target.checked)} />Re-read already-processed messages</label>
-        <button onClick={run} disabled={!!running || !selected.length} className="rounded bg-brand-yellow px-4 py-1.5 font-semibold text-brand-charcoal hover:bg-primary-500 disabled:opacity-40">
+        <button onClick={run} disabled={!!running || !selected.length} className="rounded bg-blue-600 px-4 py-1.5 font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
           {running || 'Run'}
         </button>
       </div>
@@ -606,12 +606,12 @@ export default function InboxMiningPage() {
         {profile && (
           <>
             <details open className="overflow-hidden rounded border bg-white">
-              <summary className="cursor-pointer bg-brand-cream px-3 py-2 font-semibold text-brand-charcoal">
+              <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold text-brand-charcoal">
                 Unknown senders ({profile.totals.unknownSenders}) — external, no classified or matched item yet
               </summary>
               <div className="max-h-72 overflow-auto border-t">
                 <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-brand-cream text-left text-gray-500">
+                  <thead className="sticky top-0 bg-gray-50 text-left text-gray-500">
                     <tr><th className="p-1">Sender</th><th className="p-1">Items</th><th className="p-1">Mailboxes</th><th className="p-1">Last subject</th><th className="p-1">Last</th></tr>
                   </thead>
                   <tbody>
@@ -629,12 +629,12 @@ export default function InboxMiningPage() {
               </div>
             </details>
             <details className="overflow-hidden rounded border bg-white">
-              <summary className="cursor-pointer bg-brand-cream px-3 py-2 font-semibold text-brand-charcoal">
+              <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold text-brand-charcoal">
                 Sender profile ({profile.totals.senders} senders, {profile.itemCount} items, built {sydney(profile.builtAt)})
               </summary>
               <div className="max-h-96 overflow-auto border-t">
                 <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-brand-cream text-left text-gray-500">
+                  <thead className="sticky top-0 bg-gray-50 text-left text-gray-500">
                     <tr><th className="p-1">Sender</th><th className="p-1">Items</th><th className="p-1">Class distribution</th><th className="p-1">Top (of classified)</th><th className="p-1">Internal-only</th><th className="p-1">Matched</th></tr>
                   </thead>
                   <tbody>
@@ -653,10 +653,10 @@ export default function InboxMiningPage() {
               </div>
             </details>
             <details className="overflow-hidden rounded border bg-white">
-              <summary className="cursor-pointer bg-brand-cream px-3 py-2 font-semibold text-brand-charcoal">Subject templates ({profile.totals.templates})</summary>
+              <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold text-brand-charcoal">Subject templates ({profile.totals.templates})</summary>
               <div className="max-h-96 overflow-auto border-t">
                 <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-brand-cream text-left text-gray-500">
+                  <thead className="sticky top-0 bg-gray-50 text-left text-gray-500">
                     <tr><th className="p-1">Template</th><th className="p-1">Items</th><th className="p-1">Class distribution</th><th className="p-1">Top (of classified)</th></tr>
                   </thead>
                   <tbody>
@@ -677,14 +677,14 @@ export default function InboxMiningPage() {
       </div>
 
       <div className="mt-4 overflow-hidden rounded border bg-white text-sm">
-        <h2 className="bg-brand-cream px-3 py-2 font-semibold text-brand-charcoal">Suggestion feedback by day (last 14 days)</h2>
+        <h2 className="bg-gray-50 px-3 py-2 font-semibold text-brand-charcoal">Suggestion feedback by day (last 14 days)</h2>
         {fbError ? (
           <div className="px-3 py-2 text-red-800">{fbError}</div>
         ) : fbCounts.length === 0 ? (
           <div className="px-3 py-2 text-gray-500">No feedback yet.</div>
         ) : (
           <table className="w-full border-t text-left text-xs">
-            <thead className="bg-brand-cream text-gray-500">
+            <thead className="bg-gray-50 text-gray-500">
               <tr><th className="p-1">Day</th>{OUTCOMES.map((o) => <th key={o.key} className="p-1">{o.label}</th>)}<th className="p-1">Total</th></tr>
             </thead>
             <tbody>
@@ -732,12 +732,12 @@ export default function InboxMiningPage() {
           <div ref={queueRef} className="max-h-[75vh] overflow-y-auto overflow-x-hidden">
           <table className="w-full table-fixed text-left text-xs">
             <colgroup><col className="w-16" /><col className="w-32" /><col /><col className="w-[32%]" /></colgroup>
-            <thead className="sticky top-0 z-10 bg-brand-cream text-gray-500">
+            <thead className="sticky top-0 z-10 bg-gray-50 text-gray-500">
               <tr><th className="p-2">P / grade</th><th className="p-2">Received</th><th className="p-2">From / subject</th><th className="p-2">Class / client</th></tr>
             </thead>
             <tbody>
               {pageRows.map((i) => (
-                <tr key={i.id} onClick={() => setOpenId(i.id)} className={`cursor-pointer border-t align-top ${openId === i.id ? 'bg-brand-yellow' : 'hover:bg-blue-50'}`}>
+                <tr key={i.id} onClick={() => setOpenId(i.id)} className={`cursor-pointer border-t align-top ${openId === i.id ? 'bg-blue-100 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-blue-50'}`}>
                   <td className="space-y-1 p-2">
                     {i.profile && <div title={i.profile.priorityReason}><span className={`rounded px-1.5 py-0.5 font-semibold ${PRIORITY_STYLE[i.profile.priority]}`}>P{i.profile.priority}</span></div>}
                     {i.match?.grade && <div><span className={`rounded px-1.5 py-0.5 font-semibold ${GRADE_STYLE[i.match.grade] || ''}`}>{i.match.grade === 'UNMATCHED' ? 'UNM' : i.match.grade}</span></div>}
@@ -773,7 +773,7 @@ export default function InboxMiningPage() {
             </tbody>
           </table>
           </div>
-          {pageCount > 1 && <div className="flex justify-end border-t bg-brand-cream p-2">{pager}</div>}
+          {pageCount > 1 && <div className="flex justify-end border-t bg-gray-50 p-2">{pager}</div>}
         </div>
         <div className="min-w-0 rounded border bg-white p-4 [overflow-wrap:anywhere] xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto">
           {openId ? <DetailPanel id={openId} onChanged={() => { loadItems(); loadFeedback(); }} /> : <div className="text-sm text-gray-500">Select an item to see live detail.</div>}
