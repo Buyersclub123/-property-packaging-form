@@ -136,6 +136,7 @@ export async function ensureActivityTable(): Promise<void> {
     )`;
   await sql`CREATE INDEX IF NOT EXISTS email_activity_thread ON email_activity (mailbox, thread_id, sent_at)`;
   await sql`ALTER TABLE email_activity ADD COLUMN IF NOT EXISTS activity_v1 TEXT, ADD COLUMN IF NOT EXISTS activity_rule_v1 TEXT`;
+  await sql`ALTER TABLE email_activity ADD COLUMN IF NOT EXISTS activity_v2 TEXT, ADD COLUMN IF NOT EXISTS activity_rule_v2 TEXT`;
   tablesReady = true;
 }
 
@@ -408,7 +409,8 @@ export async function reclassifyStored(apply: boolean) {
     for (let i = 0; i < ids.length; i += 5000) {
       await sql`
         UPDATE email_activity e SET activity_v1 = COALESCE(e.activity_v1, e.activity),
-          activity_rule_v1 = COALESCE(e.activity_rule_v1, e.activity_rule), activity = u.a, activity_rule = u.r
+          activity_rule_v1 = COALESCE(e.activity_rule_v1, e.activity_rule), activity = u.a, activity_rule = u.r,
+          activity_v2 = NULL, activity_rule_v2 = NULL
         FROM unnest(${ids.slice(i, i + 5000)}::int[], ${acts.slice(i, i + 5000)}::text[], ${rules.slice(i, i + 5000)}::text[]) AS u(id, a, r)
         WHERE e.id = u.id`;
     }
@@ -421,6 +423,123 @@ export async function reclassifyStored(apply: boolean) {
     after: Object.fromEntries(top(after, 50)),
     moves: Object.fromEntries(top(moves, 60)),
     otherTop30Before: patternReport(otherBefore),
+    otherTop30After: patternReport(otherAfter),
+  };
+}
+
+// Rules v3 (backlog 20 follow-up), applied to rows still 'other' after the v2 rules, in this order:
+// 1. thread inheritance: take the type of the first rule-classified message in the same mailbox thread;
+// 2. sender-domain profile: an external, non-personal domain whose rule-classified mail is one type at
+//    >= DOMAIN_MIN_SHARE of >= DOMAIN_MIN_EMAILS emails. Both use rule results only (never inherited ones).
+// The v2 result is kept in activity_v2 / activity_rule_v2; re-runs start from it. A v2 reclassify clears it.
+const NO_SIGNAL = new Set(['other', 'noise', 'thank_you']);
+const DOMAIN_MIN_EMAILS = 20;
+const DOMAIN_MIN_SHARE = 0.8;
+
+interface RefineRow {
+  id: number;
+  mailbox: string;
+  thread_id: string;
+  thread_pos: number | null;
+  sent_at: string;
+  internal_external: string;
+  sender_domain: string | null;
+  subject: string | null;
+  from_email: string | null;
+  base_activity: string;
+  base_rule: string | null;
+}
+
+export async function refineOther(apply: boolean) {
+  await ensureActivityTable();
+  const sql = getDb();
+  const rows: RefineRow[] = [];
+  let lastId = 0;
+  for (;;) {
+    const page = (await sql`
+      SELECT id, mailbox, thread_id, thread_pos, sent_at, internal_external, sender_domain, subject, from_email,
+        COALESCE(activity_v2, activity) AS base_activity, COALESCE(activity_rule_v2, activity_rule) AS base_rule
+      FROM email_activity WHERE id > ${lastId} ORDER BY id LIMIT 20000`) as RefineRow[];
+    if (!page.length) break;
+    lastId = page[page.length - 1].id;
+    rows.push(...page);
+  }
+
+  const threadFirst = new Map<string, RefineRow>();
+  const domainTally = new Map<string, Tally>();
+  for (const r of rows) {
+    if (NO_SIGNAL.has(r.base_activity)) continue;
+    const key = `${r.mailbox}|${r.thread_id}`;
+    const cur = threadFirst.get(key);
+    if (!cur || new Date(r.sent_at) < new Date(cur.sent_at)) threadFirst.set(key, r);
+    const d = r.sender_domain || '';
+    if (r.internal_external === 'external' && d && !GENERIC_DOMAINS.test(d)) {
+      const t = domainTally.get(d) || new Map();
+      bump(t, r.base_activity);
+      domainTally.set(d, t);
+    }
+  }
+  const domainRule = new Map<string, { activity: string; n: number; total: number }>();
+  for (const [d, t] of domainTally) {
+    const total = [...t.values()].reduce((s, v) => s + v, 0);
+    const [activity, n] = top(t, 1)[0];
+    if (total >= DOMAIN_MIN_EMAILS && n / total >= DOMAIN_MIN_SHARE) domainRule.set(d, { activity, n, total });
+  }
+
+  const stage: Tally = new Map();
+  const after: Tally = new Map();
+  const moves: Tally = new Map();
+  const domainsUsed: Tally = new Map();
+  const otherAfter = new Map<string, PatternTally>();
+  const ids: number[] = [];
+  const acts: string[] = [];
+  const rules: string[] = [];
+  for (const r of rows) {
+    let c: Classified = { activity: r.base_activity, rule: r.base_rule || '' };
+    if (r.base_activity === 'other') {
+      const first = threadFirst.get(`${r.mailbox}|${r.thread_id}`);
+      const dr = domainRule.get(r.sender_domain || '');
+      if (first) {
+        c = { activity: first.base_activity, rule: `thread: first classified msg ${first.thread_pos ?? '?'} is ${first.base_activity} (${first.base_rule})` };
+        bump(stage, 'thread inheritance');
+      } else if (dr && r.internal_external === 'external') {
+        c = { activity: dr.activity, rule: `sender domain profile ${r.sender_domain}: ${dr.activity} ${dr.n}/${dr.total}` };
+        bump(stage, 'sender domain profile');
+        bump(domainsUsed, `${r.sender_domain} -> ${dr.activity} (${Math.round((100 * dr.n) / dr.total)}% of ${dr.total})`);
+      } else {
+        bump(stage, 'still other');
+        const k = subjectPattern(r.subject || '');
+        const p = otherAfter.get(k) || { n: 0, domains: new Map(), to: new Map(), example: r.subject || '' };
+        p.n++;
+        bump(p.domains, r.from_email?.split('@')[1] || '');
+        otherAfter.set(k, p);
+      }
+      if (c.activity !== 'other') bump(moves, c.activity);
+    }
+    bump(after, c.activity);
+    ids.push(r.id);
+    acts.push(c.activity);
+    rules.push(c.rule);
+  }
+
+  if (apply) {
+    for (let i = 0; i < ids.length; i += 5000) {
+      await sql`
+        UPDATE email_activity e SET activity_v2 = COALESCE(e.activity_v2, e.activity),
+          activity_rule_v2 = COALESCE(e.activity_rule_v2, e.activity_rule), activity = u.a, activity_rule = u.r
+        FROM unnest(${ids.slice(i, i + 5000)}::int[], ${acts.slice(i, i + 5000)}::text[], ${rules.slice(i, i + 5000)}::text[]) AS u(id, a, r)
+        WHERE e.id = u.id`;
+    }
+  }
+  return {
+    applied: apply,
+    rows: ids.length,
+    otherBefore: rows.filter((r) => r.base_activity === 'other').length,
+    stage: Object.fromEntries(stage),
+    otherNowTypes: Object.fromEntries(top(moves, 40)),
+    after: Object.fromEntries(top(after, 50)),
+    dominantDomains: domainRule.size,
+    domainsUsed: Object.fromEntries(top(domainsUsed, 40)),
     otherTop30After: patternReport(otherAfter),
   };
 }

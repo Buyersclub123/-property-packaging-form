@@ -10,8 +10,8 @@ if (!url) throw new Error('DATABASE_URL / POSTGRES_URL is not set in .env.local'
 const sql = neon(url);
 const OUT_DIR = process.env.EMAIL_MINING_DIR || 'G:\\My Drive\\Purchase Data Reconstruction\\07 Email mining';
 const stamp = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
-const [{ v2 }] = await sql`SELECT COUNT(activity_v1) > 0 AS v2 FROM email_activity`;
-const file = `${OUT_DIR}\\email-activity-2026-06-to-10_${stamp}${v2 ? '_rules-v2' : ''}.xlsx`;
+const [{ v2, v3 }] = await sql`SELECT COUNT(activity_v1) > 0 AS v2, COUNT(activity_v2) > 0 AS v3 FROM email_activity`;
+const file = `${OUT_DIR}\\email-activity-2026-06-to-10_${stamp}${v3 ? '_rules-v3' : v2 ? '_rules-v2' : ''}.xlsx`;
 
 const wb = new ExcelJS.Workbook();
 function sheet(name, rows, widths = {}) {
@@ -45,7 +45,7 @@ function crosstab(rows, rowKey, colKey, cols) {
 
 const emails = await sql`
   SELECT mailbox, direction, to_char(sent_at AT TIME ZONE 'Australia/Sydney', 'YYYY-MM-DD HH24:MI') AS sent_sydney,
-    sydney_date::text AS date, month, weekday, hour, activity, activity_rule, activity_v1, from_email, from_addr, sender_domain, internal_external,
+    sydney_date::text AS date, month, weekday, hour, activity, activity_rule, activity_v1, activity_v2, from_email, from_addr, sender_domain, internal_external,
     all_internal, to_addrs, cc_addrs, subject, thread_id, thread_pos, thread_len, reply_hours::float AS reply_hours,
     att_count, att_types, opp_name, opp_id, opp_rule, message_id
   FROM email_activity ORDER BY sent_at`;
@@ -85,6 +85,14 @@ if (v2) {
     SELECT activity_v1 AS rules_v1, activity AS rules_v2, COUNT(*)::int AS emails FROM email_activity
     GROUP BY 1, 2 ORDER BY (activity_v1 = activity), emails DESC`;
   sheet('Rules v1 to v2', changes, { rules_v1: 26, rules_v2: 26 });
+}
+if (v3) {
+  const refined = await sql`
+    SELECT activity_v2 AS rules_v2, activity AS rules_v3,
+      CASE WHEN activity_rule LIKE 'thread:%' THEN 'thread inheritance' WHEN activity_rule LIKE 'sender domain profile%' THEN 'sender domain profile' ELSE 'unchanged' END AS stage,
+      COUNT(*)::int AS emails
+    FROM email_activity GROUP BY 1, 2, 3 ORDER BY (activity_v2 = activity), emails DESC`;
+  sheet('Rules v2 to v3', refined, { rules_v2: 26, rules_v3: 26, stage: 22 });
 }
 await wb.xlsx.writeFile(file);
 console.log(`Wrote ${emails.length} emails to ${file}`);
