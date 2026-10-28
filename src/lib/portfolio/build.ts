@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { LoadedRow, LoadedSources, LoadedWorkbook, GhlOpportunity, GhlUsers, SheetRow, SnapOpp } from './sources';
+import type { ContactLinks } from './contactLinks';
 import { MDL_VALUATION_DATE, MDL_VALUATION_DATE_NOTE, pipedriveKey } from './sources';
 import type {
   DataIssue, GhlContactMatch, PortfolioClient, PortfolioData, PortfolioOpportunity, PortfolioProperty, PortfolioRollup, SourceKind,
@@ -104,7 +105,11 @@ interface Built {
   matchEmails: string[]; matchNames: string[];
 }
 
-export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioData {
+export function buildPortfolio(
+  src: LoadedSources,
+  users: GhlUsers,
+  links: ContactLinks = { byContact: new Map(), count: 0, error: null }
+): PortfolioData {
   const oppById = new Map(src.opportunities.opportunities.map((o) => [o.id, o]));
   const recordByOpp = new Map<string, { id: string; address: string }>();
   for (const r of src.propertyRecords.records) {
@@ -373,6 +378,8 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       client = {
         key: clientKey,
         contactId,
+        personKey: null,
+        mergedFrom: [],
         name: b.opp?.contact?.name || b.clientName,
         email: b.opp?.contact?.email || '',
         hasGhlContact: !!contactId,
@@ -441,7 +448,11 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       }
     }
   }
-  list.sort((a, b) => b.rollup.properties - a.rollup.properties || a.name.localeCompare(b.name));
+  const merged = mergeByPerson(list, links.byContact, asAt);
+  const mergedCount = merged.filter((c) => c.mergedFrom.length > 1).length;
+  const bySize = (a: PortfolioClient, b: PortfolioClient) => b.rollup.properties - a.rollup.properties || a.name.localeCompare(b.name);
+  list.sort(bySize);
+  merged.sort(bySize);
 
   const all = built.map((b) => b.property);
   const counted = all.filter((p) => !p.fellOver);
@@ -475,6 +486,12 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
           : `Checked ${src.unconditionals.tabs} tabs: no valuation column - 0 valuations taken.`,
       },
       {
+        kind: 'contactLinks', name: 'contact_links (app database)', modifiedAt: new Date().toISOString(), count: links.count,
+        note: links.error
+          ? `Not loaded, so no clients were merged: ${links.error}`
+          : `${links.count.toLocaleString()} GHL contacts linked as the same person (seeded from the High groups of Duplicate contacts v1). ${mergedCount.toLocaleString()} clients here are rolled up from 2+ contacts.`,
+      },
+      {
         kind: 'ghlUsers', name: 'GHL users (live, read-only)', modifiedAt: new Date().toISOString(), count: users.names.size,
         note: users.error
           ? `Consultant names not loaded: ${users.error}`
@@ -482,9 +499,11 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       },
     ],
     clients: list,
+    people: merged,
     issues,
     totals: {
       clients: list.length,
+      people: merged.length,
       properties: counted.length,
       priced: counted.filter((p) => p.totalPrice !== null).length,
       totalCost: counted.reduce((s, p) => s + (p.totalPrice ?? 0), 0),
@@ -495,6 +514,55 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       growth: counted.reduce((s, p) => s + (p.growth ?? 0), 0),
     },
   };
+}
+
+// The contact a client stands for: its opportunity contact, or a single matched contact for no-opportunity clients.
+function effectiveContact(c: PortfolioClient): string | null {
+  if (c.contactId) return c.contactId;
+  if (c.ghlMatch?.status === 'contact_exists' && c.ghlMatch.contacts.length === 1) return c.ghlMatch.contacts[0].id;
+  return null;
+}
+
+// Item 13: clients whose contacts share a contact_links person key become one client.
+function mergeByPerson(list: PortfolioClient[], byContact: Map<string, string>, asAt: string): PortfolioClient[] {
+  const out: PortfolioClient[] = [];
+  const groups = new Map<string, PortfolioClient[]>();
+  for (const c of list) {
+    const id = effectiveContact(c);
+    const pk = id ? byContact.get(id) : undefined;
+    if (!pk) {
+      out.push(c);
+      continue;
+    }
+    c.personKey = pk;
+    groups.set(pk, [...(groups.get(pk) || []), c]);
+  }
+  for (const members of groups.values()) {
+    if (members.length === 1) {
+      out.push(members[0]);
+      continue;
+    }
+    members.sort((a, b) => Number(b.hasGhlContact) - Number(a.hasGhlContact) || b.rollup.properties - a.rollup.properties);
+    const [main, ...rest] = members;
+    const c: PortfolioClient = {
+      ...main,
+      opportunities: [...main.opportunities],
+      consultants: [...main.consultants],
+      alsoKnownAs: [...main.alsoKnownAs],
+      mergedFrom: members.map((m) => ({ contactId: effectiveContact(m), name: m.name })),
+    };
+    for (const r of rest) {
+      c.opportunities.push(...r.opportunities);
+      for (const k of r.consultants) if (!c.consultants.some((x) => x.name === k.name)) c.consultants.push(k);
+      for (const n of r.alsoKnownAs) {
+        if (n && nameTokens(n) !== nameTokens(c.name) && !c.alsoKnownAs.includes(n)) c.alsoKnownAs.push(n);
+      }
+      if (!c.email && r.email) c.email = r.email;
+    }
+    c.rollup = rollup(c, asAt);
+    out.push(c);
+  }
+  return out;
 }
 
 function emptyRollup(): PortfolioRollup {

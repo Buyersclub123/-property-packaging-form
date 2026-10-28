@@ -213,7 +213,7 @@ function PropertyRow({ p, onOpen }: { p: PortfolioProperty; onOpen: () => void }
           {p.fellOver && <span className="rounded bg-gray-200 px-1 text-gray-700">Fell over</span>}
           {p.flag && !p.fellOver && <span className="rounded bg-blue-50 px-1 text-blue-800">{p.flag}</span>}
         </div>
-        <div className="text-right" title={p.priceSource ? `Source: ${p.priceSource}` : undefined}>
+        <div className="text-right">
           <div className="font-semibold">{money(p.totalPrice) || <span className="text-gray-400">no price</span>}</div>
           {(p.landPrice !== null || p.buildPrice !== null) && (
             <div className="text-gray-500">L {money(p.landPrice) || '-'}<br />B {money(p.buildPrice) || '-'}</div>
@@ -221,15 +221,14 @@ function PropertyRow({ p, onOpen }: { p: PortfolioProperty; onOpen: () => void }
           {/provisional/i.test(p.priceSource) && <div className="text-blue-700">provisional</div>}
         </div>
         <div title={PURCHASE_DATE_HELP}>{p.contractDate}</div>
-        <div title={p.settlementSource || undefined}>
+        <div>
           {p.settlementDate || <Dash />}
           {p.settlementBeforeContract && (
             <span className="ml-1 rounded bg-red-100 px-1 font-semibold text-red-800" title="Settlement is before the contract date - listed in Data issues">⚠</span>
           )}
-          {p.settlementSource.startsWith('GHL') && <div className="text-gray-500">GHL</div>}
         </div>
         <div title="Purchase date to today">{p.heldMonths === null ? <Dash /> : fmtHeld(p.heldMonths)}</div>
-        <div className="text-right" title={p.valuationSource ? `${p.valuationSource} · dated ${p.valuationDate} (${p.valuationDateNote})` : undefined}>
+        <div className="text-right">
           {p.valuation !== null ? (
             <>
               <div className="font-semibold">
@@ -239,7 +238,6 @@ function PropertyRow({ p, onOpen }: { p: PortfolioProperty; onOpen: () => void }
                 )}
               </div>
               <div className="text-gray-500">{p.valuationDate}{p.valuationAgeMonths !== null && ` · ${p.valuationAgeMonths} mo old`}</div>
-              <div className="text-gray-400">{p.valuationDateNote}</div>
             </>
           ) : <Dash />}
         </div>
@@ -481,6 +479,7 @@ export default function PortfolioPage() {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [consultant, setConsultant] = useState('');
+  const [view, setView] = useState<'contact' | 'person'>('contact');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -505,7 +504,7 @@ export default function PortfolioPage() {
   const clients = useMemo(() => {
     if (!data) return [];
     const q = search.trim().toLowerCase();
-    const filtered = data.clients.filter((c) => {
+    const filtered = (view === 'person' ? data.people : data.clients).filter((c) => {
       if (group === 'inflight' && !c.opportunities.some((o) => o.properties.some((p) => p.source === 'inflight'))) return false;
       if (group === 'historical' && c.opportunities.some((o) => o.properties.some((p) => p.source === 'inflight'))) return false;
       if (group === 'noContact' && (c.hasGhlContact || contactExists(c))) return false;
@@ -521,6 +520,7 @@ export default function PortfolioPage() {
         c.name.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         c.alsoKnownAs.some((n) => n.toLowerCase().includes(q)) ||
+        c.mergedFrom.some((m) => m.name.toLowerCase().includes(q)) ||
         c.consultants.some((x) => x.name.toLowerCase().includes(q)) ||
         c.opportunities.some((o) => o.name.toLowerCase().includes(q) || o.properties.some((p) => p.address.toLowerCase().includes(q)))
       );
@@ -547,30 +547,30 @@ export default function PortfolioPage() {
       }
     });
     return sorted;
-  }, [data, search, group, sortBy, consultant]);
+  }, [data, view, search, group, sortBy, consultant]);
 
   const byClientConsultant = (list: PortfolioClient[]) => summarise(list.map((c) => ({
     key: consultantKey(c), properties: c.rollup.properties, cost: c.rollup.totalCost, priced: c.rollup.priced, valuation: c.rollup.totalValuation, valued: c.rollup.valued,
   })));
   const noContactByConsultant = useMemo(
-    () => byClientConsultant((data?.clients || []).filter((c) => !c.hasGhlContact && !contactExists(c))),
+    () => byClientConsultant(((view === 'person' ? data?.people : data?.clients) || []).filter((c) => !c.hasGhlContact && !contactExists(c))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data],
+    [data, view],
   );
   const contactNoOppByConsultant = useMemo(
-    () => byClientConsultant((data?.clients || []).filter((c) => !c.hasGhlContact && contactExists(c))),
+    () => byClientConsultant(((view === 'person' ? data?.people : data?.clients) || []).filter((c) => !c.hasGhlContact && contactExists(c))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data],
+    [data, view],
   );
 
   const createOppByConsultant = useMemo(() => summarise(
-    (data?.clients || []).flatMap((c) => c.opportunities.flatMap((o) => o.properties))
+    ((view === 'person' ? data?.people : data?.clients) || []).flatMap((c) => c.opportunities.flatMap((o) => o.properties))
       .filter((p) => isCreateOpp(p) && !p.fellOver)
       .map((p) => ({
         key: p.mdlConsultant || NO_CONSULTANT, properties: 1,
         cost: p.totalPrice ?? 0, priced: p.totalPrice !== null ? 1 : 0, valuation: p.valuation ?? 0, valued: p.valuation !== null ? 1 : 0,
       })),
-  ), [data]);
+  ), [data, view]);
 
   return (
     <main className="min-h-screen bg-white">
@@ -611,6 +611,18 @@ export default function PortfolioPage() {
             <IssuesPanel issues={data.issues} />
 
             <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+              <div className="inline-flex overflow-hidden rounded border border-gray-200 text-xs" role="group" aria-label="View">
+                {(['contact', 'person'] as const).map((vw) => (
+                  <button
+                    key={vw}
+                    onClick={() => setView(vw)}
+                    title={vw === 'person' ? 'Clients rolled up when their GHL contacts are the same person (contact_links)' : 'One row per GHL contact'}
+                    className={`px-2 py-1 font-semibold ${view === vw ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    {vw === 'contact' ? `By GHL contact (${data.totals.clients.toLocaleString()})` : `By person (${data.totals.people.toLocaleString()})`}
+                  </button>
+                ))}
+              </div>
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search client, consultant, opportunity or address"
                 className="w-[340px] rounded border px-2 py-1" />
               <select value={group} onChange={(e) => setGroup(e.target.value as GroupFilter)} className="rounded border px-1 py-1">
@@ -687,11 +699,18 @@ function ClientRows({ c, open, onToggle }: { c: PortfolioClient; open: boolean; 
         <td className="p-2">
           <div className="font-semibold">
             {open ? '▾' : '▸'} {c.name}
-            {c.nameSource && <span className="ml-1 text-xs font-normal text-gray-500">(from Pipedrive)</span>}
+            {c.mergedFrom.length > 1 && (
+              <span
+                className="ml-1 rounded bg-blue-100 px-1 text-xs font-normal text-blue-800"
+                title={`Same person (contact_links): ${c.mergedFrom.map((m) => `${m.name}${m.contactId ? ` (${m.contactId})` : ''}`).join('; ')}`}
+              >
+                merged from {c.mergedFrom.length} contacts
+              </span>
+            )}
           </div>
           {c.alsoKnownAs.length > 0 && (
-            <div className="text-xs text-gray-500" title="Pipedrive person name for the same property - kept for contact matching">
-              also known as {c.alsoKnownAs.join('; ')} <span className="text-gray-400">· Pipedrive</span>
+            <div className="text-xs text-gray-500">
+              also known as {c.alsoKnownAs.join('; ')}
             </div>
           )}
           <div className="text-xs text-gray-500">
@@ -710,8 +729,8 @@ function ClientRows({ c, open, onToggle }: { c: PortfolioClient; open: boolean; 
         </td>
         <td className="p-2 text-xs">
           {c.consultants.map((x) => (
-            <div key={x.name} title={x.source} className={x.source === 'Master Deal List' ? 'text-gray-500' : ''}>
-              {x.name}{x.source === 'Master Deal List' && <span className="text-gray-400"> (MDL)</span>}
+            <div key={x.name}>
+              {x.name}
             </div>
           ))}
         </td>
@@ -724,7 +743,7 @@ function ClientRows({ c, open, onToggle }: { c: PortfolioClient; open: boolean; 
           {r.valued > 0 ? money(r.totalValuation) : <Dash />}
           <div className="text-xs text-gray-500">{r.valued} of {r.properties} valued</div>
           {r.newestValuationDate && (
-            <div className="text-xs text-gray-400" title="Months since the newest valuation date. Master Deal List valuations: date assumed – file date">
+            <div className="text-xs text-gray-400">
               {r.valuationAgeMonths} mo since {r.newestValuationDate}
             </div>
           )}

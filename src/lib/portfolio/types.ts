@@ -3,7 +3,7 @@ export type SourceKind = 'inflight' | 'historical';
 export interface SourceTab { tab: string; rows: number; included: boolean; note?: string }
 
 export interface SourceFileInfo {
-  kind: SourceKind | 'opportunities' | 'propertyRecords' | 'masterDealList' | 'unconditionals' | 'ghlUsers' | 'pipedrive' | 'ghlContacts';
+  kind: SourceKind | 'opportunities' | 'propertyRecords' | 'masterDealList' | 'unconditionals' | 'ghlUsers' | 'pipedrive' | 'ghlContacts' | 'contactLinks';
   name: string;
   modifiedAt: string;
   takenAt?: string;
@@ -111,6 +111,10 @@ export interface PortfolioRollup {
 export interface PortfolioClient {
   key: string;
   contactId: string | null;
+  /** contact_links person key when this client's contact is linked to others (item 13). */
+  personKey: string | null;
+  /** The client entries rolled up into this one by person key; empty when not merged. */
+  mergedFrom: { contactId: string | null; name: string }[];
   name: string;
   email: string;
   hasGhlContact: boolean;
@@ -150,10 +154,14 @@ export interface PortfolioData {
   consultantError: string | null;
   sourceDir: string;
   sources: SourceFileInfo[];
+  /** 'By GHL contact' view: one client per GHL contact (or per file client name when there is no contact). */
   clients: PortfolioClient[];
+  /** 'By person' view: clients rolled up via contact_links (item 13). */
+  people: PortfolioClient[];
   issues: DataIssue[];
   totals: {
     clients: number;
+    people: number;
     properties: number;
     priced: number;
     totalCost: number;
