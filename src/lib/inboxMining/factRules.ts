@@ -26,7 +26,27 @@ function money(raw: string): string {
   return Number.isFinite(n) ? n.toFixed(2) : raw;
 }
 
-export type Rule = { key: FactKey; re: RegExp; value: (m: RegExpMatchArray) => string };
+/** prefer: tested on the 80 characters before a match; avoid: tested on 60 characters either side. */
+export type Rule = { key: FactKey; re: RegExp; value: (m: RegExpMatchArray) => string; prefer?: RegExp; avoid?: RegExp };
+
+/** First match, unless the rule says which occurrence to prefer (e.g. the property line over a bill-to block). */
+export function pickMatch(rule: Rule, text: string): RegExpMatchArray | null {
+  if (!rule.prefer && !rule.avoid) return text.match(rule.re);
+  const re = new RegExp(rule.re.source, rule.re.flags.includes('g') ? rule.re.flags : `${rule.re.flags}g`);
+  const all: RegExpExecArray[] = [];
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    all.push(m);
+    if (m[0] === '') re.lastIndex++;
+  }
+  if (!all.length) return null;
+  const before = (m: RegExpExecArray) => text.slice(Math.max(0, m.index - 80), m.index);
+  const around = (m: RegExpExecArray) => text.slice(Math.max(0, m.index - 60), m.index + m[0].length + 60);
+  return (
+    (rule.prefer && all.find((m) => rule.prefer!.test(before(m)))) ||
+    (rule.avoid && all.find((m) => !rule.avoid!.test(around(m)))) ||
+    all[0]
+  );
+}
 
 export const RULES: Rule[] = [
   { key: 'lot', re: /\bLot\s*(?:No\.?|Number)?\s*[:#]?\s*(\d{1,5}[A-Z]?)\b/i, value: (m) => m[1].toUpperCase() },
@@ -40,7 +60,13 @@ export const RULES: Rule[] = [
     re: /\b(DP|SP|RP|LP|PS|CP|Deposited Plan|Strata Plan|Survey Plan|Registered Plan|Plan of Subdivision)\s*(?:No\.?)?\s*[:#]?\s*\d{3,7}/i,
     value: (m) => PLAN_TYPES[m[1].toUpperCase()] || m[1].toUpperCase(),
   },
-  { key: 'state', re: /\b(NSW|QLD|VIC|WA|SA|TAS|ACT|NT)\s+\d{4}\b/, value: (m) => m[1] },
+  {
+    key: 'state',
+    re: /\b(NSW|QLD|VIC|WA|SA|TAS|ACT|NT)\s+\d{4}\b/,
+    value: (m) => m[1],
+    // The property's line (with a lot / allotment number) beats bill-to and letterhead addresses; otherwise the first match as before.
+    prefer: /\b(lot|allotment)\s*(?:no\.?\s*)?\d/i,
+  },
   { key: 'landPrice', re: /land\s+(?:purchase\s+)?price[^$\d\n]{0,30}\$\s?([\d,]{4,}(?:\.\d{2})?)/i, value: (m) => money(m[1]) },
   {
     key: 'buildPrice',

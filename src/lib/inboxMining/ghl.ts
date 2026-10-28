@@ -40,6 +40,8 @@ interface RawOpp {
   pipelineStageId?: string;
   status?: string;
   contact?: { name?: string };
+  contactId?: string;
+  lastStageChangeAt?: string;
   customFields?: RawField[];
   updatedAt?: string;
 }
@@ -52,6 +54,8 @@ export interface Opp {
   stageName: string;
   status: string;
   contactName: string;
+  contactId: string;
+  lastStageChangeAt: string;
   registeredAddress: string;
   fields: Record<string, string | string[]>;
 }
@@ -106,6 +110,8 @@ function toOpp(o: RawOpp, names: StageNames): Opp {
     stageName: names.stages.get(o.pipelineStageId || '') || o.pipelineStageId || '',
     status: o.status || '',
     contactName: o.contact?.name || '',
+    contactId: o.contactId || '',
+    lastStageChangeAt: o.lastStageChangeAt || '',
     registeredAddress: Array.isArray(addr) ? addr.join(' ') : addr || '',
     fields,
   };

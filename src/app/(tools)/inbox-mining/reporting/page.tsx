@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import TopNavBar from '@/components/portal/TopNavBar';
+import { pct, type PrecedentSummary } from '@/lib/inboxMining/precedentShared';
 
 // Management view for the inbox-mining demo (hidden route). Later moves under Admin in the menu.
 
@@ -41,6 +42,44 @@ export default function InboxMiningReportingPage() {
   const [checkMsg, setCheckMsg] = useState<string | null>(null);
   const [startInput, setStartInput] = useState('');
   const [startMsg, setStartMsg] = useState<string | null>(null);
+  const [prec, setPrec] = useState<PrecedentSummary | null>(null);
+  const [precBuilding, setPrecBuilding] = useState(false);
+  const [precError, setPrecError] = useState<string | null>(null);
+  const [precType, setPrecType] = useState<string | null>(null);
+
+  const loadPrec = useCallback(async () => {
+    try {
+      const res = await fetch('/api/inbox-mining/precedent', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setPrec(data.summary);
+      setPrecBuilding(data.building);
+      setPrecError(null);
+    } catch (e) {
+      setPrecError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPrec();
+  }, [loadPrec]);
+
+  useEffect(() => {
+    if (!precBuilding) return;
+    const t = setInterval(loadPrec, 10_000);
+    return () => clearInterval(t);
+  }, [precBuilding, loadPrec]);
+
+  const rebuildPrec = async () => {
+    try {
+      const res = await fetch('/api/inbox-mining/precedent', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setPrecBuilding(true);
+    } catch (e) {
+      setPrecError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const loadFeedback = useCallback(async () => {
     try {
@@ -226,9 +265,88 @@ export default function InboxMiningReportingPage() {
             )}
             <div className="border-t px-3 py-1 text-[11px] text-gray-500">
               Actioned and Still open count suggestions for fields that exist in GHL; actioned = GHL value equals the proposed value.
+              Replies, notes and tasks are not counted as actioned yet, so Still open is overstated.
               GHL is checked daily at 2 am (Windows scheduled task on JT&apos;s PC) and by Check GHL now.
               Items read before the lag tracker use their last re-read time as the suggested time.
             </div>
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded border bg-white text-sm">
+            <div className="flex flex-wrap items-center gap-3 bg-gray-50 px-3 py-2">
+              <h2 className="font-semibold text-brand-charcoal">Precedent: what the team did after each email type (June–Oct)</h2>
+              <span className="text-xs text-gray-500">{prec ? `built ${sydney(prec.builtAt)}` : 'not built yet'}</span>
+              <button onClick={rebuildPrec} disabled={precBuilding} className="ml-auto rounded border border-blue-300 bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">
+                {precBuilding ? 'Building (a few minutes)…' : 'Rebuild precedent'}
+              </button>
+            </div>
+            {precError && <div className="border-t px-3 py-2 text-red-800">{precError}</div>}
+            {prec && (
+              <div className="max-h-[32rem] overflow-auto border-t">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-gray-50 text-gray-500">
+                    <tr>
+                      <th className="p-1">Activity type</th>
+                      <th className="p-1 text-right" title="Inbound emails matched to an opportunity">Emails</th>
+                      <th className="p-1 text-right">Opps</th>
+                      <th className="p-1 text-right" title={`A GHL event date (not a due/scheduled date) within ${prec.windowDays} days of the email, or a stage move`}>Field changed</th>
+                      <th className="p-1 text-right" title={`A reply from the same mailbox thread within ${prec.windowDays} days`}>Reply sent</th>
+                      <th className="p-1 text-right" title={`A note or task on the contact within ${prec.windowDays} days`}>Note or task</th>
+                      <th className="p-1 text-right">Nothing</th>
+                      <th className="p-1">Field most often changed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prec.types.map((t) => {
+                      const thin = t.emails < prec.minEmails;
+                      const top = t.dateFields.find((f) => !f.schedule);
+                      return (
+                        <tr key={t.type} onClick={() => setPrecType(precType === t.type ? null : t.type)}
+                          className={`cursor-pointer border-t align-top ${precType === t.type ? 'bg-blue-100 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-blue-50'} ${thin ? 'text-gray-400' : ''}`}>
+                          <td className="p-1">{t.type.replace(/_/g, ' ')}{thin && <span className="ml-1 rounded bg-gray-100 px-1">thin</span>}</td>
+                          <td className="p-1 text-right">{t.emails}</td>
+                          <td className="p-1 text-right">{t.opps}</td>
+                          <td className="p-1 text-right">{pct(t.fieldChanged, t.emails)}</td>
+                          <td className="p-1 text-right">{pct(t.replied, t.emails)}</td>
+                          <td className="p-1 text-right">{pct(t.noteTask, t.emails)}</td>
+                          <td className="p-1 text-right">{pct(t.nothing, t.emails)}</td>
+                          <td className="p-1">{top ? `${top.name} ${Math.round(top.rate * 100)}%${top.medianDays !== null ? `, median ${top.medianDays} d` : ''}` : '–'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {prec && precType && (() => {
+              const t = prec.types.find((x) => x.type === precType);
+              if (!t) return null;
+              return (
+                <div className="grid gap-3 border-t px-3 py-2 text-xs md:grid-cols-2">
+                  <div>
+                    <div className="mb-1 font-semibold text-gray-500">Date fields dated within the window ({t.type.replace(/_/g, ' ')})</div>
+                    {t.dateFields.length === 0 ? <div className="text-gray-500">None</div> : t.dateFields.slice(0, 12).map((f) => (
+                      <div key={f.fieldId} className={f.schedule ? 'text-gray-400' : ''}>
+                        {f.name}: {f.hits} ({Math.round(f.rate * 100)}%){f.medianDays !== null ? `, median ${f.medianDays} d` : ''}{f.schedule && ' (scheduled date, not counted)'}
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="mb-1 font-semibold text-gray-500">Suggested fields today (no timing)</div>
+                    {t.current.map((f) => (
+                      <div key={f.fieldId}>{f.name}: {f.set}/{f.opps} set{f.top.length ? ` (${f.top.map(([v, n]) => `${v} ${n}`).join(', ')})` : ''}</div>
+                    ))}
+                    <div className="mt-1 text-gray-500">Stage moved within the window: {pct(t.stageMoved, t.emails)}. Median reply: {t.medianReplyHrs !== null ? `${t.medianReplyHrs} h` : '–'}.</div>
+                  </div>
+                </div>
+              );
+            })()}
+            {prec && (
+              <div className="border-t px-3 py-1 text-[11px] text-gray-500">
+                {prec.emails} inbound emails matched to an opportunity by name (a guide, not checked); {prec.contacts} contacts&apos; notes and tasks read
+                {prec.contactErrors ? ` (${prec.contactErrors} could not be read)` : ''}. Window {prec.windowDays} days; date fields count from 2 days before the email because they often hold the event date. Due / expiry / ETA / scheduled / settlement dates are listed but never counted as a change. Notes and tasks are frequent on active deals anyway: compare with the noise row as a baseline.
+                GHL keeps no change history: a date field only shows its latest date, and Yes/No fields have no timing. Under {prec.minEmails} emails = thin; suggestions on thin types or under {Math.round(prec.minRate * 100)}% are flagged &quot;no precedent&quot;.
+              </div>
+            )}
           </div>
 
           <div className="mt-4 overflow-hidden rounded border bg-white text-sm">

@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import TopNavBar from '@/components/portal/TopNavBar';
 import { driveFilePath, driveFolder } from '@/lib/inboxMining/driveTarget';
 import { matchInQuote } from '@/lib/inboxMining/factRules';
+import { precedentFor, type PrecedentSummary } from '@/lib/inboxMining/precedentShared';
 
 interface FactPos { page?: number; x?: number; y?: number; w?: number; h?: number; notFound?: boolean }
 interface Fact { value: string; source: string; quote: string; match?: string; pos?: FactPos }
@@ -18,7 +19,18 @@ interface Match {
   propertyRecordId?: string; fact1?: string; fact2?: string; reason?: string;
   geoscape: { status: string; parcelId?: string; address?: string; reason?: string }; flags: string[]; trackerEvidence: string[];
 }
-interface Suggestion { target: string; fieldKey: string; fieldLabel: string; proposed: string | string[]; source: string; notInGhl?: boolean; note?: string }
+interface Suggestion { target: string; fieldKey: string; fieldLabel: string; fieldId?: string; proposed: string | string[]; source: string; notInGhl?: boolean; note?: string }
+
+let precedentCache: Promise<PrecedentSummary | null> | null = null;
+const loadPrecedent = () => {
+  if (!precedentCache) {
+    precedentCache = fetch('/api/inbox-mining/precedent', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.summary ?? null)
+      .catch(() => null);
+  }
+  return precedentCache;
+};
 interface Item {
   id: number; mailbox: string; message_id: string; thread_id: string; received_at: string; direction: string;
   from_addr: string; to_addr: string; subject: string; cls: string; cls_rule: string; facts: Record<string, Fact>;
@@ -75,6 +87,9 @@ const show = (v: string | string[]) => (Array.isArray(v) ? v.join(', ') : v);
 // Evidence highlighting (backlog 15): text items per page with boxes as fractions of the page.
 type TextItem = { str: string; r: [number, number, number, number] };
 const factLabel = (k: string) => k.replace(/([A-Z])/g, ' $1').toLowerCase();
+// Brand yellow #FFD60A at ~45% with an amber border; the selected fact in orange.
+const HL_STYLE = { backgroundColor: 'rgba(255, 214, 10, 0.45)', border: '2px solid #F59E0B' };
+const HL_ACTIVE = { backgroundColor: 'rgba(249, 115, 22, 0.45)', border: '2px solid #EA580C' };
 const needleFor = (k: string, f: Fact) => f.match || matchInQuote(k, f.value, f.quote) || f.value;
 
 /** Finds the needle in the page text, ignoring whitespace (PDF text is split into runs), and boxes it. */
@@ -132,8 +147,8 @@ function BodyMarks({ body, hits, active, idPrefix }: {
     if (h.start < at) continue;
     out.push(body.slice(at, h.start));
     out.push(
-      <mark key={k} id={idPrefix + k} title={factLabel(k)}
-        className={k === active ? 'rounded-sm bg-yellow-300 ring-2 ring-yellow-500' : 'rounded-sm bg-yellow-200'}>
+      <mark key={k} id={idPrefix + k} title={factLabel(k)} className="rounded-sm text-inherit"
+        style={k === active ? HL_ACTIVE : HL_STYLE}>
         {body.slice(h.start, h.end)}
       </mark>
     );
@@ -230,8 +245,8 @@ function PdfPages({ itemId, doc, facts, active, autoRender, onLocated }: {
       const wrap = p?.page ? wraps.current[p.page - 1] : undefined;
       if (!p || !wrap) continue;
       const box = document.createElement('div');
-      box.className = `ev-hl pointer-events-none absolute rounded-sm ${k === active ? 'bg-yellow-300/50 ring-2 ring-yellow-500' : 'bg-yellow-200/40 ring-1 ring-yellow-400'}`;
-      Object.assign(box.style, { left: `${(p.x || 0) * 100}%`, top: `${(p.y || 0) * 100}%`, width: `${(p.w || 0) * 100}%`, height: `${(p.h || 0) * 100}%` });
+      box.className = 'ev-hl pointer-events-none absolute rounded-sm';
+      Object.assign(box.style, k === active ? HL_ACTIVE : HL_STYLE, { left: `${(p.x || 0) * 100}%`, top: `${(p.y || 0) * 100}%`, width: `${(p.w || 0) * 100}%`, height: `${(p.h || 0) * 100}%` });
       box.title = `${factLabel(k)}: ${f.value}`;
       wrap.appendChild(box);
       if (k === active) activeEl = box;
@@ -331,6 +346,11 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
   const [memMsg, setMemMsg] = useState<string | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [located, setLocated] = useState<Record<string, FactPos>>({});
+  const [precedent, setPrecedent] = useState<PrecedentSummary | null>(null);
+
+  useEffect(() => {
+    loadPrecedent().then(setPrecedent);
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -511,6 +531,19 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
                   <span className="font-medium">{show(s.proposed)}{s.note && <div className="font-normal text-gray-500">{s.note}</div>}</span>
                   <span className="text-gray-500">Source</span>
                   <span className="text-gray-600">{s.source}</span>
+                  {(() => {
+                    const p = precedentFor(precedent, item.cls, s);
+                    if (!p) return null;
+                    return (
+                      <>
+                        <span className="text-gray-500">Precedent</span>
+                        <span className={p.ok === false ? 'text-amber-800' : 'text-gray-600'}>
+                          {p.ok === false && !p.line.startsWith('No precedent') && <span className="mr-1 rounded bg-amber-100 px-1 font-semibold">no precedent</span>}
+                          {p.line}
+                        </span>
+                      </>
+                    );
+                  })()}
                 </div>
                 <div className="mt-2 border-t pt-2">
                   <FeedbackCell

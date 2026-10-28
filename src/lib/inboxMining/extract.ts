@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import type { Fact, FactKey, Facts } from './types';
 import { driveFor, googleErrorMessage } from './google';
-import { RULES, STAGE_PATTERNS } from './factRules';
+import { RULES, STAGE_PATTERNS, pickMatch } from './factRules';
 
 export interface PdfRead {
   text: string;
@@ -116,7 +116,7 @@ function quoteAround(text: string, index: number, len: number): string {
 export function extractFacts(text: string, source: string): Facts {
   const facts: Facts = {};
   for (const r of RULES) {
-    const m = text.match(r.re);
+    const m = pickMatch(r, text);
     if (m && m.index !== undefined) {
       facts[r.key] = { value: r.value(m), source, quote: quoteAround(text, m.index, m[0].length), match: m[0].replace(/\s+/g, ' ').trim() };
     }
