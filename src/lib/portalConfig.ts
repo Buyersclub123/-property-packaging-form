@@ -21,7 +21,19 @@ export type SubTile = {
   external?: boolean;
   /** Not built yet — renders muted with a badge and is not clickable. */
   comingSoon?: boolean;
+  /** Icon shown on the tile. */
+  icon?: 'cog';
+  /** A tile that opens its own page of tools (/team/[id]/[tile slug]). */
+  children?: SubTile[];
 };
+
+export function slug(s: string): string {
+  return s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+export function groupHref(team: TeamTile, tile: SubTile): string {
+  return `/team/${team.id}/${slug(tile.name)}`;
+}
 
 export type TeamTile = {
   /** URL-safe slug. Used as /team/[id]. */
@@ -56,10 +68,35 @@ export const teams: TeamTile[] = [
         newTab: true,
       },
       {
-        name: 'EOI Template Admin',
-        description: 'Manage EOI template terms, conditions and settings',
-        href: '/admin/eoi-templates',
-        newTab: true,
+        name: 'Backend',
+        description: 'Templates, market data, duplicate checks and test tools behind the Property Team',
+        icon: 'cog',
+        children: [
+          {
+            name: 'EOI Template Admin',
+            description: 'Manage EOI template terms, conditions and settings',
+            href: '/admin/eoi-templates',
+            newTab: true,
+          },
+          {
+            name: 'Market Performance',
+            description: 'Market performance data and charts',
+            href: '/admin/market-performance',
+            newTab: true,
+          },
+          {
+            name: 'Duplicate Checker',
+            description: 'Check for duplicate records',
+            href: '/admin/duplicate',
+            newTab: true,
+          },
+          {
+            name: 'Investment Highlights',
+            description: 'Test investment highlights',
+            href: '/admin/investment-highlights-test',
+            newTab: true,
+          },
+        ],
       },
     ],
   },
@@ -227,32 +264,25 @@ export const teams: TeamTile[] = [
     description: 'System configuration and internal utilities.',
     subTiles: [
       { name: 'Tool Management', description: 'Manage tool configurations', comingSoon: true },
-      {
-        name: 'Market Performance',
-        description: 'Market performance data and charts',
-        href: '/admin/market-performance',
-        newTab: true,
-      },
       { name: 'User & Access Management', description: 'User and access management', comingSoon: true },
       { name: 'System Performance', description: 'System performance monitoring', comingSoon: true },
       { name: 'IT Architecture Map', description: 'IT architecture documentation', comingSoon: true },
-      {
-        name: 'Duplicate Checker',
-        description: 'Check for duplicate records',
-        href: '/admin/duplicate',
-        newTab: true,
-      },
-      {
-        name: 'Investment Highlights',
-        description: 'Test investment highlights',
-        href: '/admin/investment-highlights-test',
-        newTab: true,
-      },
       {
         name: 'GHL Config Changes',
         description: 'Pipeline, stage and field changes detected in GHL',
         href: '/admin/ghl-changes',
         newTab: true,
+      },
+      {
+        name: 'Tile Access',
+        description: 'Who sees which tile and tool on this portal (groups and emails)',
+        href: '/admin/tile-access',
+        newTab: true,
+      },
+      {
+        name: 'New Initiatives',
+        description: 'Sandpit of read-only demos: Portfolio View and Inbox Mining',
+        href: '/new-initiatives',
       },
       {
         name: 'Access Policies (Cloudflare)',
@@ -264,6 +294,26 @@ export const teams: TeamTile[] = [
     ],
   },
 ];
+
+/** Sandpit opened from Admin > New Initiatives (who sees it: Admin > Tile Access). */
+export const newInitiatives: TeamTile = {
+  id: 'new-initiatives',
+  name: 'New Initiatives',
+  description: 'Sandpit for work in progress: read-only demos before they become team tools.',
+  subTiles: [
+    {
+      name: 'Portfolio View',
+      description:
+        'Client picture: contact, opportunities and properties with purchase cost, valuation and growth, from the unloaded purchase files and GHL snapshots.',
+      href: '/portfolio',
+    },
+    {
+      name: 'Inbox Mining',
+      description: 'Team mailbox emails matched to GHL opportunities and classified by activity.',
+      href: '/inbox-mining',
+    },
+  ],
+};
 
 /** Look up a team by its slug. Returns undefined if not found. */
 export function getTeam(id: string): TeamTile | undefined {
