@@ -1,8 +1,8 @@
 import * as XLSX from 'xlsx';
-import type { LoadedRow, LoadedSources, LoadedWorkbook, GhlOpportunity, GhlUsers, SheetRow } from './sources';
-import { MDL_VALUATION_DATE, MDL_VALUATION_DATE_NOTE } from './sources';
+import type { LoadedRow, LoadedSources, LoadedWorkbook, GhlOpportunity, GhlUsers, SheetRow, SnapOpp } from './sources';
+import { MDL_VALUATION_DATE, MDL_VALUATION_DATE_NOTE, pipedriveKey } from './sources';
 import type {
-  DataIssue, PortfolioClient, PortfolioData, PortfolioOpportunity, PortfolioProperty, PortfolioRollup, SourceKind,
+  DataIssue, GhlContactMatch, PortfolioClient, PortfolioData, PortfolioOpportunity, PortfolioProperty, PortfolioRollup, SourceKind,
 } from './types';
 
 const SETTLEMENT_FIELD = 'lWfSyDNYwWalhkMcHyAQ';
@@ -43,6 +43,26 @@ function monthsBetween(from: string, to: string): number | null {
 
 const aud = (n: number) => `$${Math.round(n).toLocaleString('en-AU')}`;
 
+const nameTokens = (s: string) => s.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((t) => t && t !== 'and').sort().join(' ');
+
+// Contact matching for clients with no purchase opportunity (JT 28/10): email first, then exact person name.
+const NAME_STOP = new Set(['and', 'mr', 'mrs', 'ms', 'miss', 'dr', 'the']);
+const nameToks = (s: string) => s.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((t) => t && !NAME_STOP.has(t));
+const personKey = (s: string) => nameToks(s).sort().join(' ');
+const ENTITY_NAME = /\b(pty|ltd|limited|atf|trust|super|superannuation|fund|holdings|investments|acn|custodian|nominees)\b/i;
+
+function personKeys(name: string): string[] {
+  if (!name || ENTITY_NAME.test(name)) return [];
+  const parts = name.split(/\s*(?:&|;|,|\/|\band\b)\s*/i).map((p) => p.trim()).filter(Boolean);
+  const last = nameToks(parts[parts.length - 1] || '').slice(-1)[0];
+  return parts
+    .map((p) => { const t = nameToks(p); return t.length === 1 && last ? `${t[0]} ${last}` : t.join(' '); })
+    .filter((p) => p.split(' ').length >= 2)
+    .map(personKey);
+}
+
+const emailsOf = (s: string | undefined) => (s?.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) || []).map((e) => e.toLowerCase());
+
 function entityFromName(name: string): string {
   const m = name.match(/\b(SMSF|PERS|TRUST)\b/i);
   return m ? m[1].toUpperCase() : '';
@@ -79,7 +99,10 @@ function gradeFacts(kind: SourceKind, v: SheetRow, grade: string): string[] {
   return [str(v.confidence), str(v.notes)].filter(Boolean);
 }
 
-interface Built { property: PortfolioProperty; opp: GhlOpportunity | undefined; clientName: string; mdlRow: number | null }
+interface Built {
+  property: PortfolioProperty; opp: GhlOpportunity | undefined; clientName: string; mdlRow: number | null;
+  matchEmails: string[]; matchNames: string[];
+}
 
 export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioData {
   const oppById = new Map(src.opportunities.opportunities.map((o) => [o.id, o]));
@@ -102,7 +125,15 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
     const kind = wb.kind;
     const oppId = str(v.opportunity_id) || null;
     const opp = oppId ? oppById.get(oppId) : undefined;
-    const clientName = str(v.client_closed) || str(v['Opportunity name']) || '(no client name)';
+    const mdlRef = str(v.master_deal_list).match(/All Deals row (\d+)/);
+    const pd = kind === 'historical'
+      ? src.pipedrive.rows.get(pipedriveKey(row.tab, v.master_deal_list, v.contract_id, v.property_address))
+      : undefined;
+    const fileClient = str(v.client_closed) || str(v['Opportunity name']);
+    const pdClient = !fileClient && pd?.clientFilled ? pd.clientFilled : '';
+    const clientNameSource = pdClient ? 'from Pipedrive' : '';
+    const clientName = fileClient || pdClient
+      || (mdlRef ? `(no client name on Master row ${mdlRef[1]})` : `(no client name - ${row.tab} row ${row.rowNumber})`);
     const address = str(v.property_address) || composeAddress(v);
     const at = { client: opp?.contact?.name || clientName, opportunityId: oppId, address, file: wb.name, tab: row.tab, rowNumber: row.rowNumber };
 
@@ -157,7 +188,6 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
     let valuationSource = '';
     let valuationDate = '';
     let valuationDateNote = '';
-    const mdlRef = str(v.master_deal_list).match(/All Deals row (\d+)/);
     if (mdlRef) {
       const m = src.masterDealList.rows.get(Number(mdlRef[1]));
       if (!m) {
@@ -186,6 +216,10 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       issues.push({ ...at, kind: 'valuation_outlier', message: `valuation ${aud(valuation)} is ${Math.round(ratio * 100)}% of the purchase price ${aud(cost)} (${valuationSource})` });
     }
 
+    const mdlLinked = mdlRef ? src.masterDealList.rows.get(Number(mdlRef[1])) : undefined;
+    const matchEmails = [...emailsOf(mdlLinked?.email), ...emailsOf(pd?.email)];
+    const matchNames = [fileClient, mdlLinked?.name ?? '', pd?.clientFilled ?? ''].filter(Boolean);
+
     if (oppId && !opp) {
       issues.push({ ...at, kind: 'opportunity_not_in_snapshot', message: `opportunity ${oppId} is not in ${src.opportunities.name}` });
     }
@@ -194,6 +228,8 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       opp,
       clientName,
       mdlRow,
+      matchEmails,
+      matchNames,
       property: {
         key: `${kind}:${row.tab}:${row.rowNumber}`,
         source: kind,
@@ -238,6 +274,10 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
         heldYears,
         heldMonths: contract.time !== null ? monthsBetween(contract.text, asAt) : null,
         mdlConsultant,
+        clientNameSource,
+        pipedrive: pd && pd.dealId
+          ? { dealId: pd.dealId, owner: pd.owner, stage: pd.stage, basis: pd.basis, name: pd.clientFilled, nameSource: pd.clientSource, nameAgrees: pd.nameAgrees }
+          : null,
       },
     };
   };
@@ -276,6 +316,43 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
     }
   }
 
+  const contactById = new Map(src.ghlAll.contacts.map((c) => [c.id, c]));
+  const oppsByContact = new Map<string, SnapOpp[]>();
+  for (const o of src.ghlAll.opportunities) {
+    if (o.contactId) oppsByContact.set(o.contactId, [...(oppsByContact.get(o.contactId) || []), o]);
+  }
+  const byEmail = new Map<string, Set<string>>();
+  const byName = new Map<string, Set<string>>();
+  const addIdx = (m: Map<string, Set<string>>, k: string, id: string) => {
+    if (!k) return;
+    const s = m.get(k) || new Set<string>();
+    s.add(id);
+    m.set(k, s);
+  };
+  for (const c of src.ghlAll.contacts) {
+    for (const e of [c.email, ...(c.additionalEmails || [])]) addIdx(byEmail, String(e || '').trim().toLowerCase(), c.id);
+    const k = personKey(c.name || '');
+    if (k.split(' ').length >= 2) addIdx(byName, k, c.id);
+  }
+  const toContact = (id: string) => {
+    const c = contactById.get(id);
+    return {
+      id, name: c?.name ?? '', email: c?.email ?? '',
+      opportunities: (oppsByContact.get(id) || []).map((o) => ({ name: o.name, pipeline: o.pipeline, status: o.status })),
+    };
+  };
+  const matchContact = (emails: Set<string>, names: Set<string>): GhlContactMatch => {
+    const ids = new Set<string>();
+    emails.forEach((e) => byEmail.get(e)?.forEach((id) => ids.add(id)));
+    if (ids.size) return { status: 'contact_exists', basis: 'email', contacts: [...ids].map(toContact) };
+    const hits = [...names].flatMap(personKeys).map((k) => byName.get(k)).filter((s): s is Set<string> => !!s);
+    hits.forEach((s) => s.forEach((id) => ids.add(id)));
+    if (hits.some((s) => s.size > 1)) return { status: 'ambiguous', basis: 'name', contacts: [...ids].map(toContact) };
+    if (ids.size) return { status: 'contact_exists', basis: 'name', contacts: [...ids].map(toContact) };
+    return { status: 'none', basis: '', contacts: [] };
+  };
+  const matchInputs = new Map<string, { emails: Set<string>; names: Set<string>; first: Built }>();
+
   const clients = new Map<string, PortfolioClient>();
   const opps = new Map<string, PortfolioOpportunity>();
   for (const b of built) {
@@ -289,6 +366,9 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
         name: b.opp?.contact?.name || b.clientName,
         email: b.opp?.contact?.email || '',
         hasGhlContact: !!contactId,
+        nameSource: contactId ? '' : b.property.clientNameSource,
+        alsoKnownAs: [],
+        ghlMatch: null,
         opportunities: [],
         consultants: [],
         rollup: emptyRollup(),
@@ -313,6 +393,10 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       client.opportunities.push(opp);
     }
     opp.properties.push(b.property);
+    const inp = matchInputs.get(clientKey) || { emails: new Set<string>(), names: new Set<string>(), first: b };
+    b.matchEmails.forEach((e) => inp.emails.add(e));
+    b.matchNames.forEach((n) => inp.names.add(n));
+    matchInputs.set(clientKey, inp);
   }
 
   const list = [...clients.values()];
@@ -327,6 +411,25 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       }
     }
     c.consultants = [...names].map(([name, source]) => ({ name, source }));
+    const aka = new Set<string>();
+    for (const o of c.opportunities) {
+      for (const p of o.properties) {
+        if (p.pipedrive?.name && nameTokens(p.pipedrive.name) !== nameTokens(c.name)) aka.add(p.pipedrive.name);
+      }
+    }
+    c.alsoKnownAs = [...aka];
+    if (!c.hasGhlContact) {
+      const inp = matchInputs.get(c.key);
+      c.ghlMatch = matchContact(inp?.emails ?? new Set(), inp?.names ?? new Set());
+      if (c.ghlMatch.status === 'ambiguous' && inp) {
+        issues.push({
+          kind: 'contact_name_ambiguous',
+          message: `name matches ${c.ghlMatch.contacts.length} GHL contacts (${c.ghlMatch.contacts.map((k) => k.name).join(' / ')}) - left as "No GHL contact"`,
+          client: c.name, opportunityId: null, address: inp.first.property.address,
+          file: inp.first.property.file, tab: inp.first.property.tab, rowNumber: inp.first.property.rowNumber,
+        });
+      }
+    }
   }
   list.sort((a, b) => b.rollup.properties - a.rollup.properties || a.name.localeCompare(b.name));
 
@@ -342,6 +445,15 @@ export function buildPortfolio(src: LoadedSources, users: GhlUsers): PortfolioDa
       { kind: 'historical', name: src.historical.name, modifiedAt: src.historical.modifiedAt, tabs: src.historical.tabs },
       { kind: 'opportunities', name: src.opportunities.name, modifiedAt: src.opportunities.modifiedAt, takenAt: src.opportunities.takenAt, count: src.opportunities.opportunities.length },
       { kind: 'propertyRecords', name: src.propertyRecords.name, modifiedAt: src.propertyRecords.modifiedAt, count: src.propertyRecords.records.length },
+      {
+        kind: 'ghlContacts', name: `${src.ghlAll.contactsName} + ${src.ghlAll.oppsName}`, modifiedAt: src.ghlAll.modifiedAt,
+        takenAt: src.ghlAll.takenAt, count: src.ghlAll.contacts.length,
+        note: `${src.ghlAll.contacts.length.toLocaleString()} contacts, ${src.ghlAll.opportunities.length.toLocaleString()} opportunities in ${src.ghlAll.pipelines.length} pipelines. Used to match clients with no purchase opportunity: email first, then exact person name.`,
+      },
+      {
+        kind: 'pipedrive', name: src.pipedrive.name, modifiedAt: src.pipedrive.modifiedAt, count: src.pipedrive.total,
+        note: `${src.pipedrive.matched} rows matched to a Pipedrive deal, ${src.pipedrive.filled} with a client name. The name is used (labelled "from Pipedrive") only where the file has no client name; deal owner shown in the Source panel.${src.pipedrive.duplicateKeys ? ` ${src.pipedrive.duplicateKeys} duplicate row keys not used.` : ''}`,
+      },
       {
         kind: 'masterDealList', name: src.masterDealList.name, modifiedAt: src.masterDealList.modifiedAt, count: src.masterDealList.rows.size,
         note: `Valuation on ${src.masterDealList.valued.toLocaleString()} rows; no valuation date in the file - dated ${MDL_VALUATION_DATE} (${MDL_VALUATION_DATE_NOTE}). Linked via the historical master_deal_list "All Deals row N"; in-flight rows have no link.`,

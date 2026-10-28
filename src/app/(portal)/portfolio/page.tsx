@@ -29,6 +29,7 @@ const ISSUE_LABEL: Record<DataIssue['kind'], string> = {
   valuation_outlier: 'Valuation under 50% / over 300% of price',
   mdl_row_missing: 'Master Deal List row not found',
   mdl_row_shared: 'Master Deal List row linked twice',
+  contact_name_ambiguous: 'Name matches 2+ GHL contacts',
 };
 
 const PURCHASE_DATE_HELP = 'Purchase date: land contract date for new builds; exchange (contract) date for established';
@@ -70,7 +71,9 @@ const dmyTime = (s: string) => {
 };
 
 type SortKey = 'properties' | 'totalCost' | 'valuation' | 'growth' | 'lastPurchase' | 'firstPurchase' | 'name';
-type GroupFilter = 'all' | 'inflight' | 'historical' | 'noContact' | 'createOpp';
+type GroupFilter = 'all' | 'inflight' | 'historical' | 'contactNoOpp' | 'noContact' | 'createOpp';
+
+const contactExists = (c: PortfolioClient) => c.ghlMatch?.status === 'contact_exists';
 
 const NO_CONSULTANT = 'No consultant';
 const isCreateOpp = (p: PortfolioProperty) => /^create opportunity/i.test(p.action);
@@ -119,6 +122,7 @@ function SourcePanel({ p }: { p: PortfolioProperty }) {
         {item('Entity', p.entity ? `${p.entity}${p.entityName ? ` – ${p.entityName}` : ''}${p.entitySource ? ` (${p.entitySource})` : ''}` : none)}
         {item('Builder', p.builder || none)}
         {p.mdlConsultant && item('Consultant', `${p.mdlConsultant} (Master Deal List)`)}
+        {p.pipedrive && item('Pipedrive', `deal ${p.pipedrive.dealId} · owner ${p.pipedrive.owner || '-'} · ${p.pipedrive.stage} · matched by ${p.pipedrive.basis}${p.pipedrive.name ? ` · name ${p.pipedrive.name}${p.clientNameSource ? ' (used as client name)' : ''}` : ''}`)}
         {p.action && item('Action', p.action)}
         {p.status && item('Status', p.status)}
         {p.valuationSource && item('Valuation', `${p.valuationSource} · dated ${p.valuationDate} (${p.valuationDateNote})`)}
@@ -217,6 +221,23 @@ function PropertyRow({ p }: { p: PortfolioProperty }) {
 function ClientDetail({ c }: { c: PortfolioClient }) {
   return (
     <div className="bg-white px-4 py-3">
+      {c.ghlMatch && c.ghlMatch.contacts.length > 0 && (
+        <div className={`mb-2 rounded border px-3 py-2 text-xs ${c.ghlMatch.status === 'contact_exists' ? 'border-blue-200 bg-blue-50/50' : 'border-amber-200 bg-amber-50'}`}>
+          <div className="mb-1 font-semibold">
+            {c.ghlMatch.status === 'contact_exists' ? `GHL contact (matched by ${c.ghlMatch.basis}, 28/10 snapshot)` : 'Possible GHL contacts – same name, not matched'}
+          </div>
+          {c.ghlMatch.contacts.map((k) => (
+            <div key={k.id} className="mb-1">
+              <span className="font-semibold">{k.name || '(no name)'}</span>
+              {k.email && <span className="text-gray-500"> · {k.email}</span>}
+              <span className="text-gray-400"> · {k.id}</span>
+              <div className="text-gray-600">
+                {k.opportunities.length ? k.opportunities.map((o) => `${o.pipeline}: ${o.name} (${o.status})`).join('; ') : 'No opportunities in any pipeline'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="overflow-hidden rounded border">
         <PropertyGridHeader />
         {c.opportunities.map((o) => (
@@ -424,7 +445,8 @@ export default function PortfolioPage() {
     const filtered = data.clients.filter((c) => {
       if (group === 'inflight' && !c.opportunities.some((o) => o.properties.some((p) => p.source === 'inflight'))) return false;
       if (group === 'historical' && c.opportunities.some((o) => o.properties.some((p) => p.source === 'inflight'))) return false;
-      if (group === 'noContact' && c.hasGhlContact) return false;
+      if (group === 'noContact' && (c.hasGhlContact || contactExists(c))) return false;
+      if (group === 'contactNoOpp' && !contactExists(c)) return false;
       if (group === 'createOpp' && !c.opportunities.some((o) => o.properties.some(isCreateOpp))) return false;
       if (consultant) {
         if (group === 'createOpp') {
@@ -435,6 +457,7 @@ export default function PortfolioPage() {
       return (
         c.name.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
+        c.alsoKnownAs.some((n) => n.toLowerCase().includes(q)) ||
         c.consultants.some((x) => x.name.toLowerCase().includes(q)) ||
         c.opportunities.some((o) => o.name.toLowerCase().includes(q) || o.properties.some((p) => p.address.toLowerCase().includes(q)))
       );
@@ -463,11 +486,19 @@ export default function PortfolioPage() {
     return sorted;
   }, [data, search, group, sortBy, consultant]);
 
-  const noContactByConsultant = useMemo(() => summarise(
-    (data?.clients || []).filter((c) => !c.hasGhlContact).map((c) => ({
-      key: consultantKey(c), properties: c.rollup.properties, cost: c.rollup.totalCost, priced: c.rollup.priced, valuation: c.rollup.totalValuation, valued: c.rollup.valued,
-    })),
-  ), [data]);
+  const byClientConsultant = (list: PortfolioClient[]) => summarise(list.map((c) => ({
+    key: consultantKey(c), properties: c.rollup.properties, cost: c.rollup.totalCost, priced: c.rollup.priced, valuation: c.rollup.totalValuation, valued: c.rollup.valued,
+  })));
+  const noContactByConsultant = useMemo(
+    () => byClientConsultant((data?.clients || []).filter((c) => !c.hasGhlContact && !contactExists(c))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data],
+  );
+  const contactNoOppByConsultant = useMemo(
+    () => byClientConsultant((data?.clients || []).filter((c) => !c.hasGhlContact && contactExists(c))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data],
+  );
 
   const createOppByConsultant = useMemo(() => summarise(
     (data?.clients || []).flatMap((c) => c.opportunities.flatMap((o) => o.properties))
@@ -523,7 +554,8 @@ export default function PortfolioPage() {
                 <option value="all">All clients</option>
                 <option value="inflight">Has an in-flight purchase</option>
                 <option value="historical">Historical only</option>
-                <option value="noContact">No GHL contact yet</option>
+                <option value="contactNoOpp">Contact exists – no purchase opportunity</option>
+                <option value="noContact">No GHL contact</option>
                 <option value="createOpp">Has &apos;Create opportunity&apos; rows</option>
               </select>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)} className="rounded border px-1 py-1">
@@ -538,8 +570,13 @@ export default function PortfolioPage() {
               <span className="text-gray-500">{clients.length.toLocaleString()} clients</span>
             </div>
 
+            {group === 'contactNoOpp' && (
+              <ConsultantTable title="Contact exists – no purchase opportunity, by consultant" countLabel="Clients"
+                note="Matched to a GHL contact by email, else exact person name (28/10 snapshot). Consultant from the Master Deal List. Fell-over rows not counted."
+                rows={contactNoOppByConsultant} selected={consultant} onSelect={setConsultant} />
+            )}
             {group === 'noContact' && (
-              <ConsultantTable title="Clients without a GHL contact, by consultant" countLabel="Clients"
+              <ConsultantTable title="No GHL contact, by consultant" countLabel="Clients"
                 note="Consultant from the Master Deal List (All Deals row link). Fell-over rows not counted."
                 rows={noContactByConsultant} selected={consultant} onSelect={setConsultant} />
             )}
@@ -585,10 +622,26 @@ function ClientRows({ c, open, onToggle }: { c: PortfolioClient; open: boolean; 
     <>
       <tr onClick={onToggle} className={`cursor-pointer border-t align-top hover:bg-blue-50 ${open ? 'bg-blue-50' : ''}`}>
         <td className="p-2">
-          <div className="font-semibold">{open ? '▾' : '▸'} {c.name}</div>
+          <div className="font-semibold">
+            {open ? '▾' : '▸'} {c.name}
+            {c.nameSource && <span className="ml-1 text-xs font-normal text-gray-500">(from Pipedrive)</span>}
+          </div>
+          {c.alsoKnownAs.length > 0 && (
+            <div className="text-xs text-gray-500" title="Pipedrive person name for the same property - kept for contact matching">
+              also known as {c.alsoKnownAs.join('; ')} <span className="text-gray-400">· Pipedrive</span>
+            </div>
+          )}
           <div className="text-xs text-gray-500">
             {c.email}
-            {!c.hasGhlContact && <span className="ml-1 rounded bg-orange-100 px-1 text-orange-800">No GHL contact yet</span>}
+            {!c.hasGhlContact && (contactExists(c) ? (
+              <span className="ml-1 rounded bg-blue-100 px-1 text-blue-800" title={c.ghlMatch?.contacts.map((k) => `${k.name} · ${k.opportunities.length} opportunities`).join('; ')}>
+                Contact exists – no purchase opportunity (matched by {c.ghlMatch?.basis})
+              </span>
+            ) : (
+              <span className="ml-1 rounded bg-orange-100 px-1 text-orange-800">
+                No GHL contact{c.ghlMatch?.status === 'ambiguous' ? ' (name matches 2+ contacts)' : ''}
+              </span>
+            ))}
             {' '}· {c.opportunities.length} opportunit{c.opportunities.length === 1 ? 'y' : 'ies'}
           </div>
         </td>

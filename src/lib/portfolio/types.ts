@@ -3,13 +3,29 @@ export type SourceKind = 'inflight' | 'historical';
 export interface SourceTab { tab: string; rows: number; included: boolean; note?: string }
 
 export interface SourceFileInfo {
-  kind: SourceKind | 'opportunities' | 'propertyRecords' | 'masterDealList' | 'unconditionals' | 'ghlUsers';
+  kind: SourceKind | 'opportunities' | 'propertyRecords' | 'masterDealList' | 'unconditionals' | 'ghlUsers' | 'pipedrive' | 'ghlContacts';
   name: string;
   modifiedAt: string;
   takenAt?: string;
   count?: number;
   tabs?: SourceTab[];
   note?: string;
+}
+
+export interface GhlContactMatch {
+  status: 'contact_exists' | 'ambiguous' | 'none';
+  basis: string;
+  contacts: { id: string; name: string; email: string; opportunities: { name: string; pipeline: string; status: string }[] }[];
+}
+
+export interface PipedriveMatch {
+  dealId: string;
+  owner: string;
+  stage: string;
+  basis: string;
+  name: string;
+  nameSource: string;
+  nameAgrees: string;
 }
 
 export interface PortfolioProperty {
@@ -56,6 +72,8 @@ export interface PortfolioProperty {
   heldYears: number | null;
   heldMonths: number | null;
   mdlConsultant: string;
+  clientNameSource: string;
+  pipedrive: PipedriveMatch | null;
 }
 
 export interface PortfolioOpportunity {
@@ -95,6 +113,9 @@ export interface PortfolioClient {
   name: string;
   email: string;
   hasGhlContact: boolean;
+  nameSource: string;
+  alsoKnownAs: string[];
+  ghlMatch: GhlContactMatch | null;
   opportunities: PortfolioOpportunity[];
   consultants: { name: string; source: string }[];
   rollup: PortfolioRollup;
@@ -108,7 +129,8 @@ export type DataIssueKind =
   | 'unparsed_price'
   | 'valuation_outlier'
   | 'mdl_row_missing'
-  | 'mdl_row_shared';
+  | 'mdl_row_shared'
+  | 'contact_name_ambiguous';
 
 export interface DataIssue {
   kind: DataIssueKind;

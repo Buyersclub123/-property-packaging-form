@@ -73,9 +73,11 @@ export interface LoadedSources {
   propertyRecords: LoadedPropertyRecords;
   masterDealList: LoadedMasterDealList;
   unconditionals: LoadedUnconditionals;
+  pipedrive: LoadedPipedrive;
+  ghlAll: LoadedGhlAll;
 }
 
-export interface MdlRow { row: number; valuation: number | null; valuationRaw: string; address: string; stage: string; consultant: string }
+export interface MdlRow { row: number; valuation: number | null; valuationRaw: string; address: string; stage: string; consultant: string; name: string; email: string }
 
 export interface LoadedMasterDealList { name: string; modifiedAt: string; rows: Map<number, MdlRow>; valued: number }
 
@@ -226,6 +228,8 @@ function loadMasterDealList(): LoadedMasterDealList {
   const ai = col('Address');
   const si = col('Stage');
   const ci = col('Consultant');
+  const ni = col('Name of client/s');
+  const ei = col('Email');
   const rows = new Map<number, MdlRow>();
   let valued = 0;
   aoa.slice(1).forEach((r, i) => {
@@ -239,6 +243,8 @@ function loadMasterDealList(): LoadedMasterDealList {
       address: String(r[ai] ?? '').trim(),
       stage: String(r[si] ?? '').trim(),
       consultant: String(r[ci] ?? '').trim(),
+      name: String(r[ni] ?? '').trim(),
+      email: String(r[ei] ?? '').trim(),
     });
   });
   return { name, modifiedAt: stat.mtime.toISOString(), rows, valued };
@@ -260,6 +266,90 @@ function loadUnconditionals(): LoadedUnconditionals {
     }));
   }
   return { name, modifiedAt: stat.mtime.toISOString(), tabs: wb.SheetNames.length, valuationColumns };
+}
+
+export interface PipedriveRow {
+  fileClient: string; clientFilled: string; clientSource: string; dealId: string; owner: string; stage: string; basis: string; nameAgrees: string; email: string;
+}
+
+export interface LoadedPipedrive {
+  name: string; modifiedAt: string; rows: Map<string, PipedriveRow>; total: number; matched: number; filled: number; duplicateKeys: number;
+}
+
+// Rows of the Pipedrive match file are the historical no-opportunity rows; joined on tab + Master row + contract id + address.
+export function pipedriveKey(tab: string, masterRow: unknown, contractIds: unknown, address: unknown): string {
+  const mdl = String(masterRow ?? '').match(/All Deals row (\d+)/);
+  return [tab.trim(), mdl ? mdl[1] : '', String(contractIds ?? '').trim(), String(address ?? '').trim().toUpperCase()].join('|');
+}
+
+function loadPipedriveMatch(): LoadedPipedrive {
+  const folder = path.join(SOURCE_DIR, '05 Historical');
+  const name = latestVersion(folder, /^No GHL contact - Pipedrive match v(\d+) \(Claude\)\.xlsx$/);
+  const file = path.join(folder, name);
+  const stat = statOrThrow(file);
+  const wb = openWorkbook(file, name);
+  const tab = wb.SheetNames.find((s) => /^All rows/i.test(s));
+  if (!tab) throw new Error(`${name}: no "All rows" tab`);
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[tab], { header: 1, defval: '' });
+  const header = (aoa[0] || []).map((c) => String(c).trim());
+  const col = (h: string) => {
+    const i = header.indexOf(h);
+    if (i < 0) throw new Error(`${name} / ${tab}: column "${h}" missing on row 1`);
+    return i;
+  };
+  const ix = {
+    tab: col('Tab'), master: col('Master row'), contract: col('Contract ids'), address: col('Property address'),
+    fileClient: col('Client (file)'), filled: col('Client name (filled)'), source: col('Client name - source'),
+    deal: col('Pipedrive deal ID'), owner: col('Pipedrive deal owner (handled the file)'), stage: col('Pipedrive pipeline / stage'),
+    basis: col('Match basis (address / lot)'), agrees: col('Name agrees'), email: col('Pipedrive person email'),
+  };
+  const s = (r: unknown[], i: number) => String(r[i] ?? '').trim();
+  const rows = new Map<string, PipedriveRow>();
+  const dupes = new Set<string>();
+  let total = 0;
+  let matched = 0;
+  let filled = 0;
+  for (const r of aoa.slice(1)) {
+    if (!r.some((c) => String(c).trim())) continue;
+    total++;
+    const row: PipedriveRow = {
+      fileClient: s(r, ix.fileClient), clientFilled: s(r, ix.filled), clientSource: s(r, ix.source), dealId: s(r, ix.deal),
+      owner: s(r, ix.owner), stage: s(r, ix.stage), basis: s(r, ix.basis), nameAgrees: s(r, ix.agrees), email: s(r, ix.email),
+    };
+    if (row.dealId) matched++;
+    if (row.clientFilled) filled++;
+    const key = pipedriveKey(s(r, ix.tab), r[ix.master], r[ix.contract], r[ix.address]);
+    if (rows.has(key)) dupes.add(key);
+    else rows.set(key, row);
+  }
+  for (const k of dupes) rows.delete(k);
+  return { name, modifiedAt: stat.mtime.toISOString(), rows, total, matched, filled, duplicateKeys: dupes.size };
+}
+
+// JT 28/10: read-only pull of ALL contacts and ALL opportunities (every pipeline), saved as snapshots in 01 Source extracts.
+export const CONTACTS_SNAPSHOT_DATE = '2026-10-28';
+
+export interface SnapContact { id: string; name: string; firstName: string; lastName: string; email: string; additionalEmails: string[] }
+
+export interface SnapOpp { id: string; name: string; pipeline: string; status: string; contactId: string }
+
+export interface LoadedGhlAll {
+  contactsName: string; oppsName: string; takenAt: string; modifiedAt: string;
+  contacts: SnapContact[]; opportunities: SnapOpp[]; pipelines: { name: string; opportunities: number }[];
+}
+
+function loadGhlAll(): LoadedGhlAll {
+  const dir = path.join(SOURCE_DIR, '01 Source extracts');
+  const contactsName = `ghl-contacts-snapshot-${CONTACTS_SNAPSHOT_DATE}.json`;
+  const oppsName = `ghl-opportunities-all-snapshot-${CONTACTS_SNAPSHOT_DATE}.json`;
+  const c = readJson(path.join(dir, contactsName)) as { takenAt?: string; contacts?: SnapContact[] } | null;
+  const o = readJson(path.join(dir, oppsName)) as { pipelines?: { name: string; opportunities: number }[]; opportunities?: SnapOpp[] } | null;
+  if (!c || !Array.isArray(c.contacts)) throw new Error(`${contactsName}: expected { takenAt, contacts[] }`);
+  if (!o || !Array.isArray(o.opportunities) || !Array.isArray(o.pipelines)) throw new Error(`${oppsName}: expected { takenAt, pipelines[], opportunities[] }`);
+  return {
+    contactsName, oppsName, takenAt: String(c.takenAt ?? ''), modifiedAt: statOrThrow(path.join(dir, contactsName)).mtime.toISOString(),
+    contacts: c.contacts, opportunities: o.opportunities, pipelines: o.pipelines,
+  };
 }
 
 export interface GhlUsers { names: Map<string, string>; error?: string }
@@ -297,5 +387,7 @@ export function loadSources(): LoadedSources {
     propertyRecords: loadPropertyRecords(),
     masterDealList: loadMasterDealList(),
     unconditionals: loadUnconditionals(),
+    pipedrive: loadPipedriveMatch(),
+    ghlAll: loadGhlAll(),
   };
 }
