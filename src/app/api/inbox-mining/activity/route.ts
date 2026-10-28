@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { INBOX_MAILBOXES } from '@/lib/inboxMining/gmail';
-import { ensureActivityTable, mineChunk, finalizeActivity } from '@/lib/inboxMining/activity';
+import { ensureActivityTable, mineChunk, finalizeActivity, reclassifyStored } from '@/lib/inboxMining/activity';
 
 // Backlog 17 activity mining. Gmail metadata/snippet reads only; writes only to the email_activity table.
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let body: { action?: string; mailbox?: string; month?: string; skip?: unknown };
+  let body: { action?: string; apply?: unknown; mailbox?: string; month?: string; skip?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -29,6 +29,7 @@ export async function POST(request: Request) {
   }
   try {
     if (body.action === 'finalize') return NextResponse.json(await finalizeActivity());
+    if (body.action === 'reclassify') return NextResponse.json(await reclassifyStored(body.apply === true));
     const mailbox = body.mailbox || '';
     if (!(INBOX_MAILBOXES as readonly string[]).includes(mailbox)) {
       return NextResponse.json({ error: `mailbox must be one of ${INBOX_MAILBOXES.join(', ')}` }, { status: 400 });

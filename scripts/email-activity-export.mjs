@@ -10,7 +10,8 @@ if (!url) throw new Error('DATABASE_URL / POSTGRES_URL is not set in .env.local'
 const sql = neon(url);
 const OUT_DIR = process.env.EMAIL_MINING_DIR || 'G:\\My Drive\\Purchase Data Reconstruction\\07 Email mining';
 const stamp = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
-const file = `${OUT_DIR}\\email-activity-2026-06-to-10_${stamp}.xlsx`;
+const [{ v2 }] = await sql`SELECT COUNT(activity_v1) > 0 AS v2 FROM email_activity`;
+const file = `${OUT_DIR}\\email-activity-2026-06-to-10_${stamp}${v2 ? '_rules-v2' : ''}.xlsx`;
 
 const wb = new ExcelJS.Workbook();
 function sheet(name, rows, widths = {}) {
@@ -44,7 +45,7 @@ function crosstab(rows, rowKey, colKey, cols) {
 
 const emails = await sql`
   SELECT mailbox, direction, to_char(sent_at AT TIME ZONE 'Australia/Sydney', 'YYYY-MM-DD HH24:MI') AS sent_sydney,
-    sydney_date::text AS date, month, weekday, hour, activity, activity_rule, from_email, from_addr, sender_domain, internal_external,
+    sydney_date::text AS date, month, weekday, hour, activity, activity_rule, activity_v1, from_email, from_addr, sender_domain, internal_external,
     all_internal, to_addrs, cc_addrs, subject, thread_id, thread_pos, thread_len, reply_hours::float AS reply_hours,
     att_count, att_types, opp_name, opp_id, opp_rule, message_id
   FROM email_activity ORDER BY sent_at`;
@@ -79,5 +80,11 @@ sheet('Hour x weekday', crosstab(byDayHour, 'hour', 'weekday', days).sort((a, b)
 sheet('Senders (inbound)', senders, { sender: 40, sender_domain: 25, top_activity: 24 });
 sheet('Clients (matched opps)', clients, { opp_name: 45, top_activity: 24 });
 sheet('Response time', response, { activity: 26 });
+if (v2) {
+  const changes = await sql`
+    SELECT activity_v1 AS rules_v1, activity AS rules_v2, COUNT(*)::int AS emails FROM email_activity
+    GROUP BY 1, 2 ORDER BY (activity_v1 = activity), emails DESC`;
+  sheet('Rules v1 to v2', changes, { rules_v1: 26, rules_v2: 26 });
+}
 await wb.xlsx.writeFile(file);
 console.log(`Wrote ${emails.length} emails to ${file}`);

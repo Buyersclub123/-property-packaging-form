@@ -15,19 +15,46 @@ const PARALLEL = 8;
 type Rule = [activity: string, re: RegExp];
 
 // Order matters: first match wins. Subject is tried first, then the snippet (first lines).
+// Rules v2 (backlog 20): the old contract_received is split into signing_notice, eoi, contract_received
+// (contract subject + pdf/doc attached) and contract_thread (contract subject, no document attached).
+// executed_contract likewise needs a document attached (or a DocuSign 'Completed' notice); replies in an
+// 'Exchanged contract' thread without one are contract_thread.
 const RULES: Rule[] = [
-  ['executed_contract', /completed: complete with docusign|fully executed|executed (land |build |hia )?contract|contracts? (have been |has been |were )?exchanged|exchange of contracts|signed contract attached/],
+  ['calendar', /^(updated |new )?invitation:|^(accepted|declined|tentatively accepted|cancell?ed( event)?):/],
+  ['executed_contract', /completed: complete with docusign|fully executed|executed (land |build |hia )?contract|contracts? (have been |has been |were )?exchanged|exchange of contracts|signed contract attached|\bexchanged\b|buyer signed contract/],
   ['registration_confirmation', /^titles?\b|titles?\b(?: and [a-z]+)?(?: have| has)?(?: been)? (issued|registered)|plan (has been |is )?registered|registration of (the )?plan|land (has )?registered|title(s)? (release|registration)|\bregistration (update|notice|confirmed)/],
   ['settlement', /\bsettle(d|ment)\b/],
   ['deposit_paid', /deposit (paid|received|receipt|has been|confirmation)|receipt (of|for) deposit|\bdeposit\b.*\breceipt/],
-  ['bp_report', /building (and|&) pest|\bb ?& ?p\b|pest inspection|pre-?purchase (building )?inspection/],
+  ['deposit_due', /deposit (is |now )?due|deposit (reminder|request|invoice|details)/],
+  ['bp_report', /building (and|&) pest|\bb ?& ?p\b|pest (and|&) build|\bp ?& ?b\b|pest inspection|pre-?purchase (building )?inspection|^building inspection\b|building inspections\b/],
   ['complaint', /complain|unhappy|disappointed|frustrat|unacceptable|not happy|disgust|ombudsman|fair trading|\brefund\b|\bdispute\b/],
-  ['build_update', /progress claim|stage (claim|receipt|payment|invoice)|\b(base|slab|frame|lock ?-?up|enclosed|fixing|tiling|roof|practical completion|pc|final) (stage|claim|payment|account|inspection|invoice)|construction (update|commence|start)|build(ing)? (update|progress|commence)|site (update|visit|photos|start)|practical completion|\bhandover\b|building (approval|permit)|\bba (issued|approved)|plumbing permit|\bpci\b|final account/],
-  ['insurance_quote', /insurance (quote|policy|renewal)|certificate of currency|landlord insurance|builders? warranty insurance/],
-  ['property_manager', /property manag(er|ement)|leasing (update|agent)|tenan(t|cy)|rental (appraisal|listing)/],
-  ['finance_update', /financ(e|ial) (for|extension|update|approval|approved|clause|condition)|formal approval|conditional approval|unconditional approval|pre-?approval|loan (approval|offer|documents?|docs|application)|\bvaluation\b|finance (update|approval|approved|clause|condition)|\bmortgage\b|\blender\b|\brefinanc/],
-  ['contract_received', /contracts? (of sale |to be reviewed|for review|attached|issued|pack|documents?|docs|drawings)|(land|build|hia|building) contract|please (review and )?sign|reminder to sign|sign (the |your )?(contract|documents?)|\beoi\b|expression of interest|reaforms|docusign/],
+  ['build_update', /progress claim|stage (claim|receipt|payment|invoice)|\b(base|slab|frame|lock ?-?up|enclosed|fixing|tiling|roof|practical completion|pc|final) (stage|claim|payment|account|inspection|invoice)|construction (update|commence|start)|build(ing)? (update|progress|commence)|site (update|visit|photos|start)|practical completion|\bhandover\b|building (approval|permit)|\bba (issued|approved)|plumbing permit|\bpci\d*\b|-claim-|final account|planning (consent|permit|approval)|\bda (approved|issued|lodged)|receive da\b/],
+  ['insurance_quote', /insurance (quote|policy|renewal)|certificate of (currency|insurance)|landlord insurance|builders? warranty insurance/],
+  ['property_manager', /property manag(er|ement)|leasing (update|agent)|tenan(t|cy)|rental (appraisal|listing)|receipt \(#rwims/],
+  ['finance_update', /financ(e|ial) (for|extension|update|approval|approved|clause|condition)|formal approval|conditional approval|unconditional approval|pre-?approval|loan (approval|offer|documents?|docs|application)|\bvaluation\b|finance (update|approval|approved|clause|condition)|\bmortgage\b|\blender\b|\brefinanc|finance (is )?due|borrowing (capacity|power)/],
+  ['contract_reviewed', /contracts? review(ed)?\b/],
+  ['signing_notice', /please (review and )?sign|reminder to sign|sign (the |your )?(contract|documents?)|send ([a-z]+ )?(for )?signing|docusign|sent you (a |the )?document|signature request/],
+  ['eoi', /\beoi\b|expression of interest|property reserved/],
+  ['contract_received', /contracts? (of sale |to be reviewed|for review|attached|issued|pack|documents?|docs|drawings)|(land|build|hia|building|draft) contract|amend(ed|ment)?\]? (to )?contract|contract (variation|amendment)|reaforms/],
+  ['property_review', /property review|qa to verify|ba auto send|approval overview/],
+  ['entity_admin', /bare trust|entity name|trust deed/],
+  ['client_onboarding', /^introduction\b|meet your new buyers club|welcome to buyers club|strategy document/],
 ];
+
+// Tried after the subject rules, before the header/noise rules.
+const SENDER_DOMAIN_RULES: Rule[] = [
+  ['signing_notice', /(^|\.)(docusign|pandadoc)\.(net|com)$/],
+  ['bp_report', /(^|\.)(wpbi|truelineinspections)\.com\.au$/],
+  ['noise', /^docs\.google\.com$/],
+];
+
+const DOC_ATTACHMENT_RE = /(^|,)(pdf|docx?|zip)(,|$)/;
+
+function withDocSplit(c: Classified, attTypes: string): Classified {
+  if (!['contract_received', 'executed_contract'].includes(c.activity) || DOC_ATTACHMENT_RE.test(attTypes)) return c;
+  if (/complete with docusign/.test(c.rule)) return c;
+  return { activity: 'contract_thread', rule: `${c.rule} (no pdf/doc attached)` };
+}
 
 const GENERIC_DOMAINS = /^(gmail|hotmail|outlook|live|yahoo|icloud|me|bigpond|optusnet|iinet|tpg)\./;
 const THANKS_RE = /^\W*(hi|hello|dear)?[^.!?\n]{0,30}?\b(thank(s| you)|cheers|much appreciated|received,? (with )?thanks|noted|got it|all good|perfect|great,? thanks)\b/;
@@ -37,13 +64,20 @@ const NOISE_TEXT_RE = /unsubscribe|webinar|newsletter|listings?|stock ?list|for 
 
 export interface Classified { activity: string; rule: string }
 
-export function classifyActivity(m: { subject: string; snippet: string; fromEmail: string; direction: string; listUnsubscribe: boolean; autoSubmitted: boolean }): Classified {
+export function classifyActivity(m: { subject: string; snippet: string; fromEmail: string; direction: string; listUnsubscribe: boolean; autoSubmitted: boolean; attTypes: string }): Classified {
+  return withDocSplit(classifyRaw(m), m.attTypes);
+}
+
+function classifyRaw(m: { subject: string; snippet: string; fromEmail: string; direction: string; listUnsubscribe: boolean; autoSubmitted: boolean; attTypes: string }): Classified {
   const subject = (m.subject || '').toLowerCase().replace(/^\s*((re|fw|fwd)\s*:\s*)+/, '');
   const snippet = (m.snippet || '').toLowerCase().replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&');
   if (m.autoSubmitted || /out of office|automatic reply|undeliverable|delivery status notification/.test(subject)) {
     return { activity: 'noise', rule: 'auto-reply / bounce' };
   }
   for (const [activity, re] of RULES) if (re.test(subject)) return { activity, rule: `subject ${re.exec(subject)?.[0]}` };
+  const senderDomain = m.fromEmail.split('@')[1] || '';
+  for (const [activity, re] of SENDER_DOMAIN_RULES) if (re.test(senderDomain)) return { activity, rule: `sender domain ${senderDomain}` };
+  if (/(^|,)ics(,|$)/.test(m.attTypes)) return { activity: 'calendar', rule: 'ics attachment' };
   if (m.listUnsubscribe) return { activity: 'noise', rule: 'List-Unsubscribe header' };
   if (NOISE_SENDER_RE.test(m.fromEmail)) return { activity: 'noise', rule: `sender ${m.fromEmail}` };
   if (NOISE_TEXT_RE.test(subject)) return { activity: 'noise', rule: `subject ${NOISE_TEXT_RE.exec(subject)?.[0]}` };
@@ -101,6 +135,7 @@ export async function ensureActivityTable(): Promise<void> {
       UNIQUE (mailbox, message_id)
     )`;
   await sql`CREATE INDEX IF NOT EXISTS email_activity_thread ON email_activity (mailbox, thread_id, sent_at)`;
+  await sql`ALTER TABLE email_activity ADD COLUMN IF NOT EXISTS activity_v1 TEXT, ADD COLUMN IF NOT EXISTS activity_rule_v1 TEXT`;
   tablesReady = true;
 }
 
@@ -149,6 +184,7 @@ async function mineOne(mailbox: string, id: string): Promise<void> {
   const c = classifyActivity({
     subject, snippet: msg.snippet || '', fromEmail, direction,
     listUnsubscribe: !!h('List-Unsubscribe'), autoSubmitted: /auto-(replied|generated)/i.test(h('Auto-Submitted')),
+    attTypes: [...new Set(atts)].join(','),
   });
   const internal = isInternal(fromEmail);
   const allInternal = internal && [...emailsIn(to), ...emailsIn(cc)].every(isInternal);
@@ -276,4 +312,115 @@ export async function finalizeActivity(): Promise<{ rows: number; matched: numbe
   }
   const [{ n }] = (await sql`SELECT COUNT(*)::int AS n FROM email_activity`) as { n: number }[];
   return { rows: n, matched, oppError };
+}
+
+// Backlog 20: re-run classification on stored rows (no re-mining). Snippets were never stored, so a row the
+// v1 rules classified from its first lines / headers keeps that result unless a subject or sender rule now
+// fires (subject rules always took precedence); its stored first-lines match is re-tested against the new rules.
+// The v1 result is kept in activity_v1 / activity_rule_v1, and re-runs always start from it.
+interface StoredRow {
+  id: number;
+  subject: string | null;
+  from_email: string | null;
+  direction: string;
+  att_types: string | null;
+  base_activity: string;
+  base_rule: string | null;
+}
+
+function reclassifyRow(r: StoredRow): Classified {
+  const rule = r.base_rule || '';
+  if (rule.startsWith('auto-reply')) return { activity: r.base_activity, rule };
+  const attTypes = r.att_types || '';
+  const c = classifyActivity({
+    subject: r.subject || '', snippet: '', fromEmail: r.from_email || '', direction: r.direction,
+    listUnsubscribe: false, autoSubmitted: false, attTypes,
+  });
+  if (c.activity !== 'other') return c;
+  if (rule.startsWith('first lines ')) {
+    const frag = rule.slice('first lines '.length);
+    for (const [activity, re] of RULES) {
+      if (activity !== 'settlement' && re.test(frag)) return withDocSplit({ activity, rule: `first lines ${re.exec(frag)?.[0]}` }, attTypes);
+    }
+  }
+  return { activity: r.base_activity, rule };
+}
+
+function subjectPattern(s: string): string {
+  return (s || '').toLowerCase().replace(/^\s*((re|fw|fwd|aw)\s*:\s*)+/, '').replace(/\[[^\]]*\]/g, ' ')
+    .split(/\s[-|:–]\s|:|\||,|\(|\//)[0].replace(/\d+/g, '#').replace(/\s+/g, ' ').trim()
+    .split(' ').slice(0, 5).join(' ') || '(blank)';
+}
+
+type Tally = Map<string, number>;
+const bump = (m: Tally, k: string) => m.set(k, (m.get(k) || 0) + 1);
+const top = (m: Tally, n: number) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+const topText = (m: Tally, n: number) => top(m, n).map(([k, v]) => `${k}: ${v}`).join(', ');
+
+interface PatternTally { n: number; domains: Tally; to: Tally; example: string }
+
+function patternReport(m: Map<string, PatternTally>) {
+  return [...m.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 30).map(([pattern, p]) => ({
+    pattern, n: p.n, now: topText(p.to, 4), senders: topText(p.domains, 3), example: p.example.slice(0, 100),
+  }));
+}
+
+export async function reclassifyStored(apply: boolean) {
+  await ensureActivityTable();
+  const sql = getDb();
+  const before: Tally = new Map();
+  const after: Tally = new Map();
+  const moves: Tally = new Map();
+  const otherBefore = new Map<string, PatternTally>();
+  const otherAfter = new Map<string, PatternTally>();
+  const addPattern = (m: Map<string, PatternTally>, r: StoredRow, to: string) => {
+    const k = subjectPattern(r.subject || '');
+    const p = m.get(k) || { n: 0, domains: new Map(), to: new Map(), example: r.subject || '' };
+    p.n++;
+    bump(p.domains, r.from_email?.split('@')[1] || '');
+    bump(p.to, to);
+    m.set(k, p);
+  };
+  const ids: number[] = [];
+  const acts: string[] = [];
+  const rules: string[] = [];
+  let lastId = 0;
+  for (;;) {
+    const rows = (await sql`
+      SELECT id, subject, from_email, direction, att_types,
+        COALESCE(activity_v1, activity) AS base_activity, COALESCE(activity_rule_v1, activity_rule) AS base_rule
+      FROM email_activity WHERE id > ${lastId} ORDER BY id LIMIT 20000`) as StoredRow[];
+    if (!rows.length) break;
+    lastId = rows[rows.length - 1].id;
+    for (const r of rows) {
+      const c = reclassifyRow(r);
+      bump(before, r.base_activity);
+      bump(after, c.activity);
+      if (c.activity !== r.base_activity) bump(moves, `${r.base_activity} -> ${c.activity}`);
+      if (r.base_activity === 'other') addPattern(otherBefore, r, c.activity);
+      if (c.activity === 'other') addPattern(otherAfter, r, c.activity);
+      ids.push(r.id);
+      acts.push(c.activity);
+      rules.push(c.rule);
+    }
+  }
+  if (apply) {
+    for (let i = 0; i < ids.length; i += 5000) {
+      await sql`
+        UPDATE email_activity e SET activity_v1 = COALESCE(e.activity_v1, e.activity),
+          activity_rule_v1 = COALESCE(e.activity_rule_v1, e.activity_rule), activity = u.a, activity_rule = u.r
+        FROM unnest(${ids.slice(i, i + 5000)}::int[], ${acts.slice(i, i + 5000)}::text[], ${rules.slice(i, i + 5000)}::text[]) AS u(id, a, r)
+        WHERE e.id = u.id`;
+    }
+  }
+  return {
+    applied: apply,
+    rows: ids.length,
+    changed: [...moves.values()].reduce((s, v) => s + v, 0),
+    before: Object.fromEntries(top(before, 50)),
+    after: Object.fromEntries(top(after, 50)),
+    moves: Object.fromEntries(top(moves, 60)),
+    otherTop30Before: patternReport(otherBefore),
+    otherTop30After: patternReport(otherAfter),
+  };
 }
