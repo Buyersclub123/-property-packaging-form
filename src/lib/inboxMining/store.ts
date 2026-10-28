@@ -46,6 +46,8 @@ export async function ensureTables(): Promise<void> {
   await sql`ALTER TABLE inbox_items ADD COLUMN IF NOT EXISTS feedback JSONB DEFAULT '{}'::jsonb`;
   // Set once, the first time an item has a suggestion. Items read before this column existed get their last re-read time.
   await sql`ALTER TABLE inbox_items ADD COLUMN IF NOT EXISTS suggested_at TIMESTAMPTZ`;
+  // Workflow list state (backlog 16): {status: 'done' | 'open', by, at}. Our DB only; nothing goes to GHL or Gmail.
+  await sql`ALTER TABLE inbox_items ADD COLUMN IF NOT EXISTS workflow JSONB`;
   await sql`
     UPDATE inbox_items SET suggested_at = created_at
     WHERE suggested_at IS NULL AND jsonb_array_length(COALESCE(suggestions, '[]'::jsonb)) > 0`;
