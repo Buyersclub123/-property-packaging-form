@@ -20,15 +20,28 @@ function rec(key: string, proposed: string, source: string): Suggestion {
   };
 }
 
+/** Expected action with no field write (JT 28/10 class-to-field map). */
+function action(key: string, label: string, source: string, note?: string): Suggestion {
+  return { target: 'action', fieldKey: key, fieldLabel: label, proposed: '', source, notInGhl: true, note };
+}
+
 const src = (f: { source: string; quote: string }) => `${f.source}: "${f.quote}"`;
+
+function isoDate(raw: string): string | null {
+  const m = raw.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
+  if (!m) return null;
+  const y = m[3].length === 2 ? `20${m[3]}` : m[3];
+  return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
 
 function sydneyDate(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
 /**
- * Class-to-field map (plan 2.5, confirmed with changes E). Values are formatted
- * the way phase (b) would write them. No pipeline stage suggestions.
+ * Class-to-field map (plan 2.5, confirmed with changes E; revised by JT 28/10 from the precedent check,
+ * docs/planning/agent-plans/class-to-field-map-proposal.md). Values are formatted the way phase (b)
+ * would write them. No pipeline stage suggestions.
  */
 export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date): Suggestion[] {
   const out: Suggestion[] = [];
@@ -49,20 +62,22 @@ export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date
       if (facts.planNumber)
         out.push(rec('plan_number', `${facts.planType?.value || ''}${facts.planNumber.value}`, src(facts.planNumber)));
       if (facts.titleReference) out.push(rec('title_reference', facts.titleReference.value, src(facts.titleReference)));
+      const exchange = facts.contractDate ? isoDate(facts.contractDate.value) : null;
+      out.push(
+        exchange
+          ? opp('exchangeDate', 'Exchange Date', exchange, src(facts.contractDate!))
+          : opp('exchangeDate', 'Exchange Date', sydneyDate(receivedAt), 'email received date (no date found in the contract)')
+      );
       break;
     }
     case 'deposit_receipt': {
-      if (facts.deposit) {
-        const build = /build|construction/i.test(facts.deposit.quote);
-        out.push(opp(build ? 'buildDepositPaid' : 'landDepositPaid', build ? 'Build Deposit Paid' : 'Land Deposit Paid', ['Yes'], src(facts.deposit)));
-      }
+      out.push(action('record_deposit_paid', 'Record deposit paid on the opportunity', facts.deposit ? src(facts.deposit) : 'classification rule',
+        'Land / Build Deposit Paid boxes; mapped to a field later'));
       break;
     }
     case 'bp_report': {
-      out.push(
-        opp('bpConditionStatus', 'B&P Condition Status', 'Report received', facts.bp ? src(facts.bp) : 'classification rule',
-          'Option text to be agreed before phase (b)')
-      );
+      out.push(action('record_bp_outcome', 'Review the B&P report and record the outcome in B&P Condition Status',
+        facts.bp ? src(facts.bp) : 'classification rule', 'The team records the outcome (e.g. Satisfied), not receipt'));
       break;
     }
     case 'finance_update': {
@@ -72,8 +87,8 @@ export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date
       break;
     }
     case 'build_update_progress_claim': {
-      out.push(opp('lastConstructionUpdateDate', 'Last Construction Update Date', sydneyDate(receivedAt), 'email received date'));
-      if (facts.constructionStage) out.push(rec('construction_stage', facts.constructionStage.value, src(facts.constructionStage)));
+      out.push(action('pass_build_update', 'Pass the build update on to the client',
+        facts.constructionStage ? src(facts.constructionStage) : `email received ${sydneyDate(receivedAt)}`));
       break;
     }
     default:

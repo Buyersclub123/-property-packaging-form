@@ -520,15 +520,24 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <span className="font-medium">{s.fieldLabel}</span>{' '}
-                    <span className="text-gray-400">{s.target === 'opportunity' ? 'Opportunity' : 'Property Record'}</span>
+                    <span className="text-gray-400">{s.target === 'opportunity' ? 'Opportunity' : s.target === 'action' ? 'Expected action (no field write)' : 'Property Record'}</span>
                   </div>
                   <button disabled title="Phase (b)" className="shrink-0 rounded border px-2 py-0.5 opacity-40">Apply</button>
                 </div>
                 <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+                  {s.target === 'action' ? (
+                    <>
+                      <span className="text-gray-500">Action</span>
+                      <span className="font-medium">{s.fieldLabel}{s.note && <div className="font-normal text-gray-500">{s.note}</div>}</span>
+                    </>
+                  ) : (
+                  <>
                   <span className="text-gray-500">Current (live)</span>
                   <span>{current[i]?.note ? <span className="italic text-gray-500">{current[i].note}</span> : current[i]?.value || <span className="text-gray-400">(blank)</span>}</span>
                   <span className="text-gray-500">Proposed</span>
                   <span className="font-medium">{show(s.proposed)}{s.note && <div className="font-normal text-gray-500">{s.note}</div>}</span>
+                  </>
+                  )}
                   <span className="text-gray-500">Source</span>
                   <span className="text-gray-600">{s.source}</span>
                   {(() => {

@@ -43,6 +43,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     }
 
     const current = suggestions.map((s) => {
+      if (s.target === 'action') return { value: null, note: 'expected action, no field write' };
       if (s.notInGhl) return { value: null, note: 'field not in GHL yet' };
       if (s.target === 'opportunity') {
         if (!opp) return { value: null, note: 'opportunity not loaded' };

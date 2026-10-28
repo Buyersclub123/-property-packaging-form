@@ -95,7 +95,8 @@ export interface MatchResult {
 }
 
 export interface Suggestion {
-  target: 'opportunity' | 'property_record';
+  /** 'action' = an expected action shown on the card with no field write. */
+  target: 'opportunity' | 'property_record' | 'action';
   fieldKey: string;
   fieldLabel: string;
   fieldId?: string;
