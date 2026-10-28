@@ -165,6 +165,116 @@ function getMonthsForRange(start: Date, end: Date): MonthData[] {
 
 type Theme = 'dark' | 'light';
 
+// deal_type option labels in GHL, keyed by their number (the feed title-cases them, e.g. '01 Hl Comms').
+const DEAL_TYPE_LABELS: Record<string, string> = {
+  '01': '01 H&L Comms',
+  '02': '02 Single Comms',
+  '03': '03 Internal with Comms',
+  '04': '04 Internal No-Comms',
+  '05': '05 Established',
+};
+const dealTypeLabel = (t: string) => DEAL_TYPE_LABELS[(t || '').trim().slice(0, 2)] || t || '(no deal type)';
+
+const sydneyMonth = (iso: string): string => {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const p = new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit' }).formatToParts(d);
+  return `${p.find((x) => x.type === 'year')?.value}-${p.find((x) => x.type === 'month')?.value}`;
+};
+const monthIndex = (ym: string) => Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1;
+const monthLabel = (ym: string) =>
+  ym ? new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1, 15)).toLocaleDateString('en-AU', { month: 'short', year: 'numeric', timeZone: 'UTC' }) : '(no date)';
+
+// Read-only: Property Records with status 01 Available, person x creation month, one column per deal type.
+function AvailableStock({ records, by, freshMonths, setFreshMonths, isDark }: {
+  records: DealRecord[];
+  by: 'sourcer' | 'packager';
+  freshMonths: number;
+  setFreshMonths: (n: number) => void;
+  isDark: boolean;
+}) {
+  const avail = records.filter((r) => (r.status || '').startsWith('01'));
+  const types = [...new Set(avail.map((r) => dealTypeLabel(r.type)))].sort();
+  const people = new Map<string, Map<string, DealRecord[]>>();
+  for (const r of avail) {
+    const who = (r[by] || '').trim() || '(none)';
+    const ym = sydneyMonth(r.createdAt);
+    const months = people.get(who) || new Map<string, DealRecord[]>();
+    months.set(ym, [...(months.get(ym) || []), r]);
+    people.set(who, months);
+  }
+  const nowIdx = monthIndex(sydneyMonth(new Date().toISOString()));
+  const ageing = (ym: string) => !ym || monthIndex(ym) < nowIdx - (freshMonths - 1);
+  const counts = (rs: DealRecord[]) => types.map((t) => rs.filter((r) => dealTypeLabel(r.type) === t).length);
+
+  const border = isDark ? 'border-gray-800' : 'border-gray-200';
+  const head = isDark ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-700';
+  const text = isDark ? 'text-white' : 'text-gray-900';
+  const sub = isDark ? 'bg-gray-800/60 font-semibold' : 'bg-gray-50 font-semibold';
+  const yellow = isDark ? 'bg-yellow-900/40' : 'bg-yellow-100';
+  const cell = (n: number) => <td className="px-3 py-1.5 text-right tabular-nums">{n || <span className={isDark ? 'text-gray-600' : 'text-gray-300'}>–</span>}</td>;
+  const label = by === 'sourcer' ? 'Sourcer' : 'Packager';
+
+  return (
+    <div className={`${isDark ? 'bg-gray-900' : 'bg-white'} border ${border} rounded-lg p-4 ${text}`}>
+      <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+        <div className="font-semibold text-sm">Available stock by {label}</div>
+        <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>{avail.length} Property Records with status 01 Available, by creation month</span>
+        <label className="ml-auto flex items-center gap-2">
+          Do not highlight the last
+          <input
+            type="number"
+            min={0}
+            max={36}
+            value={freshMonths}
+            onChange={(e) => setFreshMonths(Math.max(0, Math.min(36, parseInt(e.target.value) || 0)))}
+            className={`w-14 rounded border px-2 py-1 ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+          />
+          months
+        </label>
+        <span className={`rounded px-2 py-0.5 ${yellow}`}>ageing stock</span>
+      </div>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className={head}>
+            <th className="px-3 py-1.5 text-left">{label}</th>
+            <th className="px-3 py-1.5 text-left">Month created</th>
+            {types.map((t) => <th key={t} className="px-3 py-1.5 text-right">{t}</th>)}
+            <th className="px-3 py-1.5 text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...people.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([who, months]) => {
+            const all = [...months.values()].flat();
+            return (
+              <Fragment key={who}>
+                {[...months.entries()].sort((a, b) => (a[0] || '').localeCompare(b[0] || '')).map(([ym, rs], i) => (
+                  <tr key={ym} className={`border-t ${border} ${ageing(ym) ? yellow : ''}`}>
+                    <td className="px-3 py-1.5">{i === 0 ? who : ''}</td>
+                    <td className="px-3 py-1.5">{monthLabel(ym)}</td>
+                    {counts(rs).map((n, k) => <Fragment key={types[k]}>{cell(n)}</Fragment>)}
+                    {cell(rs.length)}
+                  </tr>
+                ))}
+                <tr className={`border-t ${border} ${sub}`}>
+                  <td className="px-3 py-1.5" colSpan={2}>{who} subtotal</td>
+                  {counts(all).map((n, k) => <Fragment key={types[k]}>{cell(n)}</Fragment>)}
+                  {cell(all.length)}
+                </tr>
+              </Fragment>
+            );
+          })}
+          <tr className={`border-t-2 ${border} ${head} font-bold`}>
+            <td className="px-3 py-1.5" colSpan={2}>Grand total</td>
+            {counts(avail).map((n, k) => <Fragment key={types[k]}>{cell(n)}</Fragment>)}
+            {cell(avail.length)}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function ReportsPage() {
   const [records, setRecords] = useState<DealRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,7 +296,8 @@ export default function ReportsPage() {
   // Date range — default to last 4 weeks up to current week
   const [weeksToShow, setWeeksToShow] = useState(4);
   const [monthsToShow, setMonthsToShow] = useState(3);
-  const [activeTab, setActiveTab] = useState<'packager' | 'sourcer' | 'team' | 'conversion' | 'operations' | 'heatmap'>('packager');
+  const [activeTab, setActiveTab] = useState<'packager' | 'sourcer' | 'team' | 'conversion' | 'operations' | 'heatmap' | 'stockSourcer' | 'stockPackager'>('packager');
+  const [freshMonths, setFreshMonths] = useState(2);
   const [period, setPeriod] = useState<'weekly' | 'monthly' | 'ytd' | 'lifetime'>('weekly');
 
   // Conversion report controls
@@ -792,6 +903,8 @@ export default function ReportsPage() {
   const sumArr = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
 
   const isDark = theme === 'dark';
+  const noPeriod = ['operations', 'heatmap', 'stockSourcer', 'stockPackager'].includes(activeTab);
+
   // Theme helpers for tables
   const tBg = isDark ? 'bg-gray-900' : 'bg-white';
   const tBorder = isDark ? 'border-gray-800' : 'border-gray-200';
@@ -814,7 +927,7 @@ export default function ReportsPage() {
         <img src="/logo.jpg" alt="Buyers Club" className="h-12 w-auto rounded" />
 
         {/* Report tabs (col 1) + Period (col 2) in a grid */}
-        <div className={`grid gap-x-4 gap-y-0.5 ${activeTab === 'operations' || activeTab === 'heatmap' ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div className={`grid gap-x-4 gap-y-0.5 ${noPeriod ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {([['packager', 'Packager Stats'], ['sourcer', 'Sourcer Stats'], ['team', 'Team Stats'], ['conversion', 'Conversion']] as const).map(([tab, label], i) => {
             const pKey = ['weekly', 'monthly', 'ytd', 'lifetime'][i] as 'weekly' | 'monthly' | 'ytd' | 'lifetime';
             const pLabel = ['Weekly', 'Monthly', 'YTD', 'Lifetime'][i];
@@ -830,7 +943,7 @@ export default function ReportsPage() {
                 >
                   {label}
                 </button>
-                {activeTab !== 'operations' && activeTab !== 'heatmap' && (
+                {!noPeriod && (
                   <button
                     onClick={() => setPeriod(pKey)}
                     className={`px-3 py-1 text-[11px] rounded font-medium transition-colors text-left ${
@@ -849,7 +962,7 @@ export default function ReportsPage() {
 
         {/* Range dropdown */}
         <div className="flex flex-col gap-1">
-          {period === 'weekly' && activeTab !== 'operations' && activeTab !== 'heatmap' && (
+          {period === 'weekly' && !noPeriod && (
             <select
               value={weeksToShow}
               onChange={(e) => setWeeksToShow(parseInt(e.target.value))}
@@ -860,7 +973,7 @@ export default function ReportsPage() {
               ))}
             </select>
           )}
-          {period === 'monthly' && activeTab !== 'operations' && activeTab !== 'heatmap' && (
+          {period === 'monthly' && !noPeriod && (
             <select
               value={monthsToShow}
               onChange={(e) => setMonthsToShow(parseInt(e.target.value))}
@@ -875,7 +988,7 @@ export default function ReportsPage() {
 
         {/* Housekeeping / Heatmap — separate section */}
         <div className={`flex flex-col gap-0.5 border-l pl-4 ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-          {([['operations', 'Housekeeping'], ['heatmap', 'Heatmap']] as const).map(([tab, label]) => (
+          {([['operations', 'Housekeeping'], ['heatmap', 'Heatmap'], ['stockSourcer', 'Available stock by Sourcer'], ['stockPackager', 'Available stock by Packager']] as const).map(([tab, label]) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2313,6 +2426,17 @@ export default function ReportsPage() {
           </div>
         );
       })()}
+
+      {/* ====== AVAILABLE STOCK TABS ====== */}
+      {(activeTab === 'stockSourcer' || activeTab === 'stockPackager') && (
+        <AvailableStock
+          records={records}
+          by={activeTab === 'stockSourcer' ? 'sourcer' : 'packager'}
+          freshMonths={freshMonths}
+          setFreshMonths={setFreshMonths}
+          isDark={isDark}
+        />
+      )}
 
       {/* ====== HEATMAP TAB ====== */}
       {activeTab === 'heatmap' && (() => {
