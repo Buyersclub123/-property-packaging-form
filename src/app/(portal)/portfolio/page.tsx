@@ -9,14 +9,14 @@ const PAGE_SIZE = 100;
 const GRID = 'grid grid-cols-[minmax(0,1fr)_120px_96px_96px_72px_140px_140px_84px] gap-x-3';
 
 const GRADE_STYLE: Record<string, string> = {
-  A: 'bg-green-100 text-green-800',
-  B: 'bg-lime-100 text-lime-800',
-  'B (established, address match)': 'bg-lime-100 text-lime-800',
-  'B-addr': 'bg-lime-100 text-lime-800',
-  C: 'bg-yellow-100 text-yellow-800',
-  D: 'bg-orange-100 text-orange-800',
-  'D-spine (strong)': 'bg-amber-100 text-amber-800',
-  'D-spine': 'bg-gray-100 text-gray-600',
+  A: 'bg-blue-600 text-white',
+  B: 'bg-blue-100 text-blue-800',
+  'B (established, address match)': 'bg-blue-100 text-blue-800',
+  'B-addr': 'bg-blue-100 text-blue-800',
+  C: 'bg-blue-50 text-blue-800',
+  D: 'bg-gray-100 text-gray-700',
+  'D-spine (strong)': 'bg-gray-100 text-gray-700',
+  'D-spine': 'bg-gray-50 text-gray-500',
   HOLD: 'bg-red-100 text-red-800',
 };
 
@@ -114,7 +114,7 @@ function SourcePanel({ p }: { p: PortfolioProperty }) {
   );
   const none = <span className="text-gray-400">-</span>;
   return (
-    <div className="grid gap-1 rounded border border-blue-200 bg-blue-50/40 p-3 text-xs text-brand-charcoal md:grid-cols-2">
+    <div className="grid gap-1 rounded border border-blue-200 bg-blue-50 p-3 text-xs text-brand-charcoal md:grid-cols-2">
       <div className="space-y-1">
         {item('Grade', p.grade ? <GradePill p={p} /> : <span className="text-gray-400">none</span>)}
         {item('Fact 1', p.gradeFacts[0] || none)}
@@ -170,7 +170,7 @@ function PropertyRow({ p }: { p: PortfolioProperty }) {
           {(p.landPrice !== null || p.buildPrice !== null) && (
             <div className="text-gray-500">L {money(p.landPrice) || '-'}<br />B {money(p.buildPrice) || '-'}</div>
           )}
-          {/provisional/i.test(p.priceSource) && <div className="text-amber-700">provisional</div>}
+          {/provisional/i.test(p.priceSource) && <div className="text-blue-700">provisional</div>}
         </div>
         <div title={PURCHASE_DATE_HELP}>{p.contractDate}</div>
         <div title={p.settlementSource || undefined}>
@@ -222,7 +222,7 @@ function ClientDetail({ c }: { c: PortfolioClient }) {
   return (
     <div className="bg-white px-4 py-3">
       {c.ghlMatch && c.ghlMatch.contacts.length > 0 && (
-        <div className={`mb-2 rounded border px-3 py-2 text-xs ${c.ghlMatch.status === 'contact_exists' ? 'border-blue-200 bg-blue-50/50' : 'border-amber-200 bg-amber-50'}`}>
+        <div className={`mb-2 rounded border px-3 py-2 text-xs ${c.ghlMatch.status === 'contact_exists' ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
           <div className="mb-1 font-semibold">
             {c.ghlMatch.status === 'contact_exists' ? `GHL contact (matched by ${c.ghlMatch.basis}, 28/10 snapshot)` : 'Possible GHL contacts – same name, not matched'}
           </div>
@@ -242,7 +242,7 @@ function ClientDetail({ c }: { c: PortfolioClient }) {
         <PropertyGridHeader />
         {c.opportunities.map((o) => (
           <div key={o.key}>
-            <div className="flex flex-wrap items-baseline gap-x-3 border-t bg-gray-100/70 px-3 py-1.5 text-[13px]">
+            <div className="flex flex-wrap items-baseline gap-x-3 border-t bg-gray-50 px-3 py-1.5 text-[13px]">
               <span className="font-semibold">{o.name}</span>
               {o.pipeline && <span className="text-gray-500">{o.pipeline} · {o.stage}</span>}
               {o.status && <span className="rounded bg-gray-200 px-1 text-xs">{o.status}</span>}
@@ -280,18 +280,18 @@ function IssuesPanel({ issues }: { issues: DataIssue[] }) {
   };
   if (!issues.length) return <div className="mb-4 rounded border bg-white p-3 text-sm text-gray-600">No data issues found.</div>;
   return (
-    <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm">
+    <div className="mb-4 rounded border border-blue-200 bg-blue-50 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={() => setOpen(!open)} className="font-semibold text-amber-900">
+        <button onClick={() => setOpen(!open)} className="font-semibold text-brand-charcoal">
           {open ? '▾' : '▸'} Data issues ({issues.length})
         </button>
         {counts.map(([k, n]) => (
           <button key={k} onClick={() => { setKind(kind === k ? '' : k); setOpen(true); }}
-            className={`rounded border px-2 py-0.5 text-xs ${kind === k ? 'border-amber-700 bg-amber-200' : 'border-amber-300 bg-white'}`}>
+            className={`rounded border px-2 py-0.5 text-xs ${kind === k ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-200 bg-white text-blue-800'}`}>
             {ISSUE_LABEL[k]}: {n}
           </button>
         ))}
-        {open && <button onClick={copy} className="rounded border bg-white px-2 py-0.5 text-xs hover:bg-gray-50">Copy {shown.length} as table (for Claude)</button>}
+        {open && <button onClick={copy} className="rounded bg-blue-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-blue-700">Copy {shown.length} as table (for Claude)</button>}
         {copied && <span className="text-xs text-gray-600">{copied}</span>}
       </div>
       {open && (
@@ -330,7 +330,7 @@ function SourcesBar({ data, onReload }: { data: PortfolioData; onReload: () => v
           {data.sources.map((s) => s.name).join(' · ')}
         </span>
         <span className="whitespace-nowrap text-gray-500">Read {sydney(data.builtAt)}</span>
-        <button onClick={onReload} className="rounded border px-2 py-0.5 hover:bg-gray-50">Reload</button>
+        <button onClick={onReload} className="rounded bg-blue-600 px-2 py-0.5 font-medium text-white hover:bg-blue-700">Reload</button>
       </div>
       {open && (
         <div className="mt-2 border-t pt-2">
@@ -349,7 +349,7 @@ function SourcesBar({ data, onReload }: { data: PortfolioData; onReload: () => v
                   <div className="mt-1 flex flex-wrap gap-1">
                     {s.tabs.map((t) => (
                       <span key={t.tab} title={t.note || (t.included ? 'Loaded' : 'Not loaded (excluded tab)')}
-                        className={`rounded px-1.5 py-0.5 ${t.included ? 'bg-green-50 text-green-800' : 'bg-gray-100 text-gray-400 line-through'}`}>
+                        className={`rounded px-1.5 py-0.5 ${t.included ? 'bg-blue-50 text-blue-800' : 'bg-gray-100 text-gray-400 line-through'}`}>
                         {t.tab}: {t.rows}
                       </span>
                     ))}
@@ -391,7 +391,7 @@ function ConsultantTable({ title, countLabel, note, rows, selected, onSelect }: 
         <tbody>
           {rows.map((r) => (
             <tr key={r.key} onClick={() => onSelect(selected === r.key ? '' : r.key)} title="Click to filter the client list"
-              className={`cursor-pointer border-t hover:bg-blue-50 ${selected === r.key ? 'bg-blue-100' : ''} ${r.key === NO_CONSULTANT ? 'italic text-gray-600' : ''}`}>
+              className={`cursor-pointer border-t hover:bg-blue-50 ${selected === r.key ? 'bg-blue-50 shadow-[inset_4px_0_0_#2563eb]' : ''} ${r.key === NO_CONSULTANT ? 'italic text-gray-600' : ''}`}>
               <td className="p-1.5">{r.key}</td>
               <td className="p-1.5 text-right">{r.count.toLocaleString()}</td>
               {cell(r)}
@@ -510,7 +510,7 @@ export default function PortfolioPage() {
   ), [data]);
 
   return (
-    <main className="min-h-screen bg-[#FAFAFA]">
+    <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1400px] px-4 py-6">
         <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Portfolio View</h1>
         <p className="mb-4 text-[13px] text-[#7A7575]">
@@ -603,7 +603,7 @@ export default function PortfolioPage() {
               </table>
               {clients.length > limit && (
                 <div className="border-t p-2 text-center">
-                  <button onClick={() => setLimit(limit + PAGE_SIZE)} className="rounded border px-3 py-1 text-sm hover:bg-gray-50">
+                  <button onClick={() => setLimit(limit + PAGE_SIZE)} className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700">
                     Show more ({(clients.length - limit).toLocaleString()} left)
                   </button>
                 </div>
@@ -620,7 +620,7 @@ function ClientRows({ c, open, onToggle }: { c: PortfolioClient; open: boolean; 
   const r = c.rollup;
   return (
     <>
-      <tr onClick={onToggle} className={`cursor-pointer border-t align-top hover:bg-blue-50 ${open ? 'bg-blue-50' : ''}`}>
+      <tr onClick={onToggle} className={`cursor-pointer border-t align-top hover:bg-blue-50 ${open ? 'bg-blue-50 shadow-[inset_4px_0_0_#2563eb]' : ''}`}>
         <td className="p-2">
           <div className="font-semibold">
             {open ? '▾' : '▸'} {c.name}
@@ -638,7 +638,7 @@ function ClientRows({ c, open, onToggle }: { c: PortfolioClient; open: boolean; 
                 Contact exists – no purchase opportunity (matched by {c.ghlMatch?.basis})
               </span>
             ) : (
-              <span className="ml-1 rounded bg-orange-100 px-1 text-orange-800">
+              <span className="ml-1 rounded bg-red-50 px-1 text-red-700">
                 No GHL contact{c.ghlMatch?.status === 'ambiguous' ? ' (name matches 2+ contacts)' : ''}
               </span>
             ))}
@@ -655,7 +655,7 @@ function ClientRows({ c, open, onToggle }: { c: PortfolioClient; open: boolean; 
         <td className="p-2 text-right">{r.properties}{r.fellOver > 0 && <div className="text-xs text-gray-400">+{r.fellOver} fell over</div>}</td>
         <td className="p-2 text-right">
           {money(r.totalCost)}
-          {r.priced < r.properties && <div className="text-xs text-amber-700">{r.priced} of {r.properties} priced</div>}
+          {r.priced < r.properties && <div className="text-xs text-blue-700">{r.priced} of {r.properties} priced</div>}
         </td>
         <td className="p-2 text-right">
           {r.valued > 0 ? money(r.totalValuation) : <Dash />}
