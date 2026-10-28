@@ -44,6 +44,11 @@ export async function ensureTables(): Promise<void> {
     )`;
   await sql`CREATE INDEX IF NOT EXISTS idx_inbox_items_received ON inbox_items(received_at DESC)`;
   await sql`ALTER TABLE inbox_items ADD COLUMN IF NOT EXISTS feedback JSONB DEFAULT '{}'::jsonb`;
+  // Set once, the first time an item has a suggestion. Items read before this column existed get their last re-read time.
+  await sql`ALTER TABLE inbox_items ADD COLUMN IF NOT EXISTS suggested_at TIMESTAMPTZ`;
+  await sql`
+    UPDATE inbox_items SET suggested_at = created_at
+    WHERE suggested_at IS NULL AND jsonb_array_length(COALESCE(suggestions, '[]'::jsonb)) > 0`;
   await sql`
     CREATE TABLE IF NOT EXISTS inbox_thread_memory (
       mailbox             VARCHAR(200) NOT NULL,
@@ -119,15 +124,16 @@ export async function upsertItem(i: ItemInput): Promise<void> {
   const sql = getDb();
   await sql`
     INSERT INTO inbox_items (run_id, mailbox, message_id, thread_id, received_at, direction, from_addr, to_addr, subject,
-      cls, cls_rule, facts, docs, links, match, suggestions, drive_target)
+      cls, cls_rule, facts, docs, links, match, suggestions, drive_target, suggested_at)
     VALUES (${i.runId}, ${i.mailbox}, ${i.messageId}, ${i.threadId}, ${i.receivedAt.toISOString()}, ${i.direction},
       ${i.from}, ${i.to}, ${i.subject}, ${i.cls}, ${i.clsRule}, ${JSON.stringify(i.facts)}::jsonb,
       ${JSON.stringify(i.docs)}::jsonb, ${JSON.stringify(i.links)}::jsonb, ${JSON.stringify(i.match)}::jsonb,
-      ${JSON.stringify(i.suggestions)}::jsonb, ${i.driveTarget})
+      ${JSON.stringify(i.suggestions)}::jsonb, ${i.driveTarget}, ${i.suggestions.length ? new Date().toISOString() : null})
     ON CONFLICT (mailbox, message_id) DO UPDATE SET
       run_id = EXCLUDED.run_id, cls = EXCLUDED.cls, cls_rule = EXCLUDED.cls_rule, facts = EXCLUDED.facts,
       docs = EXCLUDED.docs, links = EXCLUDED.links, match = EXCLUDED.match, suggestions = EXCLUDED.suggestions,
-      drive_target = EXCLUDED.drive_target, created_at = NOW()`;
+      drive_target = EXCLUDED.drive_target, created_at = NOW(),
+      suggested_at = COALESCE(inbox_items.suggested_at, EXCLUDED.suggested_at)`;
 }
 
 export async function listItems(since: Date) {

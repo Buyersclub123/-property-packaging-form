@@ -36,7 +36,7 @@ export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date
     case 'registration_titles_issued': {
       const ev = facts.registration ? src(facts.registration) : 'classification rule';
       out.push(rec('land_registration', 'Registered', ev));
-      out.push(opp('registration', 'Registration', ['Yes'], ev));
+      out.push(opp('registration', 'Registration', ['Registered'], ev));
       if (facts.titleReference) out.push(rec('title_reference', facts.titleReference.value, src(facts.titleReference)));
       break;
     }
