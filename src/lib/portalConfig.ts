@@ -183,6 +183,11 @@ export const teams: TeamTile[] = [
     name: 'Resources',
     description: 'Procedures, training and external subscriptions.',
     subTiles: [
+      {
+        name: 'New Initiatives',
+        description: 'Sandpit of read-only demos: Portfolio View and Inbox Mining',
+        href: '/new-initiatives',
+      },
       { name: 'Reference Documents', description: 'Reference documentation', comingSoon: true },
       { name: 'Company Calendar', description: 'Company event calendar', comingSoon: true },
       { name: 'Links — Internal', description: 'Internal tool links', comingSoon: true },
@@ -280,11 +285,6 @@ export const teams: TeamTile[] = [
         newTab: true,
       },
       {
-        name: 'New Initiatives',
-        description: 'Sandpit of read-only demos: Portfolio View and Inbox Mining',
-        href: '/new-initiatives',
-      },
-      {
         name: 'Access Policies (Cloudflare)',
         description: 'Who can access which section of this portal',
         href: 'https://dash.cloudflare.com/e042ae740af8318d0a2ed0fe46c8eefc/one/access-controls/apps',
@@ -295,7 +295,7 @@ export const teams: TeamTile[] = [
   },
 ];
 
-/** Sandpit opened from Admin > New Initiatives (who sees it: Admin > Tile Access). */
+/** Sandpit opened from Resources > New Initiatives (who sees it: Admin > Tile Access). Not under Admin: Cloudflare locks that section separately. */
 export const newInitiatives: TeamTile = {
   id: 'new-initiatives',
   name: 'New Initiatives',

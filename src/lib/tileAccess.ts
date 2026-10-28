@@ -135,10 +135,10 @@ async function createAndSeed(): Promise<void> {
     }
   }
   const niKey = teamKey(newInitiatives);
-  // Same people for the New Initiatives tool on the Admin page (JT 28/10).
-  const adminTeam = teams.find((t) => t.id === 'admin');
-  const adminNi = adminTeam?.subTiles.find((s) => s.href === '/new-initiatives');
-  const niKeys = [niKey, ...(adminTeam && adminNi ? [toolKey(adminTeam, adminNi)] : [])];
+  // Same people for the New Initiatives tool in Resources (JT 28/10).
+  const niTeam = teams.find((t) => t.subTiles.some((s) => s.href === '/new-initiatives'));
+  const niTool = niTeam?.subTiles.find((s) => s.href === '/new-initiatives');
+  const niKeys = [niKey, ...(niTeam && niTool ? [toolKey(niTeam, niTool)] : [])];
   for (const k of niKeys) {
     for (const e of SEED_NEW_INITIATIVES) {
       await sql`INSERT INTO tile_access (tile_key, kind, value, added_by) VALUES (${k}, 'email', ${e}, ${by}) ON CONFLICT DO NOTHING`;
