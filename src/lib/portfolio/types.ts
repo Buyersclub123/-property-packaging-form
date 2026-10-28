@@ -36,6 +36,7 @@ export interface PortfolioProperty {
   rowNumber: number;
   opportunityId: string | null;
   address: string;
+  addressParts: { lot: string; unit: string; streetNumber: string; streetName: string; suburb: string; state: string; postcode: string; lga: string };
   dealType: string;
   contractType: string;
   landPrice: number | null;

@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { DataIssue, PortfolioClient, PortfolioData, PortfolioProperty } from '@/lib/portfolio/types';
+import type { DataIssue, PortfolioClient, PortfolioData, PortfolioOpportunity, PortfolioProperty } from '@/lib/portfolio/types';
+import RecordPopout from '@/components/records/RecordPopout';
+import { propertyPageKey, type RecordPage } from '@/lib/records/types';
 
 const PAGE_SIZE = 100;
 
 // One fixed column grid for every property row under every client, so columns line up across the page.
-const GRID = 'grid grid-cols-[minmax(0,1fr)_120px_96px_96px_72px_140px_140px_84px] gap-x-3';
+const GRID = 'grid grid-cols-[minmax(0,1fr)_120px_96px_96px_72px_140px_140px_156px] gap-x-3';
 
 const GRADE_STYLE: Record<string, string> = {
   A: 'bg-blue-600 text-white',
@@ -139,6 +141,52 @@ function SourcePanel({ p }: { p: PortfolioProperty }) {
   );
 }
 
+// Property page for the record pop-out, built from the purchase-file row (used when there is no GHL Property Record).
+function filePropertyPage(p: PortfolioProperty): RecordPage {
+  const f = (label: string, value: string | number | null | undefined, long = false) => ({ label, value: value === null || value === undefined ? '' : String(value), long });
+  return {
+    key: `file:${p.key}`,
+    kind: 'property',
+    menuLabel: 'Property',
+    title: p.address || '(no address)',
+    source: `From purchase file (${p.source === 'inflight' ? 'in flight' : 'historical'})`,
+    note: `${p.file} · ${p.tab} row ${p.rowNumber}`,
+    groups: [
+      {
+        name: 'Address',
+        fields: [
+          f('Property address', p.address),
+          f('Lot', p.addressParts.lot),
+          f('Unit', p.addressParts.unit),
+          f('Street number', p.addressParts.streetNumber),
+          f('Street name', p.addressParts.streetName),
+          f('Suburb', p.addressParts.suburb),
+          f('State', p.addressParts.state),
+          f('Postcode', p.addressParts.postcode),
+          f('LGA', p.addressParts.lga),
+        ],
+      },
+      { name: 'Deal & builder', fields: [f('Deal type', p.dealType), f('Contract type', p.contractType), f('Builder', p.builder), f('Entity', [p.entity, p.entityName].filter(Boolean).join(' – ')), f('Grade', [p.grade, ...p.gradeFacts].filter(Boolean).join(' · '))] },
+      { name: 'Price & contract', fields: [f('Purchase price', money(p.totalPrice)), f('Land price', money(p.landPrice)), f('Build price', money(p.buildPrice)), f('Price source', p.priceSource), f('Purchase date', p.contractDate)] },
+      { name: 'Settlement', fields: [f('Settlement', p.settlementDate), f('Settlement source', p.settlementSource), f('Time held', fmtHeld(p.heldMonths))] },
+      { name: 'Valuation & rent', fields: [f('Value now', money(p.valuation)), f('Valuation date', p.valuationDate ? `${p.valuationDate} (${p.valuationDateNote})` : ''), f('Valuation source', p.valuationSource), f('Growth', p.growth === null ? '' : `${signedMoney(p.growth)} · ${fmtPct(p.growthPct)}${p.growthPa !== null ? ` · ${fmtPct(p.growthPa)} p.a.` : ''}`)] },
+      { name: 'Other', fields: [f('Action', p.action), f('Status', p.status), f('Fell over', p.fellOver ? 'Yes' : ''), f('Consultant (Master Deal List)', p.mdlConsultant), f('Pipedrive', p.pipedrive ? `deal ${p.pipedrive.dealId} · owner ${p.pipedrive.owner || '-'} · ${p.pipedrive.stage}` : ''), f('Notes', p.notes, true)] },
+    ],
+  };
+}
+
+interface PopoutState { title: string; opportunityId: string | null; recordIds: string[]; extraPages: RecordPage[]; initialPage?: string }
+
+function popoutFor(c: PortfolioClient, o: PortfolioOpportunity, p?: PortfolioProperty): PopoutState {
+  return {
+    title: o.name || c.name,
+    opportunityId: o.id,
+    recordIds: o.properties.map((x) => x.linkedRecordId).filter((x): x is string => !!x),
+    extraPages: o.properties.filter((x) => !o.id || !x.linkedRecordId).map(filePropertyPage),
+    initialPage: p ? (o.id && p.linkedRecordId ? propertyPageKey(p.linkedRecordId) : `file:${p.key}`) : undefined,
+  };
+}
+
 function PropertyGridHeader() {
   return (
     <div className={`${GRID} border-b bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-500`}>
@@ -154,7 +202,7 @@ function PropertyGridHeader() {
   );
 }
 
-function PropertyRow({ p }: { p: PortfolioProperty }) {
+function PropertyRow({ p, onOpen }: { p: PortfolioProperty; onOpen: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={`border-t text-xs ${p.fellOver ? 'bg-gray-50 text-gray-400' : ''}`}>
@@ -198,7 +246,14 @@ function PropertyRow({ p }: { p: PortfolioProperty }) {
         <div className="text-right" title={p.growth !== null && p.growthPa === null ? 'p.a. shown only when held 1 year or more (purchase date to valuation date)' : undefined}>
           <Growth g={p.growth} pct={p.growthPct} pa={p.growthPa} />
         </div>
-        <div className="text-right">
+        <div className="flex justify-end gap-1">
+          <button
+            onClick={onOpen}
+            title="Contact, opportunity and property details (read-only pop-out)"
+            className="whitespace-nowrap rounded border border-blue-300 bg-white px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+          >
+            Details
+          </button>
           <button
             onClick={() => setOpen(!open)}
             aria-expanded={open}
@@ -219,8 +274,10 @@ function PropertyRow({ p }: { p: PortfolioProperty }) {
 }
 
 function ClientDetail({ c }: { c: PortfolioClient }) {
+  const [pop, setPop] = useState<PopoutState | null>(null);
   return (
     <div className="bg-white px-4 py-3">
+      {pop && <RecordPopout {...pop} onClose={() => setPop(null)} />}
       {c.ghlMatch && c.ghlMatch.contacts.length > 0 && (
         <div className={`mb-2 rounded border px-3 py-2 text-xs ${c.ghlMatch.status === 'contact_exists' ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
           <div className="mb-1 font-semibold">
@@ -248,8 +305,14 @@ function ClientDetail({ c }: { c: PortfolioClient }) {
               {o.status && <span className="rounded bg-gray-200 px-1 text-xs">{o.status}</span>}
               {o.owner && <span className="text-xs text-gray-500">Owner: {o.owner}</span>}
               {o.id && <span className="text-xs text-gray-400">{o.id}</span>}
+              <button
+                onClick={() => setPop(popoutFor(c, o))}
+                className="ml-auto rounded border border-blue-300 bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+              >
+                Open
+              </button>
             </div>
-            {o.properties.map((p) => <PropertyRow key={p.key} p={p} />)}
+            {o.properties.map((p) => <PropertyRow key={p.key} p={p} onOpen={() => setPop(popoutFor(c, o, p))} />)}
           </div>
         ))}
       </div>
