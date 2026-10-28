@@ -290,6 +290,7 @@ export default function InboxMiningReportingPage() {
                       <th className="p-1 text-right">Opps</th>
                       <th className="p-1 text-right" title={`A GHL event date (not a due/scheduled date) within ${prec.windowDays} days of the email, or a stage move`}>Field changed</th>
                       <th className="p-1 text-right" title={`A reply from the same mailbox thread within ${prec.windowDays} days`}>Reply sent</th>
+                      <th className="p-1 text-right" title={`Forwarded (Fw/Fwd of the same subject) from a shared or staff mailbox within ${prec.windowDays} days`}>Forwarded</th>
                       <th className="p-1 text-right" title={`A note or task on the contact within ${prec.windowDays} days`}>Note or task</th>
                       <th className="p-1 text-right">Nothing</th>
                       <th className="p-1">Field most often changed</th>
@@ -307,6 +308,7 @@ export default function InboxMiningReportingPage() {
                           <td className="p-1 text-right">{t.opps}</td>
                           <td className="p-1 text-right">{pct(t.fieldChanged, t.emails)}</td>
                           <td className="p-1 text-right">{pct(t.replied, t.emails)}</td>
+                          <td className="p-1 text-right">{pct(t.forwarded || 0, t.emails)}</td>
                           <td className="p-1 text-right">{pct(t.noteTask, t.emails)}</td>
                           <td className="p-1 text-right">{pct(t.nothing, t.emails)}</td>
                           <td className="p-1">{top ? `${top.name} ${Math.round(top.rate * 100)}%${top.medianDays !== null ? `, median ${top.medianDays} d` : ''}` : '–'}</td>

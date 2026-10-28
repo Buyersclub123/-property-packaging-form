@@ -18,6 +18,8 @@ export interface TypeStats {
   opps: number;
   fieldChanged: number;
   replied: number;
+  /** Forwarded (Fw/Fwd of the same subject) from a shared or staff mailbox within the window. */
+  forwarded: number;
   noteTask: number;
   nothing: number;
   stageMoved: number;
@@ -33,6 +35,7 @@ export interface PrecedentSummary {
   emails: number;
   oppsLoaded: number;
   contacts: number;
+  forwards?: number;
   contactErrors: number;
   missingOpp: number;
   errors: string[];
@@ -73,7 +76,7 @@ export function precedentFor(
   if (!ts || ts.emails < summary.minEmails) {
     return { ok: false, line: `No precedent: only ${ts?.emails || 0} matched ${act.replace(/_/g, ' ')} emails (needs ${summary.minEmails})` };
   }
-  const base = `${ts.emails} ${act.replace(/_/g, ' ')} emails: field changed ${pct(ts.fieldChanged, ts.emails)}, reply ${pct(ts.replied, ts.emails)}, note/task ${pct(ts.noteTask, ts.emails)}, nothing ${pct(ts.nothing, ts.emails)}`;
+  const base = `${ts.emails} ${act.replace(/_/g, ' ')} emails: field changed ${pct(ts.fieldChanged, ts.emails)}, reply ${pct(ts.replied, ts.emails)}, forwarded ${pct(ts.forwarded || 0, ts.emails)}, note/task ${pct(ts.noteTask, ts.emails)}, nothing ${pct(ts.nothing, ts.emails)}`;
   if (s.target !== 'opportunity' || !s.fieldId) return { ok: null, line: `${base}. Property Record fields have no history, so no field-level precedent.` };
   const df = ts.dateFields.find((f) => f.fieldId === s.fieldId);
   if (df) {

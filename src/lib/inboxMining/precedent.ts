@@ -2,6 +2,7 @@ import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { ensureActivityTable } from './activity';
 import { fetchStageNames, fetchOpps } from './ghl';
+import { ensureForwardsTable, normSubject } from './forwards';
 import {
   WINDOW_DAYS, MIN_EMAILS, MIN_RATE, DATE_LEAD_DAYS, CURRENT_FIELDS, isScheduleField,
   type PrecedentSummary, type TypeStats,
@@ -88,8 +89,8 @@ export async function buildPrecedent(): Promise<PrecedentSummary> {
   await ensurePrecedentTable();
   const sql = getDb();
   const emails = (await sql`
-    SELECT activity, opp_id, sent_at, reply_hours FROM email_activity
-    WHERE direction = 'in' AND opp_id IS NOT NULL`) as { activity: string; opp_id: string; sent_at: string; reply_hours: string | null }[];
+    SELECT activity, opp_id, sent_at, reply_hours, subject FROM email_activity
+    WHERE direction = 'in' AND opp_id IS NOT NULL`) as { activity: string; opp_id: string; sent_at: string; reply_hours: string | null; subject: string | null }[];
 
   const [fields, names] = await Promise.all([dateFields(), fetchStageNames()]);
   const opps = new Map((await fetchOpps(names)).map((o) => [o.id, o]));
@@ -104,6 +105,14 @@ export async function buildPrecedent(): Promise<PrecedentSummary> {
       if (errors.length < 20) errors.push(`${cid}: ${e instanceof Error ? e.message : String(e)}`);
     }
   });
+  await ensureForwardsTable();
+  const fwdTimes = new Map<string, number[]>();
+  const fwdRows = (await sql`SELECT norm_subject, sent_at FROM email_forwards WHERE norm_subject IS NOT NULL`) as { norm_subject: string; sent_at: string }[];
+  for (const f of fwdRows) {
+    const list = fwdTimes.get(f.norm_subject) || [];
+    list.push(new Date(f.sent_at).getTime());
+    fwdTimes.set(f.norm_subject, list);
+  }
   console.log(`[inbox-mining] precedent: ${emails.length} emails, ${opps.size} opps, ${contactIds.length} contacts read`);
 
   type Acc = Omit<TypeStats, 'opps' | 'medianReplyHrs' | 'dateFields' | 'current'> & {
@@ -119,7 +128,7 @@ export async function buildPrecedent(): Promise<PrecedentSummary> {
     const t = new Date(e.sent_at).getTime();
     const day0 = Date.parse(new Date(t).toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' }));
     const a = byType.get(e.activity) || {
-      type: e.activity, emails: 0, fieldChanged: 0, replied: 0, noteTask: 0, nothing: 0, stageMoved: 0,
+      type: e.activity, emails: 0, fieldChanged: 0, replied: 0, forwarded: 0, noteTask: 0, nothing: 0, stageMoved: 0,
       oppIds: new Set<string>(), replyHrs: [], fieldDays: new Map<string, number[]>(),
     };
     byType.set(e.activity, a);
@@ -149,7 +158,11 @@ export async function buildPrecedent(): Promise<PrecedentSummary> {
     if (stageMoved) a.stageMoved++;
     if (replied) { a.replied++; a.replyHrs.push(Number(e.reply_hours)); }
     if (noteTask) a.noteTask++;
-    if (!fieldChanged && !replied && !noteTask) a.nothing++;
+    // Short generic subjects ("Invoice") would match unrelated forwards.
+    const ns = normSubject(e.subject || '');
+    const forwarded = ns.length >= 12 && (fwdTimes.get(ns) || []).some((x) => x > t && x <= t + W);
+    if (forwarded) a.forwarded++;
+    if (!fieldChanged && !replied && !forwarded && !noteTask) a.nothing++;
   }
 
   const fieldName = new Map(fields.map((f) => [f.id, f.name]));
@@ -175,13 +188,13 @@ export async function buildPrecedent(): Promise<PrecedentSummary> {
       .sort((x, y) => y.hits - x.hits);
     return {
       type: a.type, emails: a.emails, opps: a.oppIds.size, fieldChanged: a.fieldChanged, replied: a.replied, noteTask: a.noteTask,
-      nothing: a.nothing, stageMoved: a.stageMoved, medianReplyHrs: median(a.replyHrs), dateFields: dateFieldStats, current,
+      nothing: a.nothing, stageMoved: a.stageMoved, forwarded: a.forwarded, medianReplyHrs: median(a.replyHrs), dateFields: dateFieldStats, current,
     };
   }).sort((x, y) => y.emails - x.emails);
 
   const summary: PrecedentSummary = {
     builtAt: new Date().toISOString(), windowDays: WINDOW_DAYS, minEmails: MIN_EMAILS, minRate: MIN_RATE,
-    emails: emails.length, oppsLoaded: opps.size, contacts: contactIds.length,
+    emails: emails.length, oppsLoaded: opps.size, contacts: contactIds.length, forwards: fwdRows.length,
     contactErrors: Array.from(contactTimes.values()).filter((v) => v === null).length, missingOpp, errors, types,
   };
   await sql`INSERT INTO email_precedent (summary) VALUES (${JSON.stringify(summary)}::jsonb)`;
