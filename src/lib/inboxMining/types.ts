@@ -31,10 +31,23 @@ export type FactKey =
   | 'finance'
   | 'bp';
 
+/** Where a fact sits on a rendered PDF page, as fractions of the page (0-1). notFound = not in the text layer. */
+export interface FactPos {
+  page?: number;
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  notFound?: boolean;
+}
+
 export interface Fact {
   value: string;
   source: string;
   quote: string;
+  /** The exact text the rule matched (runs from backlog 15 on). */
+  match?: string;
+  pos?: FactPos;
 }
 
 export type Facts = Partial<Record<FactKey, Fact>>;

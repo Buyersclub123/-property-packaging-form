@@ -1,10 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import TopNavBar from '@/components/portal/TopNavBar';
 import { driveFilePath, driveFolder } from '@/lib/inboxMining/driveTarget';
+import { matchInQuote } from '@/lib/inboxMining/factRules';
 
-interface Fact { value: string; source: string; quote: string }
+interface FactPos { page?: number; x?: number; y?: number; w?: number; h?: number; notFound?: boolean }
+interface Fact { value: string; source: string; quote: string; match?: string; pos?: FactPos }
 interface DocRead {
   name: string; source: string; zipEntry?: string; url?: string; status: string; reason?: string;
   pages?: number; isDocuSign?: boolean; needsVisualRead?: boolean;
@@ -69,13 +72,92 @@ const sydney = (iso: string) =>
 
 const show = (v: string | string[]) => (Array.isArray(v) ? v.join(', ') : v);
 
-function PdfPages({ itemId, doc }: { itemId: number; doc: DocRead }) {
+// Evidence highlighting (backlog 15): text items per page with boxes as fractions of the page.
+type TextItem = { str: string; r: [number, number, number, number] };
+const factLabel = (k: string) => k.replace(/([A-Z])/g, ' $1').toLowerCase();
+const needleFor = (k: string, f: Fact) => f.match || matchInQuote(k, f.value, f.quote) || f.value;
+
+/** Finds the needle in the page text, ignoring whitespace (PDF text is split into runs), and boxes it. */
+function locateOnPages(needle: string, pages: TextItem[][]): FactPos | null {
+  const n = needle.replace(/\s+/g, '').toLowerCase();
+  if (n.length < 2) return null;
+  for (let p = 0; p < pages.length; p++) {
+    const chars: { item: number; ci: number }[] = [];
+    let hay = '';
+    pages[p].forEach((it, item) => {
+      for (let ci = 0; ci < it.str.length; ci++) {
+        if (/\s/.test(it.str[ci])) continue;
+        hay += it.str[ci].toLowerCase();
+        chars.push({ item, ci });
+      }
+    });
+    const i = hay.indexOf(n);
+    if (i === -1) continue;
+    const span = new Map<number, [number, number]>();
+    for (const { item, ci } of chars.slice(i, i + n.length)) {
+      const s = span.get(item);
+      span.set(item, s ? [Math.min(s[0], ci), Math.max(s[1], ci)] : [ci, ci]);
+    }
+    let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+    span.forEach(([a, b], item) => {
+      const { str, r } = pages[p][item];
+      const len = Math.max(1, str.length);
+      x0 = Math.min(x0, r[0] + ((r[2] - r[0]) * a) / len);
+      x1 = Math.max(x1, r[0] + ((r[2] - r[0]) * (b + 1)) / len);
+      y0 = Math.min(y0, r[1]);
+      y1 = Math.max(y1, r[3]);
+    });
+    const pad = 0.004;
+    return { page: p + 1, x: Math.max(0, x0 - pad), y: Math.max(0, y0 - pad), w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad };
+  }
+  return null;
+}
+
+function findLoose(hay: string, needle: string): { start: number; end: number } | null {
+  const parts = needle.trim().split(/\s+/).filter(Boolean).map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!parts.length) return null;
+  const m = new RegExp(parts.join('\\s+'), 'i').exec(hay);
+  return m ? { start: m.index, end: m.index + m[0].length } : null;
+}
+
+function BodyMarks({ body, hits, active, idPrefix }: {
+  body: string; hits: Record<string, { start: number; end: number } | null>; active: string | null; idPrefix: string;
+}) {
+  const spans = Object.entries(hits)
+    .filter((e): e is [string, { start: number; end: number }] => !!e[1])
+    .sort((a, b) => a[1].start - b[1].start);
+  const out: ReactNode[] = [];
+  let at = 0;
+  for (const [k, h] of spans) {
+    if (h.start < at) continue;
+    out.push(body.slice(at, h.start));
+    out.push(
+      <mark key={k} id={idPrefix + k} title={factLabel(k)}
+        className={k === active ? 'rounded-sm bg-yellow-300 ring-2 ring-yellow-500' : 'rounded-sm bg-yellow-200'}>
+        {body.slice(h.start, h.end)}
+      </mark>
+    );
+    at = h.end;
+  }
+  out.push(body.slice(at));
+  return <>{out}</>;
+}
+
+function PdfPages({ itemId, doc, facts, active, autoRender, onLocated }: {
+  itemId: number; doc: DocRead; facts: [string, Fact][]; active: string | null; autoRender: boolean;
+  onLocated: (key: string, pos: FactPos) => void;
+}) {
   const holder = useRef<HTMLDivElement>(null);
+  const wraps = useRef<HTMLDivElement[]>([]);
+  const tried = useRef(false);
+  const scrolled = useRef<string | null>(null);
   const [state, setState] = useState<'idle' | 'loading' | 'done'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [textPages, setTextPages] = useState<TextItem[][] | null>(null);
 
   const render = useCallback(async () => {
+    tried.current = true;
     setState('loading');
     setError(null);
     try {
@@ -90,16 +172,35 @@ function PdfPages({ itemId, doc }: { itemId: number; doc: DocRead }) {
       if (pdf.numPages > max) setNote(`Showing first ${max} of ${pdf.numPages} pages`);
       const el = holder.current!;
       el.innerHTML = '';
+      wraps.current = [];
+      const pages: TextItem[][] = [];
       for (let i = 1; i <= max; i++) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 1.4 });
+        const wrap = document.createElement('div');
+        wrap.className = 'relative mb-3 inline-block max-w-full align-top';
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        canvas.className = 'mb-3 border shadow-sm max-w-full';
-        el.appendChild(canvas);
+        canvas.className = 'block max-w-full border shadow-sm';
+        wrap.appendChild(canvas);
+        el.appendChild(wrap);
+        wraps.current.push(wrap);
         await page.render({ canvasContext: canvas.getContext('2d')!, viewport, canvas }).promise;
+        const tc = await page.getTextContent();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        pages.push(tc.items.filter((it: any) => typeof it.str === 'string' && it.transform).map((it: any) => {
+          const t = it.transform;
+          const h = it.height || Math.hypot(t[2], t[3]);
+          const [ax, ay, bx, by] = viewport.convertToViewportRectangle([t[4], t[5], t[4] + it.width, t[5] + h]);
+          return {
+            str: it.str,
+            r: [Math.min(ax, bx) / viewport.width, Math.min(ay, by) / viewport.height,
+              Math.max(ax, bx) / viewport.width, Math.max(ay, by) / viewport.height],
+          } as TextItem;
+        }));
       }
+      setTextPages(pages);
       setState('done');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -108,8 +209,42 @@ function PdfPages({ itemId, doc }: { itemId: number; doc: DocRead }) {
   }, [itemId, doc]);
 
   useEffect(() => {
-    if (doc.needsVisualRead) render();
-  }, [doc, render]);
+    if ((doc.needsVisualRead || autoRender) && !tried.current) render();
+  }, [doc, autoRender, render]);
+
+  useEffect(() => {
+    if (!textPages) return;
+    for (const [k, f] of facts) {
+      if (f.pos?.page) continue;
+      const pos = locateOnPages(needleFor(k, f), textPages);
+      if (pos || !f.pos?.notFound) onLocated(k, pos || { notFound: true });
+    }
+  }, [textPages, facts, onLocated]);
+
+  useEffect(() => {
+    if (state !== 'done') return;
+    wraps.current.forEach((w) => w.querySelectorAll('.ev-hl').forEach((n) => n.remove()));
+    let activeEl: HTMLElement | null = null;
+    for (const [k, f] of facts) {
+      const p = f.pos;
+      const wrap = p?.page ? wraps.current[p.page - 1] : undefined;
+      if (!p || !wrap) continue;
+      const box = document.createElement('div');
+      box.className = `ev-hl pointer-events-none absolute rounded-sm ${k === active ? 'bg-yellow-300/50 ring-2 ring-yellow-500' : 'bg-yellow-200/40 ring-1 ring-yellow-400'}`;
+      Object.assign(box.style, { left: `${(p.x || 0) * 100}%`, top: `${(p.y || 0) * 100}%`, width: `${(p.w || 0) * 100}%`, height: `${(p.h || 0) * 100}%` });
+      box.title = `${factLabel(k)}: ${f.value}`;
+      wrap.appendChild(box);
+      if (k === active) activeEl = box;
+    }
+    if (active !== scrolled.current) {
+      if (activeEl) {
+        (activeEl as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' });
+        scrolled.current = active;
+      } else if (!facts.some(([k]) => k === active)) {
+        scrolled.current = active;
+      }
+    }
+  }, [state, facts, active]);
 
   return (
     <div className="mt-2">
@@ -194,6 +329,8 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
   const [recId, setRecId] = useState('');
   const [busy, setBusy] = useState(false);
   const [memMsg, setMemMsg] = useState<string | null>(null);
+  const [active, setActive] = useState<string | null>(null);
+  const [located, setLocated] = useState<Record<string, FactPos>>({});
 
   const load = useCallback(async () => {
     setError(null);
@@ -210,10 +347,51 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
   useEffect(() => {
     setD(null);
     setMemMsg(null);
+    setActive(null);
+    setLocated({});
     setOppId('');
     setRecId('');
     load();
   }, [load]);
+
+  const onLocated = useCallback((key: string, pos: FactPos) => {
+    setLocated((prev) => ({ ...prev, [key]: pos }));
+    fetch('/api/inbox-mining/fact-position', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: id, key, pos }),
+    }).catch(() => {});
+  }, [id]);
+
+  const facts = useMemo<[string, Fact][]>(
+    () => Object.entries(d?.item.facts || {}).map(([k, f]) => [k, located[k] ? { ...f, pos: located[k] } : f]),
+    [d, located]
+  );
+  const bodyHits = useMemo(() => {
+    const out: Record<string, { start: number; end: number } | null> = {};
+    for (const [k, f] of facts) if (f.source === 'email') out[k] = d?.body ? findLoose(d.body, needleFor(k, f)) : null;
+    return out;
+  }, [facts, d]);
+
+  useEffect(() => {
+    if (active && d?.item.facts[active]?.source === 'email') {
+      document.getElementById(`ev-${id}-${active}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [active, id, d]);
+
+  const activeIdx = active ? facts.findIndex(([k]) => k === active) : -1;
+  const step = (dir: number) => {
+    if (!facts.length) return;
+    const n = activeIdx === -1 ? (dir > 0 ? 0 : facts.length - 1) : (activeIdx + dir + facts.length) % facts.length;
+    setActive(facts[n][0]);
+  };
+  const where = (k: string, f: Fact) => {
+    if (f.source === 'email') return bodyHits[k] ? 'email body' : d?.body ? 'subject line, or not found in the body' : 'body not loaded';
+    if (f.pos?.page) return `${f.source}, page ${f.pos.page}`;
+    const doc = d?.item.docs.find((x) => (x.zipEntry || x.name) === f.source);
+    if (f.pos?.notFound) return doc?.needsVisualRead ? `${f.source}: position not available (DocuSign overlay; visual read deferred)` : `${f.source}: not found in the text layer`;
+    return `${f.source}: locating…`;
+  };
 
   const saveMemory = async (opportunityId: string, propertyRecordId: string | null) => {
     setBusy(true);
@@ -351,14 +529,32 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
 
       <section>
         <h3 className="mb-1 border-b pb-1 text-sm font-semibold text-brand-charcoal">Extracted facts</h3>
-        {Object.keys(item.facts || {}).length === 0 ? <div className="text-gray-500">None</div> : (
-          <table className="w-full text-xs">
-            <tbody>
-              {Object.entries(item.facts).map(([k, f]) => (
-                <tr key={k} className="border-t align-top"><td className="p-1 font-mono">{k}</td><td className="p-1 font-medium">{f.value}</td><td className="p-1 text-gray-500">{f.source}: “{f.quote}”</td></tr>
-              ))}
-            </tbody>
-          </table>
+        {facts.length === 0 ? <div className="text-gray-500">None</div> : (
+          <>
+            <div className="mb-1 flex flex-wrap items-center gap-2 rounded border border-blue-200 bg-blue-50/40 px-2 py-1 text-xs">
+              <button onClick={() => step(-1)} className="rounded border bg-white px-2 py-0.5 hover:bg-blue-50">‹ Prev</button>
+              <button onClick={() => step(1)} className="rounded border bg-white px-2 py-0.5 hover:bg-blue-50">Next ›</button>
+              {activeIdx === -1 ? (
+                <span className="text-gray-500">Step through {facts.length} facts; each is highlighted in yellow where it was found.</span>
+              ) : (
+                <span>
+                  <span className="font-semibold">{activeIdx + 1}/{facts.length} {factLabel(facts[activeIdx][0])}</span>{' = '}
+                  <span className="font-mono">{facts[activeIdx][1].value}</span>{' '}
+                  <span className="text-gray-500">({where(facts[activeIdx][0], facts[activeIdx][1])})</span>
+                </span>
+              )}
+            </div>
+            <table className="w-full text-xs">
+              <tbody>
+                {facts.map(([k, f]) => (
+                  <tr key={k} onClick={() => setActive(k)}
+                    className={`cursor-pointer border-t align-top ${active === k ? 'bg-blue-100 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-blue-50'}`}>
+                    <td className="p-1 font-mono">{k}</td><td className="p-1 font-medium">{f.value}</td><td className="p-1 text-gray-500">{f.source}: “{f.quote}”</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
 
@@ -385,7 +581,13 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
               {doc.reason && <div className="text-xs text-red-700">{doc.reason}</div>}
               {target && <div className="break-all text-xs text-gray-500">→ <span className="font-mono">{target}</span></div>}
             </div>
-            {doc.status === 'read' && <PdfPages itemId={item.id} doc={doc} />}
+            {doc.status === 'read' && (() => {
+              const docFacts = facts.filter(([, f]) => f.source === (doc.zipEntry || doc.name));
+              return (
+                <PdfPages itemId={item.id} doc={doc} facts={docFacts} active={active} onLocated={onLocated}
+                  autoRender={!!active && docFacts.some(([k]) => k === active)} />
+              );
+            })()}
           </div>
           );
         })}
@@ -405,7 +607,7 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
 
       <section>
         <h3 className="mb-1 border-b pb-1 text-sm font-semibold text-brand-charcoal">Email body (live)</h3>
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border bg-gray-50 p-2 text-xs">{d.body ?? '(not loaded)'}</pre>
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border bg-gray-50 p-2 text-xs">{d.body == null ? '(not loaded)' : <BodyMarks body={d.body} hits={bodyHits} active={active} idPrefix={`ev-${item.id}-`} />}</pre>
       </section>
     </div>
   );

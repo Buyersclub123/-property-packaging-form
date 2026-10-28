@@ -136,7 +136,7 @@ export default function InboxMiningReportingPage() {
               {lag?.measurementStart ? (
                 <span>{sydney(lag.measurementStart)} (Sydney); only items received after it are counted.</span>
               ) : (
-                <span className="rounded bg-amber-100 px-1 text-amber-800">not set: these numbers are not a formal measurement</span>
+                <span className="rounded bg-amber-100 px-1 text-amber-800">not set: counts only, not a formal measurement; timing columns appear once it is set</span>
               )}
               <input type="datetime-local" value={startInput} onChange={(e) => setStartInput(e.target.value)}
                 className="rounded border px-1 py-0.5" title="Your PC's local time" />
@@ -164,8 +164,12 @@ export default function InboxMiningReportingPage() {
                       <th className="p-1 text-right" title="Items with at least one suggestion">Suggested</th>
                       <th className="p-1 text-right" title="Suggestions whose GHL value now equals the proposed value">Actioned</th>
                       <th className="p-1 text-right" title="Suggestions not yet equal in GHL">Still open</th>
-                      <th className="p-1 text-right" title="Median hours from email received to suggestion made (system speed)">Received → suggested</th>
-                      <th className="p-1 text-right" title="Median hours from email received to GHL showing the proposed value (team speed)">Received → actioned</th>
+                      {lag.measurementStart && (
+                        <>
+                          <th className="p-1 text-right" title="Median hours from email received to suggestion made (system speed)">Received → suggested</th>
+                          <th className="p-1 text-right" title="Median hours from email received to GHL showing the proposed value (team speed)">Received → actioned</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -183,8 +187,12 @@ export default function InboxMiningReportingPage() {
                           {d.open}
                           {d.changedOther > 0 && <span className="ml-1 rounded bg-amber-100 px-1 text-amber-800" title="GHL changed to a different value">{d.changedOther} differ</span>}
                         </td>
-                        <td className="p-1 text-right">{hrs(d.medianSuggestHrs)}</td>
-                        <td className="p-1 text-right">{hrs(d.medianActionHrs)}</td>
+                        {lag.measurementStart && (
+                          <>
+                            <td className="p-1 text-right">{hrs(d.medianSuggestHrs)}</td>
+                            <td className="p-1 text-right">{hrs(d.medianActionHrs)}</td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>
