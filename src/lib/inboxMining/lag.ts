@@ -26,6 +26,13 @@ export async function ensureLagTables(): Promise<void> {
       PRIMARY KEY (item_id, skey)
     )`;
   await sql`
+    CREATE TABLE IF NOT EXISTS inbox_settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_by TEXT
+    )`;
+  await sql`
     CREATE TABLE IF NOT EXISTS inbox_lag_checks (
       id           SERIAL PRIMARY KEY,
       checked_at   TIMESTAMPTZ DEFAULT NOW(),
@@ -134,6 +141,20 @@ export async function checkLag() {
   return { checkedAt: now, checked: rows.length, actionedNow, changedNow, alreadySetNow, notFound, opps: opps.length, records: records.length };
 }
 
+/** Formal start of measurement: the lag table only counts items received at or after it. Unset = not a formal measurement yet. */
+export async function getMeasurementStart(): Promise<string | null> {
+  await ensureLagTables();
+  const rows = await getDb()`SELECT value FROM inbox_settings WHERE key = 'lag_measurement_start'`;
+  return (rows[0]?.value as string) || null;
+}
+
+export async function setMeasurementStart(value: string | null, by: string): Promise<void> {
+  await ensureLagTables();
+  await getDb()`
+    INSERT INTO inbox_settings (key, value, updated_at, updated_by) VALUES ('lag_measurement_start', ${value}, NOW(), ${by})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by`;
+}
+
 const median = (xs: number[]) => {
   if (!xs.length) return null;
   const s = [...xs].sort((a, b) => a - b);
@@ -143,9 +164,10 @@ const median = (xs: number[]) => {
 const hoursBetween = (a: unknown, b: unknown) => (new Date(b as string).getTime() - new Date(a as string).getTime()) / 3_600_000;
 
 export async function lagSummary(days: number) {
-  await ensureLagTables();
+  const measurementStart = await getMeasurementStart();
   const sql = getDb();
-  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const windowStart = Date.now() - days * 86_400_000;
+  const since = new Date(Math.max(windowStart, measurementStart ? new Date(measurementStart).getTime() : 0)).toISOString();
   const items = await sql`
     SELECT id, subject, received_at, suggested_at, suggestions,
       to_char(received_at AT TIME ZONE 'Australia/Sydney', 'YYYY-MM-DD') AS day
@@ -189,5 +211,5 @@ export async function lagSummary(days: number) {
   const out = [...byDay.values()].sort((a, b) => b.day.localeCompare(a.day)).map(({ sugHrs, actHrs, ...d }) => ({
     ...d, medianSuggestHrs: median(sugHrs), medianActionHrs: median(actHrs),
   }));
-  return { days: out, open, lastCheck };
+  return { days: out, open, lastCheck, measurementStart };
 }

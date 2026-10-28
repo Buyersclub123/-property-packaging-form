@@ -42,17 +42,6 @@ const clsLabel = (c: string) => c.replace(/_/g, ' ');
 const PAGE_SIZE = 100;
 const dist = (c: Record<string, number>) => Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ');
 interface FeedbackEntry { outcome: string; note: string; by: string; at: string }
-interface FeedbackCount { day: string; outcome: string; n: number }
-interface LagDay {
-  day: string; arrived: number; suggested: number; checkable: number; actioned: number; alreadySet: number; open: number;
-  changedOther: number; notInGhl: number; medianSuggestHrs: number | null; medianActionHrs: number | null;
-}
-interface LagOpen { itemId: number; day: string; subject: string; field: string; proposed: string; current: string | null; status: string }
-interface LagData {
-  days: LagDay[]; open: LagOpen[];
-  lastCheck: { checked_at: string; checked: number; actioned_now: number; changed_now: number; not_found: number } | null;
-}
-const hrs = (h: number | null) => (h === null ? '–' : h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} d`);
 
 const OUTCOMES = [
   { key: 'accept', label: 'Accept' },
@@ -435,14 +424,17 @@ export default function InboxMiningPage() {
   const [filterGrade, setFilterGrade] = useState('');
   const [filterBox, setFilterBox] = useState('');
   const [openId, setOpenId] = useState<number | null>(null);
-  const [fbCounts, setFbCounts] = useState<FeedbackCount[]>([]);
-  const [fbError, setFbError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'priority' | 'newest'>('priority');
   const [filterSender, setFilterSender] = useState('');
   const [page, setPage] = useState(0);
   const queueRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const id = parseInt(new URLSearchParams(window.location.search).get('item') || '', 10);
+    if (Number.isInteger(id)) setOpenId(id);
+  }, []);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -459,60 +451,6 @@ export default function InboxMiningPage() {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
-
-  const loadFeedback = useCallback(async () => {
-    try {
-      const res = await fetch('/api/inbox-mining/feedback?days=14', { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setFbCounts(data.counts);
-      setFbError(null);
-    } catch (e) {
-      setFbError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  useEffect(() => {
-    loadFeedback();
-  }, [loadFeedback]);
-
-  const [lag, setLag] = useState<LagData | null>(null);
-  const [lagError, setLagError] = useState<string | null>(null);
-  const [lagDay, setLagDay] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [checkMsg, setCheckMsg] = useState<string | null>(null);
-
-  const loadLag = useCallback(async () => {
-    try {
-      const res = await fetch('/api/inbox-mining/lag?days=30', { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setLag(data);
-      setLagError(null);
-    } catch (e) {
-      setLagError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
-  useEffect(() => {
-    loadLag();
-  }, [loadLag]);
-
-  const checkNow = async () => {
-    setChecking(true);
-    setCheckMsg(null);
-    try {
-      const res = await fetch('/api/inbox-mining/lag', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setCheckMsg(`Checked ${data.checked} suggestions against GHL: ${data.actionedNow} newly actioned, ${data.alreadySetNow} already in GHL at first check, ${data.changedNow} changed to a different value${data.notFound ? `, ${data.notFound} not found (opportunity or record not loaded)` : ''}.`);
-      await loadLag();
-    } catch (e) {
-      setCheckMsg(`Check failed: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setChecking(false);
-    }
-  };
 
   const loadItems = useCallback(async () => {
     try {
@@ -623,7 +561,10 @@ export default function InboxMiningPage() {
     <TopNavBar />
     <main className="min-h-screen bg-white text-brand-charcoal">
     <div className="mx-auto max-w-[1600px] px-4 py-6">
-      <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Inbox Mining — demo (phase a)</h1>
+      <div className="flex items-baseline justify-between gap-4">
+        <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Inbox Mining — demo (phase a)</h1>
+        <a href="/inbox-mining/reporting" className="text-xs font-semibold text-blue-700 hover:underline">Reporting</a>
+      </div>
       <div className="mt-2 rounded border border-blue-200 bg-blue-50/40 px-3 py-2 text-xs text-brand-charcoal">
         Read-only: no GHL writes, no email sent, no labels changed, no Drive copy. Suggestions only; Apply is disabled until phase (b).
       </div>
@@ -739,116 +680,6 @@ export default function InboxMiningPage() {
         )}
       </div>
 
-      <div className="mt-4 overflow-hidden rounded border bg-white text-sm">
-        <h2 className="bg-gray-50 px-3 py-2 font-semibold text-brand-charcoal">Suggestion feedback by day (last 14 days)</h2>
-        {fbError ? (
-          <div className="px-3 py-2 text-red-800">{fbError}</div>
-        ) : fbCounts.length === 0 ? (
-          <div className="px-3 py-2 text-gray-500">No feedback yet.</div>
-        ) : (
-          <table className="w-full border-t text-left text-xs">
-            <thead className="bg-gray-50 text-gray-500">
-              <tr><th className="p-1">Day</th>{OUTCOMES.map((o) => <th key={o.key} className="p-1">{o.label}</th>)}<th className="p-1">Total</th></tr>
-            </thead>
-            <tbody>
-              {Array.from(new Set(fbCounts.map((c) => c.day))).map((day) => {
-                const rows = fbCounts.filter((c) => c.day === day);
-                return (
-                  <tr key={day} className="border-t">
-                    <td className="p-1">{day}</td>
-                    {OUTCOMES.map((o) => <td key={o.key} className="p-1">{rows.find((c) => c.outcome === o.key)?.n || 0}</td>)}
-                    <td className="p-1 font-semibold">{rows.reduce((a, c) => a + c.n, 0)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="mt-4 overflow-hidden rounded border bg-white text-sm">
-        <div className="flex flex-wrap items-center gap-3 bg-gray-50 px-3 py-2">
-          <h2 className="font-semibold text-brand-charcoal">Lag tracker by received day (last 30 days)</h2>
-          <span className="text-xs text-gray-500">{lag?.lastCheck ? `GHL last checked ${sydney(lag.lastCheck.checked_at)}` : 'GHL not checked yet'}</span>
-          <button onClick={checkNow} disabled={checking} className="ml-auto rounded border border-blue-300 bg-white px-2 py-0.5 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">
-            {checking ? 'Checking GHL…' : 'Check GHL now'}
-          </button>
-        </div>
-        {checkMsg && <div className="border-t px-3 py-1 text-xs text-gray-600">{checkMsg}</div>}
-        {lagError ? (
-          <div className="border-t px-3 py-2 text-red-800">{lagError}</div>
-        ) : !lag ? (
-          <div className="border-t px-3 py-2 text-gray-500">Loading…</div>
-        ) : lag.days.length === 0 ? (
-          <div className="border-t px-3 py-2 text-gray-500">No items in the last 30 days.</div>
-        ) : (
-          <div className="max-h-96 overflow-auto border-t">
-            <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="p-1">Received</th>
-                  <th className="p-1 text-right">Arrived</th>
-                  <th className="p-1 text-right" title="Items with at least one suggestion">Suggested</th>
-                  <th className="p-1 text-right" title="Suggestions whose GHL value now equals the proposed value">Actioned</th>
-                  <th className="p-1 text-right" title="Suggestions not yet equal in GHL">Still open</th>
-                  <th className="p-1 text-right" title="Median hours from email received to suggestion made (system speed)">Received → suggested</th>
-                  <th className="p-1 text-right" title="Median hours from email received to GHL showing the proposed value (team speed)">Received → actioned</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lag.days.map((d) => (
-                  <tr key={d.day} onClick={() => setLagDay(lagDay === d.day ? null : d.day)}
-                    className={`cursor-pointer border-t ${lagDay === d.day ? 'bg-blue-100' : 'hover:bg-blue-50'}`}>
-                    <td className="p-1">{d.day}</td>
-                    <td className="p-1 text-right">{d.arrived}</td>
-                    <td className="p-1 text-right">{d.suggested}</td>
-                    <td className="p-1 text-right">
-                      {d.actioned + d.alreadySet}
-                      {d.alreadySet > 0 && <span className="text-gray-400" title="Already in GHL at the first check; left out of the median"> ({d.alreadySet} already)</span>}
-                    </td>
-                    <td className="p-1 text-right">
-                      {d.open}
-                      {d.changedOther > 0 && <span className="ml-1 rounded bg-amber-100 px-1 text-amber-800" title="GHL changed to a different value">{d.changedOther} differ</span>}
-                    </td>
-                    <td className="p-1 text-right">{hrs(d.medianSuggestHrs)}</td>
-                    <td className="p-1 text-right">{hrs(d.medianActionHrs)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {lag && lagDay && (
-          <div className="border-t">
-            <div className="bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-500">Still open from {lagDay} (click to open the item)</div>
-            {lag.open.filter((o) => o.day === lagDay).length === 0 ? (
-              <div className="px-3 py-2 text-xs text-gray-500">Nothing open.</div>
-            ) : (
-              <table className="w-full text-left text-xs">
-                <thead className="text-gray-500">
-                  <tr><th className="p-1">Subject</th><th className="p-1">Field</th><th className="p-1">Proposed</th><th className="p-1">GHL at last check</th><th className="p-1">Status</th></tr>
-                </thead>
-                <tbody>
-                  {lag.open.filter((o) => o.day === lagDay).map((o, n) => (
-                    <tr key={n} onClick={() => setOpenId(o.itemId)} className="cursor-pointer border-t align-top hover:bg-blue-50">
-                      <td className="p-1">{o.subject}</td>
-                      <td className="p-1">{o.field}</td>
-                      <td className="p-1">{o.proposed}</td>
-                      <td className="p-1">{o.current === null ? <span className="text-gray-400">not checked</span> : o.current || <span className="text-gray-400">(empty)</span>}</td>
-                      <td className="p-1">{o.status === 'changed_other' ? <span className="rounded bg-amber-100 px-1 text-amber-800">different value</span> : o.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-        <div className="border-t px-3 py-1 text-[11px] text-gray-500">
-          Read-only GHL check. Actioned and Still open count suggestions for fields that exist in GHL; actioned = GHL value equals the proposed value.
-          Items read before the lag tracker use their last re-read time as the suggested time, so their received → suggested hours run high.
-        </div>
-      </div>
-
       <div className="mt-4 flex flex-wrap gap-3 text-sm">
         <select value={filterBox} onChange={(e) => setFilterBox(e.target.value)} className="rounded border bg-white px-1 py-0.5">
           <option value="">All mailboxes</option>
@@ -922,7 +753,7 @@ export default function InboxMiningPage() {
           {pageCount > 1 && <div className="flex justify-end border-t bg-gray-50 p-2">{pager}</div>}
         </div>
         <div className="min-w-0 rounded border bg-white p-4 [overflow-wrap:anywhere] xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto">
-          {openId ? <DetailPanel id={openId} onChanged={() => { loadItems(); loadFeedback(); }} /> : <div className="text-sm text-gray-500">Select an item to see live detail.</div>}
+          {openId ? <DetailPanel id={openId} onChanged={() => { loadItems(); }} /> : <div className="text-sm text-gray-500">Select an item to see live detail.</div>}
         </div>
       </div>
     </div>
