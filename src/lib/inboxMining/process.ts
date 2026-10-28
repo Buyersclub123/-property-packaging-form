@@ -10,9 +10,7 @@ import {
   ensureTables, startRun, updateRun, getRun, existingMessageIds, upsertItem, getThreadMemory, autoConfirmThread,
 } from './store';
 import type { DocRead, Facts, LinkRead } from './types';
-
-// Display only in phase (a): the folder CopyPdfsToDrive_v16 copies into. Nothing is copied.
-const DRIVE_TARGET = 'My Drive/Purchase Data Reconstruction/01 Source extracts/v16 re-read PDFs';
+import { driveFolder } from './driveTarget';
 
 const PRIORITY = [
   /exchanged|executed|signed/i, /\bCOS\b|contract/i, /\bVS\b|vendor statement|section 32|form 1|disclosure/i,
@@ -131,7 +129,7 @@ async function processMessage(mailbox: string, id: string, runId: number, ctx: C
     links,
     match,
     suggestions,
-    driveTarget: read.length ? DRIVE_TARGET : null,
+    driveTarget: read.length && ['A', 'B', 'C'].includes(match.grade) ? driveFolder(match.opportunityName) : null,
   });
 }
 

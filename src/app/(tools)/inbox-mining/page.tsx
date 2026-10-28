@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TopNavBar from '@/components/portal/TopNavBar';
+import { driveFilePath, driveFolder } from '@/lib/inboxMining/driveTarget';
 
 interface Fact { value: string; source: string; quote: string }
 interface DocRead {
@@ -240,6 +241,7 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
   if (!d) return <div className="text-sm text-gray-500">Loading live detail…</div>;
   const { item, live, current } = d;
   const m = item.match;
+  const targetOpp = ['A', 'B', 'C'].includes(m.grade) ? live?.name || m.opportunityName || null : null;
 
   return (
     <div className="space-y-4 text-sm">
@@ -363,18 +365,31 @@ function DetailPanel({ id, onChanged }: { id: number; onChanged: () => void }) {
 
       <section>
         <h3 className="mb-1 border-b pb-1 text-sm font-semibold text-brand-charcoal">Documents</h3>
-        {item.drive_target && <div className="text-xs text-gray-500">Drive target (display only, not copied): {item.drive_target}</div>}
+        {item.docs.some((doc) => doc.status === 'read') && (
+          <div className="rounded border border-blue-200 bg-blue-50/40 px-2 py-1 text-xs">
+            <span className="font-semibold">Drive target (display only, not copied):</span>{' '}
+            {targetOpp ? (
+              <span className="break-all font-mono">{driveFolder(targetOpp)}\</span>
+            ) : (
+              <span className="text-gray-500">none until the match is graded A, B or C (now {item.match.grade})</span>
+            )}
+          </div>
+        )}
         {item.docs.length === 0 && <div className="text-gray-500">No PDF / zip attachments or document links</div>}
-        {item.docs.map((doc, i) => (
+        {item.docs.map((doc, i) => {
+          const target = doc.status === 'read' && targetOpp ? driveFilePath(targetOpp, item.cls, item.received_at, doc.zipEntry || doc.name) : null;
+          return (
           <div key={i} className="mt-2 rounded border p-2">
             <div>
               <span className="font-medium">{doc.zipEntry ? `${doc.name} › ${doc.zipEntry}` : doc.name}</span>{' '}
               <span className="text-xs text-gray-500">[{doc.source}] {doc.status}{doc.pages ? ` · ${doc.pages} pages` : ''}{doc.isDocuSign ? ' · DocuSign' : ''}</span>
               {doc.reason && <div className="text-xs text-red-700">{doc.reason}</div>}
+              {target && <div className="break-all text-xs text-gray-500">→ <span className="font-mono">{target}</span></div>}
             </div>
             {doc.status === 'read' && <PdfPages itemId={item.id} doc={doc} />}
           </div>
-        ))}
+          );
+        })}
         {item.links.length > 0 && (
           <div className="mt-2">
             <div className="font-medium">Body links</div>
