@@ -111,6 +111,7 @@ export default function MorePanel({ meeting, demo = false, onClose }: { meeting:
                   <tr>
                     <th className="p-2 text-center">Still owned</th>
                     <th className="p-2">Property</th>
+                    <th className="p-2">Purchased</th>
                     <th className="p-2">Current value</th>
                     <th className="p-2">Rent $/wk</th>
                   </tr>
@@ -127,8 +128,12 @@ export default function MorePanel({ meeting, demo = false, onClose }: { meeting:
                         <td className="p-2">
                           <div className="font-medium text-brand-charcoal">{r.address || '(no address)'}</div>
                           <div className="text-xs text-gray-500">
-                            {[p.purchaseDate, money(p.purchasePrice), p.valuation !== null && `val ${money(p.valuation)}`, p.inFlight && 'in flight'].filter(Boolean).join(' · ')}
+                            {[p.valuation !== null && `Last valuation ${money(p.valuation)}`, p.inFlight && 'in flight'].filter(Boolean).join(' · ')}
                           </div>
+                        </td>
+                        <td className="whitespace-nowrap p-2">
+                          <div className="font-medium text-brand-charcoal">{p.purchasePrice !== null ? money(p.purchasePrice) : '–'}</div>
+                          <div className="text-xs text-gray-500">{p.purchaseDate || '–'}</div>
                         </td>
                         <td className="p-2">
                           <input inputMode="numeric" value={r.currentValue} onChange={(e) => set(r.key, { currentValue: e.target.value })}
