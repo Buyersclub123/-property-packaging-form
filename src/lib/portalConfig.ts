@@ -145,6 +145,11 @@ export const teams: TeamTile[] = [
         description: 'Client property purchases 2019–2026',
         href: '/team/research/purchase-analytics',
       },
+      {
+        name: 'Review Outcomes',
+        description: 'Record Portfolio Review meeting outcomes from the GHL calendar, with lists and discrepancies',
+        href: '/review-outcomes',
+      },
     ],
   },
   {

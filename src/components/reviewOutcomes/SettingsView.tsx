@@ -1,0 +1,100 @@
+'use client';
+
+import { useState } from 'react';
+import type { ReviewSettings } from '@/lib/reviewOutcomes/types';
+
+function ListEditor({ title, items, onChange, disabled }: { title: string; items: string[]; onChange: (v: string[]) => void; disabled: boolean }) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const v = draft.trim();
+    if (v && !items.includes(v)) onChange([...items, v]);
+    setDraft('');
+  };
+  return (
+    <div className="rounded border bg-white p-3">
+      <div className="mb-2 text-sm font-semibold text-brand-charcoal">{title}</div>
+      <div className="mb-2 flex flex-wrap gap-2">
+        {items.map((it) => (
+          <span key={it} className="inline-flex items-center gap-1 rounded-full border bg-gray-50 px-2 py-0.5 text-xs">
+            {it}
+            {!disabled && (
+              <button onClick={() => onChange(items.filter((x) => x !== it))} className="text-gray-400 hover:text-red-600" aria-label={`Remove ${it}`}>×</button>
+            )}
+          </span>
+        ))}
+      </div>
+      {!disabled && (
+        <div className="flex gap-2">
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="Add…" className="w-[240px] rounded border px-2 py-1 text-sm" />
+          <button onClick={add} className="rounded border px-2 py-1 text-xs hover:bg-gray-50">Add</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function SettingsView({ settings, recorder, demo = false, onSaved }: {
+  settings: ReviewSettings;
+  recorder: boolean;
+  demo?: boolean;
+  onSaved: (s: ReviewSettings) => void;
+}) {
+  const [outcomes, setOutcomes] = useState(settings.outcomes);
+  const [reasons, setReasons] = useState(settings.invalidReasons);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (demo) {
+      onSaved({ ...settings, outcomes, invalidReasons: reasons });
+      setMsg({ ok: true, text: 'Saved (demo only)' });
+      return;
+    }
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/review-outcomes/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcomes, invalidReasons: reasons, writeTarget: 'db' }),
+      });
+      const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      onSaved(body as ReviewSettings);
+      setMsg({ ok: true, text: 'Saved' });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="grid max-w-[760px] gap-3">
+      {!recorder && <div className="rounded border bg-gray-50 p-2 text-sm text-gray-600">Only Review recorders can change settings.</div>}
+      <ListEditor title="Outcomes" items={outcomes} onChange={setOutcomes} disabled={!recorder} />
+      <ListEditor title="Invalid reasons" items={reasons} onChange={setReasons} disabled={!recorder} />
+      <div className="rounded border bg-white p-3">
+        <div className="mb-2 text-sm font-semibold text-brand-charcoal">Write outcomes to</div>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" checked={settings.writeTarget === 'db'} disabled readOnly /> DB only
+          </label>
+          <label className="inline-flex items-center gap-2 text-gray-400" title="Phase 2 - not approved yet">
+            <input type="radio" checked={settings.writeTarget === 'db+ghl'} disabled={!settings.phase2Approved} readOnly /> DB + GHL calendar
+          </label>
+        </div>
+        <div className="mt-1 text-xs text-gray-500">DB + GHL calendar unlocks when phase 2 is approved.</div>
+      </div>
+      {recorder && (
+        <div className="flex items-center gap-3">
+          <button onClick={save} disabled={saving} className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save settings'}
+          </button>
+          {msg && <span className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-700'}`}>{msg.text}</span>}
+        </div>
+      )}
+    </div>
+  );
+}

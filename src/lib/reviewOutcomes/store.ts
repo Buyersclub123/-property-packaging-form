@@ -1,0 +1,142 @@
+import { getDb } from '@/lib/db';
+import { ensureTileAccessTables, logChange } from '@/lib/tileAccess';
+import { DEFAULT_SETTINGS, RECORDERS_GROUP, type ReviewSettings } from './types';
+
+// App-DB tables for the Portfolio Review outcomes tool (item 14). GHL / Google data is cached here read-only;
+// outcomes and property checks are the only things users write. Nothing is written to GHL, Calendar or the sheet.
+
+const RECORDER_SEED = ['john.e@buyersclub.com.au', 'john.t@buyersclub.com.au'];
+
+let ready: Promise<void> | null = null;
+
+async function create(): Promise<void> {
+  const sql = getDb();
+  await sql`CREATE TABLE IF NOT EXISTS review_meetings (
+    appointment_id TEXT PRIMARY KEY,
+    calendar_id TEXT NOT NULL,
+    calendar_name TEXT NOT NULL,
+    contact_id TEXT,
+    assigned_user_id TEXT,
+    start_at TIMESTAMPTZ NOT NULL,
+    ghl_status TEXT,
+    title TEXT,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS review_meetings_start ON review_meetings (start_at)`;
+  await sql`CREATE TABLE IF NOT EXISTS review_contacts (
+    contact_id TEXT PRIMARY KEY,
+    name TEXT,
+    email TEXT,
+    phones JSONB NOT NULL DEFAULT '[]',
+    fetched_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+  await sql`CREATE TABLE IF NOT EXISTS review_gcal_events (
+    event_id TEXT PRIMARY KEY,
+    start_at TIMESTAMPTZ NOT NULL,
+    all_day BOOLEAN NOT NULL DEFAULT FALSE,
+    start_raw TEXT,
+    summary TEXT,
+    description TEXT,
+    location TEXT,
+    organizer TEXT,
+    attendees JSONB NOT NULL DEFAULT '[]',
+    calendars JSONB NOT NULL DEFAULT '[]',
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS review_gcal_events_start ON review_gcal_events (start_at)`;
+  await sql`CREATE TABLE IF NOT EXISTS review_outcomes (
+    appointment_id TEXT PRIMARY KEY,
+    outcome TEXT,
+    invalid_reason TEXT,
+    note TEXT,
+    source TEXT NOT NULL DEFAULT 'tool',
+    source_ref TEXT,
+    recorded_by TEXT NOT NULL,
+    recorded_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+  await sql`CREATE TABLE IF NOT EXISTS review_property_checks (
+    appointment_id TEXT NOT NULL,
+    property_key TEXT NOT NULL,
+    address TEXT,
+    still_owned BOOLEAN,
+    current_value NUMERIC,
+    current_rent_pw NUMERIC,
+    recorded_by TEXT NOT NULL,
+    recorded_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (appointment_id, property_key)
+  )`;
+  await sql`CREATE TABLE IF NOT EXISTS review_outcome_log (
+    id SERIAL PRIMARY KEY,
+    at TIMESTAMPTZ DEFAULT NOW(),
+    by_email TEXT NOT NULL,
+    appointment_id TEXT,
+    action TEXT NOT NULL,
+    detail JSONB NOT NULL
+  )`;
+  await sql`CREATE TABLE IF NOT EXISTS review_settings (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_by TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+
+  await ensureTileAccessTables();
+  const made = await sql`INSERT INTO access_groups (name, created_by) VALUES (${RECORDERS_GROUP}, 'seed (JT 30/10 item 14)')
+    ON CONFLICT DO NOTHING RETURNING name`;
+  if (made.length) {
+    for (const e of RECORDER_SEED) {
+      await sql`INSERT INTO access_group_members (group_name, email, added_by) VALUES (${RECORDERS_GROUP}, ${e}, 'seed (JT 30/10 item 14)') ON CONFLICT DO NOTHING`;
+    }
+    await logChange('seed (JT 30/10 item 14)', 'group_create', { group: RECORDERS_GROUP, members: RECORDER_SEED });
+  }
+}
+
+export function ensureReviewTables(): Promise<void> {
+  if (!ready) {
+    ready = create().catch((e) => {
+      ready = null;
+      throw e;
+    });
+  }
+  return ready;
+}
+
+export async function loadSettings(): Promise<ReviewSettings> {
+  await ensureReviewTables();
+  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons')`;
+  const get = (k: string) => rows.find((r) => r.key === k)?.value as string[] | undefined;
+  return {
+    outcomes: get('outcomes') ?? DEFAULT_SETTINGS.outcomes,
+    invalidReasons: get('invalid_reasons') ?? DEFAULT_SETTINGS.invalidReasons,
+    writeTarget: 'db',
+    phase2Approved: false,
+  };
+}
+
+export async function saveSettings(by: string, s: { outcomes: string[]; invalidReasons: string[] }): Promise<void> {
+  await ensureReviewTables();
+  const sql = getDb();
+  const before = await loadSettings();
+  await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('outcomes', ${JSON.stringify(s.outcomes)}::jsonb, ${by})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
+  await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('invalid_reasons', ${JSON.stringify(s.invalidReasons)}::jsonb, ${by})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
+  await logReview(by, null, 'settings', { before: { outcomes: before.outcomes, invalidReasons: before.invalidReasons }, after: s });
+}
+
+export async function logReview(by: string, appointmentId: string | null, action: string, detail: Record<string, unknown>): Promise<void> {
+  await getDb()`INSERT INTO review_outcome_log (by_email, appointment_id, action, detail) VALUES (${by}, ${appointmentId}, ${action}, ${JSON.stringify(detail)}::jsonb)`;
+}
+
+export async function lastSync(): Promise<{ at: string; from: string; to: string } | null> {
+  await ensureReviewTables();
+  const rows = await getDb()`SELECT value FROM review_settings WHERE key = 'last_full_sync'`;
+  return (rows[0]?.value as { at: string; from: string; to: string }) ?? null;
+}
+
+export async function saveLastSync(by: string, v: { at: string; from: string; to: string }): Promise<void> {
+  await getDb()`INSERT INTO review_settings (key, value, updated_by) VALUES ('last_full_sync', ${JSON.stringify(v)}::jsonb, ${by})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
+}
