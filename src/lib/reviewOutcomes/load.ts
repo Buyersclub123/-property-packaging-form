@@ -2,7 +2,9 @@ import { getDb } from '@/lib/db';
 import { ensureReviewTables } from './store';
 import { ghlLocationId, ghlUsers, SECOND_MEETING_CALENDAR_ID } from './sync';
 import { matchMeetings, prepareGcal, type RawGcal } from './match';
-import { addDays, MIN_YMD, sydYmd, utcCover, type GcalEvent, type MeetingMode, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
+import { addDays, LEAD_SPLIT_FROM, MIN_YMD, NEW_LEAD_CALENDAR_ID, sydYmd, utcCover, type GcalEvent, type LeadType, type MeetingMode, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
+import { ensureSchedule, loadScheduleRows, matchSchedule, scheduleMode, scheduleOutcome, type ScheduleRow } from './schedule';
+import { nameMatcher } from './sales';
 
 // Reads meetings for Sydney days from..to from the cache, with recorded outcomes and the matching Google event.
 
@@ -28,7 +30,7 @@ export function meetingMode(location: string): MeetingMode {
 /** 'ethan.l@buyersclub.com.au' -> 'Ethan.L' (the sheet's style) when GHL has no name for the email. */
 const emailName = (e: string) => e.split('@')[0].split('.').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('.');
 
-export async function loadMeetings(viewer: ReviewViewer, from: string, to: string, callCentre: string[]): Promise<LoadedMeetings> {
+export async function loadMeetings(viewer: ReviewViewer, from: string, to: string, callCentre: string[], aliases: Record<string, string> = {}): Promise<LoadedMeetings> {
   await ensureReviewTables();
   const sql = getDb();
   const warnings: string[] = [];
@@ -43,8 +45,8 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
   const loc = ghlLocationId();
 
   const { start, end } = utcCover(addDays(from, -3), addDays(to, 3));
-  const rows = await sql`SELECT m.appointment_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.start_at, m.ghl_status, m.title,
-      c.name AS contact_name, c.email AS contact_email, c.phones,
+  const rows = await sql`SELECT m.appointment_id, m.calendar_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.start_at, m.ghl_status, m.title,
+      m.created_by, c.name AS contact_name, c.email AS contact_email, c.phones,
       o.outcome, o.invalid_reason, o.note, o.source, o.source_ref, o.recorded_by, o.recorded_at
     FROM review_meetings m
     LEFT JOIN review_contacts c ON c.contact_id = m.contact_id
@@ -86,10 +88,22 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
     const startIso = iso(r.start_at);
     return { r, startIso, t: Date.parse(startIso), ymd: sydYmd(startIso), name: String(r.contact_name || r.title || '') };
   });
+  const isNl = (r: Record<string, unknown>) => String(r.calendar_id) === NEW_LEAD_CALENDAR_ID;
   const matches = matchMeetings(
-    base.map((b) => ({ id: String(b.r.appointment_id), t: b.t, ymd: b.ymd, name: b.name, email: String(b.r.contact_email || ''), phones: (b.r.phones as string[]) || [] })),
+    base.filter((b) => !isNl(b.r)).map((b) => ({ id: String(b.r.appointment_id), t: b.t, ymd: b.ymd, name: b.name, email: String(b.r.contact_email || ''), phones: (b.r.phones as string[]) || [] })),
     prepared,
   );
+
+  // New Lead / Referral meetings: Lead type, Sat? / Outcome, Agent and Location from the calendar schedule sheet.
+  const nlBase = base.filter((b) => isNl(b.r) && b.ymd >= from && b.ymd <= to);
+  let schedByAppt = new Map<string, ScheduleRow>();
+  if (nlBase.length) {
+    const w = await ensureSchedule(false);
+    if (w) warnings.push(w);
+    const sched = await loadScheduleRows(addDays(from, -4), addDays(to, 4));
+    schedByAppt = matchSchedule(nlBase.map((b) => ({ id: String(b.r.appointment_id), ymd: b.ymd, name: b.name, phones: (b.r.phones as string[]) || [] })), sched);
+  }
+  const agentOf = nameMatcher(callCentre.map((e) => staffByEmail.get(e.toLowerCase()) || emailName(e)), aliases);
 
   const now = Date.now();
   const mine = (assigned: unknown) => viewer.recorder || viewer.consultantIds.includes(String(assigned || ''));
@@ -99,36 +113,49 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
       const status = String(r.ghl_status || '');
       const dbOutcome = r.outcome ? String(r.outcome) : null;
       const ghlOutcome = GHL_OUTCOME[status] || null;
-      const outcomeSource: OutcomeSource | null = dbOutcome ? (r.source === 'sheet' ? 'sheet' : 'tool') : ghlOutcome ? 'ghl' : null;
-      const m = matches.get(String(r.appointment_id));
+      const nl = isNl(r);
+      const sr = nl ? schedByAppt.get(String(r.appointment_id)) : undefined;
+      const schedOutcome = sr ? scheduleOutcome(sr, t <= Date.now()) : null;
+      const outcomeSource: OutcomeSource | null = dbOutcome ? (r.source === 'sheet' ? 'sheet' : 'tool') : schedOutcome ? 'schedule' : ghlOutcome ? 'ghl' : null;
+      const m = nl ? undefined : matches.get(String(r.appointment_id));
       const ev = m ? eventById.get(m.eventId) : undefined;
       const consEmail = userEmail.get(String(r.assigned_user_id || ''));
       const bookerEmail = ev?.attendees.map((a) => a.email).find((e) => cc.has(e) && e !== consEmail) || null;
+      const leadType: LeadType = !nl ? 'PR'
+        : ymd < LEAD_SPLIT_FROM || !sr ? 'Unknown'
+        : /^referr?al/i.test(sr.lead) ? 'Referral'
+        : /^new lead/i.test(sr.lead) ? 'New Lead'
+        : 'Unknown';
       return {
         id: String(r.appointment_id),
         calendar: String(r.calendar_name),
+        kind: nl ? ('NL' as const) : ('PR' as const),
+        leadType,
+        schedule: sr ? { tab: sr.tab, lead: sr.lead, sat: sr.sat, outcome: sr.outcome, agent: sr.agent, location: sr.location } : null,
         start: startIso,
         ymd,
         past: t <= now,
         contactId: String(r.contact_id || ''),
-        contactName: name,
+        // * = GHL wouldn't return the contact, so the name is the appointment title (explained in Settings).
+        contactName: r.contact_name ? name : `${name || '(no name)'}*`,
         contactEmail: String(r.contact_email || ''),
+        selfBooked: !!r.created_by && r.created_by === r.assigned_user_id,
         contactLink: r.contact_id && loc ? `https://app.gohighlevel.com/v2/location/${loc}/contacts/detail/${r.contact_id}` : '',
         consultantId: String(r.assigned_user_id || ''),
         consultant: userName.get(String(r.assigned_user_id || '')) || '(unassigned)',
         ghlStatus: GHL_STATUS[status] || status,
         title: String(r.title || ''),
-        outcome: dbOutcome || ghlOutcome,
+        outcome: dbOutcome || schedOutcome || ghlOutcome,
         outcomeSource,
         invalidReason: dbOutcome ? (r.invalid_reason as string | null) : null,
         note: (r.note as string | null) || null,
-        sourceRef: (r.source_ref as string | null) || null,
+        sourceRef: dbOutcome ? (r.source_ref as string | null) || null : schedOutcome && sr ? `Calendar schedule sheet, tab "${sr.tab}": ${[sr.sat, sr.outcome].filter(Boolean).join(' / ')}` : null,
         recordedBy: dbOutcome ? String(r.recorded_by) : null,
         recordedAt: dbOutcome ? iso(r.recorded_at) : null,
         gcal: m && ev ? { event: toEvent(ev), basis: m.basis, minutesApart: m.minutesApart } : null,
-        booker: bookerEmail ? staffByEmail.get(bookerEmail) || emailName(bookerEmail) : null,
+        booker: nl ? (sr?.agent ? agentOf(sr.agent) : null) : bookerEmail ? staffByEmail.get(bookerEmail) || emailName(bookerEmail) : null,
         bookerEmail,
-        mode: ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
+        mode: nl ? scheduleMode(sr?.location || '') : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
       };
     });
 

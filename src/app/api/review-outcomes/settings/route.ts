@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
   if (!access.ok) return json({ error: access.error }, access.status);
   if (!access.viewer.recorder) return json({ error: 'Only Review recorders can change settings.' }, 403);
   const b = (await request.json().catch(() => null)) as { outcomes?: unknown; invalidReasons?: unknown; callCentre?: unknown; targets?: unknown; salesAliases?: unknown; writeTarget?: string } | null;
-  if (b?.writeTarget && b.writeTarget !== 'db') return json({ error: 'Writing to the GHL calendar is phase 2 and not approved yet.' }, 400);
+  if (b?.writeTarget && b.writeTarget !== 'db' && b.writeTarget !== 'db+ghl') return json({ error: `Unknown write target "${b.writeTarget}".` }, 400);
+  const writeTarget = b?.writeTarget === 'db+ghl' ? 'db+ghl' : b?.writeTarget === 'db' ? 'db' : undefined;
   const outcomes = clean(b?.outcomes);
   const invalidReasons = clean(b?.invalidReasons);
   const callCentre = [...new Set((Array.isArray(b?.callCentre) ? b.callCentre : []).map((s) => String(s).trim().toLowerCase()).filter(Boolean))].slice(0, 60);
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
   const bad = callCentre.find((e) => !/^[^@\s]+@buyersclub\.com\.au$/.test(e));
   if (bad) return json({ error: `Call Centre entries must be Buyers Club emails ("${bad}").` }, 400);
   try {
-    await saveSettings(access.viewer.email, { outcomes, invalidReasons, callCentre, targets, salesAliases });
+    await saveSettings(access.viewer.email, { outcomes, invalidReasons, callCentre, targets, salesAliases, writeTarget });
     return json(await loadSettings());
   } catch (e) {
     return json({ error: (e as Error).message }, 500);

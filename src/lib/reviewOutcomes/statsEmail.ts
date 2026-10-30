@@ -32,7 +32,8 @@ ${rows.filter((r) => r.booked).map((r) => line(r)).join('\n')}
 ${line(total, true)}</table>`;
 }
 
-export function buildStatsEmail(meetings: ReviewMeeting[], periods: Period[], today: string): { subject: string; html: string } {
+export function buildStatsEmail(allMeetings: ReviewMeeting[], periods: Period[], today: string): { subject: string; html: string } {
+  const meetings = allMeetings.filter((m) => m.kind === 'PR');
   const sections = periods.map((p) => {
     const r = periodRange(p, today);
     const list = inRange(meetings, r.from, r.to);
@@ -63,7 +64,7 @@ ${table('Sales Stats (consultant)', sales.rows, sales.total, prevSales)}`;
     html: `<html><body style="font-family:Arial,sans-serif;color:#111">
 <div style="font-size:13px">PR meetings only. Referral attribution and New Lead / Referral meetings not yet included. Sat = Showed + DNQ.</div>
 ${sections.join('\n')}
-<div style="margin-top:16px;font-size:11px;color:#6b7280">From the Review Outcomes tool (Stats tab).</div>
+<div style="margin-top:16px;font-size:11px;color:#6b7280">From the Sales Meeting Outcomes tool (Stats tab).</div>
 </body></html>`,
   };
 }
@@ -81,7 +82,7 @@ export async function sendStatsEmail(args: { by: string; sender: string; to: str
   if (!args.periods.length) return { ok: false, error: 'No periods chosen.' };
   const today = sydYmd(Date.now());
   const settings = await loadSettings();
-  const loaded = await loadMeetings({ email: args.by, recorder: true, consultantIds: [] }, MIN_YMD, today, settings.callCentre);
+  const loaded = await loadMeetings({ email: args.by, recorder: true, consultantIds: [] }, MIN_YMD, today, settings.callCentre, settings.salesAliases);
   const { subject, html } = buildStatsEmail(loaded.meetings, args.periods, today);
   const res = await sendGmailAsUser({ sentBy: args.sender, to: args.to, subject, html });
   await logReview(args.by, null, 'stats_email_sent', { to: args.to, sender: args.sender, periods: args.periods, status: res.status });

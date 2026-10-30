@@ -113,6 +113,45 @@ export function sumRows(rows: Row[]): Row {
   return t;
 }
 
+export const isPR = (m: ReviewMeeting) => m.kind === 'PR';
+
+/** New Lead / Referral / Unknown (lead type not known) counts for the NL meetings of one name. */
+export interface TypeRow { name: string; nl: Row; ref: Row; unk: Row }
+export type TypeKey = 'nl' | 'ref' | 'unk';
+export const emptyTypeRow = (name: string): TypeRow => ({ name, nl: emptyRow('nl'), ref: emptyRow('ref'), unk: emptyRow('unk') });
+export const typeKeyOf = (m: ReviewMeeting): TypeKey => (m.leadType === 'New Lead' ? 'nl' : m.leadType === 'Referral' ? 'ref' : 'unk');
+
+function bump(x: Row, m: ReviewMeeting) {
+  x.booked++;
+  if (isSat(m)) x.sat++;
+  if (isDnq(m)) x.dnq++;
+  if (m.outcome === 'No show') x.noShow++;
+}
+
+export function typeTally(list: ReviewMeeting[], key: (m: ReviewMeeting) => string): { by: Map<string, TypeRow>; total: TypeRow } {
+  const by = new Map<string, TypeRow>();
+  const total = emptyTypeRow('TOTAL');
+  for (const m of list) {
+    if (isPR(m)) continue;
+    const k = key(m);
+    const r = by.get(k) || emptyTypeRow(k);
+    bump(r[typeKeyOf(m)], m);
+    bump(total[typeKeyOf(m)], m);
+    by.set(k, r);
+  }
+  return { by, total };
+}
+
+export function sumTypes(rows: TypeRow[]): TypeRow {
+  const t = emptyTypeRow('TOTAL');
+  for (const r of rows) {
+    for (const k of ['nl', 'ref', 'unk'] as const) {
+      t[k].booked += r[k].booked; t[k].sat += r[k].sat; t[k].dnq += r[k].dnq; t[k].noShow += r[k].noShow;
+    }
+  }
+  return t;
+}
+
 export const bookerKey = (m: ReviewMeeting) => m.booker || NO_BOOKER;
 export const consultantKey = (m: ReviewMeeting) => m.consultant;
 export const inRange = (list: ReviewMeeting[], from: string, to: string) => list.filter((m) => m.ymd >= from && m.ymd <= to);

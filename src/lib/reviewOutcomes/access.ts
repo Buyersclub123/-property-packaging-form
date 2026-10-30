@@ -18,7 +18,7 @@ export async function reviewAccess(h: Headers): Promise<ReviewAccess> {
     const team = teams.find((t) => t.subTiles.some((s) => s.href === TOOL_HREF));
     const tool = team?.subTiles.find((s) => s.href === TOOL_HREF);
     if (team && tool && !canSee(email, toolKey(team, tool), teamKey(team), data)) {
-      return { ok: false, status: 403, error: 'Review Outcomes is not available to you (Tile access).' };
+      return { ok: false, status: 403, error: 'Sales Meeting Outcomes is not available to you (Tile access).' };
     }
     const recorder = groupsOf(email, data).has(RECORDERS_GROUP) || isAdmin(email, data);
     const users = await ghlUsers().catch(() => []);

@@ -99,6 +99,8 @@ function AliasEditor({ aliases, onChange, disabled }: { aliases: Record<string, 
   );
 }
 
+import GhlMonitor from './GhlMonitor';
+
 export default function SettingsView({ settings, recorder, demo = false, names = [], onSaved }: {
   settings: ReviewSettings;
   /** Consultants and bookers to offer targets for. */
@@ -112,12 +114,13 @@ export default function SettingsView({ settings, recorder, demo = false, names =
   const [callCentre, setCallCentre] = useState(settings.callCentre);
   const [targets, setTargets] = useState(settings.targets || {});
   const [salesAliases, setSalesAliases] = useState(settings.salesAliases || {});
+  const [writeTarget, setWriteTarget] = useState(settings.writeTarget);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     if (demo) {
-      onSaved({ ...settings, outcomes, invalidReasons: reasons, callCentre, targets, salesAliases });
+      onSaved({ ...settings, outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget });
       setMsg({ ok: true, text: 'Saved (demo only)' });
       return;
     }
@@ -127,7 +130,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       const res = await fetch('/api/review-outcomes/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget: 'db' }),
+        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget }),
       });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
@@ -149,17 +152,22 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       <TargetsEditor names={names} targets={targets} onChange={setTargets} disabled={!recorder} />
       <AliasEditor aliases={salesAliases} onChange={setSalesAliases} disabled={!recorder} />
       {!demo && <StatsEmailSettingsCard recorder={recorder} />}
+      <GhlMonitor demo={demo} />
       <div className="rounded border bg-white p-3">
         <div className="mb-2 text-sm font-semibold text-brand-charcoal">Write outcomes to</div>
         <div className="flex flex-wrap gap-4 text-sm">
           <label className="inline-flex items-center gap-2">
-            <input type="radio" checked={settings.writeTarget === 'db'} disabled readOnly /> DB only
+            <input type="radio" checked={writeTarget === 'db'} disabled={!recorder || demo} onChange={() => setWriteTarget('db')} /> DB only
           </label>
-          <label className="inline-flex items-center gap-2 text-gray-400" title="Phase 2 - not approved yet">
-            <input type="radio" checked={settings.writeTarget === 'db+ghl'} disabled={!settings.phase2Approved} readOnly /> DB + GHL calendar
+          <label className="inline-flex items-center gap-2">
+            <input type="radio" checked={writeTarget === 'db+ghl'} disabled={!recorder || demo || !settings.phase2Approved} onChange={() => setWriteTarget('db+ghl')} /> DB + GHL appointment status
           </label>
         </div>
-        <div className="mt-1 text-xs text-gray-500">DB + GHL calendar unlocks when phase 2 is approved.</div>
+        <div className="mt-1 text-xs text-gray-500">
+          With DB + GHL, clicking an outcome also sets the GHL appointment status: Showed = showed, No show / Not sat = noshow,
+          Invalid (DNQ) = invalid, Cancelled = cancelled. Rescheduled and clearing leave GHL unchanged; DNQ reasons stay in the DB.
+          Values filled from the calendar schedule sheet are never written. Demo never writes. Click Save settings to apply.
+        </div>
       </div>
       {recorder && (
         <div className="flex items-center gap-3">

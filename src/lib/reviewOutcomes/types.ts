@@ -9,6 +9,23 @@ export type WriteTarget = 'db' | 'db+ghl';
 
 export type MeetingMode = 'Google' | 'F2F' | 'Unknown';
 
+/** PR = Portfolio Review Meeting; NL = Presentation Meeting One (New Lead / Referral). */
+export type MeetingKind = 'PR' | 'NL';
+export type LeadType = 'New Lead' | 'Referral' | 'PR' | 'Unknown';
+export const NEW_LEAD_CALENDAR_ID = 'OfHMBFJUzIEMAx7UGZrR';
+/** The calendar schedule sheet's LEAD column (New Lead / Referral) is filled from this date; earlier NL meetings are Unknown. */
+export const LEAD_SPLIT_FROM = '2026-03-01';
+
+/** The matching row of the team's CALENDAR SCHEDULE sheet (NL meetings only). */
+export interface ScheduleInfo {
+  tab: string;
+  lead: string;
+  sat: string;
+  outcome: string;
+  agent: string;
+  location: string;
+}
+
 export type StatsKind = 'day' | 'week' | 'month' | 'quarter' | 'ytd' | 'year' | 'all';
 
 /** Scheduled stats email (Settings). Sydney time; nothing is sent while disabled or with no recipients. */
@@ -119,12 +136,12 @@ export const DEFAULT_SETTINGS: ReviewSettings = {
   ],
   targets: {},
   // Tracking-sheet nicknames that don't match a GHL / Call Centre name on their own.
-  salesAliases: { Aadi: 'Adi Manek', Josh: 'Joshua.O', Jess: 'Jessica.K' },
+  salesAliases: { Aadi: 'Adi Manek', Josh: 'Joshua.O', Jess: 'Jessica.K', 'Caro Surace': 'Carlo Surace' },
   writeTarget: 'db',
   phase2Approved: false,
 };
 
-export type OutcomeSource = 'tool' | 'sheet' | 'ghl';
+export type OutcomeSource = 'tool' | 'sheet' | 'ghl' | 'schedule';
 
 export interface GcalEvent {
   id: string;
@@ -150,6 +167,11 @@ export interface GcalMatch {
 export interface ReviewMeeting {
   id: string;
   calendar: string;
+  kind: MeetingKind;
+  leadType: LeadType;
+  schedule: ScheduleInfo | null;
+  /** Created in GHL by the assigned consultant: no outcome needed (still counted in Stats). */
+  selfBooked: boolean;
   start: string;
   ymd: string;
   past: boolean;

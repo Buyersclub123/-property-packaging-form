@@ -65,7 +65,7 @@ export function teamKey(team: TeamTile): string {
 }
 
 export function toolKey(team: TeamTile, tool: SubTile): string {
-  return `tool:${team.id}/${slug(tool.name)}`;
+  return `tool:${team.id}/${tool.accessKey ?? slug(tool.name)}`;
 }
 
 /** A tool inside a tile that has its own page (e.g. Property Team > Backend > Duplicate Checker). */

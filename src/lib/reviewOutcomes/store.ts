@@ -93,6 +93,33 @@ async function create(): Promise<void> {
     reason TEXT,
     synced_at TIMESTAMPTZ DEFAULT NOW()
   )`;
+  // Read-only copy of the team's CALENDAR SCHEDULE sheet (weekly booking log): Lead type, Sat? and Outcome per meeting.
+  await sql`CREATE TABLE IF NOT EXISTS review_schedule_rows (
+    id TEXT PRIMARY KEY,
+    tab TEXT,
+    ymd TEXT NOT NULL,
+    consultant TEXT,
+    agent TEXT,
+    client TEXT,
+    lead TEXT,
+    phone TEXT,
+    sat TEXT,
+    outcome TEXT,
+    location TEXT,
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS review_schedule_rows_ymd ON review_schedule_rows (ymd)`;
+  // GHL keeps the same appointment when it is moved; each sync records a changed start time here (= Rescheduled).
+  await sql`CREATE TABLE IF NOT EXISTS review_meeting_moves (
+    id SERIAL PRIMARY KEY,
+    appointment_id TEXT NOT NULL,
+    old_start TIMESTAMPTZ NOT NULL,
+    new_start TIMESTAMPTZ NOT NULL,
+    seen_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS review_meeting_moves_appt ON review_meeting_moves (appointment_id)`;
+  // GHL createdBy.userId: equal to the assigned consultant = self-booked (no outcome needed).
+  await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS created_by TEXT`;
   await sql`CREATE TABLE IF NOT EXISTS review_outcome_log (
     id SERIAL PRIMARY KEY,
     at TIMESTAMPTZ DEFAULT NOW(),
@@ -131,7 +158,7 @@ export function ensureReviewTables(): Promise<void> {
 
 export async function loadSettings(): Promise<ReviewSettings> {
   await ensureReviewTables();
-  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets', 'sales_aliases')`;
+  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets', 'sales_aliases', 'write_target')`;
   const get = (k: string) => rows.find((r) => r.key === k)?.value as string[] | undefined;
   return {
     outcomes: get('outcomes') ?? DEFAULT_SETTINGS.outcomes,
@@ -139,15 +166,20 @@ export async function loadSettings(): Promise<ReviewSettings> {
     callCentre: get('call_centre') ?? DEFAULT_SETTINGS.callCentre,
     targets: (rows.find((r) => r.key === 'targets')?.value as Record<string, StatTarget> | undefined) ?? DEFAULT_SETTINGS.targets,
     salesAliases: (rows.find((r) => r.key === 'sales_aliases')?.value as Record<string, string> | undefined) ?? DEFAULT_SETTINGS.salesAliases,
-    writeTarget: 'db',
-    phase2Approved: false,
+    writeTarget: rows.find((r) => r.key === 'write_target')?.value === 'db+ghl' ? 'db+ghl' : 'db',
+    // JT approved GHL status write-back (2026-10-28); it stays off until switched on in Settings.
+    phase2Approved: true,
   };
 }
 
-export async function saveSettings(by: string, s: { outcomes: string[]; invalidReasons: string[]; callCentre: string[]; targets: Record<string, StatTarget>; salesAliases: Record<string, string> }): Promise<void> {
+export async function saveSettings(by: string, s: { outcomes: string[]; invalidReasons: string[]; callCentre: string[]; targets: Record<string, StatTarget>; salesAliases: Record<string, string>; writeTarget?: 'db' | 'db+ghl' }): Promise<void> {
   await ensureReviewTables();
   const sql = getDb();
   const before = await loadSettings();
+  if (s.writeTarget) {
+    await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('write_target', ${JSON.stringify(s.writeTarget)}::jsonb, ${by})
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
+  }
   await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('outcomes', ${JSON.stringify(s.outcomes)}::jsonb, ${by})
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
   await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('invalid_reasons', ${JSON.stringify(s.invalidReasons)}::jsonb, ${by})
@@ -159,7 +191,7 @@ export async function saveSettings(by: string, s: { outcomes: string[]; invalidR
   await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('sales_aliases', ${JSON.stringify(s.salesAliases)}::jsonb, ${by})
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
   await logReview(by, null, 'settings', {
-    before: { outcomes: before.outcomes, invalidReasons: before.invalidReasons, callCentre: before.callCentre, targets: before.targets, salesAliases: before.salesAliases },
+    before: { outcomes: before.outcomes, invalidReasons: before.invalidReasons, callCentre: before.callCentre, targets: before.targets, salesAliases: before.salesAliases, writeTarget: before.writeTarget },
     after: s,
   });
 }

@@ -9,6 +9,8 @@ import { MIN_YMD, utcCover } from './types';
 
 export const REVIEW_CALENDARS = [
   { id: 'ziiNfM0fl5q8iWL5MDtF', name: 'Portfolio Review Meeting' },
+  // New Lead / Referral meetings (JT: Presentation Meeting One only).
+  { id: 'OfHMBFJUzIEMAx7UGZrR', name: 'Presentation Meeting One' },
 ];
 /** 2nd / follow-up meetings aren't recorded in Review Outcomes (JT); older synced rows are filtered out on load. */
 export const SECOND_MEETING_CALENDAR_ID = 'fQPvq7ujG1HHvrPs0dfU';
@@ -34,6 +36,28 @@ async function ghlGet<T>(path: string, version: string): Promise<{ status: numbe
   if (res.status === 404) return { status: 404, body: null };
   if (!res.ok) throw new Error(`GHL ${path.split('?')[0]} returned HTTP ${res.status}`);
   return { status: res.status, body: (await res.json()) as T };
+}
+
+/** Tool outcome -> GHL appointment status. Rescheduled has no GHL status; JT: Not sat = No show. */
+export const GHL_STATUS_FOR: Record<string, string> = {
+  Showed: 'showed', 'No show': 'noshow', 'Not sat': 'noshow', 'Invalid (DNQ)': 'invalid', Cancelled: 'cancelled',
+};
+
+/** Phase 2 write-back: sets one appointment's status in GHL and mirrors it in review_meetings. */
+export async function ghlSetStatus(appointmentId: string, status: string): Promise<void> {
+  const { token, base } = ghlEnv();
+  const res = await ghlFetch(
+    `${base}/calendars/events/appointments/${appointmentId}`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, Version: '2021-04-15', Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appointmentStatus: status }),
+      signal: AbortSignal.timeout(30_000),
+    },
+    'review-outcomes',
+  );
+  if (!res.ok) throw new Error(`GHL returned HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (token needs calendars/events write scope)' : ''}`);
+  await getDb()`UPDATE review_meetings SET ghl_status = ${status} WHERE appointment_id = ${appointmentId}`;
 }
 
 export function ghlLocationId(): string {
@@ -82,6 +106,7 @@ interface GhlEvent {
   appointmentStatus?: string;
   appoinmentStatus?: string;
   deleted?: boolean;
+  createdBy?: { userId?: string; source?: string };
 }
 
 async function syncGhl(start: Date, end: Date, syncStart: string): Promise<number> {
@@ -102,17 +127,26 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
       byId.set(x.id, {
         id: x.id, cal_id: cal.id, cal_name: cal.name, contact_id: x.contactId || null, user_id: x.assignedUserId || null,
         start_at: new Date(t).toISOString(), status: x.appointmentStatus || x.appoinmentStatus || '', title: x.title || '', deleted: !!x.deleted,
+        created_by: x.createdBy?.userId || null,
       });
     }
   });
   const rows = [...byId.values()];
   const sql = getDb();
+  // Move tracking: a known appointment whose start time changed was rescheduled (GHL keeps the same id).
   for (let i = 0; i < rows.length; i += 500) {
-    await sql`INSERT INTO review_meetings (appointment_id, calendar_id, calendar_name, contact_id, assigned_user_id, start_at, ghl_status, title, deleted, synced_at)
-      SELECT r.id, r.cal_id, r.cal_name, r.contact_id, r.user_id, r.start_at::timestamptz, r.status, r.title, r.deleted, ${syncStart}::timestamptz
+    await sql`INSERT INTO review_meeting_moves (appointment_id, old_start, new_start)
+      SELECT m.appointment_id, m.start_at, r.start_at::timestamptz
+      FROM jsonb_to_recordset(${JSON.stringify(rows.slice(i, i + 500).map((r) => ({ id: r.id, start_at: r.start_at })))}::jsonb) AS r(id text, start_at text)
+      JOIN review_meetings m ON m.appointment_id = r.id
+      WHERE m.start_at <> r.start_at::timestamptz`;
+  }
+  for (let i = 0; i < rows.length; i += 500) {
+    await sql`INSERT INTO review_meetings (appointment_id, calendar_id, calendar_name, contact_id, assigned_user_id, start_at, ghl_status, title, deleted, created_by, synced_at)
+      SELECT r.id, r.cal_id, r.cal_name, r.contact_id, r.user_id, r.start_at::timestamptz, r.status, r.title, r.deleted, r.created_by, ${syncStart}::timestamptz
       FROM jsonb_to_recordset(${JSON.stringify(rows.slice(i, i + 500))}::jsonb)
-        AS r(id text, cal_id text, cal_name text, contact_id text, user_id text, start_at text, status text, title text, deleted boolean)
-      ON CONFLICT (appointment_id) DO UPDATE SET calendar_id = EXCLUDED.calendar_id, calendar_name = EXCLUDED.calendar_name,
+        AS r(id text, cal_id text, cal_name text, contact_id text, user_id text, start_at text, status text, title text, deleted boolean, created_by text)
+      ON CONFLICT (appointment_id) DO UPDATE SET calendar_id = EXCLUDED.calendar_id, created_by = EXCLUDED.created_by, calendar_name = EXCLUDED.calendar_name,
         contact_id = EXCLUDED.contact_id, assigned_user_id = EXCLUDED.assigned_user_id, start_at = EXCLUDED.start_at,
         ghl_status = EXCLUDED.ghl_status, title = EXCLUDED.title, deleted = EXCLUDED.deleted, synced_at = EXCLUDED.synced_at`;
   }
@@ -129,8 +163,8 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
   const contacts: { id: string; name: string; email: string; phones: string[] }[] = [];
   await pool(missing, 5, async (id) => {
     type C = { contactName?: string; firstName?: string; lastName?: string; email?: string; phone?: string; additionalPhones?: (string | { phone?: string })[] };
-    const { body } = await ghlGet<{ contact?: C }>(`/contacts/${id}`, '2021-07-28');
-    const k = body?.contact;
+    // One unreadable contact (GHL answers 400 for some merged / deleted ids) must not stop the rest.
+    const k = await ghlGet<{ contact?: C }>(`/contacts/${id}`, '2021-07-28').then((r) => r.body?.contact, () => undefined);
     contacts.push(
       k
         ? {

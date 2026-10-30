@@ -22,14 +22,23 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
   const g = m.gcal;
   const off = g && g.minutesApart !== null && g.minutesApart > DISCREPANCY_MINUTES;
   const isInvalid = !!m.outcome && /^invalid/i.test(m.outcome) && m.outcomeSource !== 'ghl';
+  const responded = !!m.outcome;
+  const srcLabel = m.outcomeSource === 'tool' ? 'recorded in this tool' : m.outcomeSource === 'schedule' ? 'from calendar sheet' : m.outcomeSource === 'ghl' ? 'from GHL' : 'from sheet';
   return (
-    <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 border-t px-3 py-2 first:border-t-0 md:grid-cols-[72px_minmax(0,1.1fr)_150px_minmax(0,1fr)_auto]">
-      <div className="text-sm font-semibold text-brand-charcoal">{time(m.start)}</div>
+    <div className={`grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 border-t px-3 py-2 first:border-t-0 md:grid-cols-[72px_minmax(0,1.1fr)_150px_minmax(0,1fr)_680px] ${responded ? 'bg-green-50' : ''}`}>
+      <div className="text-sm font-semibold text-brand-charcoal">
+        {time(m.start)}
+        {responded && <div className="text-2xl leading-none text-green-600" title={`Outcome ${srcLabel}`}>✔</div>}
+      </div>
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">
           {m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-brand-charcoal hover:underline">{m.contactName || '(no name)'}</a> : m.contactName}
         </div>
-        <div className="text-xs text-gray-500">GHL: {m.ghlStatus}</div>
+        <div className="text-xs text-gray-500">
+          GHL: {m.ghlStatus}
+          {m.kind === 'NL' && <span className="ml-2 rounded bg-purple-50 px-1 text-[11px] text-purple-700">Presentation 1 · {m.leadType}</span>}
+          {m.selfBooked && <span className="ml-2 rounded bg-gray-100 px-1 text-[11px] text-gray-600" title="Created in GHL by the consultant">Self-booked – no outcome needed</span>}
+        </div>
       </div>
       <div className="col-start-2 min-w-0 truncate text-sm text-gray-700 md:col-start-auto" title="GHL assigned consultant">{m.consultant}</div>
       <div className="col-start-2 min-w-0 text-xs md:col-start-auto">
@@ -40,10 +49,19 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
             <div className="truncate text-gray-400">{g.event.title}</div>
           </div>
         ) : (
-          <div className="text-amber-700">No consultant calendar event</div>
+          m.kind === 'NL' ? (
+            <div className="text-gray-600" title={m.schedule ? `Calendar schedule sheet, tab "${m.schedule.tab}"` : ''}>
+              {m.schedule
+                ? `Sheet: ${m.schedule.sat || '-'}${m.schedule.outcome ? ` / ${m.schedule.outcome}` : ''} · Agent ${m.booker || m.schedule.agent || '-'} · ${m.schedule.location || '-'}`
+                : 'Not found in the calendar schedule sheet'}
+            </div>
+          ) : (
+            <div className="text-amber-700">No consultant calendar event</div>
+          )
         )}
       </div>
-      <div className="col-start-2 mt-1 flex flex-wrap items-center gap-1 md:col-start-auto md:mt-0 md:justify-end">
+      <div className="col-start-2 mt-1 md:col-start-auto md:mt-0">
+       <div className="flex flex-wrap items-center gap-1 md:flex-nowrap md:justify-end">
         {settings.outcomes.map((o) => {
           const on = m.outcome === o;
           return (
@@ -56,6 +74,9 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
         {m.outcome && !settings.outcomes.includes(m.outcome) && (
           <span className={`rounded-full border px-2 py-0.5 text-xs ${outcomeStyle(m.outcome).on}`}>{m.outcome}</span>
         )}
+        <button onClick={() => onMore(m)} className="ml-1 rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>
+       </div>
+       <div className="mt-1 flex flex-wrap items-center gap-2 empty:hidden md:justify-end">
         {isInvalid && (
           <select value={m.invalidReason || ''} disabled={!canEdit} onChange={(e) => onRecord(m, m.outcome, e.target.value || null)}
             className="rounded border px-1 py-0.5 text-xs" aria-label="Invalid reason">
@@ -63,12 +84,11 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
             {settings.invalidReasons.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {m.outcomeSource === 'sheet' && <span className="text-[11px] text-gray-400" title={m.sourceRef || ''}>from sheet</span>}
-        {m.outcomeSource === 'ghl' && <span className="text-[11px] text-gray-400">from GHL</span>}
+        {responded && m.outcomeSource !== 'tool' && <span className="text-[11px] text-gray-400" title={m.sourceRef || ''}>{srcLabel}</span>}
         {canEdit && (m.outcomeSource === 'tool' || m.outcomeSource === 'sheet') && (
           <button onClick={() => onRecord(m, null)} className="text-[11px] text-gray-400 hover:text-red-600">clear</button>
         )}
-        <button onClick={() => onMore(m)} className="ml-1 rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>
+       </div>
       </div>
     </div>
   );
@@ -81,6 +101,15 @@ export default function ReviewOutcomesPage() {
   const [to, setTo] = useState(today);
   const [q, setQ] = useState('');
   const [consultant, setConsultant] = useState('');
+  const [kinds, setKinds] = useState<'PR' | 'NL' | 'both'>('both');
+  useEffect(() => {
+    const k = localStorage.getItem('review-outcomes-kinds');
+    if (k === 'PR' || k === 'NL' || k === 'both') setKinds(k);
+  }, []);
+  const pickKinds = (k: 'PR' | 'NL' | 'both') => {
+    setKinds(k);
+    try { localStorage.setItem('review-outcomes-kinds', k); } catch { /* storage unavailable */ }
+  };
   const [live, setLive] = useState<ReviewData | null>(null);
   const [demo, setDemo] = useState(false);
   const [demoAll, setDemoAll] = useState<ReviewData | null>(null);
@@ -94,8 +123,8 @@ export default function ReviewOutcomesPage() {
     [demo, demoAll, live, from, to],
   );
 
-  const load = useCallback(async (sync: 'auto' | 'none' = 'auto') => {
-    if (sync === 'auto') setLoading(true);
+  const load = useCallback(async (sync: 'auto' | 'none' | 'force' = 'auto') => {
+    if (sync !== 'none') setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/review-outcomes?from=${from}&to=${to}&sync=${sync}`, { cache: 'no-store' });
@@ -171,6 +200,7 @@ export default function ReviewOutcomesPage() {
       });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      if (body.ghlError) setSaveError(`${m.contactName}: ${body.ghlError}`);
     } catch (e) {
       setSaveError(`${m.contactName}: ${(e as Error).message}`);
     }
@@ -180,8 +210,8 @@ export default function ReviewOutcomesPage() {
   const meetings = useMemo(() => {
     const s = q.trim().toLowerCase();
     return (data?.meetings || []).filter((m) =>
-      (!consultant || m.consultant === consultant) && (!s || m.contactName.toLowerCase().includes(s) || m.contactEmail.toLowerCase().includes(s)));
-  }, [data, q, consultant]);
+      (kinds === 'both' || m.kind === kinds) && (!consultant || m.consultant === consultant) && (!s || m.contactName.toLowerCase().includes(s) || m.contactEmail.toLowerCase().includes(s)));
+  }, [data, q, consultant, kinds]);
   const byDay = useMemo(() => {
     const g = new Map<string, ReviewMeeting[]>();
     for (const m of meetings) g.set(m.ymd, [...(g.get(m.ymd) || []), m]);
@@ -192,9 +222,9 @@ export default function ReviewOutcomesPage() {
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1400px] px-4 py-6">
-        <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Review Outcomes</h1>
+        <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Sales Meeting Outcomes</h1>
         <p className="mb-4 text-[13px] text-[#7A7575]">
-          Source: GHL Calendar - Portfolio Review Meeting (2nd meetings aren't recorded). Outcomes are saved to our database only.
+          Source: GHL Calendars - Portfolio Review Meeting (2nd meetings aren't recorded) and Presentation Meeting One (New Lead / Referral, with the calendar schedule sheet). Outcomes are saved to our database{data?.settings.writeTarget === 'db+ghl' ? ' and the GHL appointment status' : ' only'}.
         </p>
 
         <div className="mb-4 inline-flex overflow-hidden rounded border border-gray-200 text-sm" role="tablist">
@@ -239,6 +269,14 @@ export default function ReviewOutcomesPage() {
                   </button>
                 ))}
               </div>
+              <div className="inline-flex overflow-hidden rounded border border-gray-200 text-xs" role="group" aria-label="Meeting type">
+                {([['PR', 'Portfolio Review'], ['NL', 'Presentation Meeting 1'], ['both', 'Both']] as const).map(([k, label]) => (
+                  <button key={k} onClick={() => pickKinds(k)}
+                    className={`px-2 py-1 font-semibold ${kinds === k ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client" className="w-[200px] rounded border px-2 py-1" />
               {data?.viewer.recorder && (
                 <select value={consultant} onChange={(e) => setConsultant(e.target.value)} className="rounded border px-1 py-1" aria-label="Consultant">
@@ -253,8 +291,16 @@ export default function ReviewOutcomesPage() {
               <div className="mb-3 flex flex-wrap gap-3 text-sm">
                 <Stat label="Meetings" value={meetings.length} />
                 <Stat label="Outcome recorded" value={meetings.filter((m) => m.outcome).length} />
-                <Stat label="No outcome (past)" value={meetings.filter((m) => m.past && !m.outcome).length} tone="text-red-700" />
-                <Stat label="No calendar event" value={meetings.filter((m) => !m.gcal).length} />
+                <Stat label="Updated here ✔" value={meetings.filter((m) => m.outcomeSource === 'tool').length} tone="text-green-700" />
+                <Stat label="No outcome (past)" value={meetings.filter((m) => m.past && !m.outcome && !m.selfBooked).length} tone="text-red-700" />
+                <Stat label="No calendar event (PR)" value={meetings.filter((m) => m.kind === 'PR' && !m.gcal).length} />
+                {!demo && (
+                  <button onClick={() => load('force')} disabled={loading} title="Re-read GHL appointments and Google invites for the dates shown, plus the calendar schedule sheet, now"
+                    className="ml-auto rounded border bg-white px-3 py-2 text-left hover:bg-gray-50 disabled:opacity-50">
+                    <div className="text-xs text-gray-500">GHL + calendar sheet</div>
+                    <div className="font-semibold text-blue-700">{loading ? 'Refreshing…' : 'Refresh from GHL'}</div>
+                  </button>
+                )}
               </div>
             )}
             {saveError && <div className="mb-2 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">Not saved - {saveError}</div>}

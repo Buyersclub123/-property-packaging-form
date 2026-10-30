@@ -25,6 +25,8 @@ export type SubTile = {
   icon?: 'cog';
   /** A tile that opens its own page of tools (/team/[id]/[tile slug]). */
   children?: SubTile[];
+  /** Keeps Tile access rules when a tool is renamed (defaults to slug(name)). */
+  accessKey?: string;
 };
 
 export function slug(s: string): string {
@@ -146,8 +148,9 @@ export const teams: TeamTile[] = [
         href: '/team/research/purchase-analytics',
       },
       {
-        name: 'Review Outcomes',
-        description: 'Record Portfolio Review meeting outcomes from the GHL calendar, with lists and discrepancies',
+        name: 'Sales Meeting Outcomes',
+        accessKey: 'review-outcomes',
+        description: 'Record Portfolio Review and Presentation Meeting 1 outcomes, with stats, sales and lists',
         href: '/review-outcomes',
       },
     ],

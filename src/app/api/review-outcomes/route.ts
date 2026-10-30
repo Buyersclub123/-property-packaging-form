@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { canRecord, reviewAccess } from '@/lib/reviewOutcomes/access';
 import { loadMeetings } from '@/lib/reviewOutcomes/load';
 import { meetingOwner, saveOutcome } from '@/lib/reviewOutcomes/record';
-import { lastSync, loadSettings } from '@/lib/reviewOutcomes/store';
+import { lastSync, loadSettings, logReview } from '@/lib/reviewOutcomes/store';
+import { GHL_STATUS_FOR, ghlSetStatus } from '@/lib/reviewOutcomes/sync';
+import { ensureSchedule } from '@/lib/reviewOutcomes/schedule';
 import { syncRange } from '@/lib/reviewOutcomes/sync';
 import { isYmd, sydYmd, type ReviewData } from '@/lib/reviewOutcomes/types';
 
@@ -25,9 +27,12 @@ export async function GET(request: NextRequest) {
   try {
     const mode = p.get('sync') || 'auto';
     const days = (Date.parse(to) - Date.parse(from)) / 864e5 + 1;
-    const syncWarnings = mode === 'none' || (mode === 'auto' && days > 31) ? [] : await syncRange(from, to, mode === 'force');
+    const syncWarnings: string[] = mode === 'none' || (mode === 'auto' && days > 31) ? [] : await syncRange(from, to, mode === 'force');
+    // "Refresh from GHL" also re-reads the calendar schedule sheet now (otherwise it's re-read at most hourly).
+    const sheetWarning = mode === 'force' ? await ensureSchedule(true) : null;
+    if (sheetWarning) syncWarnings.push(sheetWarning);
     const settings = await loadSettings();
-    const [loaded, sync] = await Promise.all([loadMeetings(access.viewer, from, to, settings.callCentre), lastSync()]);
+    const [loaded, sync] = await Promise.all([loadMeetings(access.viewer, from, to, settings.callCentre, settings.salesAliases), lastSync()]);
     const body: ReviewData = {
       viewer: access.viewer,
       settings,
@@ -60,9 +65,22 @@ export async function POST(request: NextRequest) {
     if (outcome !== null && !settings.outcomes.includes(outcome)) return json({ error: `Unknown outcome "${outcome}".` }, 400);
     const reason = outcome && /^invalid/i.test(outcome) ? b.invalidReason ?? null : null;
     if (reason !== null && !settings.invalidReasons.includes(reason)) return json({ error: `Unknown reason "${reason}".` }, 400);
-    // settings.writeTarget is always 'db' in phase 1: the outcome is stored in our DB only.
     await saveOutcome(access.viewer.email, b.appointmentId, outcome, reason);
-    return json({ ok: true });
+    // Phase 2: a deliberate save in the tool always writes the mapped status to GHL (correcting it if set wrong there).
+    // The DB save stands even if GHL fails; Rescheduled / cleared outcomes leave GHL unchanged. DNQ reasons stay DB-only.
+    let ghl: string | null = null;
+    const status = outcome ? GHL_STATUS_FOR[outcome] : undefined;
+    if (settings.writeTarget === 'db+ghl' && status) {
+      try {
+        await ghlSetStatus(b.appointmentId, status);
+        ghl = `GHL set to ${status}`;
+        await logReview(access.viewer.email, b.appointmentId, 'ghl_status', { status });
+      } catch (e) {
+        await logReview(access.viewer.email, b.appointmentId, 'ghl_status_failed', { status, error: (e as Error).message });
+        return json({ ok: true, ghlError: `Saved, but GHL wasn't updated: ${(e as Error).message}` });
+      }
+    }
+    return json({ ok: true, ghl });
   } catch (e) {
     console.error('[review-outcomes] save failed:', e);
     return json({ error: (e as Error).message }, 500);

@@ -37,6 +37,10 @@
       "schedule": "5 * * * *"
     },
     {
+      "path": "/api/review-outcomes/sync-cron",
+      "schedule": "15 * * * *"
+    },
+    {
       "path": "/api/ghl-monitor/digest",
       "schedule": "0 7 * * *"
     }

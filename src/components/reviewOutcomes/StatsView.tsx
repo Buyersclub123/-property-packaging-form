@@ -5,11 +5,12 @@ import { addDays, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type Sal
 import { aud, emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sumSold } from '@/lib/reviewOutcomes/salesStats';
 import { dmy, weekday } from './ui';
 import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
+import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
 import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, NO_BOOKER, pct, periodRange, shift, sumRows, tally, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
 
 // Item 15: CC Stats (left) and Sales Stats (right) for one shared period, laid out like the team's STATS sheet.
-// Only the PR columns are filled from the tool's outcomes; New Lead / Referral / Sold / Revenue / Marketing are blank
-// placeholders until their sources are known.
+// PR = Portfolio Review meetings; New Lead / Referral = Presentation Meeting One (lead type and Sat? from the calendar
+// schedule sheet); Sold / Revenue from the Tracking sheet. Marketing stays a placeholder.
 
 
 const n0 = (n: number) => (n ? String(n) : '');
@@ -72,19 +73,26 @@ function CompareBox({ title, rows, total, prev, prevLabel }: { title: string; ro
 
 type SoldOf = (name: string) => SoldRow;
 
-function CcTable({ data, pick, prevOf, soldOf }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf }) {
+type TypeOf = (name: string) => TypeRow;
+type PickT = (name: string, f: Field, t: TypeKey) => void;
+
+function CcTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf; typeOf: TypeOf; pickT: PickT }) {
   const line = (r: Row, total = false) => {
     const s = soldOf(total ? 'TOTAL' : r.name);
+    const t = typeOf(total ? 'TOTAL' : r.name);
+    const exB = t.nl.booked + t.ref.booked + t.unk.booked;
+    const exS = t.nl.sat + t.ref.sat + t.unk.sat;
+    const T = (v: number, f: Field, k: TypeKey) => <NumCell v={v} total={total} onClick={() => pickT(r.name, f, k)} />;
     return (
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
         <td className={TDN}>{r.name}</td>
-        <td className={TD} /><td className={TD} /><NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked}</td>
-        <td className={TD} /><td className={TD} /><td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>0.00%</td>
-        <td className={TD} /><td className={TD} /><td className={TD}>{n0(s.ref)}</td>
+        {T(t.nl.booked, 'booked', 'nl')}{T(t.ref.booked, 'booked', 'ref')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`} title={t.unk.booked ? `Includes ${t.unk.booked} with unknown lead type` : ''}>{r.booked + exB}</td>
+        {T(t.nl.sat, 'sat', 'nl')}{T(t.nl.dnq, 'dnq', 'nl')}<td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>{pct(t.nl.sat, t.nl.booked)}</td>
+        {T(t.ref.sat, 'sat', 'ref')}{T(t.ref.dnq, 'dnq', 'ref')}<td className={TD}>{n0(s.ref)}</td>
         <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td>
-        <td className={`${TD} ${SHADE}`}>0</td><td className={`${TD} ${SHADE}`}>0</td>
+        <td className={`${TD} ${SHADE}`}>{exB}</td><td className={`${TD} ${SHADE}`}>{exS}</td>
         <td className={`${TD} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td><td className={TD}>{aud(s.revenue)}</td>
-        <td className={`${TD} ${SHADE}`}>0.00%</td><td className={`${TD} ${SHADE}`} title="PR Sold / PR Sat">{pct(s.pr, r.sat)}</td>
+        <td className={`${TD} ${SHADE}`}>{pct(t.nl.sat, t.nl.booked)}</td><td className={`${TD} ${SHADE}`} title="SOLD / Sat (all meeting types)">{pct(s.total, r.sat + exS)}</td>
       </tr>
     );
   };
@@ -120,19 +128,23 @@ function CcTable({ data, pick, prevOf, soldOf }: { data: { rows: Row[]; total: R
   );
 }
 
-function SalesTable({ data, pick, prevOf, soldOf }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf }) {
+function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf; typeOf: TypeOf; pickT: PickT }) {
   const line = (r: Row, total = false) => {
     const s = soldOf(total ? 'TOTAL' : r.name);
+    const t = typeOf(total ? 'TOTAL' : r.name);
+    const exB = t.nl.booked + t.ref.booked + t.unk.booked;
+    const allSat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
+    const T = (v: number, f: Field, k: TypeKey) => <NumCell v={v} total={total} onClick={() => pickT(r.name, f, k)} />;
     return (
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
         <td className={TDN}>{r.name}</td>
-        <td className={TD} /><td className={TD} /><NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked}</td>
-        <td className={TD} /><td className={TD} /><td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>0.00%</td>
-        <td className={TD} /><td className={TD} /><td className={TD}>{n0(s.ref)}</td><td className={`${TD} ${SHADE}`}>0.00%</td>
+        {T(t.nl.booked, 'booked', 'nl')}{T(t.ref.booked, 'booked', 'ref')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`} title={t.unk.booked ? `Includes ${t.unk.booked} with unknown lead type` : ''}>{r.booked + exB}</td>
+        {T(t.nl.sat, 'sat', 'nl')}{T(t.nl.dnq, 'dnq', 'nl')}<td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>{pct(s.nl, t.nl.sat)}</td>
+        {T(t.ref.sat, 'sat', 'ref')}{T(t.ref.dnq, 'dnq', 'ref')}<td className={TD}>{n0(s.ref)}</td><td className={`${TD} ${SHADE}`}>{pct(s.ref, t.ref.sat)}</td>
         <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td><td className={`${TD} ${SHADE}`}>{pct(s.pr, r.sat)}</td>
         <td className={TD}>{n0(s.selfGen)}</td><td className={TD}>{n0(s.repeat)}</td><td className={`${TD} ${SHADE} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
         <td className={TD}>{aud(s.revenue)}</td>
-        <td className={`${TD} ${SHADE}`}>{pct(r.sat, r.booked)}</td><td className={`${TD} ${SHADE}`} title="PR Sold / PR Sat">{pct(s.pr, r.sat)}</td>
+        <td className={`${TD} ${SHADE}`}>{pct(allSat, r.booked + exB)}</td><td className={`${TD} ${SHADE}`} title="Sold / Sat (all meeting types)">{pct(s.total, allSat)}</td>
       </tr>
     );
   };
@@ -207,23 +219,29 @@ function MarketingTable() {
 const ratio = (n: number, d: number) => (d ? n / d : 0);
 
 /** Download the period in the STATS sheet's column order; only the PR columns are filled for now. */
-async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, ccSold: SoldOf, salesSold: SoldOf) {
+async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, ccSold: SoldOf, salesSold: SoldOf, ccT: TypeOf, salesT: TypeOf) {
   const XLSX = await import('xlsx');
   const ccHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sat %',
     'Ref Sat', 'Ref DNQ', 'Ref Sold', 'PR Sat', 'PR DNQ', 'PR Sold', 'Total (Excl PR) Booked', 'Total (Excl PR) Sat', 'SOLD', 'Cancelled', 'Revenue $', 'N/L Sat %', 'Sold %'];
   const ccRow = (r: Row) => {
     const s = ccSold(r.name);
-    return [r.name, null, null, r.booked, r.booked, null, null, s.nl, 0, null, null, s.ref, r.sat, r.dnq, s.pr, 0, 0, s.total, s.cancelled, s.revenue, 0, ratio(s.pr, r.sat)];
+    const t = ccT(r.name);
+    const exB = t.nl.booked + t.ref.booked + t.unk.booked;
+    const exS = t.nl.sat + t.ref.sat + t.unk.sat;
+    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, t.nl.sat, t.nl.dnq, s.nl, ratio(t.nl.sat, t.nl.booked), t.ref.sat, t.ref.dnq, s.ref, r.sat, r.dnq, s.pr, exB, exS, s.total, s.cancelled, s.revenue, ratio(t.nl.sat, t.nl.booked), ratio(s.total, r.sat + exS)];
   };
   const salesHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sold %',
     'Ref Sat', 'Ref DNQ', 'Ref Sold', 'Ref Sold %', 'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Cancelled', 'Revenue $', 'Overall Sat %', 'Overall Sold %'];
   const salesRow = (r: Row) => {
     const s = salesSold(r.name);
-    return [r.name, null, null, r.booked, r.booked, null, null, s.nl, 0, null, null, s.ref, 0, r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, s.revenue, ratio(r.sat, r.booked), ratio(s.pr, r.sat)];
+    const t = salesT(r.name);
+    const exB = t.nl.booked + t.ref.booked + t.unk.booked;
+    const allSat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
+    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, t.nl.sat, t.nl.dnq, s.nl, ratio(s.nl, t.nl.sat), t.ref.sat, t.ref.dnq, s.ref, ratio(s.ref, t.ref.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, s.revenue, ratio(allSat, r.booked + exB), ratio(s.total, allSat)];
   };
   const aoa: unknown[][] = [
-    [`Review Outcomes stats - ${label}`],
-    ['PR meetings only. Referral attribution and New Lead / Referral meetings not yet included.'],
+    [`Sales Meeting Outcomes stats - ${label}`],
+    ['PR and New Lead (Presentation Meeting One) meetings. New Lead vs Referral from the calendar schedule sheet (from March 2026); others Unknown, in TOTAL only.'],
     ['Sold, Cancelled and Revenue: Buyers Club Tracking sheet, all lead sources.'],
     [],
     ['CC Stats'], ccHead, ...cc.rows.map(ccRow), ccRow(cc.total),
@@ -452,6 +470,9 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
 
   const r = periodRange(p, today);
   const list = useMemo(() => (data?.meetings || []).filter((m) => m.ymd >= r.from && m.ymd <= r.to), [data, r.from, r.to]);
+  const prList = useMemo(() => list.filter(isPR), [list]);
+  const ccTypes = useMemo(() => typeTally(list, bookerKey), [list]);
+  const consTypes = useMemo(() => typeTally(list, consultantKey), [list]);
   const pool = useMemo(
     () => (names.mode === 'year' ? (data?.meetings || []).filter((m) => m.ymd.startsWith(today.slice(0, 4))) : data?.meetings || []),
     [data, names.mode, today],
@@ -464,13 +485,19 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const allBookers = useMemo(() => [...new Set([...pool.map((m) => m.booker || NO_BOOKER), ...salePool.map(ccKey)])], [pool, salePool]);
   const allConsultants = useMemo(() => [...new Set([...pool.map((m) => m.consultant), ...salePool.map(consKey)])], [pool, salePool]);
   const cc = useMemo(() => {
-    const t = tally(list, bookerKey, names.mode === 'active' ? [...ccSold.by.keys()] : allBookers);
+    const t = tally(prList, bookerKey, names.mode === 'active' ? [...new Set([...ccSold.by.keys(), ...ccTypes.by.keys()])] : allBookers);
     return names.mode === 'custom' ? visible(t, names.hiddenCc, view.includeHidden) : t;
-  }, [list, names, allBookers, view.includeHidden, ccSold]);
+  }, [prList, names, allBookers, view.includeHidden, ccSold, ccTypes]);
   const sales = useMemo(() => {
-    const t = tally(list, consultantKey, names.mode === 'active' ? [...consSold.by.keys()] : allConsultants);
+    const t = tally(prList, consultantKey, names.mode === 'active' ? [...new Set([...consSold.by.keys(), ...consTypes.by.keys()])] : allConsultants);
     return names.mode === 'custom' ? visible(t, names.hiddenSales, view.includeHidden) : t;
-  }, [list, names, allConsultants, view.includeHidden, consSold]);
+  }, [prList, names, allConsultants, view.includeHidden, consSold, consTypes]);
+  const typeOf = (s: { by: Map<string, TypeRow>; total: TypeRow }, rows: Row[]): TypeOf => {
+    const total = names.mode === 'custom' && !view.includeHidden ? sumTypes(rows.map((x) => s.by.get(x.name) || emptyTypeRow(x.name))) : s.total;
+    return (n) => (n === 'TOTAL' ? total : s.by.get(n) || emptyTypeRow(n));
+  };
+  const ccTypeOf = typeOf(ccTypes, cc.rows);
+  const consTypeOf = typeOf(consTypes, sales.rows);
   const soldOf = (s: { by: Map<string, SoldRow>; total: SoldRow }, rows: Row[]): SoldOf => {
     const total = names.mode === 'custom' && !view.includeHidden ? sumSold(rows.map((x) => s.by.get(x.name) || emptySold(x.name))) : s.total;
     return (n) => (n === 'TOTAL' ? total : s.by.get(n) || emptySold(n));
@@ -480,7 +507,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const prevMaps = useMemo(() => {
     const pr = compareRange(p, today, view.base, view.baseYear);
     if (!pr) return null;
-    const pl = inRange(data?.meetings || [], pr.from, pr.to);
+    const pl = inRange(data?.meetings || [], pr.from, pr.to).filter(isPR);
     const toMap = (t: Tally, hidden: string[]) => {
       const v = names.mode === 'custom' ? visible(t, hidden, view.includeHidden) : t;
       return new Map([...v.rows, v.total].map((x) => [x.name, x]));
@@ -525,7 +552,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   }, [data, list, p.kind, r.from, r.to]);
   const canShift = p.kind !== 'ytd' && p.kind !== 'all';
   const prevOk = canShift && periodRange(shift(p, -1), today).to >= MIN_YMD;
-  const noOutcome = useMemo(() => list.filter((m) => m.past && !m.outcome).length, [list]);
+  const noOutcome = useMemo(() => list.filter((m) => m.past && !m.outcome && !m.selfBooked).length, [list]);
   const check = useMemo(() => {
     if (!sheet) return null;
     const inside = sheet.blocks.filter((b) => b.from >= r.from && b.to <= r.to && b.booked + b.sat + b.dnq > 0);
@@ -539,17 +566,18 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
     chosen.sort((a, c) => a.from.localeCompare(c.from));
     const s = emptyRow('Sheet');
     for (const b of chosen) { s.booked += b.booked; s.sat += b.sat; s.dnq += b.dnq; }
-    const covered = (data?.meetings || []).filter((m) => chosen.some((b) => m.ymd >= b.from && m.ymd <= b.to));
+    const covered = (data?.meetings || []).filter(isPR).filter((m) => chosen.some((b) => m.ymd >= b.from && m.ymd <= b.to));
     return { weeks: chosen.length, from: chosen[0].from, to: chosen[chosen.length - 1].to, s, t: tally(covered, () => 'x').total };
   }, [sheet, data, r.from, r.to]);
   const years = Array.from({ length: Number(today.slice(0, 4)) - 2023 }, (_, i) => 2024 + i);
-  const pickFrom = (side: 'cc' | 'sales', name: string, f: Field) => {
+  const pickFrom = (side: 'cc' | 'sales', name: string, f: Field, type: 'PR' | TypeKey = 'PR') => {
     const key = side === 'cc' ? (m: ReviewMeeting) => m.booker || NO_BOOKER : (m: ReviewMeeting) => m.consultant;
     const meetings = list
       .filter((m) => name === 'TOTAL' || key(m) === name)
+      .filter((m) => (type === 'PR' ? isPR(m) : !isPR(m) && typeKeyOf(m) === type))
       .filter((m) => (f === 'sat' ? isSat(m) : f === 'dnq' ? isDnq(m) : true))
       .sort((a, b) => a.start.localeCompare(b.start));
-    setDrill({ title: `${name === 'TOTAL' ? (side === 'cc' ? 'Call Centre total' : 'Sales total') : name} - ${f === 'booked' ? 'Booked' : f === 'sat' ? 'Sat' : 'DNQ'} - ${r.label}`, meetings });
+    setDrill({ title: `${name === 'TOTAL' ? (side === 'cc' ? 'Call Centre total' : 'Sales total') : name} - ${f === 'booked' ? 'Booked' : f === 'sat' ? 'Sat' : 'DNQ'} - ${type === 'PR' ? 'PR' : type === 'nl' ? 'New Lead' : type === 'ref' ? 'Referral' : 'Unknown lead type'} - ${r.label}`, meetings });
   };
 
   if (error) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>;
@@ -558,7 +586,9 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   return (
     <div>
       <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-brand-charcoal">
-        PR meetings only. Referral attribution and New Lead / Referral meetings not yet included.
+        PR (Portfolio Review) and New Lead (Presentation Meeting One) meetings. New Lead vs Referral comes from the calendar schedule sheet&apos;s Lead column
+        (from March 2026); earlier or unlabelled ones are Unknown and count only in TOTAL / Total (Excl PR&apos;s). New Lead Sat / DNQ come from the sheet&apos;s Sat? column.
+        Comparisons, targets and the sheet check are PR only.
         {!demoData && (
           <div className="mt-1 text-xs text-gray-600">
             Sold, Cancelled and Revenue come from the Buyers Club Tracking sheet (all lead sources, by date signed; see the Sales tab).
@@ -621,7 +651,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
             </div>
           )}
         </div>
-        <button onClick={() => exportXlsx(r.label, cc, sales, modes, ccSoldOf, consSoldOf)} className="ml-2 rounded border bg-white px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">
+        <button onClick={() => exportXlsx(r.label, cc, sales, modes, ccSoldOf, consSoldOf, ccTypeOf, consTypeOf)} className="ml-2 rounded border bg-white px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">
           Export xlsx
         </button>
         {!demoData && data.viewer.recorder && (
@@ -728,7 +758,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
           <div className={view.compare === 'box' && prevMaps ? 'grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_300px]' : ''}>
             <div className="min-w-0 overflow-x-auto rounded border bg-white">
               <Title>CC Stats</Title>
-              <CcTable data={cc} pick={(n, f) => pickFrom('cc', n, f)} prevOf={prevOf('cc')} soldOf={ccSoldOf} />
+              <CcTable data={cc} pick={(n, f) => pickFrom('cc', n, f)} prevOf={prevOf('cc')} soldOf={ccSoldOf} typeOf={ccTypeOf} pickT={(n, f, t) => pickFrom('cc', n, f, t)} />
             </div>
             {view.compare === 'box' && prevMaps && <CompareBox title="CC" rows={cc.rows} total={cc.total} prev={prevMaps.cc} prevLabel={prevMaps.label} />}
           </div>
@@ -740,7 +770,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         <div className={view.compare === 'box' && prevMaps ? 'grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_300px]' : ''}>
           <div className="min-w-0 overflow-x-auto rounded border bg-white">
             <Title>Sales Stats</Title>
-            <SalesTable data={sales} pick={(n, f) => pickFrom('sales', n, f)} prevOf={prevOf('sales')} soldOf={consSoldOf} />
+            <SalesTable data={sales} pick={(n, f) => pickFrom('sales', n, f)} prevOf={prevOf('sales')} soldOf={consSoldOf} typeOf={consTypeOf} pickT={(n, f, t) => pickFrom('sales', n, f, t)} />
           </div>
           {view.compare === 'box' && prevMaps && <CompareBox title="Sales" rows={sales.rows} total={sales.total} prev={prevMaps.sales} prevLabel={prevMaps.label} />}
         </div>

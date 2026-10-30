@@ -87,7 +87,7 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
   };
 
   const inRange = useMemo(() => (data?.meetings || []).filter((m) => m.ymd >= from && m.ymd <= to), [data, from, to]);
-  const noOutcome = useMemo(() => inRange.filter((m) => m.past && !m.outcome), [inRange]);
+  const noOutcome = useMemo(() => inRange.filter((m) => m.past && !m.outcome && !m.selfBooked), [inRange]);
   const noOutcomeByCons = useMemo(() => {
     const g = new Map<string, ReviewMeeting[]>();
     for (const m of noOutcome) g.set(m.consultant, [...(g.get(m.consultant) || []), m]);
@@ -116,7 +116,7 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
 
   const pastInRange = useMemo(() => inRange.filter((m) => m.ymd <= today), [inRange, today]);
   const ghlNoGcal = useMemo(
-    () => pastInRange.filter((m) => !m.gcal && !(hideCancelled && (m.ghlStatus === 'Cancelled' || m.outcome === 'Cancelled'))),
+    () => pastInRange.filter((m) => m.kind === 'PR' && !m.gcal && !(hideCancelled && (m.ghlStatus === 'Cancelled' || m.outcome === 'Cancelled'))),
     [pastInRange, hideCancelled],
   );
   const gcalNoGhl = useMemo(() => (data?.gcalUnmatched || []).filter((e) => e.ymd >= from && e.ymd <= to && e.ymd <= today), [data, from, to, today]);
