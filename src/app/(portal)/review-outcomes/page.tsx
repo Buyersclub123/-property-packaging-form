@@ -242,7 +242,9 @@ export default function ReviewOutcomesPage() {
         </p>
 
         <div className="mb-4 inline-flex overflow-hidden rounded border border-gray-200 text-sm" role="tablist">
-          {([['day', 'Meetings'], ['lists', 'Lists'], ['stats', 'Stats'], ['sales', 'Sales'], ['settings', 'Settings']] as const).map(([k, label]) => (
+          {([['day', 'Meetings'], ['lists', 'Lists'], ['stats', 'Stats'], ['sales', 'Sales'], ['settings', 'Settings']] as const)
+            .filter(([k]) => k !== 'settings' || demo || data?.viewer.recorder)
+            .map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
               className={`px-3 py-1.5 font-semibold ${tab === k ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
               {label}
@@ -350,7 +352,7 @@ export default function ReviewOutcomesPage() {
         {tab === 'lists' && <ListsView onOpenDay={openDay} demoData={demo ? demoAll : null} />}
         {tab === 'stats' && <StatsView demoData={demo ? demoAll : null} />}
         {tab === 'sales' && <SalesView demo={demo} />}
-        {tab === 'settings' && data && (
+        {tab === 'settings' && data && (demo || data.viewer.recorder) && (
           <SettingsView settings={data.settings} recorder={data.viewer.recorder} demo={demo}
             names={[...new Set([...data.consultants, ...data.meetings.flatMap((m) => [m.consultant, m.booker || ''])].filter(Boolean))]}
             onSaved={(s) => (demo ? setDemoAll((d) => d && { ...d, settings: s }) : setLive((d) => d && { ...d, settings: s }))} />

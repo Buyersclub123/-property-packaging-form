@@ -7,6 +7,9 @@ import { RECORDERS_GROUP, TOOL_HREF, type ReviewViewer } from './types';
 // Server-side access for the review-outcomes page and APIs (Tile access only hides tiles, so the API checks too).
 // 'Review recorders' (and Admin) see and record every meeting; everyone else only meetings assigned to their GHL user.
 
+// JT: always see every meeting and Settings, without relying on Tile access groups.
+const FULL_VIEW_EMAILS = ['john.t@buyersclub.com.au', 'john.e@buyersclub.com.au', 'ali.h@buyersclub.com.au', 'samara@buyersclub.com.au'];
+
 export type ReviewAccess = { ok: true; viewer: ReviewViewer } | { ok: false; status: number; error: string };
 
 export async function reviewAccess(h: Headers): Promise<ReviewAccess> {
@@ -17,10 +20,11 @@ export async function reviewAccess(h: Headers): Promise<ReviewAccess> {
     const data = await loadAccess();
     const team = teams.find((t) => t.subTiles.some((s) => s.href === TOOL_HREF));
     const tool = team?.subTiles.find((s) => s.href === TOOL_HREF);
-    if (team && tool && !canSee(email, toolKey(team, tool), teamKey(team), data)) {
+    const fullView = FULL_VIEW_EMAILS.includes(email.trim().toLowerCase());
+    if (!fullView && team && tool && !canSee(email, toolKey(team, tool), teamKey(team), data)) {
       return { ok: false, status: 403, error: 'Sales Meeting Outcomes is not available to you (Tile access).' };
     }
-    const recorder = groupsOf(email, data).has(RECORDERS_GROUP) || isAdmin(email, data);
+    const recorder = fullView || groupsOf(email, data).has(RECORDERS_GROUP) || isAdmin(email, data);
     const users = await ghlUsers().catch(() => []);
     return { ok: true, viewer: { email, recorder, consultantIds: users.filter((u) => u.email === email).map((u) => u.id) } };
   } catch (e) {
