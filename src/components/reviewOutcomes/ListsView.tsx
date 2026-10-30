@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, DISCREPANCY_MINUTES, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting } from '@/lib/reviewOutcomes/types';
 import { dateTime, dmy, outcomeStyle, periodKey, periodLabel, Stat, type Period } from './ui';
 
-type Section = 'noOutcome' | 'completed' | 'discrepancies';
+type Section = 'noOutcome' | 'repeats' | 'completed' | 'discrepancies';
+
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 
 function Section({ title, count, children, open, onToggle }: { title: string; count: number; children: React.ReactNode; open: boolean; onToggle: () => void }) {
   return (
@@ -48,7 +50,9 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
   const [from, setFrom] = useState(MIN_YMD);
   const [to, setTo] = useState(today);
   const [period, setPeriod] = useState<Period>('month');
-  const [open, setOpen] = useState<Record<Section, boolean>>({ noOutcome: true, completed: true, discrepancies: false });
+  const [open, setOpen] = useState<Record<Section, boolean>>({ noOutcome: true, repeats: false, completed: true, discrepancies: false });
+  const [repeatDays, setRepeatDays] = useState(90);
+  const [sameConsultant, setSameConsultant] = useState(true);
   const [openCons, setOpenCons] = useState<string | null>(null);
   const [hideCancelled, setHideCancelled] = useState(true);
 
@@ -93,6 +97,24 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
     for (const m of noOutcome) g.set(m.consultant, [...(g.get(m.consultant) || []), m]);
     return [...g.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [noOutcome]);
+  // Same client booked again within N days: 2nd / follow-up meetings disguised as 1st meetings (cancelled ones ignored).
+  const repeats = useMemo(() => {
+    const by = new Map<string, ReviewMeeting[]>();
+    for (const m of inRange) {
+      if (m.outcome === 'Cancelled' || m.ghlStatus === 'Cancelled') continue;
+      const k = (m.contactId || m.contactName.replace(/\*$/, '').trim().toLowerCase()) + (sameConsultant ? `|${m.consultantId}` : '');
+      if (k) by.set(k, [...(by.get(k) || []), m]);
+    }
+    const out: { first: ReviewMeeting; next: ReviewMeeting; days: number }[] = [];
+    for (const list of by.values()) {
+      const s = [...list].sort((a, b) => a.start.localeCompare(b.start));
+      for (let i = 1; i < s.length; i++) {
+        const days = daysBetween(s[i - 1].ymd, s[i].ymd);
+        if (days <= repeatDays) out.push({ first: s[i - 1], next: s[i], days });
+      }
+    }
+    return out.sort((a, b) => b.next.start.localeCompare(a.next.start));
+  }, [inRange, repeatDays, sameConsultant]);
   const completed = useMemo(() => inRange.filter((m) => m.outcome), [inRange]);
   const outcomeCols = useMemo(() => {
     const extra = [...new Set(completed.map((m) => m.outcome!))].filter((o) => !data?.settings.outcomes.includes(o));
@@ -161,15 +183,58 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
 
       <Section title="No outcome recorded, by consultant" count={noOutcome.length} open={open.noOutcome} onToggle={() => setOpen({ ...open, noOutcome: !open.noOutcome })}>
         {noOutcomeByCons.length === 0 && <div className="text-sm text-gray-500">None.</div>}
+        {noOutcomeByCons.length > 0 && (
+          <div className="grid grid-cols-[minmax(0,1fr)_80px_80px_80px_100px_60px] gap-2 pb-1 text-right text-xs text-gray-500">
+            <span className="text-left">Consultant</span><span>Up to 7 days</span><span>8-30 days</span><span>Over 30 days</span><span>Oldest</span><span>Total</span>
+          </div>
+        )}
         {noOutcomeByCons.map(([cons, list]) => (
           <div key={cons} className="border-t first:border-t-0">
-            <button onClick={() => setOpenCons(openCons === cons ? null : cons)} className="flex w-full justify-between py-1.5 text-left text-sm">
-              <span className="font-medium text-brand-charcoal">{cons}</span>
+            <button onClick={() => setOpenCons(openCons === cons ? null : cons)}
+              className="grid w-full grid-cols-[minmax(0,1fr)_80px_80px_80px_100px_60px] gap-2 py-1.5 text-right text-sm">
+              <span className="text-left font-medium text-brand-charcoal">{cons}</span>
+              <span>{list.filter((m) => daysBetween(m.ymd, today) <= 7).length || ''}</span>
+              <span className="text-amber-700">{list.filter((m) => { const d = daysBetween(m.ymd, today); return d > 7 && d <= 30; }).length || ''}</span>
+              <span className="font-semibold text-red-700">{list.filter((m) => daysBetween(m.ymd, today) > 30).length || ''}</span>
+              <span className="text-gray-600">{dmy(list.reduce((mn, m) => (m.ymd < mn ? m.ymd : mn), list[0].ymd))}</span>
               <span className="text-gray-500">{list.length}</span>
             </button>
             {openCons === cons && <div className="pb-2"><MeetingTable rows={list} onOpenDay={onOpenDay} /></div>}
           </div>
         ))}
+      </Section>
+
+      <Section title="Same client booked again (possible 2nd meetings booked as 1st)" count={repeats.length} open={open.repeats} onToggle={() => setOpen({ ...open, repeats: !open.repeats })}>
+        <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-gray-600">
+          <label className="inline-flex items-center gap-1">
+            Within <input type="number" min={1} max={730} value={repeatDays} onChange={(e) => setRepeatDays(Math.max(1, Number(e.target.value) || 1))} className="w-16 rounded border px-1 py-0.5" /> days
+          </label>
+          <label className="inline-flex items-center gap-1">
+            <input type="checkbox" checked={sameConsultant} onChange={(e) => setSameConsultant(e.target.checked)} /> Same consultant only
+          </label>
+          <span>Cancelled meetings are ignored.</span>
+        </div>
+        {repeats.length === 0 ? <div className="text-sm text-gray-500">None.</div> : (
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-gray-500">
+              <tr><th className="p-1">Client</th><th className="p-1">Earlier meeting</th><th className="p-1">Later meeting</th><th className="p-1 text-right">Days apart</th></tr>
+            </thead>
+            <tbody>
+              {repeats.map(({ first, next, days }) => (
+                <tr key={`${first.id}-${next.id}`} className="border-t">
+                  <td className="p-1">{next.contactLink ? <a href={next.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{next.contactName}</a> : next.contactName}</td>
+                  {[first, next].map((m) => (
+                    <td key={m.id} className="p-1">
+                      <button onClick={() => onOpenDay(m.ymd)} className="text-blue-700 hover:underline">{dateTime(m.start)}</button>
+                      <span className="text-xs text-gray-600"> · {m.consultant} · {m.kind === 'PR' ? 'Portfolio Review' : 'Presentation 1'}{m.outcome ? ` · ${m.outcome}` : ''}</span>
+                    </td>
+                  ))}
+                  <td className="p-1 text-right font-semibold">{days}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </Section>
 
       <Section title={`Completed, by ${period}`} count={completed.length} open={open.completed} onToggle={() => setOpen({ ...open, completed: !open.completed })}>

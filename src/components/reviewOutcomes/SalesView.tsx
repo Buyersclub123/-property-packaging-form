@@ -69,10 +69,17 @@ function Breakdown({ title, rows, total }: { title: string; rows: SoldRow[]; tot
   );
 }
 
-function TrendBars({ points }: { points: { label: string; sold: number; revenue: number }[] }) {
+type SalePoint = { label: string; sold: number; revenue: number };
+const minusYear = (ymd: string) => {
+  const y = `${Number(ymd.slice(0, 4)) - 1}${ymd.slice(4)}`;
+  return y.endsWith('-02-29') ? `${y.slice(0, 8)}28` : y;
+};
+
+function TrendBars({ points, ly = [] }: { points: SalePoint[]; ly?: SalePoint[] }) {
   if (points.length < 2) return <div className="text-sm text-gray-500">Pick a longer period to see a trend.</div>;
   const W = 900, H = 200, L = 36, R = 10, T = 10, B = 28;
-  const max = Math.max(1, ...points.map((p) => p.sold));
+  const lyPts = ly.slice(0, points.length);
+  const max = Math.max(1, ...points.map((p) => p.sold), ...lyPts.map((p) => p.sold));
   const bw = (W - L - R) / points.length;
   const y = (v: number) => T + (H - T - B) * (1 - v / max);
   const every = Math.ceil(points.length / 14);
@@ -86,12 +93,18 @@ function TrendBars({ points }: { points: { label: string; sold: number; revenue:
       ))}
       {points.map((p, i) => (
         <g key={i}>
-          <rect x={L + i * bw + bw * 0.15} y={y(p.sold)} width={bw * 0.7} height={H - B - y(p.sold)} fill="#2563eb">
+          {lyPts[i] && (
+            <rect x={L + i * bw + bw * 0.05} y={y(lyPts[i].sold)} width={bw * 0.45} height={H - B - y(lyPts[i].sold)} fill="#cbd5e1">
+              <title>{`Last year ${lyPts[i].label}: ${lyPts[i].sold} sold, ${aud(lyPts[i].revenue) || '$0'}`}</title>
+            </rect>
+          )}
+          <rect x={L + i * bw + (lyPts.length ? bw * 0.5 : bw * 0.15)} y={y(p.sold)} width={lyPts.length ? bw * 0.45 : bw * 0.7} height={H - B - y(p.sold)} fill="#2563eb">
             <title>{`${p.label}: ${p.sold} sold, ${aud(p.revenue) || '$0'}`}</title>
           </rect>
           {i % every === 0 && <text x={L + i * bw + bw / 2} y={H - 8} fontSize="11" textAnchor="middle" fill="#6b7280">{p.label}</text>}
         </g>
       ))}
+      {lyPts.length > 0 && <text x={W - R} y={T + 10} fontSize="11" textAnchor="end" fill="#6b7280">Grey: same period last year</text>}
     </svg>
   );
 }
@@ -172,21 +185,26 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
     const b = bucketOf(p.kind);
     const lastYmd = items.reduce((mx, it) => (it.signed > mx ? it.signed : mx), FIRST);
     const end = r.to < lastYmd ? r.to : lastYmd;
-    const by = new Map<string, { label: string; sold: number; revenue: number }>();
     const step = b === 'year' ? 365 : 1;
-    for (let d = r.from; d <= end; d = addDays(d, step)) {
-      const k = bucketKey(d, b);
-      if (!by.has(k)) by.set(k, { label: bucketLabel(k, b), sold: 0, revenue: 0 });
-    }
-    for (const it of inPeriod) {
-      if (net && it.cancelled) continue;
-      const pt = by.get(bucketKey(it.signed, b));
-      if (!pt) continue;
-      pt.sold++;
-      pt.revenue += it.removed ? 0 : it.fee;
-    }
-    return [...by.values()];
-  }, [items, inPeriod, net, p.kind, r.from, r.to]);
+    const build = (from: string, to: string, list: SaleItem[]) => {
+      const by = new Map<string, SalePoint>();
+      for (let d = from; d <= to; d = addDays(d, step)) {
+        const k = bucketKey(d, b);
+        if (!by.has(k)) by.set(k, { label: bucketLabel(k, b), sold: 0, revenue: 0 });
+      }
+      for (const it of list) {
+        if (net && it.cancelled) continue;
+        const pt = by.get(bucketKey(it.signed, b));
+        if (!pt) continue;
+        pt.sold++;
+        pt.revenue += it.removed ? 0 : it.fee;
+      }
+      return [...by.values()];
+    };
+    const lyFrom = minusYear(r.from), lyTo = minusYear(end);
+    const lyItems = b === 'year' ? [] : itemsIn(items, lyFrom, lyTo).filter((it) => FILTERS.every(([k]) => !filters[k] || val(it, k) === filters[k]));
+    return { cur: build(r.from, end, inPeriod), ly: lyItems.length ? build(lyFrom, lyTo, lyItems) : [] };
+  }, [items, inPeriod, net, p.kind, r.from, r.to, filters]);
 
   if (demo) return <div className="rounded border bg-white p-4 text-sm text-gray-600">Sales come from the live Tracking sheet, so they aren&apos;t shown in demo mode.</div>;
   if (error && !data) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>;
@@ -261,7 +279,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
 
       <div className="mb-3 rounded border bg-white p-3">
         <div className="mb-2 text-sm font-semibold text-brand-charcoal">Sold over time{net ? ' (net)' : ''}</div>
-        <TrendBars points={trend} />
+        <TrendBars points={trend.cur} ly={trend.ly} />
       </div>
 
       <div className="mb-3 grid gap-3 xl:grid-cols-2">

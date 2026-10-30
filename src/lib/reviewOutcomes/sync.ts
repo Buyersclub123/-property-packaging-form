@@ -247,7 +247,7 @@ async function syncGcal(start: Date, end: Date, syncStart: string): Promise<numb
 const recent = new Map<string, number>();
 
 /** Refreshes the cache for Sydney days from..to. Returns warnings (a failed source keeps its cached rows). */
-export async function syncRange(from: string, to: string, force = false): Promise<string[]> {
+export async function syncRange(from: string, to: string, force = false, timings?: Record<string, number>): Promise<string[]> {
   const f = from < MIN_YMD ? MIN_YMD : from;
   if (f > to) return [];
   const key = `${f}|${to}`;
@@ -255,7 +255,11 @@ export async function syncRange(from: string, to: string, force = false): Promis
   await ensureReviewTables();
   const { start, end } = utcCover(f, to);
   const syncStart = new Date().toISOString();
-  const [g, c] = await Promise.allSettled([syncGhl(start, end, syncStart), syncGcal(start, end, syncStart)]);
+  const timed = async <T>(k: string, run: Promise<T>): Promise<T> => {
+    const t0 = Date.now();
+    try { return await run; } finally { if (timings) timings[k] = Date.now() - t0; }
+  };
+  const [g, c] = await Promise.allSettled([timed('ghlMs', syncGhl(start, end, syncStart)), timed('googleMs', syncGcal(start, end, syncStart))]);
   const warnings: string[] = [];
   const msg = (r: PromiseRejectedResult) => (r.reason instanceof Error ? r.reason.message : String(r.reason));
   if (g.status === 'rejected') warnings.push(`GHL calendar not refreshed (showing saved data): ${msg(g)}`);

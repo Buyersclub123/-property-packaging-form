@@ -12,6 +12,7 @@ export const maxDuration = 300;
 export async function GET(request: NextRequest) {
   if (!isCronAuthorised(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const today = sydYmd(Date.now());
-  const warnings = await syncRange(addDays(today, -7), addDays(today, 60), true);
-  return NextResponse.json({ ok: warnings.length === 0, warnings });
+  const timings: Record<string, number> = {};
+  const warnings = await syncRange(addDays(today, -7), addDays(today, 60), true, timings);
+  return NextResponse.json({ ok: warnings.length === 0, warnings, timings });
 }

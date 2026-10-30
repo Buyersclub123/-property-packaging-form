@@ -17,7 +17,7 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
   settings: ReviewSettings;
   canEdit: boolean;
   onRecord: (m: ReviewMeeting, outcome: string | null, reason?: string | null) => void;
-  onMore: (m: ReviewMeeting) => void;
+  onMore?: (m: ReviewMeeting) => void;
 }) {
   const g = m.gcal;
   const off = g && g.minutesApart !== null && g.minutesApart > DISCREPANCY_MINUTES;
@@ -74,7 +74,7 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
         {m.outcome && !settings.outcomes.includes(m.outcome) && (
           <span className={`rounded-full border px-2 py-0.5 text-xs ${outcomeStyle(m.outcome).on}`}>{m.outcome}</span>
         )}
-        <button onClick={() => onMore(m)} className="ml-1 rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>
+        {onMore && <button onClick={() => onMore(m)} className="ml-1 rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>}
        </div>
        <div className="mt-1 flex flex-wrap items-center gap-2 empty:hidden md:justify-end">
         {isInvalid && (
@@ -93,6 +93,10 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
     </div>
   );
 }
+
+let loadSeq = 0;
+/** JT: More (property checks) is demo-only until the historical data is loaded; set true to show it on live meetings. */
+const SHOW_MORE_LIVE = false;
 
 export default function ReviewOutcomesPage() {
   const today = sydYmd(Date.now());
@@ -124,17 +128,27 @@ export default function ReviewOutcomesPage() {
   );
 
   const load = useCallback(async (sync: 'auto' | 'none' | 'force' = 'auto') => {
+    const seq = ++loadSeq;
     if (sync !== 'none') setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/review-outcomes?from=${from}&to=${to}&sync=${sync}`, { cache: 'no-store' });
+    const get = async (s: string) => {
+      const res = await fetch(`/api/review-outcomes?from=${from}&to=${to}&sync=${s}`, { cache: 'no-store' });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status} (response was not JSON)` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      setLive(body as ReviewData);
+      return body as ReviewData;
+    };
+    try {
+      // Show the saved copy straight away; the GHL / Google re-read follows and replaces it.
+      if (sync === 'auto') {
+        const quick = await get('none');
+        if (seq === loadSeq) setLive(quick);
+      }
+      const body = await get(sync);
+      if (seq === loadSeq) setLive(body);
     } catch (e) {
-      setError((e as Error).message);
+      if (seq === loadSeq) setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq) setLoading(false);
     }
   }, [from, to]);
 
@@ -327,7 +341,7 @@ export default function ReviewOutcomesPage() {
             {data && byDay.map(([ymd, list]) => (
               <div key={ymd} className="mb-3 overflow-hidden rounded border bg-white">
                 <div className="bg-gray-50 px-3 py-1.5 text-sm font-semibold text-brand-charcoal">{weekday(ymd)} {dmy(ymd)} <span className="font-normal text-gray-500">· {list.length}</span></div>
-                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={setMore} />)}
+                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} />)}
               </div>
             ))}
           </>

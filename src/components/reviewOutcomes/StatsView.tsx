@@ -351,10 +351,17 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function TrendChart({ points }: { points: { label: string; booked: number; sat: number; dnq: number }[] }) {
+type TrendPoint = { label: string; booked: number; sat: number; dnq: number };
+const minusYear = (ymd: string) => {
+  const y = `${Number(ymd.slice(0, 4)) - 1}${ymd.slice(4)}`;
+  return y.endsWith('-02-29') ? `${y.slice(0, 8)}28` : y;
+};
+
+function TrendChart({ points, ly = [] }: { points: TrendPoint[]; ly?: TrendPoint[] }) {
   if (points.length < 2) return <div className="text-sm text-gray-500">Pick a longer period to see a trend.</div>;
   const W = 900, H = 220, L = 36, R = 10, T = 10, B = 28;
-  const max = Math.max(1, ...points.map((p) => p.booked));
+  const lyPts = ly.slice(0, points.length);
+  const max = Math.max(1, ...points.map((p) => p.booked), ...lyPts.map((p) => p.booked));
   const x = (i: number) => L + (i * (W - L - R)) / (points.length - 1);
   const y = (v: number) => T + (H - T - B) * (1 - v / max);
   const every = Math.ceil(points.length / 12);
@@ -367,11 +374,57 @@ function TrendChart({ points }: { points: { label: string; booked: number; sat: 
         </g>
       ))}
       {points.map((p, i) => (i % every === 0 ? <text key={i} x={x(i)} y={H - 8} fontSize="11" textAnchor="middle" fill="#6b7280">{p.label}</text> : null))}
+      {lyPts.length > 1 && SERIES.filter((s) => s.key !== 'dnq').map((s) => (
+        <polyline key={`ly-${s.key}`} fill="none" stroke={s.color} strokeWidth="1.5" strokeDasharray="5 4" opacity="0.55"
+          points={lyPts.map((p, i) => `${x(i)},${y(p[s.key])}`).join(' ')} />
+      ))}
       {SERIES.map((s) => (
         <polyline key={s.key} fill="none" stroke={s.color} strokeWidth="2"
           points={points.map((p, i) => `${x(i)},${y(p[s.key])}`).join(' ')} />
       ))}
+      {lyPts.length > 1 && <text x={W - R} y={T + 10} fontSize="11" textAnchor="end" fill="#6b7280">Dashed: same period last year</text>}
     </svg>
+  );
+}
+
+function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeOf; soldOf: SoldOf; net: boolean }) {
+  const list = rows
+    .filter((r) => r.name !== 'TOTAL')
+    .map((r) => {
+      const t = typeOf(r.name);
+      const s = soldOf(r.name);
+      const sat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
+      return { name: r.name, sat, sold: s.total, cancelled: s.cancelled, revenue: s.revenue };
+    })
+    .filter((x) => x.sat || x.sold || x.cancelled)
+    .sort((a, b) => b.sold - a.sold || b.revenue - a.revenue);
+  return (
+    <div className="min-w-0 overflow-x-auto rounded border bg-white">
+      <Title>Consultant leaderboard - conversion and cancellations</Title>
+      {!list.length ? <div className="p-3 text-sm text-gray-500">No meetings or sales in this period.</div> : (
+        <table className="w-full border-collapse">
+          <thead><tr>{['#', 'Consultant', 'Sat (all types)', 'Sold', 'Conversion (Sold / Sat)', 'Cancelled', 'Cancel rate', 'Revenue'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+          <tbody>
+            {list.map((x, i) => {
+              const gross = net ? x.sold + x.cancelled : x.sold;
+              return (
+                <tr key={x.name}>
+                  <td className={TD}>{i + 1}</td>
+                  <td className={TDN}>{x.name}</td>
+                  <td className={TD}>{x.sat || ''}</td>
+                  <td className={TD}>{x.sold || ''}</td>
+                  <td className={TD}>{pct(x.sold, x.sat)}</td>
+                  <td className={`${TD} text-red-700`}>{x.cancelled || ''}</td>
+                  <td className={TD}>{pct(x.cancelled, gross)}</td>
+                  <td className={TD}>{x.revenue ? `$${Math.round(x.revenue).toLocaleString()}` : ''}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <div className="px-3 py-1 text-xs text-gray-500">Sat counts PR, New Lead, Referral and Unknown meetings; Sold, Cancelled and Revenue come from the Tracking sheet (by date signed). A high cancel rate means clients sign but don&apos;t go through.</div>
+    </div>
   );
 }
 
@@ -536,19 +589,24 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
     const b = bucketOf(p.kind);
     const lastYmd = (data?.meetings || []).reduce((mx, m) => (m.ymd > mx ? m.ymd : mx), MIN_YMD);
     const end = r.to < lastYmd ? r.to : lastYmd;
-    const by = new Map<string, { label: string; booked: number; sat: number; dnq: number }>();
-    for (let d = r.from; d <= end; d = addDays(d, 1)) {
-      const k = bucketKey(d, b);
-      if (!by.has(k)) by.set(k, { label: bucketLabel(k, b), booked: 0, sat: 0, dnq: 0 });
-    }
-    for (const m of list) {
-      const pt = by.get(bucketKey(m.ymd, b));
-      if (!pt) continue;
-      pt.booked++;
-      if (isSat(m)) pt.sat++;
-      if (isDnq(m)) pt.dnq++;
-    }
-    return [...by.values()];
+    const build = (from: string, to: string, ms: ReviewMeeting[]) => {
+      const by = new Map<string, TrendPoint>();
+      for (let d = from; d <= to; d = addDays(d, 1)) {
+        const k = bucketKey(d, b);
+        if (!by.has(k)) by.set(k, { label: bucketLabel(k, b), booked: 0, sat: 0, dnq: 0 });
+      }
+      for (const m of ms) {
+        const pt = by.get(bucketKey(m.ymd, b));
+        if (!pt) continue;
+        pt.booked++;
+        if (isSat(m)) pt.sat++;
+        if (isDnq(m)) pt.dnq++;
+      }
+      return [...by.values()];
+    };
+    const lyFrom = minusYear(r.from), lyTo = minusYear(end);
+    const ly = lyFrom >= MIN_YMD ? build(lyFrom, lyTo, (data?.meetings || []).filter((m) => m.ymd >= lyFrom && m.ymd <= lyTo)) : [];
+    return { cur: build(r.from, end, list), ly };
   }, [data, list, p.kind, r.from, r.to]);
   const canShift = p.kind !== 'ytd' && p.kind !== 'all';
   const prevOk = canShift && periodRange(shift(p, -1), today).to >= MIN_YMD;
@@ -775,7 +833,8 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
           {view.compare === 'box' && prevMaps && <CompareBox title="Sales" rows={sales.rows} total={sales.total} prev={prevMaps.sales} prevLabel={prevMaps.label} />}
         </div>
         <TargetsTable targets={data.settings.targets || {}} factor={targetFactor(p, today)} rows={[...cc.rows, ...sales.rows]} />
-        <ChartCard title={`Trend - ${r.label}`}><TrendChart points={trend} /></ChartCard>
+        <Leaderboard rows={sales.rows} typeOf={consTypeOf} soldOf={consSoldOf} net={view.net} />
+        <ChartCard title={`Trend - ${r.label}`}><TrendChart points={trend.cur} ly={trend.ly} /></ChartCard>
         <div className="grid gap-4 lg:grid-cols-2">
           <ChartCard title="Consultants - Booked vs Sat"><BarChart rows={sales.rows} /></ChartCard>
           <ChartCard title="Call Centre - Booked vs Sat"><BarChart rows={cc.rows} /></ChartCard>
