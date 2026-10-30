@@ -47,9 +47,63 @@ export interface ReviewSettings {
   callCentre: string[];
   /** Monthly Booked / Sat targets by consultant or booker name (Stats tab). */
   targets: Record<string, StatTarget>;
+  /** Tracking-sheet name -> name shown in Stats / Sales (consultants and CC members), e.g. "Adi" -> "Aaditya M". */
+  salesAliases: Record<string, string>;
   writeTarget: WriteTarget;
   /** Phase 2 (write-back to GHL) is not approved; the switch stays greyed out while false. */
   phase2Approved: boolean;
+}
+
+/** Lead source of a sale in the Buyers Club Tracking sheet, grouped as the STATS sheet columns. */
+export type SaleSource = 'New Lead' | 'Referral' | 'PR' | 'Self Gen' | 'Repeat' | 'Other' | 'Unknown';
+export const SALE_SOURCES: SaleSource[] = ['New Lead', 'Referral', 'PR', 'Self Gen', 'Repeat', 'Other', 'Unknown'];
+
+export interface Sale {
+  id: string;
+  office: string;
+  client: string;
+  signed: string;
+  /** Revenue = amount paid + balance. */
+  fee: number;
+  paid: number;
+  consultant: string;
+  consultantRaw: string;
+  cc: string;
+  ccRaw: string;
+  source: SaleSource;
+  sourceRaw: string;
+  broker: string;
+  smsf: string;
+  comments: string;
+  phone: string;
+  adType: string;
+  leadDate: string;
+  cancelled: boolean;
+}
+
+export interface SaleCancel {
+  id: string;
+  client: string;
+  signed: string;
+  deposit: number;
+  refund: number;
+  consultant: string;
+  office: string;
+  processed: string;
+  reason: string;
+  saleId: string | null;
+  /** Fee of the matched sale (0 when the sale isn't found). */
+  fee: number;
+  source: SaleSource;
+  cc: string;
+}
+
+export interface SalesData {
+  sales: Sale[];
+  cancels: SaleCancel[];
+  offices: string[];
+  syncedAt: string | null;
+  warnings: string[];
 }
 
 export const DEFAULT_SETTINGS: ReviewSettings = {
@@ -64,6 +118,8 @@ export const DEFAULT_SETTINGS: ReviewSettings = {
     'omar.n@buyersclub.com.au', 'jonathan.g@buyersclub.com.au', 'amy.y@buyersclub.com.au', 'petra.h@buyersclub.com.au',
   ],
   targets: {},
+  // Tracking-sheet nicknames that don't match a GHL / Call Centre name on their own.
+  salesAliases: { Aadi: 'Adi Manek', Josh: 'Joshua.O', Jess: 'Jessica.K' },
   writeTarget: 'db',
   phase2Approved: false,
 };

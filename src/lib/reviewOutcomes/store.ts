@@ -69,6 +69,30 @@ async function create(): Promise<void> {
   )`;
   // Current value is a From / To range: current_value is "from", current_value_to is "to".
   await sql`ALTER TABLE review_property_checks ADD COLUMN IF NOT EXISTS current_value_to NUMERIC`;
+  // Read-only copy of the Buyers Club Tracking sheet's office sales tabs and CANCELLATIONS (kind = 'sale' | 'cancel').
+  await sql`CREATE TABLE IF NOT EXISTS review_sales (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    office TEXT,
+    row_no INT,
+    client TEXT,
+    signed_on TEXT,
+    paid NUMERIC,
+    balance NUMERIC,
+    consultant TEXT,
+    cc_member TEXT,
+    broker TEXT,
+    smsf TEXT,
+    comments TEXT,
+    lead_source TEXT,
+    phone TEXT,
+    ad_type TEXT,
+    lead_date TEXT,
+    refund NUMERIC,
+    processed TEXT,
+    reason TEXT,
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
   await sql`CREATE TABLE IF NOT EXISTS review_outcome_log (
     id SERIAL PRIMARY KEY,
     at TIMESTAMPTZ DEFAULT NOW(),
@@ -107,19 +131,20 @@ export function ensureReviewTables(): Promise<void> {
 
 export async function loadSettings(): Promise<ReviewSettings> {
   await ensureReviewTables();
-  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets')`;
+  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets', 'sales_aliases')`;
   const get = (k: string) => rows.find((r) => r.key === k)?.value as string[] | undefined;
   return {
     outcomes: get('outcomes') ?? DEFAULT_SETTINGS.outcomes,
     invalidReasons: get('invalid_reasons') ?? DEFAULT_SETTINGS.invalidReasons,
     callCentre: get('call_centre') ?? DEFAULT_SETTINGS.callCentre,
     targets: (rows.find((r) => r.key === 'targets')?.value as Record<string, StatTarget> | undefined) ?? DEFAULT_SETTINGS.targets,
+    salesAliases: (rows.find((r) => r.key === 'sales_aliases')?.value as Record<string, string> | undefined) ?? DEFAULT_SETTINGS.salesAliases,
     writeTarget: 'db',
     phase2Approved: false,
   };
 }
 
-export async function saveSettings(by: string, s: { outcomes: string[]; invalidReasons: string[]; callCentre: string[]; targets: Record<string, StatTarget> }): Promise<void> {
+export async function saveSettings(by: string, s: { outcomes: string[]; invalidReasons: string[]; callCentre: string[]; targets: Record<string, StatTarget>; salesAliases: Record<string, string> }): Promise<void> {
   await ensureReviewTables();
   const sql = getDb();
   const before = await loadSettings();
@@ -131,8 +156,10 @@ export async function saveSettings(by: string, s: { outcomes: string[]; invalidR
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
   await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('targets', ${JSON.stringify(s.targets)}::jsonb, ${by})
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
+  await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('sales_aliases', ${JSON.stringify(s.salesAliases)}::jsonb, ${by})
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
   await logReview(by, null, 'settings', {
-    before: { outcomes: before.outcomes, invalidReasons: before.invalidReasons, callCentre: before.callCentre, targets: before.targets },
+    before: { outcomes: before.outcomes, invalidReasons: before.invalidReasons, callCentre: before.callCentre, targets: before.targets, salesAliases: before.salesAliases },
     after: s,
   });
 }

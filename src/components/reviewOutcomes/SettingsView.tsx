@@ -75,6 +75,30 @@ function ListEditor({ title, items, onChange, disabled }: { title: string; items
   );
 }
 
+function AliasEditor({ aliases, onChange, disabled }: { aliases: Record<string, string>; onChange: (v: Record<string, string>) => void; disabled: boolean }) {
+  const [text, setText] = useState(() => Object.entries(aliases).map(([k, v]) => `${k} = ${v}`).join('\n'));
+  const parse = (t: string) => {
+    setText(t);
+    const out: Record<string, string> = {};
+    for (const line of t.split('\n')) {
+      const [k, ...rest] = line.split('=');
+      const v = rest.join('=').trim();
+      if (k.trim() && v) out[k.trim()] = v;
+    }
+    onChange(out);
+  };
+  return (
+    <div className="rounded border bg-white p-3">
+      <div className="mb-1 text-sm font-semibold text-brand-charcoal">Tracking sheet names (Sales / Stats Sold)</div>
+      <div className="mb-2 text-xs text-gray-500">
+        One per line: <code>name in the sheet = name to show</code>, e.g. <code>Aadi = Adi Manek</code>. Consultant and CC names are otherwise matched
+        to GHL users and the Call Centre list automatically (e.g. &quot;Phil Harker&quot; = &quot;Phil H&quot;).
+      </div>
+      <textarea value={text} onChange={(e) => parse(e.target.value)} disabled={disabled} rows={5} className="w-full rounded border px-2 py-1 font-mono text-xs" />
+    </div>
+  );
+}
+
 export default function SettingsView({ settings, recorder, demo = false, names = [], onSaved }: {
   settings: ReviewSettings;
   /** Consultants and bookers to offer targets for. */
@@ -87,12 +111,13 @@ export default function SettingsView({ settings, recorder, demo = false, names =
   const [reasons, setReasons] = useState(settings.invalidReasons);
   const [callCentre, setCallCentre] = useState(settings.callCentre);
   const [targets, setTargets] = useState(settings.targets || {});
+  const [salesAliases, setSalesAliases] = useState(settings.salesAliases || {});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     if (demo) {
-      onSaved({ ...settings, outcomes, invalidReasons: reasons, callCentre, targets });
+      onSaved({ ...settings, outcomes, invalidReasons: reasons, callCentre, targets, salesAliases });
       setMsg({ ok: true, text: 'Saved (demo only)' });
       return;
     }
@@ -102,7 +127,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       const res = await fetch('/api/review-outcomes/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, writeTarget: 'db' }),
+        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget: 'db' }),
       });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
@@ -122,6 +147,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       <ListEditor title="Invalid reasons" items={reasons} onChange={setReasons} disabled={!recorder} />
       <ListEditor title="Call Centre (booker emails on the invite)" items={callCentre} onChange={setCallCentre} disabled={!recorder} />
       <TargetsEditor names={names} targets={targets} onChange={setTargets} disabled={!recorder} />
+      <AliasEditor aliases={salesAliases} onChange={setSalesAliases} disabled={!recorder} />
       {!demo && <StatsEmailSettingsCard recorder={recorder} />}
       <div className="rounded border bg-white p-3">
         <div className="mb-2 text-sm font-semibold text-brand-charcoal">Write outcomes to</div>

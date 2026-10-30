@@ -9,8 +9,9 @@ import { MIN_YMD, utcCover } from './types';
 
 export const REVIEW_CALENDARS = [
   { id: 'ziiNfM0fl5q8iWL5MDtF', name: 'Portfolio Review Meeting' },
-  { id: 'fQPvq7ujG1HHvrPs0dfU', name: 'Portfolio Review 2nd Meeting' },
 ];
+/** 2nd / follow-up meetings aren't recorded in Review Outcomes (JT); older synced rows are filtered out on load. */
+export const SECOND_MEETING_CALENDAR_ID = 'fQPvq7ujG1HHvrPs0dfU';
 /** info@ has reader access to the consultants' calendars (checked 29/10). */
 export const GCAL_MAILBOX = 'info@buyersclub.com.au';
 const CALENDAR_READONLY = 'https://www.googleapis.com/auth/calendar.readonly';

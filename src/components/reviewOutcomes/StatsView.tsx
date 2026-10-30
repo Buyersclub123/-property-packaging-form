@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDays, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type StatTarget } from '@/lib/reviewOutcomes/types';
+import { addDays, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type SalesData, type StatTarget } from '@/lib/reviewOutcomes/types';
+import { aud, emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sumSold } from '@/lib/reviewOutcomes/salesStats';
 import { dmy, weekday } from './ui';
 import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
 import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, NO_BOOKER, pct, periodRange, shift, sumRows, tally, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
@@ -69,19 +70,24 @@ function CompareBox({ title, rows, total, prev, prevLabel }: { title: string; ro
   );
 }
 
-function CcTable({ data, pick, prevOf }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf }) {
-  const line = (r: Row, total = false) => (
-    <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
-      <td className={TDN}>{r.name}</td>
-      <td className={TD} /><td className={TD} /><NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked}</td>
-      <td className={TD} /><td className={TD} /><td className={TD} /><td className={`${TD} ${SHADE}`}>0.00%</td>
-      <td className={TD} /><td className={TD} /><td className={TD} />
-      <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD} />
-      <td className={`${TD} ${SHADE}`}>0</td><td className={`${TD} ${SHADE}`}>0</td>
-      <td className={TD}>0</td><td className={TD} />
-      <td className={`${TD} ${SHADE}`}>0.00%</td><td className={`${TD} ${SHADE}`}>0.00%</td>
-    </tr>
-  );
+type SoldOf = (name: string) => SoldRow;
+
+function CcTable({ data, pick, prevOf, soldOf }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf }) {
+  const line = (r: Row, total = false) => {
+    const s = soldOf(total ? 'TOTAL' : r.name);
+    return (
+      <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
+        <td className={TDN}>{r.name}</td>
+        <td className={TD} /><td className={TD} /><NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked}</td>
+        <td className={TD} /><td className={TD} /><td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>0.00%</td>
+        <td className={TD} /><td className={TD} /><td className={TD}>{n0(s.ref)}</td>
+        <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td>
+        <td className={`${TD} ${SHADE}`}>0</td><td className={`${TD} ${SHADE}`}>0</td>
+        <td className={`${TD} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td><td className={TD}>{aud(s.revenue)}</td>
+        <td className={`${TD} ${SHADE}`}>0.00%</td><td className={`${TD} ${SHADE}`} title="PR Sold / PR Sat">{pct(s.pr, r.sat)}</td>
+      </tr>
+    );
+  };
   return (
     <table className="w-full border-collapse">
       <thead>
@@ -90,6 +96,7 @@ function CcTable({ data, pick, prevOf }: { data: { rows: Row[]; total: Row }; pi
           <th className={TH} colSpan={4}>Booked</th>
           <th className={TH} colSpan={12}>Sat</th>
           <th className={TH} rowSpan={3}>SOLD</th>
+          <th className={TH} rowSpan={3}><V>Cancelled</V></th>
           <th className={TH} rowSpan={3}><V>Revenue $</V></th>
           <th className={TH} rowSpan={3}><V>N/L Sat %</V></th>
           <th className={TH} rowSpan={3}><V>Sold %</V></th>
@@ -113,19 +120,22 @@ function CcTable({ data, pick, prevOf }: { data: { rows: Row[]; total: Row }; pi
   );
 }
 
-function SalesTable({ data, pick, prevOf }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf }) {
-  const line = (r: Row, total = false) => (
-    <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
-      <td className={TDN}>{r.name}</td>
-      <td className={TD} /><td className={TD} /><NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked}</td>
-      <td className={TD} /><td className={TD} /><td className={TD} /><td className={`${TD} ${SHADE}`}>0.00%</td>
-      <td className={TD} /><td className={TD} /><td className={TD} /><td className={`${TD} ${SHADE}`}>0.00%</td>
-      <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD} /><td className={`${TD} ${SHADE}`}>0.00%</td>
-      <td className={TD} /><td className={TD} /><td className={`${TD} ${SHADE}`}>0</td>
-      <td className={TD} />
-      <td className={`${TD} ${SHADE}`}>{pct(r.sat, r.booked)}</td><td className={`${TD} ${SHADE}`}>0.00%</td>
-    </tr>
-  );
+function SalesTable({ data, pick, prevOf, soldOf }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf }) {
+  const line = (r: Row, total = false) => {
+    const s = soldOf(total ? 'TOTAL' : r.name);
+    return (
+      <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
+        <td className={TDN}>{r.name}</td>
+        <td className={TD} /><td className={TD} /><NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked}</td>
+        <td className={TD} /><td className={TD} /><td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>0.00%</td>
+        <td className={TD} /><td className={TD} /><td className={TD}>{n0(s.ref)}</td><td className={`${TD} ${SHADE}`}>0.00%</td>
+        <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td><td className={`${TD} ${SHADE}`}>{pct(s.pr, r.sat)}</td>
+        <td className={TD}>{n0(s.selfGen)}</td><td className={TD}>{n0(s.repeat)}</td><td className={`${TD} ${SHADE} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
+        <td className={TD}>{aud(s.revenue)}</td>
+        <td className={`${TD} ${SHADE}`}>{pct(r.sat, r.booked)}</td><td className={`${TD} ${SHADE}`} title="PR Sold / PR Sat">{pct(s.pr, r.sat)}</td>
+      </tr>
+    );
+  };
   return (
     <table className="w-full border-collapse">
       <thead>
@@ -133,7 +143,7 @@ function SalesTable({ data, pick, prevOf }: { data: { rows: Row[]; total: Row };
           <th className={TH} rowSpan={3}>Name</th>
           <th className={TH} colSpan={4}>BOOKED</th>
           <th className={TH} colSpan={12}>Sat</th>
-          <th className={TH} colSpan={3}>Sold</th>
+          <th className={TH} colSpan={4}>Sold</th>
           <th className={TH} rowSpan={3}><V>Revenue $</V></th>
           <th className={TH} rowSpan={3}><V>Overall Sat %</V></th>
           <th className={TH} rowSpan={3}><V>Overall Sold %</V></th>
@@ -143,7 +153,7 @@ function SalesTable({ data, pick, prevOf }: { data: { rows: Row[]; total: Row };
           <th className={TH} colSpan={4}>New Lead</th>
           <th className={TH} colSpan={4}>Referral</th>
           <th className={TH} colSpan={4}>PR</th>
-          {['Self Gen', 'Repeat', 'Total'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
+          {['Self Gen', 'Repeat', 'Total', 'Cancelled'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
         </tr>
         <tr>
           {[0, 1, 2].flatMap((g) => ['Sat', 'DNQ', 'Sold', 'Sold %'].map((h) => <th key={`${g}${h}`} className={TH}>{h}</th>))}
@@ -197,17 +207,24 @@ function MarketingTable() {
 const ratio = (n: number, d: number) => (d ? n / d : 0);
 
 /** Download the period in the STATS sheet's column order; only the PR columns are filled for now. */
-async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally) {
+async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, ccSold: SoldOf, salesSold: SoldOf) {
   const XLSX = await import('xlsx');
   const ccHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sat %',
-    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'PR Sat', 'PR DNQ', 'PR Sold', 'Total (Excl PR) Booked', 'Total (Excl PR) Sat', 'SOLD', 'Revenue $', 'N/L Sat %', 'Sold %'];
-  const ccRow = (r: Row) => [r.name, null, null, r.booked, r.booked, null, null, null, 0, null, null, null, r.sat, r.dnq, null, 0, 0, 0, null, 0, 0];
+    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'PR Sat', 'PR DNQ', 'PR Sold', 'Total (Excl PR) Booked', 'Total (Excl PR) Sat', 'SOLD', 'Cancelled', 'Revenue $', 'N/L Sat %', 'Sold %'];
+  const ccRow = (r: Row) => {
+    const s = ccSold(r.name);
+    return [r.name, null, null, r.booked, r.booked, null, null, s.nl, 0, null, null, s.ref, r.sat, r.dnq, s.pr, 0, 0, s.total, s.cancelled, s.revenue, 0, ratio(s.pr, r.sat)];
+  };
   const salesHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sold %',
-    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'Ref Sold %', 'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Revenue $', 'Overall Sat %', 'Overall Sold %'];
-  const salesRow = (r: Row) => [r.name, null, null, r.booked, r.booked, null, null, null, 0, null, null, null, 0, r.sat, r.dnq, null, 0, null, null, 0, null, ratio(r.sat, r.booked), 0];
+    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'Ref Sold %', 'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Cancelled', 'Revenue $', 'Overall Sat %', 'Overall Sold %'];
+  const salesRow = (r: Row) => {
+    const s = salesSold(r.name);
+    return [r.name, null, null, r.booked, r.booked, null, null, s.nl, 0, null, null, s.ref, 0, r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, s.revenue, ratio(r.sat, r.booked), ratio(s.pr, r.sat)];
+  };
   const aoa: unknown[][] = [
     [`Review Outcomes stats - ${label}`],
     ['PR meetings only. Referral attribution and New Lead / Referral meetings not yet included.'],
+    ['Sold, Cancelled and Revenue: Buyers Club Tracking sheet, all lead sources.'],
     [],
     ['CC Stats'], ccHead, ...cc.rows.map(ccRow), ccRow(cc.total),
     [],
@@ -217,7 +234,7 @@ async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally) 
     ...[...modes.rows, modes.total].map((x) => [x.name, x.booked, x.name === 'TOTAL' ? null : ratio(x.booked, modes.total.booked), x.sat, null, null, null]),
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 24 }, ...Array.from({ length: 22 }, () => ({ wch: 10 }))];
+  ws['!cols'] = [{ wch: 24 }, ...Array.from({ length: 24 }, () => ({ wch: 10 }))];
   for (const [addr, cell] of Object.entries(ws)) {
     if (addr.startsWith('!') || typeof (cell as { v?: unknown }).v !== 'number') continue;
     const v = (cell as { v: number }).v;
@@ -270,7 +287,10 @@ function TargetsTable({ targets, factor, rows }: { targets: Record<string, StatT
   );
 }
 
-interface ViewPrefs { includeHidden: boolean; compare: 'off' | 'box' | 'cells'; base: CompareBase; baseYear: number }
+interface ViewPrefs { includeHidden: boolean; compare: 'off' | 'box' | 'cells'; base: CompareBase; baseYear: number; net: boolean }
+const NO_CC = 'No CC member (sales)';
+const ccKey = (it: SaleItem) => it.cc || NO_CC;
+const consKey = (it: SaleItem) => it.consultant || 'No consultant (sales)';
 const VIEW_KEY = 'review-outcomes-stats-view';
 
 /** Drop hidden names; the TOTAL keeps them unless includeHidden is off. */
@@ -364,12 +384,14 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const [names, setNames] = useState<NameConfig>({ mode: 'all', hiddenCc: [], hiddenSales: [] });
   const [namesOpen, setNamesOpen] = useState(false);
   const [drill, setDrill] = useState<{ title: string; meetings: ReviewMeeting[] } | null>(null);
-  const [view, setView] = useState<ViewPrefs>({ includeHidden: true, compare: 'off', base: 'prev', baseYear: Number(today.slice(0, 4)) - 1 });
+  const [view, setView] = useState<ViewPrefs>({ includeHidden: true, compare: 'off', base: 'prev', baseYear: Number(today.slice(0, 4)) - 1, net: true });
+  const [salesData, setSalesData] = useState<SalesData | null>(null);
+  const [salesErr, setSalesErr] = useState<string | null>(null);
   const [mailMsg, setMailMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => {
     try {
       const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null') as ViewPrefs | null;
-      if (v) setView({ includeHidden: v.includeHidden !== false, compare: v.compare || 'off', base: v.base || 'prev', baseYear: v.baseYear || Number(today.slice(0, 4)) - 1 });
+      if (v) setView({ includeHidden: v.includeHidden !== false, compare: v.compare || 'off', base: v.base || 'prev', baseYear: v.baseYear || Number(today.slice(0, 4)) - 1, net: v.net !== false });
     } catch { /* ignore a bad saved value */ }
   }, [today]);
   const saveView = (v: ViewPrefs) => {
@@ -387,6 +409,13 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         setSheet(body as SheetStats);
       })
       .catch((e) => setSheetErr((e as Error).message));
+    fetch('/api/review-outcomes/sales', { cache: 'no-store' })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        setSalesData(body as SalesData);
+      })
+      .catch((e) => setSalesErr((e as Error).message));
   }, [demoData]);
   useEffect(() => {
     try {
@@ -427,16 +456,27 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
     () => (names.mode === 'year' ? (data?.meetings || []).filter((m) => m.ymd.startsWith(today.slice(0, 4))) : data?.meetings || []),
     [data, names.mode, today],
   );
-  const allBookers = useMemo(() => [...new Set(pool.map((m) => m.booker || NO_BOOKER))], [pool]);
-  const allConsultants = useMemo(() => [...new Set(pool.map((m) => m.consultant))], [pool]);
+  const items = useMemo(() => (salesData && !demoData ? saleItems(salesData) : []), [salesData, demoData]);
+  const salePool = useMemo(() => items.filter((it) => it.signed >= (names.mode === 'year' ? `${today.slice(0, 4)}-01-01` : MIN_YMD)), [items, names.mode, today]);
+  const periodItems = useMemo(() => itemsIn(items, r.from, r.to), [items, r.from, r.to]);
+  const ccSold = useMemo(() => soldBy(periodItems, ccKey, view.net), [periodItems, view.net]);
+  const consSold = useMemo(() => soldBy(periodItems, consKey, view.net), [periodItems, view.net]);
+  const allBookers = useMemo(() => [...new Set([...pool.map((m) => m.booker || NO_BOOKER), ...salePool.map(ccKey)])], [pool, salePool]);
+  const allConsultants = useMemo(() => [...new Set([...pool.map((m) => m.consultant), ...salePool.map(consKey)])], [pool, salePool]);
   const cc = useMemo(() => {
-    const t = tally(list, bookerKey, names.mode === 'active' ? [] : allBookers);
+    const t = tally(list, bookerKey, names.mode === 'active' ? [...ccSold.by.keys()] : allBookers);
     return names.mode === 'custom' ? visible(t, names.hiddenCc, view.includeHidden) : t;
-  }, [list, names, allBookers, view.includeHidden]);
+  }, [list, names, allBookers, view.includeHidden, ccSold]);
   const sales = useMemo(() => {
-    const t = tally(list, consultantKey, names.mode === 'active' ? [] : allConsultants);
+    const t = tally(list, consultantKey, names.mode === 'active' ? [...consSold.by.keys()] : allConsultants);
     return names.mode === 'custom' ? visible(t, names.hiddenSales, view.includeHidden) : t;
-  }, [list, names, allConsultants, view.includeHidden]);
+  }, [list, names, allConsultants, view.includeHidden, consSold]);
+  const soldOf = (s: { by: Map<string, SoldRow>; total: SoldRow }, rows: Row[]): SoldOf => {
+    const total = names.mode === 'custom' && !view.includeHidden ? sumSold(rows.map((x) => s.by.get(x.name) || emptySold(x.name))) : s.total;
+    return (n) => (n === 'TOTAL' ? total : s.by.get(n) || emptySold(n));
+  };
+  const ccSoldOf = soldOf(ccSold, cc.rows);
+  const consSoldOf = soldOf(consSold, sales.rows);
   const prevMaps = useMemo(() => {
     const pr = compareRange(p, today, view.base, view.baseYear);
     if (!pr) return null;
@@ -519,6 +559,12 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
     <div>
       <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-brand-charcoal">
         PR meetings only. Referral attribution and New Lead / Referral meetings not yet included.
+        {!demoData && (
+          <div className="mt-1 text-xs text-gray-600">
+            Sold, Cancelled and Revenue come from the Buyers Club Tracking sheet (all lead sources, by date signed; see the Sales tab).
+            Sold % = PR Sold / PR Sat.{salesErr && <span className="text-red-700"> Sales not loaded: {salesErr}</span>}
+          </div>
+        )}
       </div>
       {noOutcome > 0 && (
         <div className="mb-3 rounded border border-l-4 border-gray-200 border-l-orange-500 bg-white px-3 py-2 text-sm text-gray-800">
@@ -575,7 +621,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
             </div>
           )}
         </div>
-        <button onClick={() => exportXlsx(r.label, cc, sales, modes)} className="ml-2 rounded border bg-white px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">
+        <button onClick={() => exportXlsx(r.label, cc, sales, modes, ccSoldOf, consSoldOf)} className="ml-2 rounded border bg-white px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">
           Export xlsx
         </button>
         {!demoData && data.viewer.recorder && (
@@ -587,6 +633,11 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         {names.mode === 'custom' && (
           <label className="inline-flex items-center gap-1">
             <input type="checkbox" checked={view.includeHidden} onChange={() => saveView({ ...view, includeHidden: !view.includeHidden })} /> Totals include hidden names
+          </label>
+        )}
+        {!demoData && (
+          <label className="inline-flex items-center gap-1" title="Sold and Revenue leave out cancelled sales; the Cancelled column always shows them">
+            <input type="checkbox" checked={view.net} onChange={() => saveView({ ...view, net: !view.net })} /> Sold net of cancellations
           </label>
         )}
         {p.kind !== 'all' && (
@@ -677,7 +728,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
           <div className={view.compare === 'box' && prevMaps ? 'grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_300px]' : ''}>
             <div className="min-w-0 overflow-x-auto rounded border bg-white">
               <Title>CC Stats</Title>
-              <CcTable data={cc} pick={(n, f) => pickFrom('cc', n, f)} prevOf={prevOf('cc')} />
+              <CcTable data={cc} pick={(n, f) => pickFrom('cc', n, f)} prevOf={prevOf('cc')} soldOf={ccSoldOf} />
             </div>
             {view.compare === 'box' && prevMaps && <CompareBox title="CC" rows={cc.rows} total={cc.total} prev={prevMaps.cc} prevLabel={prevMaps.label} />}
           </div>
@@ -689,7 +740,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         <div className={view.compare === 'box' && prevMaps ? 'grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_300px]' : ''}>
           <div className="min-w-0 overflow-x-auto rounded border bg-white">
             <Title>Sales Stats</Title>
-            <SalesTable data={sales} pick={(n, f) => pickFrom('sales', n, f)} prevOf={prevOf('sales')} />
+            <SalesTable data={sales} pick={(n, f) => pickFrom('sales', n, f)} prevOf={prevOf('sales')} soldOf={consSoldOf} />
           </div>
           {view.compare === 'box' && prevMaps && <CompareBox title="Sales" rows={sales.rows} total={sales.total} prev={prevMaps.sales} prevLabel={prevMaps.label} />}
         </div>

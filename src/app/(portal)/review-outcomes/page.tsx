@@ -7,9 +7,10 @@ import MorePanel from '@/components/reviewOutcomes/MorePanel';
 import ListsView from '@/components/reviewOutcomes/ListsView';
 import SettingsView from '@/components/reviewOutcomes/SettingsView';
 import StatsView from '@/components/reviewOutcomes/StatsView';
+import SalesView from '@/components/reviewOutcomes/SalesView';
 import { dmy, outcomeStyle, Stat, time, weekday } from '@/components/reviewOutcomes/ui';
 
-type Tab = 'day' | 'lists' | 'stats' | 'settings';
+type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
 
 function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
   m: ReviewMeeting;
@@ -27,7 +28,6 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">
           {m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-brand-charcoal hover:underline">{m.contactName || '(no name)'}</a> : m.contactName}
-          {m.calendar.includes('2nd') && <span className="ml-2 rounded bg-blue-50 px-1 text-[11px] text-blue-700">2nd meeting</span>}
         </div>
         <div className="text-xs text-gray-500">GHL: {m.ghlStatus}</div>
       </div>
@@ -194,11 +194,11 @@ export default function ReviewOutcomesPage() {
       <div className="mx-auto max-w-[1400px] px-4 py-6">
         <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Review Outcomes</h1>
         <p className="mb-4 text-[13px] text-[#7A7575]">
-          Source: GHL Calendar - Portfolio Review Meeting (and 2nd Meeting). Outcomes are saved to our database only.
+          Source: GHL Calendar - Portfolio Review Meeting (2nd meetings aren't recorded). Outcomes are saved to our database only.
         </p>
 
         <div className="mb-4 inline-flex overflow-hidden rounded border border-gray-200 text-sm" role="tablist">
-          {([['day', 'Meetings'], ['lists', 'Lists'], ['stats', 'Stats'], ['settings', 'Settings']] as const).map(([k, label]) => (
+          {([['day', 'Meetings'], ['lists', 'Lists'], ['stats', 'Stats'], ['sales', 'Sales'], ['settings', 'Settings']] as const).map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
               className={`px-3 py-1.5 font-semibold ${tab === k ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
               {label}
@@ -289,6 +289,7 @@ export default function ReviewOutcomesPage() {
 
         {tab === 'lists' && <ListsView onOpenDay={openDay} demoData={demo ? demoAll : null} />}
         {tab === 'stats' && <StatsView demoData={demo ? demoAll : null} />}
+        {tab === 'sales' && <SalesView demo={demo} />}
         {tab === 'settings' && data && (
           <SettingsView settings={data.settings} recorder={data.viewer.recorder} demo={demo}
             names={[...new Set([...data.consultants, ...data.meetings.flatMap((m) => [m.consultant, m.booker || ''])].filter(Boolean))]}

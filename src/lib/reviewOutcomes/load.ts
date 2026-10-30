@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { ensureReviewTables } from './store';
-import { ghlLocationId, ghlUsers } from './sync';
+import { ghlLocationId, ghlUsers, SECOND_MEETING_CALENDAR_ID } from './sync';
 import { matchMeetings, prepareGcal, type RawGcal } from './match';
 import { addDays, MIN_YMD, sydYmd, utcCover, type GcalEvent, type MeetingMode, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
 
@@ -49,10 +49,11 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
     FROM review_meetings m
     LEFT JOIN review_contacts c ON c.contact_id = m.contact_id
     LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id
-    WHERE NOT m.deleted AND m.start_at >= ${start.toISOString()}::timestamptz AND m.start_at < ${end.toISOString()}::timestamptz
+    WHERE NOT m.deleted AND m.calendar_id IS DISTINCT FROM ${SECOND_MEETING_CALENDAR_ID} AND m.start_at >= ${start.toISOString()}::timestamptz AND m.start_at < ${end.toISOString()}::timestamptz
     ORDER BY m.start_at`;
   const gRows = await sql`SELECT event_id, start_at, all_day, start_raw, summary, description, location, organizer, attendees, calendars
-    FROM review_gcal_events WHERE start_at >= ${start.toISOString()}::timestamptz AND start_at < ${end.toISOString()}::timestamptz`;
+    FROM review_gcal_events WHERE start_at >= ${start.toISOString()}::timestamptz AND start_at < ${end.toISOString()}::timestamptz
+      AND COALESCE(summary, '') !~* '(follow[ -]?up|2nd meeting|second meeting)'`;
 
   const raw: RawGcal[] = gRows.map((g) => ({
     id: String(g.event_id),

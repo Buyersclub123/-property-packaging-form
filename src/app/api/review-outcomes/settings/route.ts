@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   const access = await reviewAccess(request.headers);
   if (!access.ok) return json({ error: access.error }, access.status);
   if (!access.viewer.recorder) return json({ error: 'Only Review recorders can change settings.' }, 403);
-  const b = (await request.json().catch(() => null)) as { outcomes?: unknown; invalidReasons?: unknown; callCentre?: unknown; targets?: unknown; writeTarget?: string } | null;
+  const b = (await request.json().catch(() => null)) as { outcomes?: unknown; invalidReasons?: unknown; callCentre?: unknown; targets?: unknown; salesAliases?: unknown; writeTarget?: string } | null;
   if (b?.writeTarget && b.writeTarget !== 'db') return json({ error: 'Writing to the GHL calendar is phase 2 and not approved yet.' }, 400);
   const outcomes = clean(b?.outcomes);
   const invalidReasons = clean(b?.invalidReasons);
@@ -34,11 +34,17 @@ export async function POST(request: NextRequest) {
     const v = { booked: num(t?.booked), sat: num(t?.sat) };
     if (n && (v.booked || v.sat)) targets[n] = v;
   }
+  const salesAliases: Record<string, string> = {};
+  for (const [k, v] of Object.entries(b?.salesAliases && typeof b.salesAliases === 'object' ? (b.salesAliases as Record<string, unknown>) : {}).slice(0, 200)) {
+    const from = k.trim().slice(0, 80);
+    const to = String(v ?? '').trim().slice(0, 80);
+    if (from && to) salesAliases[from] = to;
+  }
   if (!outcomes.length) return json({ error: 'Keep at least one outcome.' }, 400);
   const bad = callCentre.find((e) => !/^[^@\s]+@buyersclub\.com\.au$/.test(e));
   if (bad) return json({ error: `Call Centre entries must be Buyers Club emails ("${bad}").` }, 400);
   try {
-    await saveSettings(access.viewer.email, { outcomes, invalidReasons, callCentre, targets });
+    await saveSettings(access.viewer.email, { outcomes, invalidReasons, callCentre, targets, salesAliases });
     return json(await loadSettings());
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
