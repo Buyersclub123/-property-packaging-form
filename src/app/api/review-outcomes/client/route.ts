@@ -44,10 +44,12 @@ export async function POST(request: NextRequest) {
     const checks: PropertyCheckInput[] = [];
     for (const c of b?.checks || []) {
       const currentValue = num(c.currentValue);
+      const currentValueTo = num(c.currentValueTo);
       const currentRentPw = num(c.currentRentPw);
-      if (Number.isNaN(currentValue) || Number.isNaN(currentRentPw)) return json({ error: `Value / rent for ${c.address} must be a number.` }, 400);
+      if (Number.isNaN(currentValue) || Number.isNaN(currentValueTo) || Number.isNaN(currentRentPw)) return json({ error: `Value / rent for ${c.address} must be a number.` }, 400);
+      if (currentValue !== null && currentValueTo !== null && currentValueTo < currentValue) return json({ error: `Value range for ${c.address}: To must not be below From.` }, 400);
       if (!c.key) continue;
-      checks.push({ key: String(c.key), address: String(c.address || ''), stillOwned: typeof c.stillOwned === 'boolean' ? c.stillOwned : null, currentValue, currentRentPw });
+      checks.push({ key: String(c.key), address: String(c.address || ''), stillOwned: typeof c.stillOwned === 'boolean' ? c.stillOwned : null, currentValue, currentValueTo, currentRentPw });
     }
     const note = b?.note ? String(b.note).slice(0, 4000) : null;
     await saveClientPanel(g.access.viewer.email, b!.appointmentId!, checks, note);

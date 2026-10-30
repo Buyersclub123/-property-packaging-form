@@ -1,7 +1,48 @@
 'use client';
 
 import { useState } from 'react';
-import type { ReviewSettings } from '@/lib/reviewOutcomes/types';
+import type { ReviewSettings, StatTarget } from '@/lib/reviewOutcomes/types';
+import StatsEmailSettingsCard from './StatsEmailSettings';
+
+function TargetsEditor({ names, targets, onChange, disabled }: {
+  names: string[];
+  targets: Record<string, StatTarget>;
+  onChange: (v: Record<string, StatTarget>) => void;
+  disabled: boolean;
+}) {
+  const all = [...new Set([...names, ...Object.keys(targets)])].sort((a, b) => a.localeCompare(b));
+  const set = (n: string, f: keyof StatTarget, v: string) => {
+    const t = { ...(targets[n] || { booked: 0, sat: 0 }), [f]: Math.max(0, Math.round(Number(v) || 0)) };
+    const next = { ...targets };
+    if (t.booked || t.sat) next[n] = t;
+    else delete next[n];
+    onChange(next);
+  };
+  return (
+    <div className="rounded border bg-white p-3">
+      <div className="mb-1 text-sm font-semibold text-brand-charcoal">Monthly targets (Stats tab)</div>
+      <div className="mb-2 text-xs text-gray-500">PR Booked and Sat per month, by consultant or booker. Blank = no target. Other periods are scaled (week = 12/52 of a month, quarter = 3, year = 12).</div>
+      <div className="max-h-[320px] overflow-y-auto">
+        <table className="text-sm">
+          <thead><tr><th className="px-2 text-left">Name</th><th className="px-2">Booked</th><th className="px-2">Sat</th></tr></thead>
+          <tbody>
+            {all.map((n) => (
+              <tr key={n}>
+                <td className="px-2 py-0.5">{n}</td>
+                {(['booked', 'sat'] as const).map((f) => (
+                  <td key={f} className="px-2 py-0.5">
+                    <input type="number" min={0} value={targets[n]?.[f] || ''} disabled={disabled} onChange={(e) => set(n, f, e.target.value)}
+                      className="w-[70px] rounded border px-1 py-0.5 text-center" aria-label={`${n} ${f} target`} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function ListEditor({ title, items, onChange, disabled }: { title: string; items: string[]; onChange: (v: string[]) => void; disabled: boolean }) {
   const [draft, setDraft] = useState('');
@@ -34,20 +75,24 @@ function ListEditor({ title, items, onChange, disabled }: { title: string; items
   );
 }
 
-export default function SettingsView({ settings, recorder, demo = false, onSaved }: {
+export default function SettingsView({ settings, recorder, demo = false, names = [], onSaved }: {
   settings: ReviewSettings;
+  /** Consultants and bookers to offer targets for. */
+  names?: string[];
   recorder: boolean;
   demo?: boolean;
   onSaved: (s: ReviewSettings) => void;
 }) {
   const [outcomes, setOutcomes] = useState(settings.outcomes);
   const [reasons, setReasons] = useState(settings.invalidReasons);
+  const [callCentre, setCallCentre] = useState(settings.callCentre);
+  const [targets, setTargets] = useState(settings.targets || {});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     if (demo) {
-      onSaved({ ...settings, outcomes, invalidReasons: reasons });
+      onSaved({ ...settings, outcomes, invalidReasons: reasons, callCentre, targets });
       setMsg({ ok: true, text: 'Saved (demo only)' });
       return;
     }
@@ -57,7 +102,7 @@ export default function SettingsView({ settings, recorder, demo = false, onSaved
       const res = await fetch('/api/review-outcomes/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcomes, invalidReasons: reasons, writeTarget: 'db' }),
+        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, writeTarget: 'db' }),
       });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
@@ -75,6 +120,9 @@ export default function SettingsView({ settings, recorder, demo = false, onSaved
       {!recorder && <div className="rounded border bg-gray-50 p-2 text-sm text-gray-600">Only Review recorders can change settings.</div>}
       <ListEditor title="Outcomes" items={outcomes} onChange={setOutcomes} disabled={!recorder} />
       <ListEditor title="Invalid reasons" items={reasons} onChange={setReasons} disabled={!recorder} />
+      <ListEditor title="Call Centre (booker emails on the invite)" items={callCentre} onChange={setCallCentre} disabled={!recorder} />
+      <TargetsEditor names={names} targets={targets} onChange={setTargets} disabled={!recorder} />
+      {!demo && <StatsEmailSettingsCard recorder={recorder} />}
       <div className="rounded border bg-white p-3">
         <div className="mb-2 text-sm font-semibold text-brand-charcoal">Write outcomes to</div>
         <div className="flex flex-wrap gap-4 text-sm">

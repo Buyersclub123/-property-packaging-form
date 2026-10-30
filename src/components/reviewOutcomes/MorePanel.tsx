@@ -5,9 +5,9 @@ import type { ClientPanel, ReviewMeeting } from '@/lib/reviewOutcomes/types';
 import { demoPanel, saveDemoPanel } from '@/lib/reviewOutcomes/demo';
 import { dateTime, money } from './ui';
 
-interface Row { key: string; address: string; stillOwned: boolean | null; currentValue: string; currentRentPw: string }
+interface Row { key: string; address: string; stillOwned: boolean | null; currentValue: string; currentValueTo: string; currentRentPw: string }
 
-// Client's properties for one meeting: still owned / current value / current rent ticks and fields, one note. App DB only.
+// Client's properties for one meeting: still owned / current value range (From-To) / current rent ticks and fields, one note. App DB only.
 export default function MorePanel({ meeting, demo = false, onClose }: { meeting: ReviewMeeting; demo?: boolean; onClose: () => void }) {
   const [panel, setPanel] = useState<ClientPanel | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -26,6 +26,7 @@ export default function MorePanel({ meeting, demo = false, onClose }: { meeting:
           address: x.address,
           stillOwned: x.check?.stillOwned ?? null,
           currentValue: x.check?.currentValue != null ? String(x.check.currentValue) : '',
+          currentValueTo: x.check?.currentValueTo != null ? String(x.check.currentValueTo) : '',
           currentRentPw: x.check?.currentRentPw != null ? String(x.check.currentRentPw) : '',
         })));
     };
@@ -59,7 +60,7 @@ export default function MorePanel({ meeting, demo = false, onClose }: { meeting:
         note: note.trim() || null,
         properties: panel.properties.map((p) => {
           const r = rows.find((x) => x.key === p.key)!;
-          return { ...p, check: { stillOwned: r.stillOwned, currentValue: n(r.currentValue), currentRentPw: n(r.currentRentPw) } };
+          return { ...p, check: { stillOwned: r.stillOwned, currentValue: n(r.currentValue), currentValueTo: n(r.currentValueTo), currentRentPw: n(r.currentRentPw) } };
         }),
       });
       setSaved(true);
@@ -112,7 +113,7 @@ export default function MorePanel({ meeting, demo = false, onClose }: { meeting:
                     <th className="p-2 text-center">Still owned</th>
                     <th className="p-2">Property</th>
                     <th className="p-2">Purchased</th>
-                    <th className="p-2">Current value</th>
+                    <th className="p-2">Current value range $</th>
                     <th className="p-2">Rent $/wk</th>
                   </tr>
                 </thead>
@@ -136,8 +137,13 @@ export default function MorePanel({ meeting, demo = false, onClose }: { meeting:
                           <div className="text-xs text-gray-500">{p.purchaseDate || '–'}</div>
                         </td>
                         <td className="p-2">
-                          <input inputMode="numeric" value={r.currentValue} onChange={(e) => set(r.key, { currentValue: e.target.value })}
-                            placeholder={p.valuation !== null ? String(p.valuation) : ''} className="w-[120px] rounded border px-2 py-1" />
+                          <div className="flex items-center gap-1 whitespace-nowrap">
+                            <input inputMode="numeric" value={r.currentValue} onChange={(e) => set(r.key, { currentValue: e.target.value })}
+                              placeholder="From" aria-label={`Value from: ${r.address}`} className="w-[100px] rounded border px-2 py-1" />
+                            <span className="text-gray-400">–</span>
+                            <input inputMode="numeric" value={r.currentValueTo} onChange={(e) => set(r.key, { currentValueTo: e.target.value })}
+                              placeholder="To" aria-label={`Value to: ${r.address}`} className="w-[100px] rounded border px-2 py-1" />
+                          </div>
                         </td>
                         <td className="p-2">
                           <input inputMode="numeric" value={r.currentRentPw} onChange={(e) => set(r.key, { currentRentPw: e.target.value })}

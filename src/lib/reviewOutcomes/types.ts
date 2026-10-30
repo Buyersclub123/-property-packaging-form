@@ -7,9 +7,46 @@ export const DISCREPANCY_MINUTES = 15;
 
 export type WriteTarget = 'db' | 'db+ghl';
 
+export type MeetingMode = 'Google' | 'F2F' | 'Unknown';
+
+export type StatsKind = 'day' | 'week' | 'month' | 'quarter' | 'ytd' | 'year' | 'all';
+
+/** Scheduled stats email (Settings). Sydney time; nothing is sent while disabled or with no recipients. */
+export interface StatsEmailSettings {
+  enabled: boolean;
+  recipients: string[];
+  /** 0 = Sunday ... 5 = Friday. */
+  day: number;
+  /** Sydney hour, 0-23. */
+  hour: number;
+  periods: StatsKind[];
+  /** Workspace mailbox the email is sent from. */
+  sender: string;
+  lastSent: string | null;
+}
+
+export const DEFAULT_STATS_EMAIL: StatsEmailSettings = {
+  enabled: false,
+  recipients: [],
+  day: 5,
+  hour: 8,
+  periods: ['week', 'month'],
+  sender: 'john.t@buyersclub.com.au',
+  lastSent: null,
+};
+
+export interface StatTarget {
+  booked: number;
+  sat: number;
+}
+
 export interface ReviewSettings {
   outcomes: string[];
   invalidReasons: string[];
+  /** Call Centre staff emails: an invite attendee on this list (not the meeting's consultant) is the booker. */
+  callCentre: string[];
+  /** Monthly Booked / Sat targets by consultant or booker name (Stats tab). */
+  targets: Record<string, StatTarget>;
   writeTarget: WriteTarget;
   /** Phase 2 (write-back to GHL) is not approved; the switch stays greyed out while false. */
   phase2Approved: boolean;
@@ -18,6 +55,15 @@ export interface ReviewSettings {
 export const DEFAULT_SETTINGS: ReviewSettings = {
   outcomes: ['Showed', 'No show', 'Invalid (DNQ)', 'Cancelled', 'Rescheduled', 'Not sat'],
   invalidReasons: ["Can't afford to buy again", 'Not ready', 'Waiting on a sale', 'Restructure', 'Divorce'],
+  // Seeded from staff seen on Portfolio Review invites (JT 31/10: Carmen is a referrer, not Call Centre).
+  callCentre: [
+    'adrian.p@buyersclub.com.au', 'cooper.r@buyersclub.com.au', 'ethan.l@buyersclub.com.au', 'ethan.w@buyersclub.com.au',
+    'mahdi.s@buyersclub.com.au', 'ninos.e@buyersclub.com.au', 'haydar.a@buyersclub.com.au', 'dion.k@buyersclub.com.au',
+    'joel.r@buyersclub.com.au', 'aaditya.m@buyersclub.com.au', 'jessica.k@buyersclub.com.au', 'jackson.p@buyersclub.com.au',
+    'rupert.e@buyersclub.com.au', 'isabella.k@buyersclub.com.au', 'jerry.h@buyersclub.com.au', 'joshua.o@buyersclub.com.au',
+    'omar.n@buyersclub.com.au', 'jonathan.g@buyersclub.com.au', 'amy.y@buyersclub.com.au', 'petra.h@buyersclub.com.au',
+  ],
+  targets: {},
   writeTarget: 'db',
   phase2Approved: false,
 };
@@ -34,6 +80,8 @@ export interface GcalEvent {
   staff: string;
   staffEmails: string[];
   calendars: string[];
+  location: string;
+  mode: MeetingMode;
 }
 
 export interface GcalMatch {
@@ -65,6 +113,11 @@ export interface ReviewMeeting {
   recordedBy: string | null;
   recordedAt: string | null;
   gcal: GcalMatch | null;
+  /** Call Centre person on the matched Google invite; null when none is on it. */
+  booker: string | null;
+  bookerEmail: string | null;
+  /** From the matched Google event's location: Meet link = Google, street address = F2F. */
+  mode: MeetingMode;
 }
 
 export interface ReviewViewer {
@@ -96,7 +149,8 @@ export interface ClientProperty {
   valuationDate: string;
   inFlight: boolean;
   fellOver: boolean;
-  check: { stillOwned: boolean | null; currentValue: number | null; currentRentPw: number | null } | null;
+  /** currentValue / currentValueTo are the From / To ends of the current value range. */
+  check: { stillOwned: boolean | null; currentValue: number | null; currentValueTo: number | null; currentRentPw: number | null } | null;
 }
 
 export interface ClientPanel {

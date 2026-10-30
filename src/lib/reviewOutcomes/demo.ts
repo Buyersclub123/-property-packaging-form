@@ -8,6 +8,9 @@ const CLIENTS = [
   'Quinn Instance', 'Rosa Template', 'Sam Exercise', 'Tara Drill',
 ];
 const CONSULTANTS = ['Demo Consultant A', 'Demo Consultant B', 'Demo Consultant C'];
+const CALL_CENTRE = ['Demo Booker 1', 'Demo Booker 2', 'Demo Booker 3'];
+const MEET = 'https://meet.google.com/abc-defg-hij';
+const OFFICE = 'Level 3, 1G Homebush Bay Dr, Rhodes NSW';
 const SUBURBS = ['Ipswich QLD', 'Geelong VIC', 'Elizabeth SA', 'Logan QLD', 'Penrith NSW', 'Armadale WA'];
 const PAST_OUTCOMES: (string | null)[] = ['Showed', null, 'No show', 'Showed', 'Invalid (DNQ)', null, 'Cancelled', 'Showed', 'Not sat', null, 'Rescheduled'];
 
@@ -30,6 +33,7 @@ export function demoData(): ReviewData {
     const gcal: GcalEvent = {
       id: `demo-g${i}`, start: gStart, allDay: false, ymd, title: `Portfolio Review with Buyers Club with ${name}`,
       staff: cons, staffEmails: [], calendars: [cons],
+      location: i % 3 ? MEET : OFFICE, mode: i % 3 ? 'Google' : 'F2F',
     };
     return {
       id: `demo-${i}`, calendar: i % 5 === 4 ? 'Portfolio Review 2nd Meeting' : 'Portfolio Review Meeting', start, ymd, past,
@@ -39,11 +43,14 @@ export function demoData(): ReviewData {
       invalidReason: outcome === 'Invalid (DNQ)' ? 'Not ready' : null, note: null, sourceRef: src === 'sheet' ? 'Demo sheet row' : null,
       recordedBy: outcome && src !== 'ghl' ? 'demo' : null, recordedAt: null,
       gcal: hasG ? { event: gcal, basis: 'Email + Name', minutesApart: Math.round(Math.abs(Date.parse(gStart) - Date.parse(start)) / 60e3) } : null,
+      booker: hasG && i % 5 ? CALL_CENTRE[i % 3] : null,
+      bookerEmail: null,
+      mode: hasG ? gcal.mode : 'Unknown',
     };
   }).sort((a, b) => a.start.localeCompare(b.start));
   const gcalUnmatched: GcalEvent[] = [
-    { id: 'demo-gx1', start: at(addDays(today, -2), 14), allDay: false, ymd: addDays(today, -2), title: 'Portfolio Review - Walk-in Client', staff: CONSULTANTS[0], staffEmails: [], calendars: [CONSULTANTS[0]] },
-    { id: 'demo-gx2', start: at(addDays(today, -4), 11), allDay: false, ymd: addDays(today, -4), title: 'Portfolio Review catch up - Unknown', staff: CONSULTANTS[2], staffEmails: [], calendars: [CONSULTANTS[2]] },
+    { id: 'demo-gx1', start: at(addDays(today, -2), 14), allDay: false, ymd: addDays(today, -2), title: 'Portfolio Review - Walk-in Client', staff: CONSULTANTS[0], staffEmails: [], calendars: [CONSULTANTS[0]], location: OFFICE, mode: 'F2F' },
+    { id: 'demo-gx2', start: at(addDays(today, -4), 11), allDay: false, ymd: addDays(today, -4), title: 'Portfolio Review catch up - Unknown', staff: CONSULTANTS[2], staffEmails: [], calendars: [CONSULTANTS[2]], location: MEET, mode: 'Google' },
   ];
   return {
     viewer: { email: 'demo@example.com', recorder: true, consultantIds: [] },

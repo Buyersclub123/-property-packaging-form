@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     const mode = p.get('sync') || 'auto';
     const days = (Date.parse(to) - Date.parse(from)) / 864e5 + 1;
     const syncWarnings = mode === 'none' || (mode === 'auto' && days > 31) ? [] : await syncRange(from, to, mode === 'force');
-    const [loaded, settings, sync] = await Promise.all([loadMeetings(access.viewer, from, to), loadSettings(), lastSync()]);
+    const settings = await loadSettings();
+    const [loaded, sync] = await Promise.all([loadMeetings(access.viewer, from, to, settings.callCentre), lastSync()]);
     const body: ReviewData = {
       viewer: access.viewer,
       settings,

@@ -38,7 +38,7 @@ async function portfolio(): Promise<PortfolioData> {
 
 export async function loadClientPanel(appointmentId: string, contactId: string | null, contactName: string): Promise<ClientPanel> {
   const sql = getDb();
-  const checks = await sql`SELECT property_key, still_owned, current_value, current_rent_pw FROM review_property_checks WHERE appointment_id = ${appointmentId}`;
+  const checks = await sql`SELECT property_key, still_owned, current_value, current_value_to, current_rent_pw FROM review_property_checks WHERE appointment_id = ${appointmentId}`;
   const noteRow = await sql`SELECT note FROM review_outcomes WHERE appointment_id = ${appointmentId}`;
   const byKey = new Map(checks.map((c) => [String(c.property_key), c]));
   const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
@@ -66,21 +66,21 @@ export async function loadClientPanel(appointmentId: string, contactId: string |
         valuationDate: p.valuationDate,
         inFlight: p.source === 'inflight',
         fellOver: p.fellOver,
-        check: c ? { stillOwned: c.still_owned ?? null, currentValue: num(c.current_value), currentRentPw: num(c.current_rent_pw) } : null,
+        check: c ? { stillOwned: c.still_owned ?? null, currentValue: num(c.current_value), currentValueTo: num(c.current_value_to), currentRentPw: num(c.current_rent_pw) } : null,
       };
     });
   return { ...panel, available: true, properties };
 }
 
-export interface PropertyCheckInput { key: string; address: string; stillOwned: boolean | null; currentValue: number | null; currentRentPw: number | null }
+export interface PropertyCheckInput { key: string; address: string; stillOwned: boolean | null; currentValue: number | null; currentValueTo: number | null; currentRentPw: number | null }
 
 export async function saveClientPanel(by: string, appointmentId: string, checks: PropertyCheckInput[], note: string | null): Promise<void> {
   const sql = getDb();
   for (const c of checks) {
-    await sql`INSERT INTO review_property_checks (appointment_id, property_key, address, still_owned, current_value, current_rent_pw, recorded_by)
-      VALUES (${appointmentId}, ${c.key}, ${c.address}, ${c.stillOwned}, ${c.currentValue}, ${c.currentRentPw}, ${by})
+    await sql`INSERT INTO review_property_checks (appointment_id, property_key, address, still_owned, current_value, current_value_to, current_rent_pw, recorded_by)
+      VALUES (${appointmentId}, ${c.key}, ${c.address}, ${c.stillOwned}, ${c.currentValue}, ${c.currentValueTo}, ${c.currentRentPw}, ${by})
       ON CONFLICT (appointment_id, property_key) DO UPDATE SET address = EXCLUDED.address, still_owned = EXCLUDED.still_owned,
-        current_value = EXCLUDED.current_value, current_rent_pw = EXCLUDED.current_rent_pw, recorded_by = EXCLUDED.recorded_by, recorded_at = NOW()`;
+        current_value = EXCLUDED.current_value, current_value_to = EXCLUDED.current_value_to, current_rent_pw = EXCLUDED.current_rent_pw, recorded_by = EXCLUDED.recorded_by, recorded_at = NOW()`;
   }
   await sql`INSERT INTO review_outcomes (appointment_id, note, source, recorded_by) VALUES (${appointmentId}, ${note}, 'tool', ${by})
     ON CONFLICT (appointment_id) DO UPDATE SET note = EXCLUDED.note, updated_at = NOW()`;
