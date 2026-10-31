@@ -94,6 +94,9 @@ export const FIELD_MAP: Record<string, string> = {
   'Poj7K875EpZgW8a5yM4O': 'valuationNotes',            // opportunity.valuation_notes (large text)
 };
 
+// Opportunity custom fields not in FIELD_MAP are sent as opp_<GHL key> columns from the live schema (read-only).
+export const OPP_DYNAMIC_PREFIX = 'opp_';
+
 // Values computed by the reporting API (never written to GHL). Used by the NEW-mapping views.
 export const COMPUTED_FIELDS = [
   'financeTrack', 'constructionTrack', 'fcTrack', 'inFlight', 'inFlightNew',

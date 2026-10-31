@@ -4,6 +4,7 @@ import {
   FIELD_MAP,
   PROPERTY_OBJECT_ID,
   PROPERTY_LINK_FIELD_ID,
+  OPP_DYNAMIC_PREFIX,
 } from './fields';
 import { sendCtrAlert } from './alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
@@ -295,6 +296,29 @@ async function fetchPropertyRecords(): Promise<{ records: GHLPropertyRecord[]; k
   return { records: allRecords, keys: allKeys };
 }
 
+// Opportunity custom fields the tool has no friendly name for, keyed opp_<GHL key>, from the live schema:
+// new Opportunity fields appear as (read-only) columns without a code change. A schema failure only hides them.
+async function fetchOpportunityDynamicKeys(): Promise<Map<string, string>> {
+  const keys = new Map<string, string>();
+  try {
+    const response = await ghlFetch(
+      `${GHL_BASE_URL}/locations/${GHL_LOCATION_ID}/customFields?model=opportunity`,
+      { headers: { Authorization: `Bearer ${GHL_API_TOKEN}`, Version: GHL_API_VERSION }, cache: 'no-store' },
+      'ctr-opportunity-schema'
+    );
+    if (!response.ok) throw new Error(`GHL opportunity customFields error: ${response.status}`);
+    const data = await response.json();
+    for (const f of (data.customFields || []) as { id: string; fieldKey?: string; model?: string }[]) {
+      if (f.model !== 'opportunity' || FIELD_MAP[f.id]) continue;
+      const short = (f.fieldKey || '').split('.').pop();
+      if (short) keys.set(f.id, `${OPP_DYNAMIC_PREFIX}${short}`);
+    }
+  } catch (e) {
+    console.error('CTR opportunity schema error (dynamic Opportunity columns hidden):', e);
+  }
+  return keys;
+}
+
 // Every Property Review field key from the live schema, so new fields get a co_ column
 // even before any record holds a value.
 async function fetchPropertySchemaKeys(): Promise<string[]> {
@@ -338,14 +362,15 @@ function daysSinceDay(value: string): string {
 function transformOpportunity(
   opp: GHLOpportunity,
   propertyByOppId: Map<string, Record<string, string>>,
-  allPropertyKeys: Set<string>
+  allPropertyKeys: Set<string>,
+  oppDynamicKeys: Map<string, string>
 ): ReportRecord {
   const customFieldValues: Record<string, string> = {};
   if (opp.customFields) {
     for (const cf of opp.customFields) {
-      const friendlyName = FIELD_MAP[cf.id];
+      const friendlyName = FIELD_MAP[cf.id] || oppDynamicKeys.get(cf.id);
       if (friendlyName) {
-        if (ARRAY_FIELDS.has(cf.id) && cf.fieldValueArray) {
+        if ((ARRAY_FIELDS.has(cf.id) || !FIELD_MAP[cf.id]) && cf.fieldValueArray) {
           customFieldValues[friendlyName] = cf.fieldValueArray.join(', ');
         } else if (cf.fieldValueString) {
           customFieldValues[friendlyName] = cf.fieldValueString;
@@ -453,6 +478,10 @@ function transformOpportunity(
   for (const friendly of Object.values(FIELD_MAP)) {
     if (!(friendly in base)) base[friendly] = customFieldValues[friendly] || '';
   }
+  // Live-schema Opportunity fields: only non-empty values are sent (the page lists every key from the schema).
+  for (const key of oppDynamicKeys.values()) {
+    if (customFieldValues[key]) base[key] = customFieldValues[key];
+  }
 
   // Custom object (Property Review) fields are prefixed with co_ so they can
   // never collide with / overwrite opportunity fields (e.g. status vs Status).
@@ -538,10 +567,11 @@ function buildPropertyLookup(
 
 async function buildReport(): Promise<ReportRecord[]> {
   const started = Date.now();
-  const [opportunityData, propertyData, schemaKeys] = await Promise.all([
+  const [opportunityData, propertyData, schemaKeys, oppDynamicKeys] = await Promise.all([
     Promise.all([fetchPipelineStages(), fetchUsers()]).then(() => fetchAllOpportunities()),
     fetchPropertyRecords(),
     fetchPropertySchemaKeys(),
+    fetchOpportunityDynamicKeys(),
   ]);
 
   const allOpportunities = opportunityData;
@@ -551,7 +581,7 @@ async function buildReport(): Promise<ReportRecord[]> {
 
   const report = allOpportunities
     .filter((opp) => opp.status === 'open')
-    .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys))
+    .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys, oppDynamicKeys))
     .filter((r) => {
       if (r.pipelineId === PIPELINE_ID.FINANCE && r.pipelineStage.toLowerCase() === 'settled') return false;
       // Construction HANDOVER is NOT excluded here: Build Deposit Status has to

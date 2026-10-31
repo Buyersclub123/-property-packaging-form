@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
-import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, getColumnBadge } from '@/app/api/contract-team-reporting/fields';
+import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, getColumnBadge, OPP_DYNAMIC_PREFIX } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
 // USER MAP
@@ -88,7 +88,7 @@ interface LiveSchemaRegistry {
   fetchedAt: string;
   types: Record<string, string>;                 // field key (opp key or co_...) -> dataType
   options: Record<string, OptionPair[] | null>;  // field key -> option pairs (stored key / display label)
-  labels: Record<string, string>;                // co_ field key -> GHL field label
+  labels: Record<string, string>;                // co_ / opp_ field key -> GHL field label
   newFieldCount: number;
 }
 let LIVE_SCHEMA: LiveSchemaRegistry | null = null;
@@ -96,7 +96,7 @@ let LIVE_SCHEMA: LiveSchemaRegistry | null = null;
 // Header text: Property Record columns always show their GHL label (never the raw key),
 // even in saved layouts; other columns keep their column label.
 function headerLabel(col: { key: string; label: string }): string {
-  if (!col.key.startsWith(CO_PREFIX)) return col.label;
+  if (!col.key.startsWith(CO_PREFIX) && !col.key.startsWith(OPP_DYNAMIC_PREFIX)) return col.label;
   return LIVE_SCHEMA?.labels[col.key] || getFieldLabel(col.key);
 }
 
@@ -908,7 +908,7 @@ for (const col of [...DEFAULT_COLUMNS, ...FULL_FC_COLUMNS, ...SETTLEMENT_COLUMNS
 }
 
 function getReportFieldLabel(key: string): string {
-  return KNOWN_COLUMN_LABELS[key] || getFieldLabel(key);
+  return KNOWN_COLUMN_LABELS[key] || LIVE_SCHEMA?.labels[key] || getFieldLabel(key);
 }
 
 // ----------------------------------------------------------------------------
@@ -1710,6 +1710,7 @@ export default function ContractTeamReportingPage() {
         if (!f.key) continue;
         types[f.key] = f.dataType;
         options[f.key] = f.options;
+        if (f.key.startsWith(OPP_DYNAMIC_PREFIX) && f.name) labels[f.key] = String(f.name).trim();
       }
       for (const f of data.propertyFields || []) {
         if (!f.key) continue;
@@ -1747,10 +1748,12 @@ export default function ContractTeamReportingPage() {
   const allAvailableKeys = useMemo(() => {
     const keys = new Set<string>();
     records.forEach((r) => Object.keys(r).forEach((k) => keys.add(k)));
+    // Every live-schema Opportunity field, even while no record holds a value.
+    Object.keys(LIVE_SCHEMA?.labels || {}).forEach((k) => { if (k.startsWith(OPP_DYNAMIC_PREFIX)) keys.add(k); });
     CHOOSER_HIDDEN_KEYS.forEach((k) => keys.delete(k));
     return Array.from(keys).sort((a, b) => getReportFieldLabel(a).localeCompare(getReportFieldLabel(b)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [records]);
+  }, [records, schemaInfo]);
 
   const [columnMenuSearch, setColumnMenuSearch] = useState('');
 
@@ -1796,7 +1799,7 @@ export default function ContractTeamReportingPage() {
     // Send every edited field that isn't read-only; the update API maps
     // friendly names to GHL field IDs and safely ignores anything unwritable.
     for (const [key, newVal] of Object.entries(edits)) {
-      if (READ_ONLY_FIELDS.has(key) || key === 'assignedTo') continue;
+      if (READ_ONLY_FIELDS.has(key) || key === 'assignedTo' || key.startsWith(OPP_DYNAMIC_PREFIX)) continue;
       if (key.startsWith(CO_PREFIX) && !isCoFieldEditable(key)) continue;
       if (newVal !== undefined && newVal !== original[key]) {
         changes[key] = newVal;
@@ -3206,7 +3209,7 @@ export default function ContractTeamReportingPage() {
                   {columns.map((col, colIdx) => {
                     const rawValue = record[col.key] || '';
                     const displayValue = getDisplayValue(record, col.key);
-                    const isEditable = editMode && isSelected && !READ_ONLY_FIELDS.has(col.key) && !(col.key.startsWith(CO_PREFIX) && !isCoFieldEditable(col.key));
+                    const isEditable = editMode && isSelected && !READ_ONLY_FIELDS.has(col.key) && !col.key.startsWith(OPP_DYNAMIC_PREFIX) && !(col.key.startsWith(CO_PREFIX) && !isCoFieldEditable(col.key));
                     const currentValue = isEditable ? getEditValue(record.id, col.key) : rawValue;
                     let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;
 

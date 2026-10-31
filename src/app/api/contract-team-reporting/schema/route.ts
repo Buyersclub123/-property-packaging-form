@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getRedisClient } from '@/lib/redis';
-import { FIELD_MAP, PROPERTY_FIELD_MAP } from '../fields';
+import { FIELD_MAP, PROPERTY_FIELD_MAP, OPP_DYNAMIC_PREFIX } from '../fields';
 import { sendCtrAlert, CTR_ALERT_RECIPIENTS } from '../alerts';
 
 // Always run at request time, never pre-render at build (data must be live)
@@ -22,7 +22,7 @@ const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export interface SchemaField {
   id: string;
-  key: string;            // friendly key used by the tool ('' if unknown/new)
+  key: string;            // friendly key used by the tool (opp_<GHL key> for unmapped opportunity fields)
   name: string;
   dataType: string;
   // Option pairs: GHL stores `key`, users see `label`. For opportunity fields
@@ -55,7 +55,8 @@ async function fetchOpportunitySchema(): Promise<SchemaField[]> {
     .filter((f: any) => f.model === 'opportunity')
     .map((f: any) => ({
       id: f.id,
-      key: FIELD_MAP[f.id] || '',
+      // Unmapped fields get the opp_<GHL key> column the report API sends for them.
+      key: FIELD_MAP[f.id] || (f.fieldKey ? `${OPP_DYNAMIC_PREFIX}${String(f.fieldKey).split('.').pop()}` : ''),
       name: f.name || '',
       dataType: f.dataType || 'TEXT',
       options: Array.isArray(f.picklistOptions)
@@ -169,7 +170,7 @@ export async function GET() {
     } catch { /* without Redis we can't track a baseline — report no new fields */ }
 
     const newOpportunityFields = baseline
-      ? opportunityFields.filter((f) => !f.key && !baseline!.has(`opp:${f.id}`))
+      ? opportunityFields.filter((f) => !FIELD_MAP[f.id] && !baseline!.has(`opp:${f.id}`))
       : [];
     const newPropertyFields = baseline
       ? propertyFields.filter((f) => !knownPropertyKeys.has(f.key) && !baseline!.has(`co:${f.id}`))
