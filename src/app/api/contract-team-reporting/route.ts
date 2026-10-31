@@ -23,6 +23,12 @@ const SHARED_TTL_SEC = 60;
 const LOCK_TTL_SEC = 30;
 const WAIT_FOR_LOCK_MS = 15000;
 const WAIT_POLL_MS = 400;
+// Safety limit only: hitting it fails the load loudly instead of returning a truncated report.
+const MAX_PAGES = 200;
+const PROPERTY_OBJECT_KEY = 'custom_objects.property_reviews';
+// Property Record statuses that never count as the opportunity's live record.
+const INACTIVE_RECORD_STATUSES = new Set(['05_remove_no_interest', '06_remove_lost', '07_test_record', '08_resold']);
+let lastBuildMs = 0;
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -77,6 +83,7 @@ interface GHLSearchResponse {
 
 interface GHLPropertyRecord {
   id?: string;
+  updatedAt?: string;
   properties?: Record<string, unknown>;
 }
 
@@ -254,8 +261,7 @@ async function fetchPropertyRecords(): Promise<{ records: GHLPropertyRecord[]; k
         action: 'Check GHL API status and that the GHL_BEARER_TOKEN has access to custom objects. If it persists, the token may have expired or lost scopes.',
         detailsHtml: `<p>HTTP ${response.status}</p><pre>${errorText.slice(0, 1000)}</pre>`,
       });
-      // Return what we have rather than failing completely.
-      break;
+      throw new Error(`GHL Property Records API error: ${response.status}`);
     }
 
     const data: GHLPropertyRecordsResponse = await response.json();
@@ -274,12 +280,41 @@ async function fetchPropertyRecords(): Promise<{ records: GHLPropertyRecord[]; k
 
     hasMore = records.length === 100;
 
-    if (page > 30) {
-      break;
+    if (hasMore && page > MAX_PAGES) {
+      sendCtrAlert({
+        type: 'page-limit-reached',
+        subject: 'Property Review records exceeded the tool\'s page limit',
+        reason: `More than ${MAX_PAGES * 100} Property Review records were returned.`,
+        impact: 'The report did not load (it never shows a partial set).',
+        action: 'Raise MAX_PAGES in src/app/api/contract-team-reporting/route.ts.',
+      });
+      throw new Error(`Property Review records exceed ${MAX_PAGES * 100}; report not loaded.`);
     }
   }
 
   return { records: allRecords, keys: allKeys };
+}
+
+// Every Property Review field key from the live schema, so new fields get a co_ column
+// even before any record holds a value.
+async function fetchPropertySchemaKeys(): Promise<string[]> {
+  const response = await ghlFetch(
+    `${GHL_BASE_URL}/custom-fields/object-key/${PROPERTY_OBJECT_KEY}?locationId=${GHL_LOCATION_ID}`,
+    { headers: { Authorization: `Bearer ${GHL_API_TOKEN}`, Version: GHL_API_VERSION }, cache: 'no-store' },
+    'ctr-property-schema'
+  );
+  if (!response.ok) throw new Error(`GHL Property Review schema error: ${response.status}`);
+  const data = await response.json();
+  return ((data.fields || []) as { fieldKey?: string }[])
+    .map((f) => (f.fieldKey ? toShortPropertyKey(f.fieldKey) : ''))
+    .filter(Boolean);
+}
+
+const DAY_MS = 1000 * 60 * 60 * 24;
+function daysSince(date: string): string {
+  if (!date) return '';
+  const t = new Date(date).getTime();
+  return Number.isNaN(t) ? '' : String(Math.floor((Date.now() - t) / DAY_MS));
 }
 
 function transformOpportunity(
@@ -396,6 +431,10 @@ function transformOpportunity(
     propertyManagerDetails: customFieldValues['propertyManagerDetails'] || '',
     stage: stageName,
   };
+  // Any other mapped field (e.g. the new-mapping fields) not listed above.
+  for (const friendly of Object.values(FIELD_MAP)) {
+    if (!(friendly in base)) base[friendly] = customFieldValues[friendly] || '';
+  }
 
   // Custom object (Property Review) fields are prefixed with co_ so they can
   // never collide with / overwrite opportunity fields (e.g. status vs Status).
@@ -403,6 +442,28 @@ function transformOpportunity(
   for (const key of allPropertyKeys) {
     base[`co_${key}`] = propertyValues?.[key] ?? '';
   }
+  base.propertyRecordCount = propertyValues?.__count ?? '0';
+  base.propertyRecordIds = propertyValues?.__ids ?? '';
+
+  // New-mapping computed values (Finance Status / Construction stage instead of pipelines).
+  const stageLower = stageName.toLowerCase();
+  const ptSettled = opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM && stageLower === 'settled';
+  const fallen = !!base.dealFallenOver;
+  const constructionStage = base.co_construction_stage || '';
+  base.financeTrack = base.financeStatus && !ptSettled && !fallen ? 'Yes' : '';
+  base.constructionTrack = constructionStage && !ptSettled && !fallen ? 'Yes' : '';
+  base.fcTrack = base.financeTrack || base.constructionTrack ? 'Yes' : '';
+  base.inFlight =
+    (opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM && stageLower !== 'settled') ||
+    (opp.pipelineId === PIPELINE_ID.FINANCE && stageLower !== 'settled') ||
+    (opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !stageLower.includes('handover'))
+      ? 'Yes' : '';
+  base.inFlightNew =
+    !fallen && !ptSettled &&
+    (opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM || !!base.financeStatus || (!!constructionStage && constructionStage !== 'handover'))
+      ? 'Yes' : '';
+  base.daysInFinanceStatus = base.financeStatus ? daysSince(base.financeStatusChangeDate) : '';
+  base.daysInConstructionStage = constructionStage ? daysSince(base.co_construction_stage_change_date || '') : '';
 
   return base;
 }
@@ -412,6 +473,7 @@ function buildPropertyLookup(
   allKeys: Set<string>
 ): { propertyByOppId: Map<string, Record<string, string>>; allPropertyKeys: Set<string> } {
   const propertyByOppId = new Map<string, Record<string, string>>();
+  const candidates = new Map<string, { values: Record<string, string>; active: boolean; updatedAt: string }[]>();
 
   for (const record of records) {
     const props = record.properties || {};
@@ -434,24 +496,42 @@ function buildPropertyLookup(
     }
 
     if (linkedOppId) {
-      propertyByOppId.set(linkedOppId, values);
+      // Reselling (seller's old record) and removed/test/resold records never count as the live record.
+      const active = !INACTIVE_RECORD_STATUSES.has(values['status'] || '') && !values['reselling'];
+      const list = candidates.get(linkedOppId) || [];
+      list.push({ values, active, updatedAt: record.updatedAt || '' });
+      candidates.set(linkedOppId, list);
     }
+  }
+
+  // Deterministic pick: latest-updated active record, else latest-updated of any.
+  for (const [oppId, list] of candidates) {
+    const active = list.filter((c) => c.active);
+    const pool = (active.length ? active : list).slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    propertyByOppId.set(oppId, {
+      ...pool[0].values,
+      __count: String(active.length),
+      __ids: active.map((c) => c.values['record_id']).join(', '),
+    });
   }
 
   return { propertyByOppId, allPropertyKeys: allKeys };
 }
 
 async function buildReport(): Promise<ReportRecord[]> {
-  const [opportunityData, propertyData] = await Promise.all([
+  const started = Date.now();
+  const [opportunityData, propertyData, schemaKeys] = await Promise.all([
     Promise.all([fetchPipelineStages(), fetchUsers()]).then(() => fetchAllOpportunities()),
     fetchPropertyRecords(),
+    fetchPropertySchemaKeys(),
   ]);
 
   const allOpportunities = opportunityData;
   const { records: propertyRecords, keys: allPropertyKeys } = propertyData;
+  for (const k of schemaKeys) allPropertyKeys.add(k);
   const { propertyByOppId } = buildPropertyLookup(propertyRecords, allPropertyKeys);
 
-  return allOpportunities
+  const report = allOpportunities
     .filter((opp) => opp.status === 'open')
     .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys))
     .filter((r) => {
@@ -466,6 +546,8 @@ async function buildReport(): Promise<ReportRecord[]> {
       const dateB = b.confirmedSettlementDate || '9999-12-31';
       return new Date(dateA).getTime() - new Date(dateB).getTime();
     });
+  lastBuildMs = Date.now() - started;
+  return report;
 }
 
 function sleep(ms: number) {
@@ -477,6 +559,8 @@ function respond(records: ReportRecord[], fetchedAt: number, served: 'shared' | 
     headers: {
       'X-Fetched-At': String(fetchedAt),
       'X-Served-From': served,
+      'X-Build-Ms': served === 'live' ? String(lastBuildMs) : '',
+      'X-Record-Count': String(records.length),
       'Cache-Control': 'no-store',
     },
   });
@@ -574,6 +658,7 @@ async function fetchAllOpportunities(): Promise<GHLOpportunity[]> {
       url.searchParams.set('location_id', GHL_LOCATION_ID);
       url.searchParams.set('pipeline_id', pipelineId);
       url.searchParams.set('limit', '100');
+      url.searchParams.set('status', 'open');
       if (startAfter !== undefined && startAfterId) {
         url.searchParams.set('startAfter', String(startAfter));
         url.searchParams.set('startAfterId', startAfterId);
@@ -617,8 +702,15 @@ async function fetchAllOpportunities(): Promise<GHLOpportunity[]> {
         hasMore = false;
       }
 
-      if (pageCount > 30) {
-        hasMore = false;
+      if (hasMore && pageCount > MAX_PAGES) {
+        sendCtrAlert({
+          type: 'page-limit-reached',
+          subject: 'Opportunities exceeded the tool\'s page limit',
+          reason: `Pipeline ${PIPELINE_NAMES[pipelineId] || pipelineId} returned more than ${MAX_PAGES * 100} open opportunities.`,
+          impact: 'The report did not load (it never shows a partial set).',
+          action: 'Raise MAX_PAGES in src/app/api/contract-team-reporting/route.ts.',
+        });
+        throw new Error(`Open opportunities in ${PIPELINE_NAMES[pipelineId] || pipelineId} exceed ${MAX_PAGES * 100}; report not loaded.`);
       }
     }
   }

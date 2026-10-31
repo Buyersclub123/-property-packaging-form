@@ -8,6 +8,7 @@ export const ARRAY_FIELDS = new Set([
   'Qtu3Zhuno1RUQziNmfNw', // Build Deposit Issued
   'z46PLoTif5bLLyVNeL13', // Build Deposit Paid
   'V88m80BD2yiweCdXwOs2', // PM Intro Sent
+  'fntjCiEVwyWG4HvcJYwg', // Deal Fallen Over
 ]);
 
 // Custom field ID → friendly name mapping for GHL Opportunities.
@@ -67,7 +68,22 @@ export const FIELD_MAP: Record<string, string> = {
   'trxorFuw4WPqKZT8f78U': 'accountantCompany',
   'SQwuifVkGaYglkBUGseP': 'propertyManager',
   'UgtJu3I87HQLVdt918BZ': 'propertyManagerDetails',
+  // New field mapping (run sheet, created 31/10-1/11). Referenced by GHL key in comments, never by name:
+  // two opportunity fields are labelled "Finance status" (finance_status__residential vs finance_status).
+  'zTgTXnbDCLlXs3Ehx9sl': 'financeStatus',            // opportunity.finance_status__residential
+  'fXXr8HchG3ZmSYvsIYHo': 'financeStatusChangeDate',  // opportunity.finance_status_change_date
+  'gVoWpQUyCoKjTPzCb08u': 'purchasingEntityName',     // opportunity.purchasing_entity_name
+  'NKTfkc3EG9aWUoDAMzNT': 'purchasingEntityType',     // opportunity.purchasing_entity_type
+  'fntjCiEVwyWG4HvcJYwg': 'dealFallenOver',           // opportunity.deal_fallen_over
+  'XWtmLQsANI4zHhAQ5a9t': 'dealFallenOverDate',       // opportunity.deal_fallen_over_date
+  'aVPPOAkSJ0pG0BthLfki': 'dealFallenOverReason',     // opportunity.deal_fallen_over_reason
 };
+
+// Values computed by the reporting API (never written to GHL). Used by the NEW-mapping views.
+export const COMPUTED_FIELDS = [
+  'financeTrack', 'constructionTrack', 'fcTrack', 'inFlight', 'inFlightNew',
+  'daysInFinanceStatus', 'daysInConstructionStage', 'propertyRecordCount', 'propertyRecordIds',
+] as const;
 
 // Reverse map: friendly name → field ID
 export const FRIENDLY_TO_FIELD_ID: Record<string, string> = Object.fromEntries(
@@ -2963,6 +2979,11 @@ export const READ_ONLY_FIELDS = new Set([
   'contactName', 'contactEmail', 'contactPhone',
   // Business rule (items 7 + 29)
   'assignedBA', 'partnerName', 'partnerEmail', 'partnerPhone',
+  // Computed by the API
+  ...COMPUTED_FIELDS,
+  // New-mapping opportunity fields: read-only until JT's editability table covers them
+  'financeStatus', 'financeStatusChangeDate', 'purchasingEntityName', 'purchasingEntityType',
+  'dealFallenOver', 'dealFallenOverDate', 'dealFallenOverReason',
 ]);
 
 // Property Review fields the user explicitly requested for this report
@@ -3131,4 +3152,20 @@ const OPPORTUNITY_FIELD_LABELS: Record<string, string> = {
   bpExtensionStatus: 'B&P Extension Status',
   bpScheduledDate: 'B&P Scheduled Date',
   financeApprovalReceived: 'Finance Formal Approval Received',
+  financeStatus: 'Finance Status',
+  financeStatusChangeDate: 'Finance Status change date',
+  purchasingEntityName: 'Purchasing entity name',
+  purchasingEntityType: 'Entity type',
+  dealFallenOver: 'Deal Fallen Over',
+  dealFallenOverDate: 'Deal Fallen Over date',
+  dealFallenOverReason: 'Deal Fallen Over reason',
+  financeTrack: 'Finance track (Finance Status set)',
+  constructionTrack: 'Construction track (Construction stage set)',
+  fcTrack: 'Finance or Construction track',
+  inFlight: 'In flight (pipelines)',
+  inFlightNew: 'In flight (new mapping)',
+  daysInFinanceStatus: 'Days in Finance Status',
+  daysInConstructionStage: 'Days in Construction stage',
+  propertyRecordCount: 'Active Property Records',
+  propertyRecordIds: 'Property Record IDs',
 };
