@@ -90,6 +90,8 @@ export const FIELD_MAP: Record<string, string> = {
   'doXsMp7kGfYW5MCfgEQB': 'valuationAttendedDate',     // opportunity.valuation_attended_date
   'SpU2h8HHC0vsjOvuAxeB': 'valuationOutcome',          // opportunity.valuation_outcome
   'K2L0idGtMv7dzEahtl6S': 'valuationAmountResidential', // opportunity.valuation_amount_residential
+  'kUCdsznXZTMDcjqDETE7': 'valuationShortfall',        // opportunity.valuation_shortfall (checkbox)
+  'Poj7K875EpZgW8a5yM4O': 'valuationNotes',            // opportunity.valuation_notes (large text)
 };
 
 // Values computed by the reporting API (never written to GHL). Used by the NEW-mapping views.
@@ -3026,11 +3028,13 @@ export const READ_ONLY_FIELDS = new Set([
   // assignedBA and partner fields became editable on 1/11 (editability workbook, Agreed = Y).
   // Computed by the API
   ...COMPUTED_FIELDS,
-  // New-mapping opportunity fields: read-only until JT's editability table covers them
-  'financeStatus', 'financeStatusChangeDate', 'purchasingEntityName', 'purchasingEntityType',
+  // New-mapping opportunity fields: read-only until JT's editability table covers them.
+  // financeStatus and purchasingEntityName/Type are editable (workbook Y); the change date is stamped by the update route.
+  'financeStatusChangeDate',
   'dealFallenOver', 'dealFallenOverDate', 'dealFallenOverReason',
   'valuationRequested', 'valuationRequestedDate', 'valuationAccessAvailable', 'valuationAccessEstimate',
   'valuationBookedDate', 'valuationAttended', 'valuationAttendedDate', 'valuationOutcome', 'valuationAmountResidential',
+  'valuationShortfall', 'valuationNotes',
 ]);
 
 // Property Review fields the user explicitly requested for this report
@@ -3157,7 +3161,7 @@ const OPPORTUNITY_FIELD_LABELS: Record<string, string> = {
   financeRequestedExtensionDate: 'Finance Requested Extension Date',
   financeExtensionStatus: 'Finance Extension Status',
   bpRequestedExtensionDate: 'B&P Requested Extension Date',
-  valuationExpectedAccessDate: 'Valuation Expected Access Date',
+  valuationExpectedAccessDate: 'Valuation access available date from',
   lastFinanceUpdateDate: 'Last Finance Update Date',
   lastConstructionUpdateDate: 'Last Construction Update Date',
   settlementDate: 'Settlement Date',
@@ -3224,6 +3228,8 @@ const OPPORTUNITY_FIELD_LABELS: Record<string, string> = {
   valuationAttendedDate: 'Valuation attended date',
   valuationOutcome: 'Valuation outcome',
   valuationAmountResidential: 'Valuation amount',
+  valuationShortfall: 'Valuation shortfall',
+  valuationNotes: 'Valuation notes',
   financeTrack: 'Finance track (Finance Status set)',
   constructionTrack: 'Construction track (Construction stage set)',
   fcTrack: 'Finance or Construction track',

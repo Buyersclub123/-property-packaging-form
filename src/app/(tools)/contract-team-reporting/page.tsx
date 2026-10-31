@@ -784,6 +784,7 @@ const PRESET_VIEWS: ViewDef[] = [
 // Every property fact in a NEW view comes from the linked Property Record (co_), never the Opportunity.
 const NEW_COLUMN_SWAP: Record<string, string[]> = {
   registeredAddress: ['co_property_address'],
+  settlementDate: ['settlementDate', 'co_settlement_date_mined'],
   pipelineName: ['financeStatus'],
   pipelineStage: ['co_construction_stage', 'pipelineStage'],
   daysSinceStageChange: ['daysInFinanceStatus', 'daysInConstructionStage'],
@@ -809,6 +810,9 @@ const NEW_VIEW_FILTERS: Record<string, ViewFilter[]> = {
   ],
 };
 
+// Column labels that differ in the NEW views.
+const NEW_LABELS: Record<string, string> = { settlementDate: 'Settlement terms' };
+
 function toNewColumns(cols: ColumnDef[]): ColumnDef[] {
   const out: ColumnDef[] = [];
   const seen = new Set<string>();
@@ -816,7 +820,7 @@ function toNewColumns(cols: ColumnDef[]): ColumnDef[] {
     for (const key of NEW_COLUMN_SWAP[c.key] || [c.key]) {
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(key === c.key ? c : { key, label: getFieldLabel(key), width: c.width });
+      out.push(key === c.key ? { ...c, label: NEW_LABELS[key] ?? c.label } : { key, label: getFieldLabel(key), width: c.width });
     }
   }
   return out;
@@ -857,10 +861,10 @@ PRESET_VIEWS.push(
     builtin: true,
     columns: [
       { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('co_property_address', 220), col('assignedBA'),
-      col('financeStatus'), col('daysInFinanceStatus', 80), col('valuationRequested', 90), col('valuationRequestedDate'),
-      col('valuationAccessAvailable', 90), col('valuationExpectedAccessDate'), col('valuationAccessEstimate'),
-      col('valuationBookedDate'), col('valuationAttended', 90), col('valuationAttendedDate'), col('valuationOutcome'),
-      col('valuationAmountResidential'), col('financeDueDate'), col('confirmedSettlementDate'), col('latestStatusUpdate', 250),
+      col('financeStatus'), col('daysInFinanceStatus', 80), col('valuationAccessEstimate'), col('valuationAccessAvailable', 90),
+      col('valuationExpectedAccessDate'), col('valuationRequested', 90), col('valuationRequestedDate'), col('valuationBookedDate'),
+      col('valuationAttended', 90), col('valuationAttendedDate'), col('valuationOutcome'), col('valuationAmountResidential'),
+      col('valuationShortfall', 90), col('valuationNotes', 250), col('financeDueDate'), col('confirmedSettlementDate'), col('latestStatusUpdate', 250),
     ],
     filters: [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
     sortBy: 'valuationExpectedAccessDate',
@@ -2149,7 +2153,7 @@ export default function ContractTeamReportingPage() {
         const outcome = (record.valuationOutcome || '').trim();
         if (outcome !== '' && outcome !== 'Pending') return false;
       } else if (activePreset === 'valShortfall') {
-        if (record.valuationOutcome !== 'Shortfall') return false;
+        if (record.valuationOutcome !== 'Shortfall' && record.valuationShortfall !== 'Yes') return false;
       }
 
       // Check excluded value filters
@@ -2573,7 +2577,7 @@ export default function ContractTeamReportingPage() {
                 {([
                   ['opportunity', 'OPPORTUNITY FIELDS', 'text-blue-400'],
                   ['custom-object', 'CUSTOM OBJECT FIELDS', 'text-green-400'],
-                  ['custom-object-other', 'OTHER CUSTOM OBJECT FIELDS', 'text-gray-400'],
+                  ['custom-object-other', 'OTHER CUSTOM OBJECT FIELDS', 'text-green-400'],
                 ] as [FieldSource, string, string][]).map(([source, heading, colour]) => {
                   const sectionKeys = allAvailableKeys
                     .filter((k) => getFieldSource(k) === source)

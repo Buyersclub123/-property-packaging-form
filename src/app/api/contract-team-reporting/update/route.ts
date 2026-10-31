@@ -104,6 +104,9 @@ export async function PUT(request: NextRequest) {
 
     // Change dates for tool edits: stamp today unless the user set the date in the same save.
     const todaySyd = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+    if ('financeStatus' in (changes || {}) && !('financeStatusChangeDate' in (changes || {}))) {
+      customFields.push({ id: FRIENDLY_TO_FIELD_ID.financeStatusChangeDate, field_value: new Date(todaySyd).toISOString() });
+    }
     for (const [field, dateField] of Object.entries(CO_CHANGE_DATE_FIELDS)) {
       if (field in propertyProps && !(dateField in propertyProps)) {
         propertyProps[dateField] = new Date(todaySyd).toISOString();
