@@ -2984,7 +2984,23 @@ export const CO_PREFIX = 'co_';
 export const CO_EDITABLE_KEYS = new Set<string>([
   'agent_email', 'agent_mobile', 'agent_name', 'completion_date', 'construction_stage',
   'status', 'street_name', 'street_number', 'unit__lot',
+  // JT 3/11: edited only through the Registered / TBC / Expected month control, never free text.
+  'land_registration',
 ]);
+
+export const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const LAND_REG_MONTH_RE = new RegExp(`^(${MONTH_NAMES.join('|')}) (\\d{4}) approx\\.$`);
+/** Allowed land_registration values: "Registered", "TBC" or "Month YYYY approx." */
+export function isValidLandRegistration(v: string): boolean {
+  return v === 'Registered' || v === 'TBC' || LAND_REG_MONTH_RE.test(v);
+}
+export function parseLandRegistrationMonth(v: string): { month: string; year: number } | null {
+  const m = LAND_REG_MONTH_RE.exec(v);
+  return m ? { month: m[1], year: Number(m[2]) } : null;
+}
 export const CO_TOOL_PROPOSED_KEYS = new Set<string>(['closing_price']);
 export function isCoFieldEditable(key: string): boolean {
   return key.startsWith(CO_PREFIX) && CO_EDITABLE_KEYS.has(key.slice(CO_PREFIX.length));

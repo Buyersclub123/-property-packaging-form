@@ -24,7 +24,7 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
     trigger: 'Same save call as the user edit (/api/contract-team-reporting/update)',
     fieldsWritten: 'Property Record construction_stage_change_date, status_change_date',
     rule: 'Writes today (Sydney) unless the user set the date in the same save.',
-    log: 'Vercel function logs; failures emailed (CTR alerts)',
+    log: 'Postgres ctr_edit_log (every Property Record field written by a CTRT save, old -> new, with user); failures emailed (CTR alerts)',
   },
   {
     name: 'Sales Meeting Outcomes GHL write-back',

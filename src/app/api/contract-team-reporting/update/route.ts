@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX, CO_EDITABLE_KEYS, CO_CHANGE_DATE_FIELDS, READ_ONLY_FIELDS } from '../fields';
+import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX, CO_EDITABLE_KEYS, CO_CHANGE_DATE_FIELDS, READ_ONLY_FIELDS, isValidLandRegistration } from '../fields';
 import { sendCtrAlert } from '../alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
+import { getDb } from '@/lib/db';
+import { emailFromHeaders } from '@/lib/tileAccess';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -67,6 +69,12 @@ export async function PUT(request: NextRequest) {
         if (coKey === 'record_id' || coKey === 'linked_opportunity_id') continue;
         const dataType = PROPERTY_FIELD_TYPES[coKey];
         if (!dataType) continue;
+        if (coKey === 'land_registration' && !isValidLandRegistration(value)) {
+          return NextResponse.json(
+            { error: `Land registration must be Registered, TBC or "Month YYYY approx." (got "${value}")` },
+            { status: 400 }
+          );
+        }
         if (dataType === 'DATE') {
           propertyProps[coKey] = value ? new Date(value).toISOString() : '';
         } else if (dataType === 'NUMERICAL') {
@@ -147,6 +155,7 @@ export async function PUT(request: NextRequest) {
     // 2. Update the linked Property Review custom object record
     if (Object.keys(propertyProps).length > 0) {
       const url = `${GHL_BASE_URL}/objects/${PROPERTY_OBJECT_ID}/records/${propertyRecordId}?locationId=${GHL_LOCATION_ID}`;
+      const before = await readRecordProps(url);
       const res = await ghlFetch(url, {
         method: 'PUT',
         headers: {
@@ -169,11 +178,51 @@ export async function PUT(request: NextRequest) {
         });
         return NextResponse.json({ error: `GHL API error (property record): ${res.status}` }, { status: res.status });
       }
+      await logEdits(emailFromHeaders(request.headers), opportunityId, propertyRecordId, before, propertyProps);
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('CTR update error:', error);
     return NextResponse.json({ error: 'Failed to update opportunity' }, { status: 500 });
+  }
+}
+
+function asText(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+// Current Property Record values, so each edit can be logged old -> new. null = could not read.
+async function readRecordProps(url: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await ghlFetch(url, {
+      headers: { Authorization: `Bearer ${GHL_API_TOKEN}`, Version: GHL_API_VERSION },
+      cache: 'no-store',
+    }, 'ctr-update-property-before');
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.record || data).properties || {};
+  } catch {
+    return null;
+  }
+}
+
+// Every Property Record field written by a CTRT edit, old -> new, in ctr_edit_log.
+async function logEdits(
+  email: string | null, opportunityId: string, recordId: string,
+  before: Record<string, unknown> | null, written: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const sql = getDb();
+    await sql`CREATE TABLE IF NOT EXISTS ctr_edit_log (id serial PRIMARY KEY, at timestamptz NOT NULL DEFAULT now(), user_email text, opportunity_id text NOT NULL, record_id text NOT NULL, field text NOT NULL, old_value text, new_value text)`;
+    for (const [field, value] of Object.entries(written)) {
+      const oldValue = before ? asText(before[field]) : '(unknown)';
+      await sql`INSERT INTO ctr_edit_log (user_email, opportunity_id, record_id, field, old_value, new_value)
+        VALUES (${email}, ${opportunityId}, ${recordId}, ${field}, ${oldValue}, ${asText(value)})`;
+    }
+  } catch (e) {
+    console.error('CTR edit log failed:', e);
   }
 }

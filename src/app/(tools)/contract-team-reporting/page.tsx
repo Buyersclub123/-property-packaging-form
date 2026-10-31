@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
-import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS } from '@/app/api/contract-team-reporting/fields';
+import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
 // USER MAP
@@ -123,6 +123,44 @@ function checkboxOnValue(key: string): string | null {
     return pairs?.[0]?.key || 'Yes';
   }
   return null;
+}
+
+// Land registration edit control (JT mock-up 3/11): Registered / TBC / Expected month, never free text.
+function LandRegistrationControl({ value, original, onChange, inputClass }: {
+  value: string; original: string; onChange: (v: string) => void; inputClass: string;
+}) {
+  const parsed = parseLandRegistrationMonth(value);
+  const mode = value === 'Registered' ? 'reg' : value === 'TBC' ? 'tbc' : parsed ? 'month' : '';
+  const now = new Date();
+  const month = parsed?.month ?? MONTH_NAMES[now.getMonth()];
+  const year = parsed?.year ?? now.getFullYear();
+  const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 1 + i);
+  if (!years.includes(year)) years.unshift(year);
+  const setMonth = (m: string, y: number) => onChange(`${m} ${y} approx.`);
+  const btn = (on: boolean) =>
+    `flex-1 px-1 py-0.5 rounded border text-[10px] ${on ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-400'}`;
+  return (
+    <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
+      <div className="flex gap-0.5">
+        <button type="button" className={btn(mode === 'reg')} onClick={() => onChange('Registered')}>Registered</button>
+        <button type="button" className={btn(mode === 'tbc')} onClick={() => onChange('TBC')}>TBC</button>
+        <button type="button" className={btn(mode === 'month')} onClick={() => setMonth(month, year)}>Expected month</button>
+      </div>
+      {mode === 'month' && (
+        <div className="flex gap-0.5">
+          <select value={month} onChange={(e) => setMonth(e.target.value, year)} className={`flex-1 ${inputClass}`}>
+            {MONTH_NAMES.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select value={year} onChange={(e) => setMonth(month, Number(e.target.value))} className={`flex-1 ${inputClass}`}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      )}
+      {value !== original && (
+        <div className="text-[9px] opacity-70">Will save: <b>{value}</b> · current: {original || '(blank)'}</div>
+      )}
+    </div>
+  );
 }
 
 // Dropdown option pairs: `value` is what GHL stores, `label` is what users see.
@@ -1062,7 +1100,8 @@ export default function ContractTeamReportingPage() {
     if (colKey === 'co_land_registration') {
       if (!v) return 'rgba(148,163,184,0.15)';            // blank = unknown (established)
       if (v === 'registered') return END_STATE_BG;         // Registered
-      return 'rgba(234,179,8,0.25)';                       // "Month YYYY approx." / TBC = unregistered
+      if (v === 'tbc') return 'rgba(148,163,184,0.35)';    // TBC = unregistered, no ETA
+      return 'rgba(234,179,8,0.25)';                       // "Month YYYY approx." = unregistered with ETA
     }
     if (colKey === 'co_construction_stage') {
       if (v === 'handover') return END_STATE_BG;
@@ -3115,6 +3154,15 @@ export default function ContractTeamReportingPage() {
                               <option key={ba.id} value={ba.id}>{ba.name}</option>
                             ))}
                           </select>
+                        );
+                      } else if (col.key === 'co_land_registration') {
+                        cellContent = (
+                          <LandRegistrationControl
+                            value={currentValue}
+                            original={rawValue}
+                            onChange={(v) => setEditValue(record.id, col.key, v)}
+                            inputClass={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-0.5 py-0 ${t.text}`}
+                          />
                         );
                       } else if (dropdownOptions(col.key)) {
                         cellContent = (
