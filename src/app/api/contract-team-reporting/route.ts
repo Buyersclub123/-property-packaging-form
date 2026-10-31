@@ -317,6 +317,24 @@ function daysSince(date: string): string {
   return Number.isNaN(t) ? '' : String(Math.floor((Date.now() - t) / DAY_MS));
 }
 
+// Calendar day (YYYY-MM-DD, Sydney) of a GHL date value: date-only strings and midnight-UTC
+// timestamps are taken as that day; real timestamps / epoch ms are converted to Sydney time.
+function sydneyDay(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (/^\d{4}-\d{2}-\d{2}T00:00:00(\.000)?Z$/.test(value)) return value.slice(0, 10);
+  const d = new Date(/^\d+$/.test(value) ? Number(value) : value);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+}
+
+// Whole days from a change date to today (Sydney): 0 on the day of change.
+function daysSinceDay(value: string): string {
+  if (!value) return '';
+  const day = sydneyDay(value);
+  if (!day) return '';
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+  return String(Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / DAY_MS));
+}
+
 function transformOpportunity(
   opp: GHLOpportunity,
   propertyByOppId: Map<string, Record<string, string>>,
@@ -462,8 +480,8 @@ function transformOpportunity(
     !fallen && !ptSettled &&
     (opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM || !!base.financeStatus || (!!constructionStage && constructionStage !== 'handover'))
       ? 'Yes' : '';
-  base.daysInFinanceStatus = base.financeStatus ? daysSince(base.financeStatusChangeDate) : '';
-  base.daysInConstructionStage = constructionStage ? daysSince(base.co_construction_stage_change_date || '') : '';
+  base.daysInFinanceStatus = base.financeStatus ? daysSinceDay(base.financeStatusChangeDate) : '';
+  base.daysInConstructionStage = constructionStage ? daysSinceDay(base.co_construction_stage_change_date || '') : '';
 
   return base;
 }

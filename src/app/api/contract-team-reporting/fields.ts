@@ -317,7 +317,7 @@ export const PROPERTY_FIELD_LABELS: Record<string, string> = {
   "email_template_html": "email_template_html",
   "email_template_text": "email_template_text",
   "build_size": "build_size",
-  "land_registration": "land_registration",
+  "land_registration": "Land registration / expected date",
   "lga": "lga",
   "folder_link": "folder_link",
   "land_price": "land_price",
@@ -3118,6 +3118,15 @@ export function getPropertyOptionLabel(coFieldKey: string, value: string): strin
   if (!pairs) return value;
   const match = pairs.find((p) => p.key === value || p.label === value);
   return match ? match.label : value;
+}
+
+// Computed columns derived (wholly or partly) from Property Record fields: badged PR, not Opp.
+export const RECORD_DERIVED_FIELDS = new Set<string>([
+  'daysInConstructionStage', 'constructionTrack', 'fcTrack', 'inFlightNew', 'propertyRecordCount', 'propertyRecordIds',
+]);
+/** Header badge: where a column's value actually comes from. */
+export function getColumnBadge(key: string): 'record' | 'opportunity' {
+  return key.startsWith(CO_PREFIX) || RECORD_DERIVED_FIELDS.has(key) ? 'record' : 'opportunity';
 }
 
 // Which section of the column chooser a field belongs to.

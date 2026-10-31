@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
-import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth } from '@/app/api/contract-team-reporting/fields';
+import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, getColumnBadge } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
 // USER MAP
@@ -88,9 +88,17 @@ interface LiveSchemaRegistry {
   fetchedAt: string;
   types: Record<string, string>;                 // field key (opp key or co_...) -> dataType
   options: Record<string, OptionPair[] | null>;  // field key -> option pairs (stored key / display label)
+  labels: Record<string, string>;                // co_ field key -> GHL field label
   newFieldCount: number;
 }
 let LIVE_SCHEMA: LiveSchemaRegistry | null = null;
+
+// Header text: Property Record columns always show their GHL label (never the raw key),
+// even in saved layouts; other columns keep their column label.
+function headerLabel(col: { key: string; label: string }): string {
+  if (!col.key.startsWith(CO_PREFIX)) return col.label;
+  return LIVE_SCHEMA?.labels[col.key] || getFieldLabel(col.key);
+}
 
 function liveTypeOf(key: string): string | null {
   return LIVE_SCHEMA?.types[key] || null;
@@ -773,7 +781,9 @@ const PRESET_VIEWS: ViewDef[] = [
 // Counts must match the original once the in-flight load is done. Computed fields come from the API:
 // financeTrack / constructionTrack / fcTrack / inFlightNew exclude Deal Fallen Over and Property Team Settled.
 // ----------------------------------------------------------------------------
+// Every property fact in a NEW view comes from the linked Property Record (co_), never the Opportunity.
 const NEW_COLUMN_SWAP: Record<string, string[]> = {
+  registeredAddress: ['co_property_address'],
   pipelineName: ['financeStatus'],
   pipelineStage: ['co_construction_stage', 'pipelineStage'],
   daysSinceStageChange: ['daysInFinanceStatus', 'daysInConstructionStage'],
@@ -816,10 +826,15 @@ function toNewView(v: ViewDef): ViewDef {
   const constructionOnly = v.id === 'builtin-pm-intro';
   const swapSort = (col: string) =>
     col === 'daysSinceStageChange' ? (constructionOnly ? 'daysInConstructionStage' : 'daysInFinanceStatus')
-      : col === 'pipelineStage' ? 'co_construction_stage' : col;
+      : col === 'pipelineStage' ? 'co_construction_stage'
+      : col === 'registeredAddress' ? 'co_property_address' : col;
   const filters = NEW_VIEW_FILTERS[v.id]
-    // Project views keep their address / name filters and add the in-flight scope.
-    ?? [...v.filters.filter((f) => f.field !== 'pipelineId'), { field: 'inFlightNew', operator: 'equals' as const, value: 'Yes' }];
+    // Project views keep their address / name filters (address read from the Property Record) and add the in-flight scope.
+    ?? [
+      ...v.filters.filter((f) => f.field !== 'pipelineId')
+        .map((f) => (f.field === 'registeredAddress' ? { ...f, field: 'co_property_address' } : f)),
+      { field: 'inFlightNew', operator: 'equals' as const, value: 'Yes' },
+    ];
   return {
     ...v,
     id: `${v.id}-new`,
@@ -841,7 +856,7 @@ PRESET_VIEWS.push(
     section: 'Standard',
     builtin: true,
     columns: [
-      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('registeredAddress', 220), col('assignedBA'),
+      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('co_property_address', 220), col('assignedBA'),
       col('financeStatus'), col('daysInFinanceStatus', 80), col('valuationRequested', 90), col('valuationRequestedDate'),
       col('valuationAccessAvailable', 90), col('valuationExpectedAccessDate'), col('valuationAccessEstimate'),
       col('valuationBookedDate'), col('valuationAttended', 90), col('valuationAttendedDate'), col('valuationOutcome'),
@@ -857,9 +872,9 @@ PRESET_VIEWS.push(
     section: 'Exception',
     builtin: true,
     columns: [
-      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('registeredAddress', 220), col('owner'), col('assignedBA'),
+      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('co_property_address', 220), col('owner'), col('assignedBA'),
       col('dealFallenOverDate'), col('dealFallenOverReason', 160), col('financeStatus'), col('co_construction_stage'),
-      col('pipelineName', 100), col('pipelineStage', 140), col('co_status'), col('latestStatusUpdate', 250),
+      col('pipelineName', 100), { key: 'pipelineStage', label: 'Stage', width: 140 }, col('co_status'), col('latestStatusUpdate', 250),
     ],
     filters: [{ field: 'dealFallenOver', operator: 'not blank', value: '' }],
     sortBy: 'dealFallenOverDate',
@@ -871,8 +886,8 @@ PRESET_VIEWS.push(
     section: 'Exception',
     builtin: true,
     columns: [
-      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('registeredAddress', 220), col('pipelineName', 100),
-      col('pipelineStage', 140), col('propertyRecordCount', 90), col('propertyRecordIds', 260), col('co_status'), col('co_property_address', 220),
+      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('co_property_address', 220), col('pipelineName', 100),
+      { key: 'pipelineStage', label: 'Stage', width: 140 }, col('propertyRecordCount', 90), col('propertyRecordIds', 260), col('co_status'),
     ],
     // More than one active record (not Reselling, not 05/06/07/08) linked to the same opportunity.
     filters: [{ field: 'propertyRecordIds', operator: 'contains', value: ',' }],
@@ -1686,6 +1701,7 @@ export default function ContractTeamReportingPage() {
       const data = await res.json();
       const types: Record<string, string> = {};
       const options: Record<string, OptionPair[] | null> = {};
+      const labels: Record<string, string> = {};
       for (const f of data.opportunityFields || []) {
         if (!f.key) continue;
         types[f.key] = f.dataType;
@@ -1695,9 +1711,10 @@ export default function ContractTeamReportingPage() {
         if (!f.key) continue;
         types[`co_${f.key}`] = f.dataType;
         options[`co_${f.key}`] = f.options;
+        if (f.name) labels[`co_${f.key}`] = f.name;
       }
       const newFieldCount = (data.newOpportunityFields?.length || 0) + (data.newPropertyFields?.length || 0);
-      LIVE_SCHEMA = { fetchedAt: data.fetchedAt, types, options, newFieldCount };
+      LIVE_SCHEMA = { fetchedAt: data.fetchedAt, types, options, labels, newFieldCount };
       setSchemaInfo({ fetchedAt: data.fetchedAt, newFieldCount });
     } catch { /* fall back to baked-in maps */ }
   }, []);
@@ -3018,19 +3035,19 @@ export default function ContractTeamReportingPage() {
                   className={`relative border ${t.cellBorder} px-1.5 py-1.5 text-left font-medium ${t.headerText} cursor-move select-none`}
                   style={{ width: col.width, minWidth: col.width, maxWidth: col.width, backgroundColor: getColumnBg(col.key, true) || (theme === 'dark' ? '#1f2937' : '#f3f4f6') }}
                 >
-                  {/* Source tag: opp (blue) / co (green) — tiny, corner, no real estate cost */}
+                  {/* Source tag: Opp (blue) / PR = Property Record or computed from it (green) — tiny, corner */}
                   <span
                     className="absolute top-0 right-2 text-[7px] font-bold leading-none pointer-events-none"
-                    style={{ color: getFieldSource(col.key) === 'opportunity' ? '#60a5fa' : '#4ade80' }}
+                    style={{ color: getColumnBadge(col.key) === 'opportunity' ? '#60a5fa' : '#4ade80' }}
                   >
-                    {getFieldSource(col.key) === 'opportunity' ? 'opp' : 'co'}
+                    {getColumnBadge(col.key) === 'opportunity' ? 'Opp' : 'PR'}
                   </span>
                   <div
                     className="flex items-center gap-0.5 cursor-pointer overflow-hidden"
                     title="Click to sort. Shift-click to add this column as another sort level."
                     onClick={(e) => handleSort(col.key, e.shiftKey)}
                   >
-                    <span className="text-[11px] leading-tight">{col.label}</span>
+                    <span className="text-[11px] leading-tight">{headerLabel(col)}</span>
                     {(() => {
                       const at = sortLevels.findIndex((l) => l.column === col.key);
                       if (at === -1) return null;
