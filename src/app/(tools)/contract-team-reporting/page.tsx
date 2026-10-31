@@ -154,6 +154,11 @@ function displayLabelFor(key: string, raw: string): string {
   }
   return getPropertyOptionLabel(key.slice(CO_PREFIX.length), raw);
 }
+// Money fields are plain numbers (or TEXT on the Property Record) in GHL; always shown as $x,xxx,xxx.
+const MONEY_FIELDS = new Set([
+  'monetaryValue', 'valuationAmountResidential', 'co_land_price', 'co_build_price', 'co_total_price', 'co_closing_price',
+  'co_offer_price', 'co_offer_price_land', 'co_offer_price_build', 'co_net_price', 'co_holding_deposit_amount', 'co_asking',
+]);
 // Fields that are large text (get expand button in edit mode)
 const LARGE_TEXT_FIELDS = new Set(['latestStatusUpdate', 'bpNegotiationDetail', 'agentBuilderDetails', 'briefNotes']);
 // Editability (READ_ONLY_FIELDS, isCoFieldEditable) is imported from fields.ts —
@@ -673,6 +678,120 @@ const PRESET_VIEWS: ViewDef[] = [
   },
 ];
 
+// ----------------------------------------------------------------------------
+// NEW-mapping copies (JT 1/11): every preset again as "<name> NEW", built on Finance Status,
+// Construction stage and Property Record fields instead of the Finance / Construction pipelines.
+// Counts must match the original once the in-flight load is done. Computed fields come from the API:
+// financeTrack / constructionTrack / fcTrack / inFlightNew exclude Deal Fallen Over and Property Team Settled.
+// ----------------------------------------------------------------------------
+const NEW_COLUMN_SWAP: Record<string, string[]> = {
+  pipelineName: ['financeStatus'],
+  pipelineStage: ['co_construction_stage', 'pipelineStage'],
+  daysSinceStageChange: ['daysInFinanceStatus', 'daysInConstructionStage'],
+  smsfName: ['purchasingEntityName', 'purchasingEntityType'],
+  personalName: ['purchasingEntityName', 'purchasingEntityType'],
+  typeOfProperty: ['co_property_type'],
+  registration: ['co_land_registration'],
+  registrationDateETA: ['co_land_registration'],
+};
+const NEW_VIEW_FILTERS: Record<string, ViewFilter[]> = {
+  'builtin-bp': [
+    { field: 'financeTrack', operator: 'equals', value: 'Yes' },
+    { field: 'co_property_type', operator: 'equals', value: 'established' },
+  ],
+  'builtin-full-fc': [{ field: 'fcTrack', operator: 'equals', value: 'Yes' }],
+  'builtin-build-deposit': [{ field: 'fcTrack', operator: 'equals', value: 'Yes' }],
+  'builtin-settlement': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
+  'builtin-uncon': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
+  'builtin-finance-tracking': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
+  'builtin-pm-intro': [
+    { field: 'constructionTrack', operator: 'equals', value: 'Yes' },
+    { field: 'co_construction_stage', operator: 'not equals', value: 'handover' },
+  ],
+};
+
+function toNewColumns(cols: ColumnDef[]): ColumnDef[] {
+  const out: ColumnDef[] = [];
+  const seen = new Set<string>();
+  for (const c of cols) {
+    for (const key of NEW_COLUMN_SWAP[c.key] || [c.key]) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(key === c.key ? c : { key, label: getFieldLabel(key), width: c.width });
+    }
+  }
+  return out;
+}
+
+function toNewView(v: ViewDef): ViewDef {
+  const constructionOnly = v.id === 'builtin-pm-intro';
+  const swapSort = (col: string) =>
+    col === 'daysSinceStageChange' ? (constructionOnly ? 'daysInConstructionStage' : 'daysInFinanceStatus')
+      : col === 'pipelineStage' ? 'co_construction_stage' : col;
+  const filters = NEW_VIEW_FILTERS[v.id]
+    // Project views keep their address / name filters and add the in-flight scope.
+    ?? [...v.filters.filter((f) => f.field !== 'pipelineId'), { field: 'inFlightNew', operator: 'equals' as const, value: 'Yes' }];
+  return {
+    ...v,
+    id: `${v.id}-new`,
+    name: `${v.name} NEW`,
+    columns: toNewColumns(v.columns),
+    filters,
+    sortBy: swapSort(v.sortBy),
+    sorts: v.sorts?.map((s) => ({ ...s, column: swapSort(s.column) })),
+  };
+}
+
+const col = (key: string, width = 120): ColumnDef => ({ key, label: getFieldLabel(key), width });
+
+PRESET_VIEWS.push(
+  ...PRESET_VIEWS.map(toNewView),
+  {
+    id: 'builtin-valuation-access',
+    name: 'Valuation access',
+    section: 'Standard',
+    builtin: true,
+    columns: [
+      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('registeredAddress', 220), col('assignedBA'),
+      col('financeStatus'), col('daysInFinanceStatus', 80), col('valuationRequested', 90), col('valuationRequestedDate'),
+      col('valuationAccessAvailable', 90), col('valuationExpectedAccessDate'), col('valuationAccessEstimate'),
+      col('valuationBookedDate'), col('valuationAttended', 90), col('valuationAttendedDate'), col('valuationOutcome'),
+      col('valuationAmountResidential'), col('financeDueDate'), col('confirmedSettlementDate'), col('latestStatusUpdate', 250),
+    ],
+    filters: [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
+    sortBy: 'valuationExpectedAccessDate',
+    sortDir: 'asc',
+  },
+  {
+    id: 'builtin-fallen-deals',
+    name: 'Fallen deals',
+    section: 'Exception',
+    builtin: true,
+    columns: [
+      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('registeredAddress', 220), col('owner'), col('assignedBA'),
+      col('dealFallenOverDate'), col('dealFallenOverReason', 160), col('financeStatus'), col('co_construction_stage'),
+      col('pipelineName', 100), col('pipelineStage', 140), col('co_status'), col('latestStatusUpdate', 250),
+    ],
+    filters: [{ field: 'dealFallenOver', operator: 'not blank', value: '' }],
+    sortBy: 'dealFallenOverDate',
+    sortDir: 'desc',
+  },
+  {
+    id: 'builtin-duplicate-records',
+    name: 'Duplicate Property Records',
+    section: 'Exception',
+    builtin: true,
+    columns: [
+      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('registeredAddress', 220), col('pipelineName', 100),
+      col('pipelineStage', 140), col('propertyRecordCount', 90), col('propertyRecordIds', 260), col('co_status'), col('co_property_address', 220),
+    ],
+    // More than one active record (not Reselling, not 05/06/07/08) linked to the same opportunity.
+    filters: [{ field: 'propertyRecordIds', operator: 'contains', value: ',' }],
+    sortBy: 'name',
+    sortDir: 'asc',
+  },
+);
+
 // Label helper for the report builder — prefers explicit column labels, then
 // the API field label map (opportunity + property fields), then title-case.
 const KNOWN_COLUMN_LABELS: Record<string, string> = {};
@@ -930,7 +1049,29 @@ export default function ContractTeamReportingPage() {
         if (record.preSettlementInspectionStatus === 'Satisfied' && (colKey === 'preSettlementInspectionDate' || colKey === 'bpNegotiationDetail')) return END_STATE_BG;
       }
     }
-    return getColumnBg(colKey, false);
+    return stateBg(colKey, value) || getColumnBg(colKey, false);
+  }
+
+  // New-mapping state colours (D3): each field coloured by its own state, no derived labels.
+  function stateBg(colKey: string, value: string): string {
+    const v = (value || '').toLowerCase();
+    if (colKey === 'financeStatus') {
+      return ({ 'pending finance': 'rgba(234,179,8,0.25)', 'valuation ordered': 'rgba(249,115,22,0.25)', 'application lodged': 'rgba(59,130,246,0.25)', 'formally approved': END_STATE_BG, 'not tracked': 'rgba(148,163,184,0.25)' } as Record<string, string>)[v] || '';
+    }
+    if (colKey === 'co_land_registration') {
+      if (!v) return 'rgba(148,163,184,0.15)';            // blank = unknown (established)
+      if (v === 'registered') return END_STATE_BG;         // Registered
+      return 'rgba(234,179,8,0.25)';                       // "Month YYYY approx." / TBC = unregistered
+    }
+    if (colKey === 'co_construction_stage') {
+      if (v === 'handover') return END_STATE_BG;
+      if (v === 'practical_completion' || v === 'landscaping_pending') return 'rgba(59,130,246,0.25)';
+      return v ? 'rgba(249,115,22,0.2)' : '';
+    }
+    if (colKey === 'purchasingEntityType') {
+      return ({ smsf: 'rgba(168,85,247,0.25)', 'trust or company': 'rgba(236,72,153,0.2)', personal: 'rgba(59,130,246,0.15)' } as Record<string, string>)[v] || '';
+    }
+    return '';
   }
 
   // Theme
@@ -1809,6 +1950,10 @@ export default function ContractTeamReportingPage() {
     const raw = record[key] || '';
     if (key === 'assignedTo' || key === 'assignedBA') return USER_MAP[raw] || raw;
     if (isDateField(key)) return formatDate(raw);
+    if (raw && (MONEY_FIELDS.has(key) || liveTypeOf(key) === 'MONETORY')) {
+      const n = Number(raw.replace(/[$,\s]/g, ''));
+      if (!Number.isNaN(n)) return `$${Math.round(n).toLocaleString('en-AU')}`;
+    }
     // Custom object dropdowns store keys (e.g. "split_contract") — show labels
     if (key.startsWith(CO_PREFIX)) return displayLabelFor(key, raw);
     return raw;

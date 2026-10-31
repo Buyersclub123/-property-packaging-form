@@ -9,6 +9,9 @@ export const ARRAY_FIELDS = new Set([
   'z46PLoTif5bLLyVNeL13', // Build Deposit Paid
   'V88m80BD2yiweCdXwOs2', // PM Intro Sent
   'fntjCiEVwyWG4HvcJYwg', // Deal Fallen Over
+  'YvFO6OfND0rUymcdiaEC', // Valuation requested
+  '362dbBtKjPU682iyoiTK', // Valuation access available
+  'jMQzRJlqXcMadLAaQQHE', // Valuation attended
 ]);
 
 // Custom field ID → friendly name mapping for GHL Opportunities.
@@ -77,6 +80,16 @@ export const FIELD_MAP: Record<string, string> = {
   'fntjCiEVwyWG4HvcJYwg': 'dealFallenOver',           // opportunity.deal_fallen_over
   'XWtmLQsANI4zHhAQ5a9t': 'dealFallenOverDate',       // opportunity.deal_fallen_over_date
   'aVPPOAkSJ0pG0BthLfki': 'dealFallenOverReason',     // opportunity.deal_fallen_over_reason
+  // Valuation fields (created 1/11; live schema read 1/11)
+  'YvFO6OfND0rUymcdiaEC': 'valuationRequested',        // opportunity.valuation_requested (checkbox)
+  'Do1cTPfQBabBNnna9lm7': 'valuationRequestedDate',    // opportunity.valuation_requested_date
+  '362dbBtKjPU682iyoiTK': 'valuationAccessAvailable',  // opportunity.valuation_access_available (checkbox)
+  'tM6af4OZGnBX4bSrf1bn': 'valuationAccessEstimate',   // opportunity.valuation_access_estimate (text)
+  'qqTrF20beTSfT5MVlcyr': 'valuationBookedDate',       // opportunity.valuation_booked_date
+  'jMQzRJlqXcMadLAaQQHE': 'valuationAttended',         // opportunity.valuation_attended (checkbox)
+  'doXsMp7kGfYW5MCfgEQB': 'valuationAttendedDate',     // opportunity.valuation_attended_date
+  'SpU2h8HHC0vsjOvuAxeB': 'valuationOutcome',          // opportunity.valuation_outcome
+  'K2L0idGtMv7dzEahtl6S': 'valuationAmountResidential', // opportunity.valuation_amount_residential
 };
 
 // Values computed by the reporting API (never written to GHL). Used by the NEW-mapping views.
@@ -3000,6 +3013,8 @@ export const READ_ONLY_FIELDS = new Set([
   // New-mapping opportunity fields: read-only until JT's editability table covers them
   'financeStatus', 'financeStatusChangeDate', 'purchasingEntityName', 'purchasingEntityType',
   'dealFallenOver', 'dealFallenOverDate', 'dealFallenOverReason',
+  'valuationRequested', 'valuationRequestedDate', 'valuationAccessAvailable', 'valuationAccessEstimate',
+  'valuationBookedDate', 'valuationAttended', 'valuationAttendedDate', 'valuationOutcome', 'valuationAmountResidential',
 ]);
 
 // Property Review fields the user explicitly requested for this report
@@ -3175,6 +3190,15 @@ const OPPORTUNITY_FIELD_LABELS: Record<string, string> = {
   dealFallenOver: 'Deal Fallen Over',
   dealFallenOverDate: 'Deal Fallen Over date',
   dealFallenOverReason: 'Deal Fallen Over reason',
+  valuationRequested: 'Valuation requested',
+  valuationRequestedDate: 'Valuation requested date',
+  valuationAccessAvailable: 'Valuation access available',
+  valuationAccessEstimate: 'Valuation access estimate',
+  valuationBookedDate: 'Valuation booked date',
+  valuationAttended: 'Valuation attended',
+  valuationAttendedDate: 'Valuation attended date',
+  valuationOutcome: 'Valuation outcome',
+  valuationAmountResidential: 'Valuation amount',
   financeTrack: 'Finance track (Finance Status set)',
   constructionTrack: 'Construction track (Construction stage set)',
   fcTrack: 'Finance or Construction track',
