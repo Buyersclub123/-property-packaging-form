@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
@@ -126,9 +127,37 @@ function checkboxOnValue(key: string): string | null {
 }
 
 // Land registration edit control (JT mock-up 3/11): Registered / TBC / Expected month, never free text.
-function LandRegistrationControl({ value, original, onChange, inputClass }: {
-  value: string; original: string; onChange: (v: string) => void; inputClass: string;
+// The cell stays one line; the buttons and pickers open in a floating panel so the column doesn't widen.
+function LandRegistrationControl({ value, original, onChange, inputClass, panelClass }: {
+  value: string; original: string; onChange: (v: string) => void; inputClass: string; panelClass: string;
 }) {
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pos) return;
+    const close = (e: Event) => {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setPos(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'Enter') setPos(null); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('scroll', close, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('scroll', close, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [pos]);
+  const toggle = () => {
+    if (pos) { setPos(null); return; }
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = 240;
+    setPos({ left: Math.max(4, Math.min(r.left, window.innerWidth - width - 4)), top: r.bottom + 2 });
+  };
   const parsed = parseLandRegistrationMonth(value);
   const mode = value === 'Registered' ? 'reg' : value === 'TBC' ? 'tbc' : parsed ? 'month' : '';
   const now = new Date();
@@ -139,25 +168,47 @@ function LandRegistrationControl({ value, original, onChange, inputClass }: {
   const setMonth = (m: string, y: number) => onChange(`${m} ${y} approx.`);
   const btn = (on: boolean) =>
     `flex-1 px-1 py-0.5 rounded border text-[10px] ${on ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-400'}`;
+  const changed = value !== original;
   return (
-    <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
-      <div className="flex gap-0.5">
-        <button type="button" className={btn(mode === 'reg')} onClick={() => onChange('Registered')}>Registered</button>
-        <button type="button" className={btn(mode === 'tbc')} onClick={() => onChange('TBC')}>TBC</button>
-        <button type="button" className={btn(mode === 'month')} onClick={() => setMonth(month, year)}>Expected month</button>
-      </div>
-      {mode === 'month' && (
-        <div className="flex gap-0.5">
-          <select value={month} onChange={(e) => setMonth(e.target.value, year)} className={`flex-1 ${inputClass}`}>
-            {MONTH_NAMES.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <select value={year} onChange={(e) => setMonth(month, Number(e.target.value))} className={`flex-1 ${inputClass}`}>
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-      )}
-      {value !== original && (
-        <div className="text-[9px] opacity-70">Will save: <b>{value}</b> · current: {original || '(blank)'}</div>
+    <div onClick={(e) => e.stopPropagation()}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={toggle}
+        title={changed ? `Will save: ${value} (current: ${original || 'blank'})` : 'Change land registration'}
+        className={`w-full flex items-center justify-between gap-1 text-left ${inputClass} ${changed ? 'ring-1 ring-blue-500' : ''}`}
+      >
+        <span className="truncate">{value || '(blank)'}</span>
+        <span className="opacity-60">▾</span>
+      </button>
+      {pos && createPortal(
+        <div
+          ref={panelRef}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, width: 240, zIndex: 1000 }}
+          className={`flex flex-col gap-1 p-1.5 rounded shadow-lg text-[11px] ${panelClass}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex gap-1">
+            <button type="button" className={btn(mode === 'reg')} onClick={() => { onChange('Registered'); setPos(null); }}>Registered</button>
+            <button type="button" className={btn(mode === 'tbc')} onClick={() => { onChange('TBC'); setPos(null); }}>TBC</button>
+            <button type="button" className={btn(mode === 'month')} onClick={() => setMonth(month, year)}>Expected month</button>
+          </div>
+          {mode === 'month' && (
+            <div className="flex gap-1">
+              <select value={month} onChange={(e) => setMonth(e.target.value, year)} className={`flex-1 ${inputClass}`}>
+                {MONTH_NAMES.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <select value={year} onChange={(e) => setMonth(month, Number(e.target.value))} className={`flex-1 ${inputClass}`}>
+                {years.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <button type="button" className={btn(false)} style={{ flex: 'none' }} onClick={() => setPos(null)}>OK</button>
+            </div>
+          )}
+          <div className="text-[10px] opacity-70">
+            {changed ? <>Will save: <b>{value}</b> · current: {original || '(blank)'}</> : <>Current: {original || '(blank)'}</>}
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -3162,6 +3213,7 @@ export default function ContractTeamReportingPage() {
                             original={rawValue}
                             onChange={(v) => setEditValue(record.id, col.key, v)}
                             inputClass={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-0.5 py-0 ${t.text}`}
+                            panelClass={`${t.inputBg} ${t.text} border ${t.inputBorder}`}
                           />
                         );
                       } else if (dropdownOptions(col.key)) {
