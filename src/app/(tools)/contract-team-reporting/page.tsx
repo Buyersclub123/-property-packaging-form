@@ -963,7 +963,8 @@ export default function ContractTeamReportingPage() {
   const sortDirection: SortDirection = sortLevels[0]?.dir ?? null;
 
   // Preset filter
-  type PresetFilter = 'none' | 'blankPropertyType' | 'blankBpDueDate' | 'blankBpRequested' | 'bpDueNext5' | 'settlementNext5';
+  type PresetFilter = 'none' | 'blankPropertyType' | 'blankBpDueDate' | 'blankBpRequested' | 'bpDueNext5' | 'settlementNext5'
+    | 'valNoAccessDate' | 'valNotRequested' | 'valRequestedNoBooking' | 'valAttendedNoOutcome' | 'valShortfall';
   const [activePreset, setActivePreset] = useState<PresetFilter>('none');
 
   // Filter state (Excel-style excluded values)
@@ -2025,6 +2026,23 @@ export default function ContractTeamReportingPage() {
         const in5 = new Date(now);
         in5.setDate(in5.getDate() + 5);
         if (d < now || d > in5) return false;
+      } else if (activePreset === 'valNoAccessDate') {
+        if ((record.valuationExpectedAccessDate || '').trim() !== '') return false;
+      } else if (activePreset === 'valNotRequested') {
+        if ((record.valuationRequested || '').trim() !== '') return false;
+      } else if (activePreset === 'valRequestedNoBooking') {
+        const raw = record.valuationRequestedDate;
+        if (!raw || (record.valuationBookedDate || '').trim() !== '') return false;
+        const weekAgo = new Date();
+        weekAgo.setHours(0, 0, 0, 0);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        if (new Date(raw) >= weekAgo) return false;
+      } else if (activePreset === 'valAttendedNoOutcome') {
+        if ((record.valuationAttended || '').trim() === '') return false;
+        const outcome = (record.valuationOutcome || '').trim();
+        if (outcome !== '' && outcome !== 'Pending') return false;
+      } else if (activePreset === 'valShortfall') {
+        if (record.valuationOutcome !== 'Shortfall') return false;
       }
 
       // Check excluded value filters
@@ -2271,8 +2289,30 @@ export default function ContractTeamReportingPage() {
             </>
           )}
           {/* Preset filter buttons — only relevant to the B&P & Finance view */}
-          {activeView.name === 'B&P' && (['none', 'blankPropertyType', 'blankBpDueDate', 'blankBpRequested', 'bpDueNext5', 'settlementNext5'] as PresetFilter[]).map((preset) => {
-            const labels: Record<PresetFilter, string> = {
+          {activeView.name === 'Valuation access' && (['none', 'valNoAccessDate', 'valNotRequested', 'valRequestedNoBooking', 'valAttendedNoOutcome', 'valShortfall'] as PresetFilter[]).map((preset) => {
+            const labels: Partial<Record<PresetFilter, string>> = {
+              none: 'All *',
+              valNoAccessDate: 'No access date',
+              valNotRequested: 'Not requested',
+              valRequestedNoBooking: 'Req > 7d no booking',
+              valAttendedNoOutcome: 'Attended no outcome',
+              valShortfall: 'Shortfall',
+            };
+            const isActive = activePreset === preset;
+            return (
+              <button
+                key={preset}
+                onClick={() => setActivePreset(preset)}
+                className={`px-2 py-1 rounded text-xs ${
+                  isActive ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`
+                }`}
+              >
+                {labels[preset]}
+              </button>
+            );
+          })}
+          {(activeView.name === 'B&P' || activeView.name === 'B&P NEW') && (['none', 'blankPropertyType', 'blankBpDueDate', 'blankBpRequested', 'bpDueNext5', 'settlementNext5'] as PresetFilter[]).map((preset) => {
+            const labels: Partial<Record<PresetFilter, string>> = {
               none: 'All *',
               blankPropertyType: 'Blank P-type',
               blankBpDueDate: 'No B&P Date',
@@ -2853,6 +2893,11 @@ export default function ContractTeamReportingPage() {
                   : activePreset === 'blankBpDueDate' ? 'B&P Due Date blank'
                   : activePreset === 'blankBpRequested' ? 'B&P Requested blank'
                   : activePreset === 'bpDueNext5' ? 'B&P Due Date within 5 days'
+                  : activePreset === 'valNoAccessDate' ? 'Valuation access date blank'
+                  : activePreset === 'valNotRequested' ? 'Valuation not requested'
+                  : activePreset === 'valRequestedNoBooking' ? 'Valuation requested over 7 days ago, not booked'
+                  : activePreset === 'valAttendedNoOutcome' ? 'Valuation attended, no outcome'
+                  : activePreset === 'valShortfall' ? 'Valuation shortfall'
                   : 'Settlement Date within 5 days'}
               </span>
             )}
