@@ -43,6 +43,10 @@
     {
       "path": "/api/ghl-monitor/digest",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/contract-team-reporting/stamp-cron",
+      "schedule": "0 15 * * *"
     }
   ]
 }

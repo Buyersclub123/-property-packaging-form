@@ -293,6 +293,12 @@ export const teams: TeamTile[] = [
         newTab: true,
       },
       {
+        name: 'Automated Updates',
+        description: 'Every automatic (non-human) write into GHL: trigger, fields, rule and log',
+        href: '/admin/automated-updates',
+        newTab: true,
+      },
+      {
         name: 'Access Policies (Cloudflare)',
         description: 'Who can access which section of this portal',
         href: 'https://dash.cloudflare.com/e042ae740af8318d0a2ed0fe46c8eefc/one/access-controls/apps',

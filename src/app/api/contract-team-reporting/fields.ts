@@ -2948,6 +2948,9 @@ export const PROPERTY_FIELD_TYPES: Record<string, string> = {
   "dwelling_type": "SINGLE_OPTIONS",
   "subject_line": "TEXT",
   "dwelling_details": "LARGE_TEXT",
+  "construction_stage": "SINGLE_OPTIONS",
+  "construction_stage_change_date": "DATE",
+  "status_change_date": "DATE",
   "completion_date": "TEXT",
   "linked_opportunity_id": "TEXT"
 };
@@ -2962,9 +2965,23 @@ export const CO_PREFIX = 'co_';
 // To make a field editable or read-only, change it HERE and nowhere else.
 // ============================================================================
 
-// Custom object (Property Review) fields are read-only for now (feedback item 31).
-// Flip to false to re-enable editing of co_ fields in both UI and API.
-export const CO_FIELDS_READ_ONLY = true;
+// Custom object (Property Review) fields were all read-only (feedback item 31) until 1/11.
+// Replaced on 1/11 by per-field rules from "CTRT editability - for JT v1 (Devin).xlsx", column "Agreed (1/11)".
+// Y = human editable in CTRT. T = tool-proposed, human-accepted (read-only until that flow exists). Everything else N.
+export const CO_EDITABLE_KEYS = new Set<string>([
+  'agent_email', 'agent_mobile', 'agent_name', 'completion_date', 'construction_stage',
+  'status', 'street_name', 'street_number', 'unit__lot',
+]);
+export const CO_TOOL_PROPOSED_KEYS = new Set<string>(['closing_price']);
+export function isCoFieldEditable(key: string): boolean {
+  return key.startsWith(CO_PREFIX) && CO_EDITABLE_KEYS.has(key.slice(CO_PREFIX.length));
+}
+// When the tool changes one of these Property Record fields it writes today's date to the paired
+// change-date field in the same call (GHL custom-object workflows cannot write dates).
+export const CO_CHANGE_DATE_FIELDS: Record<string, string> = {
+  construction_stage: 'construction_stage_change_date',
+  status: 'status_change_date',
+};
 
 // Fields that can never be edited from the tool — system/computed fields plus
 // business-rule read-only fields (feedback items 7, 23, 29).
@@ -2977,8 +2994,7 @@ export const READ_ONLY_FIELDS = new Set([
   'co_record_id', 'co_linked_opportunity_id',
   // Contact fields (item 23)
   'contactName', 'contactEmail', 'contactPhone',
-  // Business rule (items 7 + 29)
-  'assignedBA', 'partnerName', 'partnerEmail', 'partnerPhone',
+  // assignedBA and partner fields became editable on 1/11 (editability workbook, Agreed = Y).
   // Computed by the API
   ...COMPUTED_FIELDS,
   // New-mapping opportunity fields: read-only until JT's editability table covers them

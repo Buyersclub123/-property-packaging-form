@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX, CO_FIELDS_READ_ONLY, READ_ONLY_FIELDS } from '../fields';
+import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX, CO_EDITABLE_KEYS, CO_CHANGE_DATE_FIELDS, READ_ONLY_FIELDS } from '../fields';
 import { sendCtrAlert } from '../alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
 
@@ -11,7 +11,7 @@ const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 
-// Read-only rules (READ_ONLY_FIELDS, CO_FIELDS_READ_ONLY) come from fields.ts —
+// Read-only rules (READ_ONLY_FIELDS, CO_EDITABLE_KEYS) come from fields.ts —
 // the same list the page uses to lock cells, so UI and API can never disagree.
 
 // Fields that are DATE type in GHL
@@ -62,8 +62,8 @@ export async function PUT(request: NextRequest) {
 
       // Custom object (Property Review) fields — written to the property record.
       if (rawKey.startsWith(CO_PREFIX)) {
-        if (CO_FIELDS_READ_ONLY) continue;
         const coKey = rawKey.slice(CO_PREFIX.length);
+        if (!CO_EDITABLE_KEYS.has(coKey)) continue;
         if (coKey === 'record_id' || coKey === 'linked_opportunity_id') continue;
         const dataType = PROPERTY_FIELD_TYPES[coKey];
         if (!dataType) continue;
@@ -91,6 +91,14 @@ export async function PUT(request: NextRequest) {
         customFields.push({ id: ghlId, field_value: value ? new Date(value).toISOString() : '' });
       } else {
         customFields.push({ id: ghlId, field_value: value });
+      }
+    }
+
+    // Change dates for tool edits: stamp today unless the user set the date in the same save.
+    const todaySyd = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+    for (const [field, dateField] of Object.entries(CO_CHANGE_DATE_FIELDS)) {
+      if (field in propertyProps && !(dateField in propertyProps)) {
+        propertyProps[dateField] = new Date(todaySyd).toISOString();
       }
     }
 

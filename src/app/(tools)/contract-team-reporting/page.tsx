@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
-import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, CO_FIELDS_READ_ONLY, READ_ONLY_FIELDS } from '@/app/api/contract-team-reporting/fields';
+import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
 // USER MAP
@@ -156,7 +156,7 @@ function displayLabelFor(key: string, raw: string): string {
 }
 // Fields that are large text (get expand button in edit mode)
 const LARGE_TEXT_FIELDS = new Set(['latestStatusUpdate', 'bpNegotiationDetail', 'agentBuilderDetails', 'briefNotes']);
-// Editability (READ_ONLY_FIELDS, CO_FIELDS_READ_ONLY) is imported from fields.ts —
+// Editability (READ_ONLY_FIELDS, isCoFieldEditable) is imported from fields.ts —
 // shared with the update API so the UI and the write guard can never disagree.
 
 // ============================================================================
@@ -1544,7 +1544,7 @@ export default function ContractTeamReportingPage() {
     // friendly names to GHL field IDs and safely ignores anything unwritable.
     for (const [key, newVal] of Object.entries(edits)) {
       if (READ_ONLY_FIELDS.has(key) || key === 'assignedTo') continue;
-      if (CO_FIELDS_READ_ONLY && key.startsWith(CO_PREFIX)) continue;
+      if (key.startsWith(CO_PREFIX) && !isCoFieldEditable(key)) continue;
       if (newVal !== undefined && newVal !== original[key]) {
         changes[key] = newVal;
       }
@@ -2905,7 +2905,7 @@ export default function ContractTeamReportingPage() {
                   {columns.map((col, colIdx) => {
                     const rawValue = record[col.key] || '';
                     const displayValue = getDisplayValue(record, col.key);
-                    const isEditable = editMode && isSelected && !READ_ONLY_FIELDS.has(col.key) && !(CO_FIELDS_READ_ONLY && col.key.startsWith(CO_PREFIX));
+                    const isEditable = editMode && isSelected && !READ_ONLY_FIELDS.has(col.key) && !(col.key.startsWith(CO_PREFIX) && !isCoFieldEditable(col.key));
                     const currentValue = isEditable ? getEditValue(record.id, col.key) : rawValue;
                     let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;
 
@@ -2913,7 +2913,7 @@ export default function ContractTeamReportingPage() {
                     let cellContent: React.ReactNode;
 
                     if (isEditable) {
-                      if (col.key === 'assignedTo') {
+                      if (col.key === 'assignedTo' || col.key === 'assignedBA') {
                         cellContent = (
                           <select
                             value={currentValue}
