@@ -224,7 +224,15 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
 
 // Dropdown option pairs: `value` is what GHL stores, `label` is what users see.
 // (GHL stores option KEYS for custom object fields, e.g. "split_contract".)
+// Deal Sheet → Admin → Projects (active names, plus aliases for the Project quick filter). Filled on page load.
+const PROJECTS: { name: string; aliases: string }[] = [];
+const projectMatches = (value: string, project: { name: string; aliases: string }) => {
+  const v = value.toLowerCase();
+  return !!v && [project.name, ...project.aliases.split(',')].map((s) => s.trim().toLowerCase()).filter(Boolean).some((t) => v.includes(t));
+};
+
 function dropdownOptions(key: string): OptionPair[] | null {
+  if (key === 'co_project_name') return [{ key: '', label: '-- None --' }, ...PROJECTS.map((p) => ({ key: p.name, label: p.name }))];
   const live = liveTypeOf(key);
   if (live === 'SINGLE_OPTIONS') {
     const opts = LIVE_SCHEMA?.options[key];
@@ -859,14 +867,14 @@ const NEW_VIEW_FILTERS: Record<string, ViewFilter[]> = {
   'builtin-uncon': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
   'builtin-finance-tracking': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
   // Project views filter on the Property Record project_name (picked from Deal Sheet → Project names), not address text.
-  'builtin-ocean-rise': [{ field: 'co_project_name', operator: 'contains', value: 'ocean rise' }, IN_FLIGHT_NEW],
+  'builtin-ocean-rise': [{ field: 'co_project_name', operator: 'in', value: 'ocean rise' }, IN_FLIGHT_NEW],
   'builtin-huntly': [
-    { field: 'co_project_name', operator: 'contains', value: 'huntly' },
+    { field: 'co_project_name', operator: 'in', value: 'huntly, harlowe' },
     { field: 'name', operator: 'not contains', value: 'Bilal Darwich' },
     { field: 'name', operator: 'not contains', value: 'Cooper Rigg' },
     IN_FLIGHT_NEW,
   ],
-  'builtin-golden-horizon': [{ field: 'co_project_name', operator: 'contains', value: 'golden horizon' }, IN_FLIGHT_NEW],
+  'builtin-golden-horizon': [{ field: 'co_project_name', operator: 'in', value: 'golden horizon' }, IN_FLIGHT_NEW],
   'builtin-pm-intro': [
     { field: 'constructionTrack', operator: 'equals', value: 'Yes' },
     { field: 'co_construction_stage', operator: 'not equals', value: 'handover' },
@@ -1142,6 +1150,17 @@ export default function ContractTeamReportingPage() {
   // ?opp=<id> (from Pipeline Journey "Open in CTRT"): show only that opportunity until cleared.
   const [oppFilter, setOppFilter] = useState('');
   const [includeConstruction, setIncludeConstruction] = useState(false);
+  // "Project" quick filter (Deal Sheet → Admin → Projects; matches the record's project name or an alias)
+  const [projectFilter, setProjectFilter] = useState('');
+  const [projectList, setProjectList] = useState<{ name: string; aliases: string }[]>([]);
+  useEffect(() => {
+    fetch('/api/deal-sheet/project-names').then((r) => r.json()).then((d) => {
+      const active = (Array.isArray(d.projects) ? d.projects : []).filter((p: { active: boolean }) => p.active)
+        .map((p: { name: string; aliases: string }) => ({ name: p.name, aliases: p.aliases || '' }));
+      PROJECTS.splice(0, PROJECTS.length, ...active);
+      setProjectList(active);
+    }).catch(() => {});
+  }, []);
   useEffect(() => {
     const opp = new URLSearchParams(window.location.search).get('opp');
     if (opp) setOppFilter(opp);
@@ -2189,7 +2208,9 @@ export default function ContractTeamReportingPage() {
 
   // Apply filters (effectiveView = live builder preview when it's open)
   const filteredRecords = useMemo(() => {
+    const project = projectFilter ? projectList.find((p) => p.name === projectFilter) : undefined;
     return viewScopedRecords.filter((record) => {
+      if (project && !projectMatches(record.co_project_name || '', project)) return false;
       // Preset filter logic
       if (activePreset === 'blankPropertyType') {
         if (record.pipelineStage === 'Settled') return false;
@@ -2257,7 +2278,7 @@ export default function ContractTeamReportingPage() {
         return getDisplayValue(record, key as RecordKey).toLowerCase().includes(pattern.toLowerCase().trim());
       });
     });
-  }, [viewScopedRecords, excludedFilters, textExcludeFilters, textIncludeFilters, activePreset]);
+  }, [viewScopedRecords, excludedFilters, textExcludeFilters, textIncludeFilters, activePreset, projectFilter, projectList]);
 
   // Apply sort — every level in turn, so level 2 breaks ties on level 1, etc.
   const sortedRecords = useMemo(() => {
@@ -2525,6 +2546,17 @@ export default function ContractTeamReportingPage() {
               </button>
             );
           })}
+          {projectList.length > 0 && (
+            <select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+              className={`px-2 py-1 rounded text-xs ${projectFilter ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText}`}`}
+              title="Project quick filter (Deal Sheet → Admin → Projects)"
+            >
+              <option value="">Project: all</option>
+              {projectList.map((p) => <option key={p.name} value={p.name}>Project: {p.name}</option>)}
+            </select>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

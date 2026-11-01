@@ -2995,6 +2995,8 @@ export const CO_EDITABLE_KEYS = new Set<string>([
   'status', 'street_name', 'street_number', 'unit__lot',
   // JT 3/11: edited only through the Registered / TBC / Expected month control, never free text.
   'land_registration',
+  // Picked from Deal Sheet → Admin → Projects only (the update API rejects any other value).
+  'project_name',
 ]);
 
 export const MONTH_NAMES = [

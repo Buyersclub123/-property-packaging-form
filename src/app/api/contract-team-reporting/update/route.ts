@@ -77,6 +77,15 @@ export async function PUT(request: NextRequest) {
             { status: 400 }
           );
         }
+        if (coKey === 'project_name' && value) {
+          const known = await getDb()`SELECT 1 FROM projects WHERE name = ${value} AND active`.catch(() => []);
+          if (!known.length) {
+            return NextResponse.json(
+              { error: `Project "${value}" is not in Deal Sheet → Admin → Projects (pick it from the list)` },
+              { status: 400 }
+            );
+          }
+        }
         if (dataType === 'DATE') {
           propertyProps[coKey] = value ? new Date(value).toISOString() : '';
         } else if (dataType === 'NUMERICAL') {
