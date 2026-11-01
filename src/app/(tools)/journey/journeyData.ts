@@ -226,10 +226,16 @@ function salesTile(id: string, sales: Sales | null) {
   if (id === 'contacts') return { rows: sales.contacts.map((c) => ({ id: c.id, date: c.date, client: c.name, source: c.source || c.createdBy, consultant: c.createdBy })) };
   if (id === 'booked') return { rows: sales.meetings.map((m) => ({ id: m.id, date: m.date, at: m.at, client: m.client, consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
   if (id === 'outcomes') return { rows: sales.meetings.filter((m) => m.outcome).map((m) => ({ id: m.id, date: m.date, client: m.client, outcome: m.outcome, consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
-  return { rows: sales.opps.map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, consultant: o.consultant, ba: '' })) };
+  // Same test-opp rule as the CTRT route (name starts ZZZ or contains the word TEST).
+  return { rows: sales.opps.filter((o) => !/^\s*zzz|\btest\b/i.test(o.name || '')).map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, consultant: o.consultant, ba: '' })) };
 }
 
-export function buildJourneyData(records: Rec[], recon: Recon, historical: boolean, sales: Sales | null = null) {
+export function buildJourneyData(allRecords: Rec[], recon: Recon, historical: boolean, sales: Sales | null = null) {
+  // Test / ZZZ opps are left out of every tab (JT 2/11).
+  const records = allRecords.filter((r) => r.testOpp !== 'Yes');
+  // GHL column totals include test opps; take them off so the reconciliation still compares like for like.
+  const tests = allRecords.filter((r) => r.testOpp === 'Yes' && (historical || r.status === 'open'));
+  const testsAt = (ids: Set<string>) => tests.filter((r) => ids.has(r.pipelineStageId || '')).length;
   const today = sydney(new Date());
   const pop = historical ? records : records.filter((r) => r.inFlight === 'Yes' && !isFallen(r));
   const popIds = new Set(pop.map((r) => r.id));
@@ -237,7 +243,8 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
   const ghlStage = (pipelineId: string, names: string[]) => {
     const p = recon.pipelines.find((x) => x.id === pipelineId);
     const stages = (p?.stages || []).filter((s) => names.some((n) => norm(n) === norm(s.name)));
-    return { ids: new Set(stages.map((s) => s.id)), total: stages.reduce((a, s) => a + s.total, 0), names: stages.map((s) => s.name) };
+    const ids = new Set(stages.map((s) => s.id));
+    return { ids, total: stages.reduce((a, s) => a + s.total, 0) - testsAt(ids), names: stages.map((s) => s.name) };
   };
   const scope = historical ? 'all statuses' : 'open';
   // Collapsed to one line (first comparison: Matches GHL / ≠ GHL: diff); detail behind a toggle. Kept for cutover.
@@ -257,7 +264,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
       const all = records.filter((r) => r.pipelineStageId === s.id);
       // Sales & Property tiles: every OPEN opp at the stage, as GHL counts it (no in-flight filter; JT 1/11).
       const tile = historical ? all : all.filter((r) => r.status === 'open');
-      const rc = reconcile(tile, { label: `GHL pipeline column: Property Team / ${s.name} (${scope})`, ghl: s.total, ghlRecs: all, why: notInFlight }, where);
+      const rc = reconcile(tile, { label: `GHL pipeline column: Property Team / ${s.name} (${scope})`, ghl: s.total - testsAt(new Set([s.id])), ghlRecs: all, why: notInFlight }, where);
       return {
         id: 'pt-' + s.id, name: s.name, kind: 'opp',
         phase: i <= dealClosedAt ? 'property' : 'contract',
