@@ -86,6 +86,15 @@ export default function InboxDecisionPage() {
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setItems(data.items);
       setError(null);
+      // Deep link: /inbox-mining?item=<id> opens that item in its list.
+      const want = new URLSearchParams(window.location.search).get('item');
+      const hit = want ? (data.items as WorkItem[]).find((x) => String(x.id) === want) : undefined;
+      if (hit) {
+        setList(listOf(hit));
+        setTab(hit.workflow?.status === 'done' ? 'processed' : 'open');
+        setOpenId(hit.id);
+        window.history.replaceState(null, '', window.location.pathname);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

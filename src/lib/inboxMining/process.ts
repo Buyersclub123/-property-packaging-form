@@ -1,7 +1,7 @@
 import { getMessage, listMessageIds, getAttachment, sydneyWindow, newPart, type ParsedMessage } from './gmail';
 import { googleErrorMessage } from './google';
 import { readPdf, expandZip, documentLinks, fetchLinkedPdf, extractFacts, mergeFacts } from './extract';
-import { classify } from './classify';
+import { classify, builderFor } from './classify';
 import { fetchStageNames, fetchOpps, fetchRecords, type Opp, type PropRecord } from './ghl';
 import { loadTrackers, type Trackers } from './trackers';
 import { matchMessage } from './match';
@@ -108,7 +108,7 @@ async function processMessage(mailbox: string, id: string, runId: number, ctx: C
   const haystack = [msg.subject, facts.purchaser?.value || '', msg.text.slice(0, 20000), ...read.map((r) => r.text.slice(0, 30000))].join('\n');
   const memory = await getThreadMemory(mailbox, msg.threadId);
   const match = await matchMessage({ facts, haystack, memory, opps: ctx.opps, records: ctx.records, trackers: ctx.trackers });
-  const fromBuilder = !!(ctx.trackers.builderSenders.get(msg.fromEmail) || ctx.trackers.builderSenders.get(msg.fromEmail.split('@')[1] || ''));
+  const fromBuilder = !!builderFor(msg.fromEmail, ctx.trackers.builderSenders);
   // A client question is a reply item, never a field suggestion (JT 01/11).
   const suggestions = !question && ['A', 'B', 'C'].includes(match.grade) ? buildSuggestions(cls, facts, msg.date, fromBuilder, basis) : [];
 

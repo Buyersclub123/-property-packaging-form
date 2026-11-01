@@ -49,6 +49,12 @@ function find(re: RegExp, subject: string, files: string[], head: string): Class
   return null;
 }
 
+/** Builder name for a sender from Kata's tracker. Domain matches only for company domains: a builder on gmail.com must not make every gmail client a builder. */
+export function builderFor(email: string, senders: Map<string, string>): string | undefined {
+  const domain = email.split('@')[1] || '';
+  return senders.get(email) || (PERSONAL_DOMAIN.test(domain) ? undefined : senders.get(domain));
+}
+
 /** Rules only (phase a). Order matters: the first rule that fires wins, and the rule is shown in the UI. */
 export function classify(input: ClassifyInput): ClassifyResult {
   const { subject, body, docText } = input;
@@ -57,7 +63,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
   const first = bodyLines(body).join('\n').slice(0, 600);
   const said = (b: ClassBasis) => `"${b.match}" in the ${b.where === 'subject' ? 'subject line' : b.where === 'file' ? 'file name' : 'email'}`;
   const domain = input.fromEmail.split('@')[1] || '';
-  const builder = input.builderSenders.get(input.fromEmail) || input.builderSenders.get(domain);
+  const builder = builderFor(input.fromEmail, input.builderSenders);
 
   // JT 01/11: a client asking a question is a reply item, never a date-field suggestion.
   if (!builder && !INTERNAL.test(input.fromEmail) && PERSONAL_DOMAIN.test(domain)) {

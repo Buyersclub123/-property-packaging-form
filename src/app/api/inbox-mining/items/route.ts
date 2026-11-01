@@ -46,9 +46,13 @@ export async function GET(request: Request) {
       ((r.suggestions as unknown[]) || []).length * 10 + Object.keys((r.feedback as object) || {}).length + (r.workflow ? 1 : 0);
     const best = new Map<string, (typeof rows)[number]>();
     const copies = new Map<string, string[]>();
+    const loose = (r: (typeof rows)[number]) =>
+      `${emailOf((r.from_addr as string) || '')}|${r.subject}|${Math.floor(new Date(r.received_at as string).getTime() / 60000)}`;
+    // Copies not yet re-read have no rfc_id: join them to a re-read copy with the same sender/subject/minute.
+    const alias = new Map<string, string>();
+    for (const r of rows) if (r.rfc_id) alias.set(loose(r), r.rfc_id as string);
     for (const r of rows) {
-      const k = (r.rfc_id as string) ||
-        `${emailOf((r.from_addr as string) || '')}|${r.subject}|${Math.floor(new Date(r.received_at as string).getTime() / 60000)}`;
+      const k = (r.rfc_id as string) || alias.get(loose(r)) || loose(r);
       copies.set(k, [...(copies.get(k) || []), r.mailbox as string]);
       const cur = best.get(k);
       if (!cur || weight(r) > weight(cur)) best.set(k, r);
