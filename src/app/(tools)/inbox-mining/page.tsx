@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import TopNavBar from '@/components/portal/TopNavBar';
 import { clsLabel, type Item } from './shared';
 import { DecisionPanel, niceDate } from './decision';
+import './wireframe.css';
 
 // Inbox decision screen (JT redesign): lists as tabs, the selected list down the left, the decision on the right.
 // Decisions write only inbox_items.feedback / inbox_items.workflow. Nothing is written to GHL and no email is sent.
@@ -56,15 +57,11 @@ const groupKey = (i: WorkItem, g: string) =>
 
 function Card({ i, open, onOpen }: { i: WorkItem; open: boolean; onOpen: () => void }) {
   return (
-    <button onClick={onOpen}
-      className={`block w-full border-b px-3 py-2.5 text-left text-sm ${open ? 'bg-blue-100 shadow-[inset_3px_0_0_#2563eb]' : 'bg-white hover:bg-blue-50'}`}>
-      <div className="truncate font-semibold text-brand-charcoal" title={i.from_addr}>{senderName(i.from_addr || '')}</div>
-      <div className="truncate text-gray-700" title={i.subject}>{i.subject || '(no subject)'}</div>
-      <div className="truncate text-gray-500">{i.match?.opportunityName || 'No opportunity matched'}</div>
-      <div className="flex justify-between text-xs text-gray-400">
-        <span>{niceDate(i.received_at)}</span>
-        {(i.suggestions || []).length > 0 && <span className="text-blue-700">{i.suggestions.length} suggestion{i.suggestions.length > 1 ? 's' : ''}</span>}
-      </div>
+    <button onClick={onOpen} className={`li ${open ? 'on' : ''}`}>
+      <b className="truncate" title={i.from_addr}>{senderName(i.from_addr || '')}</b>
+      <span title={i.subject} style={{ color: 'var(--ink)' }}>{i.subject || '(no subject)'}</span>
+      <span>{i.match?.opportunityName || 'No opportunity matched'}</span>
+      <span>{niceDate(i.received_at)}{(i.suggestions || []).length > 0 && ` · ${i.suggestions.length} suggestion${i.suggestions.length > 1 ? 's' : ''}`}</span>
     </button>
   );
 }
@@ -193,24 +190,24 @@ export default function InboxDecisionPage() {
             ))}
           </nav>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
-            <section className="self-start overflow-hidden rounded border bg-white">
-              <div className="flex flex-wrap items-center gap-2 border-b bg-gray-50 px-3 py-2 text-xs">
-                <div className="flex overflow-hidden rounded border">
+          <div className="imx mt-4"><div className="frame">
+            <section className="list">
+              <div className="tools">
+                <div className="flex gap-1">
                   {(['open', 'processed'] as const).map((t) => (
-                    <button key={t} onClick={() => { setTab(t); setOpenId(null); }} className={`px-2 py-0.5 ${tab === t ? 'bg-blue-600 text-white' : 'bg-white hover:bg-blue-50'}`}>
+                    <button key={t} onClick={() => { setTab(t); setOpenId(null); }} className={tab === t ? 'on' : ''}>
                       {t === 'open' ? `To do (${counts[list].open})` : `Processed (${counts[list].done})`}
                     </button>
                   ))}
                 </div>
-                <select value={group} onChange={(e) => setGroup(e.target.value)} className="rounded border bg-white px-1 py-0.5">
+                <select value={group} onChange={(e) => setGroup(e.target.value)}>
                   {GROUPS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
                 </select>
-                <select value={days} onChange={(e) => setDays(parseInt(e.target.value, 10))} className="rounded border bg-white px-1 py-0.5">
+                <select value={days} onChange={(e) => setDays(parseInt(e.target.value, 10))}>
                   {[1, 2, 3, 5, 7].map((d) => <option key={d} value={d}>Last {d} day{d > 1 ? 's' : ''}</option>)}
                 </select>
                 {list === 'thanks' && tab === 'open' && shown.length > 0 && (
-                  <button onClick={clearAll} className="rounded bg-blue-600 px-2 py-0.5 font-semibold text-white hover:bg-blue-700">Clear all ({shown.length})</button>
+                  <button onClick={clearAll} className="on">Clear all ({shown.length})</button>
                 )}
               </div>
               <div className="max-h-[calc(100vh-14rem)] overflow-y-auto">
@@ -218,22 +215,22 @@ export default function InboxDecisionPage() {
                 {!loading && shown.length === 0 && <div className="p-3 text-sm text-gray-500">{tab === 'open' ? 'Nothing to do here.' : 'Nothing processed yet.'}</div>}
                 {groups.map((g) => (
                   <div key={g.key || 'all'}>
-                    {g.key && <div className="border-b bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-500">{g.key} <span className="font-normal">({g.items.length})</span></div>}
+                        {g.key && <div className="tag">{g.key} ({g.items.length})</div>}
                     {g.items.map((i) => <Card key={i.id} i={i} open={openId === i.id} onOpen={() => setOpenId(i.id)} />)}
                   </div>
                 ))}
               </div>
             </section>
 
-            <section className="min-w-0 rounded border bg-white p-5 [overflow-wrap:anywhere] lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+            <section className="pane [overflow-wrap:anywhere] lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
               {openId ? (
                 <DecisionPanel key={openId} id={openId} processed={tab === 'processed'}
                   onDone={() => onDone(openId)} onSkip={() => onSkip(openId)} onReopen={() => reopen(openId)} onChanged={load} />
               ) : (
-                <div className="text-sm text-gray-500">{loading ? 'Loading…' : 'Nothing selected.'}</div>
+                <div className="p-5 text-sm text-gray-500">{loading ? 'Loading…' : 'Nothing selected.'}</div>
               )}
             </section>
-          </div>
+          </div></div>
         </div>
       </main>
     </>

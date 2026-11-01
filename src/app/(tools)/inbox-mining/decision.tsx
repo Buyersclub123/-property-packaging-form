@@ -47,14 +47,15 @@ function factFor(s: Suggestion, facts: [string, Fact][]): [string, Fact] | null 
 }
 
 /** Evidence suggestions first; suggestions with no evidence in the text in their own group after them. */
-export const orderSuggestions = (list: Suggestion[]) => [...list.filter((s) => !s.noEvidence), ...list.filter((s) => s.noEvidence)];
+const rank = (s: Suggestion) => (s.noEvidence ? 2 : s.target === 'action' ? 1 : 0);
+export const orderSuggestions = (list: Suggestion[]) => [...list].sort((a, b) => rank(a) - rank(b));
 
 function Excerpt({ body, hit, idKey }: { body: string; hit: { start: number; end: number }; idKey: string }) {
   const from = Math.max(0, body.lastIndexOf('\n', Math.max(0, hit.start - 240)) + 1);
   const nl = body.indexOf('\n', Math.min(body.length, hit.end + 240));
   const to = nl === -1 ? body.length : nl;
   return (
-    <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded border bg-gray-50 p-3 text-sm">
+    <pre className="excerpt">
       {from > 0 && '… '}
       <BodyMarks body={body.slice(from, to)} hits={{ [idKey]: { start: hit.start - from, end: hit.end - from } }} active={idKey} idPrefix="ex-" />
       {to < body.length && ' …'}
@@ -62,17 +63,13 @@ function Excerpt({ body, hit, idKey }: { body: string; hit: { start: number; end
   );
 }
 
-function Label({ children }: { children: ReactNode }) {
-  return <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{children}</div>;
-}
-
 function Why({ s, d, facts, onLocated, itemId }: { s: Suggestion; d: Detail; facts: [string, Fact][]; onLocated: (k: string, p: FactPos) => void; itemId: number }) {
   const fact = factFor(s, facts);
   if (s.noEvidence || !fact) {
     return (
-      <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-        <span className="mr-2 rounded-full bg-amber-500 px-2 font-bold text-white">!</span>
-        {s.noEvidence ? 'No evidence in the text — based on the email date only' : `No evidence in the text — ${s.source}`}
+      <div className="noev">
+        <span className="ic">!</span>
+        {s.noEvidence ? 'No evidence in the text — based on the email date only' : `No evidence in the text — ${s.source.replace(/\d{4}-\d{2}-\d{2}/g, niceValue)}`}
       </div>
     );
   }
@@ -82,12 +79,12 @@ function Why({ s, d, facts, onLocated, itemId }: { s: Suggestion; d: Detail; fac
   const doc = fact[1].source !== 'email' ? d.item.docs.find((x) => (x.zipEntry || x.name) === fact[1].source) : undefined;
   if (doc && doc.status === 'read') {
     return (
-      <div className="max-h-[30rem] overflow-auto rounded border">
+      <div className="excerpt-doc">
         <PdfPages itemId={itemId} doc={doc} facts={[fact]} active={fact[0]} autoRender onLocated={onLocated} />
       </div>
     );
   }
-  return <div className="rounded border bg-gray-50 p-3 text-sm text-gray-700">{fact[1].source}: “{fact[1].quote}”</div>;
+  return <div className="excerpt">{fact[1].source}: “{fact[1].quote}”</div>;
 }
 
 export function DecisionPanel({ id, onDone, onSkip, onChanged, focusField, evidenceOnly = false, processed = false, onReopen }: {
@@ -277,109 +274,103 @@ export function DecisionPanel({ id, onDone, onSkip, onChanged, focusField, evide
   ];
 
   return (
-    <div className="space-y-5 text-sm">
-      {d.errors.length > 0 && <div className="rounded border border-red-300 bg-red-50 p-2 text-red-800">{d.errors.map((e, i) => <div key={i}>{e}</div>)}</div>}
+    <div className="imx">
+      {d.errors.length > 0 && <div className="border-b bg-red-50 px-5 py-2 text-sm text-red-800">{d.errors.map((e, i) => <div key={i}>{e}</div>)}</div>}
 
-      <div>
-        <Label>From</Label>
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="text-base font-semibold" title={item.from_addr}>{senderName(item.from_addr || '')}</span>
-          <span className="shrink-0 text-gray-500">{niceDate(item.received_at)}</span>
+      <div className="band">
+        <div>
+          <div className="lbl">From</div>
+          <div><span className="from-name" title={item.from_addr}>{senderName(item.from_addr || '')}</span><span className="date">{niceDate(item.received_at)}</span></div>
+          <div className="subj">{item.subject || '(no subject)'}</div>
         </div>
-        <div className="text-gray-600">{item.subject || '(no subject)'}</div>
-      </div>
-
-      <div>
-        <Label>Regarding</Label>
-        {m.opportunityId ? (
-          <>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-900">{oppName} <span className="ml-1 text-[11px] font-normal text-blue-700">Opp</span></span>
+        <div className="reg">
+          <div className="lbl">Regarding</div>
+          {m.opportunityId ? (
+            <>
+              <div className="reg-row"><span className="opp">{oppName}</span><span className="chip c-opp">Opp</span></div>
               {(live?.registeredAddress || m.propertyRecordId) && (
-                <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-900">{live?.registeredAddress || m.propertyRecordId} <span className="ml-1 text-[11px] text-blue-700">PR</span></span>
+                <div className="reg-row"><span className="addr">{live?.registeredAddress || m.propertyRecordId}</span><span className="chip c-prop">PR</span></div>
               )}
-              <span className={`rounded px-1.5 text-xs font-semibold ${GRADE_STYLE[m.grade] || ''}`}>{m.grade}</span>
-            </div>
-            {!evidenceOnly && (
-              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
-                {confirmed ? <span className="font-semibold text-green-700">✓ Link confirmed (whole thread)</span> : (
-                  <button disabled={busy} onClick={() => saveMemory(m.opportunityId!, m.propertyRecordId || null)} className="font-semibold text-blue-700 underline disabled:opacity-40">Confirm link</button>
-                )}
-                <button onClick={() => setChanging((c) => !c)} className="text-blue-700 underline">Change opportunity</button>
-                <button onClick={toggleMute} className="text-gray-600 underline">{isMuted ? 'Unmute suggestions for this opportunity' : 'Mute suggestions for this opportunity'}</button>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3 text-gray-600">
-            No opportunity matched{m.reason ? ` — ${m.reason}` : ''}.
-            {!evidenceOnly && <button onClick={() => setChanging((c) => !c)} className="text-xs text-blue-700 underline">Set opportunity</button>}
-          </div>
-        )}
-        {changing && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <input value={oppId} onChange={(e) => setOppId(e.target.value)} placeholder="Opportunity ID" className="rounded border bg-white px-2 py-1" />
-            <input value={recId} onChange={(e) => setRecId(e.target.value)} placeholder="Property Record ID (optional)" className="rounded border bg-white px-2 py-1" />
-            <button disabled={busy || !oppId.trim()} onClick={() => saveMemory(oppId.trim(), recId.trim() || null)} className="rounded bg-blue-600 px-3 py-1 font-semibold text-white disabled:opacity-40">Save for the thread</button>
-          </div>
-        )}
-        {msg && <div className={`mt-1 text-xs ${msg.startsWith('Error') ? 'text-red-700' : 'text-green-700'}`}>{msg}</div>}
-      </div>
-
-      <div className="rounded border p-4">
-        <div className="flex items-center justify-between">
-          <Label>Suggestion{current?.noEvidence ? ' — no evidence in the text' : ''}</Label>
-          {ordered.length > 1 && (
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <button onClick={() => setStep((s) => (s - 1 + ordered.length) % ordered.length)} className="rounded border px-1.5">‹</button>
-              {step + 1} of {ordered.length}
-              <button onClick={() => setStep((s) => (s + 1) % ordered.length)} className="rounded border px-1.5">›</button>
+              {!evidenceOnly && (
+                <div className="reg-row">
+                  {confirmed ? <span className="link-ok">✓ Link confirmed</span> : (
+                    <button disabled={busy} onClick={() => saveMemory(m.opportunityId!, m.propertyRecordId || null)} className="btn-sm">Confirm link</button>
+                  )}
+                  <button onClick={() => setChanging((c) => !c)} className="txtbtn">Change opportunity</button>
+                  <button onClick={toggleMute} className="txtbtn">{isMuted ? 'Unmute suggestions for this opportunity' : 'Mute suggestions for this opportunity'}</button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="reg-row">
+              <span className="muted-note">No opportunity matched{m.reason ? ` — ${m.reason}` : ''}.</span>
+              {!evidenceOnly && <button onClick={() => setChanging((c) => !c)} className="txtbtn">Set opportunity</button>}
             </div>
           )}
+          {changing && (
+            <div className="reg-row">
+              <input value={oppId} onChange={(e) => setOppId(e.target.value)} placeholder="Opportunity ID" className="input" />
+              <input value={recId} onChange={(e) => setRecId(e.target.value)} placeholder="Property Record ID (optional)" className="input" />
+              <button disabled={busy || !oppId.trim()} onClick={() => saveMemory(oppId.trim(), recId.trim() || null)} className="btn-sm">Save for the thread</button>
+            </div>
+          )}
+          {msg && <div className={`text-xs ${msg.startsWith('Error') ? 'text-red-700' : 'text-green-700'}`}>{msg}</div>}
         </div>
-        {isMuted ? (
-          <div className="text-gray-600">Suggestions are muted for this opportunity.</div>
-        ) : !current ? (
-          <div className="text-gray-600">No suggested change {matched ? 'for this email' : `(match ${m.grade})`}.</div>
-        ) : (
-          <>
-            <div className={`text-2xl font-semibold leading-snug ${current.noEvidence ? 'text-gray-600' : 'text-brand-charcoal'}`}>
-              {current.target === 'action' ? current.fieldLabel : <>Set {current.fieldLabel} to {niceValue(show(current.proposed))}</>}
-            </div>
-            <div className="mt-1 text-gray-600">
-              {current.target === 'action' ? 'Expected action on the opportunity above (no field write)'
-                : current.target === 'property_record' ? 'On the Property Record above' : 'On the opportunity above'}
-              {current.target !== 'action' && <span className="text-gray-400"> · now: {now?.note || (now?.value ? niceValue(now.value) : '(blank)')}</span>}
-            </div>
-            {decided && (
-              <div className={`mt-2 text-sm ${decided.outcome === 'accept' ? 'text-green-700' : 'text-red-700'}`}>
-                {decided.outcome === 'accept' ? '✓ Accepted' : `✗ Rejected: ${outcomeLabel(decided.outcome).toLowerCase()}`} · {decided.by} · {niceDate(decided.at)}
+      </div>
+
+      <div className="core" style={evidenceOnly ? { gridTemplateColumns: '1fr' } : undefined}>
+        <div className="sugg">
+          <div className="flex items-center justify-between">
+            <div className="lbl">Suggestion{current?.noEvidence ? ' · no evidence in the text' : ''}</div>
+            {ordered.length > 1 && (
+              <div className="stepper">
+                <button onClick={() => setStep((s) => (s - 1 + ordered.length) % ordered.length)}>‹</button>
+                {step + 1} of {ordered.length}
+                <button onClick={() => setStep((s) => (s + 1) % ordered.length)}>›</button>
               </div>
             )}
-          </>
-        )}
+          </div>
+          {isMuted ? (
+            <p className="instr weak">Suggestions are muted for this opportunity.</p>
+          ) : !current ? (
+            <p className="instr weak">No suggested change {matched ? 'for this email' : `(match ${m.grade})`}.</p>
+          ) : (
+            <>
+              <p className={`instr ${current.noEvidence ? 'weak' : ''}`}>
+                {current.target === 'action' ? current.fieldLabel
+                  : <>Set <span className="pill f">{current.fieldLabel}</span> to <span className="pill">{niceValue(show(current.proposed))}</span></>}
+              </p>
+              <div className="on-what">
+                {current.target === 'action' ? 'Expected action on the opportunity above (no field write)'
+                  : current.target === 'property_record' ? 'On the Property Record above' : 'On the opportunity above'}
+                {current.target !== 'action' && ` · now: ${now?.note || (now?.value ? niceValue(now.value) : '(blank)')}`}
+              </div>
+              {decided && (
+                <div className={decided.outcome === 'accept' ? 'decided-ok' : 'decided-no'}>
+                  {decided.outcome === 'accept' ? '✓ Accepted' : `✗ Rejected: ${outcomeLabel(decided.outcome).toLowerCase()}`} · {decided.by} · {niceDate(decided.at)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
         {!evidenceOnly && (
-          <div className="relative mt-4 flex flex-wrap gap-2">
+          <div className="decide">
             {processed ? (
-              <button onClick={onReopen} className={`${btn} border bg-white hover:bg-gray-50`}>Reopen</button>
+              <button onClick={onReopen} className="dbtn skip">Reopen</button>
             ) : (
               <>
                 {current && !isMuted ? (
-                  <>
-                    <button disabled={busy} onClick={() => decide('accept')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>Accept <span className={kbd}>A</span></button>
-                    <button disabled={busy} onClick={() => setRejecting((r) => !r)} className={`${btn} border ${rejecting ? 'border-red-500 bg-red-50 text-red-800' : 'bg-white hover:bg-gray-50'}`}>Reject <span className={kbd}>R</span></button>
-                  </>
+                  <button disabled={busy} onClick={() => decide('accept')} className="dbtn accept">Accept <kbd>A</kbd></button>
                 ) : (
-                  <button onClick={markDone} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>Done</button>
+                  <button onClick={markDone} className="dbtn accept">Done</button>
                 )}
-                <button onClick={skip} className={`${btn} border bg-white hover:bg-gray-50`}>Skip <span className={kbd}>S</span></button>
+                <button disabled={busy || !current || isMuted} onClick={() => setRejecting((r) => !r)} className={`dbtn reject ${rejecting ? 'open' : ''}`}>Reject <kbd>R</kbd></button>
+                <button onClick={skip} className="dbtn skip">Skip <kbd>S</kbd></button>
                 {rejecting && (
-                  <div className="absolute left-0 top-full z-10 mt-1 w-64 rounded border bg-white p-1 shadow-lg">
+                  <div className="reasons">
                     {REJECT_REASONS.map((r, i) => (
-                      <button key={r.key} disabled={busy} onClick={() => decide(r.key)} className="flex w-full items-center justify-between rounded px-3 py-1.5 text-left hover:bg-red-50">
-                        {r.label} <span className="text-xs text-gray-400">{i + 1}</span>
-                      </button>
+                      <button key={r.key} disabled={busy} onClick={() => decide(r.key)}>{r.label} <kbd>{i + 1}</kbd></button>
                     ))}
                   </div>
                 )}
@@ -390,55 +381,56 @@ export function DecisionPanel({ id, onDone, onSkip, onChanged, focusField, evide
       </div>
 
       {current && !isMuted && (
-        <div>
-          <Label>Why</Label>
+        <div className="why">
+          <div className="lbl">Why</div>
           <Why s={current} d={d} facts={facts} onLocated={onLocated} itemId={item.id} />
         </div>
       )}
 
-      <details className="rounded border">
-        <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold">Full email</summary>
-        <pre className="max-h-96 overflow-auto whitespace-pre-wrap p-3 text-xs">
-          {d.body == null ? '(not loaded)' : <BodyMarks body={d.body} hits={bodyHits} active={null} idPrefix={`fb-${item.id}-`} />}
-        </pre>
-      </details>
-
-      <details className="rounded border">
-        <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold">Attachments <span className="font-normal text-gray-500">{item.docs.length}</span></summary>
-        <div className="space-y-2 p-3">
-          {item.docs.length === 0 && <div className="text-xs text-gray-500">No PDF / zip attachments or document links.</div>}
-          {item.docs.map((doc, i) => (
-            <div key={i} className="rounded border p-2">
-              <div className="text-xs">
-                <span className="font-medium">{doc.zipEntry ? `${doc.name} › ${doc.zipEntry}` : doc.name}</span>{' '}
-                <span className="text-gray-500">[{doc.source}] {doc.status}{doc.pages ? ` · ${doc.pages} pages` : ''}{doc.isDocuSign ? ' · DocuSign' : ''}</span>
-                {doc.reason && <div className="text-red-700">{doc.reason}</div>}
+      <div className="more">
+        <details>
+          <summary>Full email</summary>
+          <div className="body">
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs">
+              {d.body == null ? '(not loaded)' : <BodyMarks body={d.body} hits={bodyHits} active={null} idPrefix={`fb-${item.id}-`} />}
+            </pre>
+          </div>
+        </details>
+        <details>
+          <summary>Attachments <span className="count">{item.docs.length}</span></summary>
+          <div className="body space-y-2">
+            {item.docs.length === 0 && <div className="muted-note">No PDF / zip attachments or document links.</div>}
+            {item.docs.map((doc, i) => (
+              <div key={i} className="rounded border p-2">
+                <div className="text-xs">
+                  <span className="font-medium">{doc.zipEntry ? `${doc.name} › ${doc.zipEntry}` : doc.name}</span>{' '}
+                  <span className="text-gray-500">[{doc.source}] {doc.status}{doc.pages ? ` · ${doc.pages} pages` : ''}{doc.isDocuSign ? ' · DocuSign' : ''}</span>
+                  {doc.reason && <div className="text-red-700">{doc.reason}</div>}
+                </div>
+                {doc.status === 'read' && <PdfPages itemId={item.id} doc={doc} facts={facts.filter(([, f]) => f.source === (doc.zipEntry || doc.name))} active={null} autoRender={false} onLocated={onLocated} />}
               </div>
-              {doc.status === 'read' && <PdfPages itemId={item.id} doc={doc} facts={facts.filter(([, f]) => f.source === (doc.zipEntry || doc.name))} active={null} autoRender={false} onLocated={onLocated} />}
-            </div>
-          ))}
-          {item.links.map((l, i) => (
-            <div key={i} className="break-all text-xs">
-              <span className={l.status === 'read' ? 'text-green-700' : 'text-red-700'}>{l.status === 'read' ? 'read' : 'link not read'}</span>{' '}
-              <a href={l.url} target="_blank" rel="noreferrer" className="underline">{l.url}</a>{l.reason && <span className="text-gray-500"> — {l.reason}</span>}
-            </div>
-          ))}
-        </div>
-      </details>
-
-      <details className="rounded border">
-        <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold">Details</summary>
-        <table className="w-full text-xs">
-          <tbody>
-            {detailRows.map(([k, v], i) => (
-              <tr key={i} className="border-t align-top">
-                <td className="w-32 bg-gray-50 p-2 font-semibold text-gray-600">{k}</td>
-                <td className="p-2">{v}</td>
-              </tr>
             ))}
-          </tbody>
-        </table>
-      </details>
+            {item.links.map((l, i) => (
+              <div key={i} className="break-all text-xs">
+                <span className={l.status === 'read' ? 'text-green-700' : 'text-red-700'}>{l.status === 'read' ? 'read' : 'link not read'}</span>{' '}
+                <a href={l.url} target="_blank" rel="noreferrer" className="underline">{l.url}</a>{l.reason && <span className="text-gray-500"> — {l.reason}</span>}
+              </div>
+            ))}
+          </div>
+        </details>
+        <details>
+          <summary>Details</summary>
+          <div className="body">
+            <table className="kv">
+              <tbody>
+                {detailRows.map(([k, v], i) => (
+                  <tr key={i}><td>{k}</td><td>{v}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
     </div>
   );
 }
