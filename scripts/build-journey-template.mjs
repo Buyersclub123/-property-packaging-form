@@ -123,7 +123,9 @@ swapBetween('function detail(o){', '\nfunction toggleRow', fs.readFileSync(new U
 // blank Finance lane = "Not started" (grey italic), never "No status".
 swap('if(lane==="finance" && o.fin===undefined) return {t:"No status",cls:"miss"};', 'if(lane==="finance" && o.fin===undefined) return {t:"Not started",cls:"state-todo blank"};');
 html = html.split('"No status"').join('"Not started"').split('>No status<').join('>Not started<');
-swap('const OPPS = window.JOURNEY.opps;', 'const OPPS_ALL = window.JOURNEY.opps;\nlet hideDup = true; // "Hide SMSF Construction duplicates": drop once the duplicates are closed\nconst OPPS = OPPS_ALL.filter(o=>!o.smsfDup);');
+// OPPS is normalised in place below, so duplicates are dropped only after that (else unticking shows half-built rows).
+swap('const OPPS = window.JOURNEY.opps;', 'const OPPS_ALL = window.JOURNEY.opps.slice();\nlet hideDup = true; // "Hide SMSF Construction duplicates": drop once the duplicates are closed\nconst OPPS = window.JOURNEY.opps;');
+swap('function states(o, lane){', 'OPPS.splice(0, OPPS.length, ...OPPS_ALL.filter(o=>!o.smsfDup));\n\nfunction states(o, lane){');
 swapBetween("  // two lists side by side only when there's room for both; otherwise one list", '\n}\n\n/* ---------- lists, filters, modes ---------- */',
   fs.readFileSync(new URL('./journey-opp-list.js', import.meta.url), 'utf8').trimEnd());
 swap('/* ---------- lists, filters, modes ---------- */', `const GROUP_ORDER=["Deal Closed","Contract Review","Exchange WIP","Conditional","Unconditional","Finance pipeline","Construction pipeline"];
@@ -217,11 +219,13 @@ swap('<div class="bar">${st.map((s,i)=>`<i class="${s}" ${tip(l,i,s,o)}></i>`).j
 swap('const val = l==="finance" ? `<div class="val-marks" aria-label="Valuation steps">${states(o,"val").map((s,i)=>`<i class="${s}" ${tip("val",i,s)}></i>`).join("")}</div>` : "";',
   'const val = l==="finance" ? valChip(o) : "";');
 swap('if(l==="finance"&&o.short) cap=`<span class="cap alert">Val shortfall</span>`;',
-  'if(l==="finance"&&o.fin===null) cap=`<span class="cap state-todo">Not tracked <span class="nt-info" tabindex="0" title="${NT_TIP}">&#9432;</span></span>`;');
+  '');
+swap('if(!st) return `<div class="seg"><span class="na-txt">${t.t}</span></div>`;',
+  'if(!st) return `<div class="seg"><span class="na-txt">${t.t}${l==="finance"&&o.fin===null?` <span class="nt-info" tabindex="0" title="${NT_TIP}" aria-label="${NT_TIP}">&#9432;</span>`:""}</span>${l==="finance"?valChip(o):""}</div>`;');
 swap('function nowText(o, lane){', `const NT_TIP="Finance is not tracked by the Contracts Team for this deal — the purchaser (usually a staff member) manages their own finance.";
 function valChip(o){
   if(o.valStep<1 && !o.short) return "";
-  const mo=s=>{const d=new Date(s); return isNaN(d)?s:d.toLocaleDateString("en-AU",{month:"short",year:"numeric"})};
+  const mo=s=>{const d=new Date(s); return isNaN(d)?s:"Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ")[d.getMonth()]+" "+d.getFullYear()};
   const t=o.short?"shortfall":o.valStep>=6?"at value":["",o.valAccess?"access "+mo(o.valAccess):"access","available","requested","booked","attended"][o.valStep];
   return \`<span class="val-chip\${o.short?" alert":""}">Val: \${esc(t)}</span>\`;
 }

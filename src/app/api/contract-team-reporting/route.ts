@@ -641,7 +641,8 @@ function markSmsfConstructionDuplicates(report: ReportRecord[]) {
     const a = dupAddr(String(r.registeredAddress || '')); if (a.length >= 8) addrs.add(a);
   }
   for (const r of report) {
-    if (r.pipelineId !== PIPELINE_ID.CONSTRUCTION || r.smsfConstructionDuplicate === 'Yes') continue;
+    // A resold seller's opp shares its address with the buyer's Finance opp; that is not a duplicate.
+    if (r.pipelineId !== PIPELINE_ID.CONSTRUCTION || r.smsfConstructionDuplicate === 'Yes' || r.co_status === '08_resold') continue;
     const a = dupAddr(String(r.registeredAddress || ''));
     // A name match only counts when the Construction opp has no record of its own (else it is a separate property).
     const byName = !r.propertyRecordIds && names.has(dupName(String(r.opportunityName || r.name || '')));
