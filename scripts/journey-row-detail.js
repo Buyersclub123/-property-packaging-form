@@ -54,9 +54,8 @@ function detail(o){
     ${o.latest?`<div class="lsu">${esc(o.latest)}</div>${long?`<button type="button" class="lsu-more" onclick="var l=this.previousElementSibling;l.classList.toggle('full');this.textContent=l.classList.contains('full')?'Show less':'Show more'">Show more</button>`:""}`:NS}
     ${o.missing&&o.missing.length?`<div class="kv"><span>Needs data</span><span class="miss-txt">${esc(o.missing.join(", "))}</span></div>`:""}</div>`;
 
-  return `<div class="detail">
-    <div class="dt-col">${moneyB}${datesB}</div>
-    <div class="dt-col">${progressB}${peopleB}</div>
+  return `<div class="detail d4">
+    ${moneyB}${datesB}${progressB}${peopleB}
     ${latestB}
     <div class="d-foot"><div class="tbc">Live from GHL · read-only · <a href="${esc(o.ctrtLink||"/contract-team-reporting")}" target="_blank" rel="noopener noreferrer">Open in CTRT</a> · <a href="${esc(o.ghlLink||"")}" target="_blank" rel="noopener noreferrer">Open in GHL</a></div>
       <button class="collapse" data-collapse="${o.ref}">Collapse <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 7.5 3-3 3 3"/></svg></button></div>
