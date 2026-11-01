@@ -1,4 +1,4 @@
-import { getMessage, listMessageIds, getAttachment, sydneyWindow, type ParsedMessage } from './gmail';
+import { getMessage, listMessageIds, getAttachment, sydneyWindow, newPart, type ParsedMessage } from './gmail';
 import { googleErrorMessage } from './google';
 import { readPdf, expandZip, documentLinks, fetchLinkedPdf, extractFacts, mergeFacts } from './extract';
 import { classify } from './classify';
@@ -91,12 +91,14 @@ async function processMessage(mailbox: string, id: string, runId: number, ctx: C
     doc.needsVisualRead = !!doc.isDocuSign && (!f.contractDate || !f.purchaser || !(f.landPrice || f.buildPrice || f.totalPrice));
     return f;
   });
-  const facts = mergeFacts(...docFacts, extractFacts(`${msg.subject}\n${msg.text}`, 'email'));
+  // JT 01/11: mine only the new part of the email; quoted replies were mined from their own emails.
+  const fresh = newPart(msg.text);
+  const facts = mergeFacts(...docFacts, extractFacts(`${msg.subject}\n${fresh}`, 'email'));
   const docText = read.map((r) => r.text).join('\n');
 
   const { cls, rule, basis, question } = classify({
     subject: msg.subject,
-    body: msg.text,
+    body: fresh,
     filenames: msg.attachments.map((a) => a.filename).concat(docs.map((d) => d.zipEntry || '').filter(Boolean)),
     docText,
     fromEmail: msg.fromEmail,
@@ -118,6 +120,7 @@ async function processMessage(mailbox: string, id: string, runId: number, ctx: C
     runId,
     mailbox,
     messageId: msg.id,
+    rfcId: msg.rfcId,
     threadId: msg.threadId,
     receivedAt: msg.date,
     direction: msg.direction,

@@ -185,20 +185,22 @@ export function DecisionPanel({ id, onDone, onSkip, onChanged, focusField, evide
     else onDone?.();
   }, [id, onDone]);
 
-  const decide = useCallback(async (outcome: string) => {
-    if (!current || busy) return;
+  const decide = useCallback(async (outcome: string, target?: Suggestion) => {
+    const sg = target || current;
+    if (!sg || busy) return;
     setBusy(true);
     try {
       const res = await fetch('/api/inbox-mining/feedback', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId: id, key: suggestionKey(current), outcome, note: '' }),
+        body: JSON.stringify({ itemId: id, key: suggestionKey(sg), outcome, note: '' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setRejecting(false);
       const fresh = await load();
       if (!fresh) return;
-      const rest = ordered.findIndex((s, i) => i > step && !fresh.item.feedback?.[suggestionKey(s)]);
+      const at = ordered.indexOf(sg);
+      const rest = ordered.findIndex((s, i) => i > at && !fresh.item.feedback?.[suggestionKey(s)]);
       const anyLeft = ordered.findIndex((s) => !fresh.item.feedback?.[suggestionKey(s)]);
       if (rest !== -1) setStep(rest);
       else if (anyLeft !== -1) setStep(anyLeft);
@@ -208,12 +210,21 @@ export function DecisionPanel({ id, onDone, onSkip, onChanged, focusField, evide
     } finally {
       setBusy(false);
     }
-  }, [current, busy, id, load, ordered, step, markDone]);
+  }, [current, busy, id, load, ordered, markDone]);
 
   const skip = useCallback(() => {
     setRejecting(false);
     onSkip?.();
   }, [onSkip]);
+
+  /** Skip one suggestion row: move to the next undecided row, or to the next item after the last row. */
+  const skipRow = useCallback((s: Suggestion) => {
+    setRejecting(false);
+    const at = ordered.indexOf(s);
+    const next = ordered.findIndex((x, i) => i > at && !d?.item.feedback?.[suggestionKey(x)]);
+    if (next !== -1) setStep(next);
+    else skip();
+  }, [ordered, d, skip]);
 
   // Keyboard: A accept, R reject (then 1-4 for the reason), S skip, Esc closes the reasons.
   useEffect(() => {
@@ -227,13 +238,13 @@ export function DecisionPanel({ id, onDone, onSkip, onChanged, focusField, evide
       else if (k === 'escape') setRejecting(false);
       else if (k === 'a' && current && !isMuted) decide('accept');
       else if (k === 'r' && current && !isMuted) setRejecting((r) => !r);
-      else if (k === 's') skip();
+      else if (k === 's') (current ? skipRow(current) : skip());
       else return;
       e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [evidenceOnly, processed, rejecting, current, isMuted, decide, skip]);
+  }, [evidenceOnly, processed, rejecting, current, isMuted, decide, skip, skipRow]);
 
   const saveMemory = async (opportunityId: string, propertyRecordId: string | null) => {
     setBusy(true);
@@ -334,74 +345,74 @@ export function DecisionPanel({ id, onDone, onSkip, onChanged, focusField, evide
         </div>
       </div>
 
-      <div className="core" style={evidenceOnly ? { gridTemplateColumns: '1fr' } : undefined}>
-        <div className="sugg">
-          <div className="flex items-center justify-between">
-            <div className="lbl">Suggestion{current?.noEvidence ? ' · no evidence in the text' : ''}</div>
-            {ordered.length > 1 && (
-              <div className="stepper">
-                <button onClick={() => setStep((s) => (s - 1 + ordered.length) % ordered.length)}>‹</button>
-                {step + 1} of {ordered.length}
-                <button onClick={() => setStep((s) => (s + 1) % ordered.length)}>›</button>
-              </div>
-            )}
+      {isMuted || !ordered.length ? (
+        <div className="core" style={evidenceOnly ? { gridTemplateColumns: '1fr' } : undefined}>
+          <div className="sugg">
+            <div className="lbl">Suggestion</div>
+            <p className="instr weak">{isMuted ? 'Suggestions are muted for this opportunity.' : `No suggested change ${matched ? 'for this email' : `(match ${m.grade})`}.`}</p>
           </div>
-          {isMuted ? (
-            <p className="instr weak">Suggestions are muted for this opportunity.</p>
-          ) : !current ? (
-            <p className="instr weak">No suggested change {matched ? 'for this email' : `(match ${m.grade})`}.</p>
-          ) : (
-            <>
-              <p className={`instr ${current.noEvidence ? 'weak' : ''}`}>
-                {current.target === 'action' ? current.fieldLabel
-                  : <>Set <span className="pill f">{current.fieldLabel}</span> to <span className="pill">{niceValue(show(current.proposed))}</span></>}
-              </p>
-              <div className="on-what">
-                {current.target === 'action' ? 'Expected action on the opportunity above (no field write)'
-                  : current.target === 'property_record' ? 'On the Property Record above' : 'On the opportunity above'}
-                {current.target !== 'action' && ` · now: ${now?.note || (now?.value ? niceValue(now.value) : '(blank)')}`}
-              </div>
-              {decided && (
-                <div className={decided.outcome === 'accept' ? 'decided-ok' : 'decided-no'}>
-                  {decided.outcome === 'accept' ? '✓ Accepted' : `✗ Rejected: ${outcomeLabel(decided.outcome).toLowerCase()}`} · {decided.by} · {niceDate(decided.at)}
-                </div>
+          {!evidenceOnly && (
+            <div className="decide">
+              {processed ? <button onClick={onReopen} className="dbtn skip">Reopen</button> : (
+                <>
+                  <button onClick={markDone} className="dbtn accept">Done</button>
+                  <button onClick={skip} className="dbtn skip">Skip <kbd>S</kbd></button>
+                </>
               )}
-            </>
+            </div>
           )}
         </div>
-
-        {!evidenceOnly && (
-          <div className="decide">
-            {processed ? (
-              <button onClick={onReopen} className="dbtn skip">Reopen</button>
-            ) : (
-              <>
-                {current && !isMuted ? (
-                  <button disabled={busy} onClick={() => decide('accept')} className="dbtn accept">Accept <kbd>A</kbd></button>
-                ) : (
-                  <button onClick={markDone} className="dbtn accept">Done</button>
-                )}
-                <button disabled={busy || !current || isMuted} onClick={() => setRejecting((r) => !r)} className={`dbtn reject ${rejecting ? 'open' : ''}`}>Reject <kbd>R</kbd></button>
-                <button onClick={skip} className="dbtn skip">Skip <kbd>S</kbd></button>
-                {rejecting && (
-                  <div className="reasons">
-                    {REJECT_REASONS.map((r, i) => (
-                      <button key={r.key} disabled={busy} onClick={() => decide(r.key)}>{r.label} <kbd>{i + 1}</kbd></button>
-                    ))}
+      ) : ordered.map((s, n) => {
+        const idx = (item.suggestions || []).indexOf(s);
+        const now = idx >= 0 ? d.current[idx] : undefined;
+        const decided = item.feedback?.[suggestionKey(s)];
+        const active = s === current && !evidenceOnly && !processed;
+        return (
+          <div key={suggestionKey(s)} className={`srow ${active ? 'active' : ''}`} onClick={() => setStep(n)}>
+            <div className="core" style={evidenceOnly ? { gridTemplateColumns: '1fr' } : undefined}>
+              <div className="sugg">
+                <div className="lbl">Suggestion {ordered.length > 1 ? `${n + 1} of ${ordered.length}` : ''}{s.noEvidence ? ' · no evidence in the text' : ''}</div>
+                <p className={`instr ${s.noEvidence ? 'weak' : ''}`}>
+                  {s.target === 'action' ? s.fieldLabel
+                    : <>Set <span className="pill f">{s.fieldLabel}</span> to <span className="pill">{niceValue(show(s.proposed))}</span></>}
+                </p>
+                <div className="on-what">
+                  {s.target === 'action' ? 'Expected action on the opportunity above (no field write)'
+                    : s.target === 'property_record' ? 'On the Property Record above' : 'On the opportunity above'}
+                  {s.target !== 'action' && ` · now: ${now?.note || (now?.value ? niceValue(now.value) : '(blank)')}`}
+                </div>
+                {decided && (
+                  <div className={decided.outcome === 'accept' ? 'decided-ok' : 'decided-no'}>
+                    {decided.outcome === 'accept' ? '✓ Accepted' : `✗ Rejected: ${outcomeLabel(decided.outcome).toLowerCase()}`} · {decided.by} · {niceDate(decided.at)}
                   </div>
                 )}
-              </>
-            )}
+              </div>
+              {!evidenceOnly && (
+                <div className="decide">
+                  {processed ? <button onClick={onReopen} className="dbtn skip">Reopen</button> : (
+                    <>
+                      <button disabled={busy} onClick={(e) => { e.stopPropagation(); decide('accept', s); }} className="dbtn accept">Accept {active && <kbd>A</kbd>}</button>
+                      <button disabled={busy} onClick={(e) => { e.stopPropagation(); setStep(n); setRejecting((r) => !(r && active)); }} className={`dbtn reject ${rejecting && active ? 'open' : ''}`}>Reject {active && <kbd>R</kbd>}</button>
+                      <button onClick={(e) => { e.stopPropagation(); skipRow(s); }} className="dbtn skip">Skip {active && <kbd>S</kbd>}</button>
+                      {rejecting && active && (
+                        <div className="reasons">
+                          {REJECT_REASONS.map((r, i) => (
+                            <button key={r.key} disabled={busy} onClick={(e) => { e.stopPropagation(); decide(r.key, s); }}>{r.label} <kbd>{i + 1}</kbd></button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="why">
+              <div className="lbl">Why</div>
+              <Why s={s} d={d} facts={facts} onLocated={onLocated} itemId={item.id} />
+            </div>
           </div>
-        )}
-      </div>
-
-      {current && !isMuted && (
-        <div className="why">
-          <div className="lbl">Why</div>
-          <Why s={current} d={d} facts={facts} onLocated={onLocated} itemId={item.id} />
-        </div>
-      )}
+        );
+      })}
 
       <div className="more">
         <details>

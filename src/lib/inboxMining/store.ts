@@ -48,6 +48,8 @@ export async function ensureTables(): Promise<void> {
   await sql`ALTER TABLE inbox_items ADD COLUMN IF NOT EXISTS suggested_at TIMESTAMPTZ`;
   // Workflow list state (backlog 16): {status: 'done' | 'open', by, at}. Our DB only; nothing goes to GHL or Gmail.
   await sql`ALTER TABLE inbox_items ADD COLUMN IF NOT EXISTS workflow JSONB`;
+  // RFC Message-ID, the same in every mailbox copy: one list row per email across mailboxes.
+  await sql`ALTER TABLE inbox_items ADD COLUMN IF NOT EXISTS rfc_id TEXT`;
   await sql`
     UPDATE inbox_items SET suggested_at = created_at
     WHERE suggested_at IS NULL AND jsonb_array_length(COALESCE(suggestions, '[]'::jsonb)) > 0`;
@@ -106,6 +108,7 @@ export interface ItemInput {
   runId: number;
   mailbox: string;
   messageId: string;
+  rfcId: string;
   threadId: string;
   receivedAt: Date;
   direction: 'inbound' | 'outbound';
@@ -126,12 +129,12 @@ export async function upsertItem(i: ItemInput): Promise<void> {
   const sql = getDb();
   await sql`
     INSERT INTO inbox_items (run_id, mailbox, message_id, thread_id, received_at, direction, from_addr, to_addr, subject,
-      cls, cls_rule, facts, docs, links, match, suggestions, drive_target, suggested_at)
+      cls, cls_rule, facts, docs, links, match, suggestions, drive_target, suggested_at, rfc_id)
     VALUES (${i.runId}, ${i.mailbox}, ${i.messageId}, ${i.threadId}, ${i.receivedAt.toISOString()}, ${i.direction},
       ${i.from}, ${i.to}, ${i.subject}, ${i.cls}, ${i.clsRule}, ${JSON.stringify(i.facts)}::jsonb,
       ${JSON.stringify(i.docs)}::jsonb, ${JSON.stringify(i.links)}::jsonb, ${JSON.stringify(i.match)}::jsonb,
-      ${JSON.stringify(i.suggestions)}::jsonb, ${i.driveTarget}, ${i.suggestions.length ? new Date().toISOString() : null})
-    ON CONFLICT (mailbox, message_id) DO UPDATE SET
+      ${JSON.stringify(i.suggestions)}::jsonb, ${i.driveTarget}, ${i.suggestions.length ? new Date().toISOString() : null}, ${i.rfcId || null})
+    ON CONFLICT (mailbox, message_id) DO UPDATE SET rfc_id = EXCLUDED.rfc_id,
       run_id = EXCLUDED.run_id, cls = EXCLUDED.cls, cls_rule = EXCLUDED.cls_rule, facts = EXCLUDED.facts,
       docs = EXCLUDED.docs, links = EXCLUDED.links, match = EXCLUDED.match, suggestions = EXCLUDED.suggestions,
       drive_target = EXCLUDED.drive_target, created_at = NOW(),

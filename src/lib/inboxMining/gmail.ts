@@ -28,7 +28,21 @@ export interface ParsedMessage {
   date: Date;
   direction: 'inbound' | 'outbound';
   text: string;
+  /** RFC 822 Message-ID: the same across every mailbox copy of an email. */
+  rfcId: string;
   attachments: AttachmentMeta[];
+}
+
+const QUOTE_START =
+  /(?:^|\n)[ \t>]*(?:On [^\n]{0,200}?(?:\n[^\n]{0,160}?){0,2}wrote:|From:[ \t]*[^\n]+\n[ \t>]*(?:Sent|Date):|-{2,}\s*Original Message\s*-{2,}|-{2,}\s*Forwarded message\s*-{2,}|_{20,})/i;
+
+/** The new part of an email: everything above the first quoted reply/forward header or `>` block (JT 01/11: mine each message once). */
+export function newPart(text: string): string {
+  const m = QUOTE_START.exec(text);
+  let top = m ? text.slice(0, m.index) : text;
+  const q = top.search(/(?:^|\n)>/);
+  if (q > 0) top = top.slice(0, q);
+  return top;
 }
 
 function sydneyOffsetMinutes(at: Date): number {
@@ -142,6 +156,7 @@ export async function getMessage(mailbox: string, id: string): Promise<ParsedMes
     date: new Date(parseInt(msg.internalDate || '0', 10)),
     direction: outbound ? 'outbound' : 'inbound',
     text,
+    rfcId: header(msg, 'Message-ID').trim().toLowerCase(),
     attachments: out.atts,
   };
 }

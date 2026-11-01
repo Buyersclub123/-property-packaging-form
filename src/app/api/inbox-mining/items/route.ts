@@ -40,7 +40,22 @@ export async function GET(request: Request) {
       bySubject.set(f.norm_subject, list);
     }
 
-    const items = rows.map((r) => {
+    // One row per email across all mailboxes (JT 01/11): dedupe on the RFC Message-ID, or sender + subject + minute
+    // for items not re-read since rfc_id was added. Keep the copy with the most suggestions / decisions.
+    const weight = (r: Record<string, unknown>) =>
+      ((r.suggestions as unknown[]) || []).length * 10 + Object.keys((r.feedback as object) || {}).length + (r.workflow ? 1 : 0);
+    const best = new Map<string, (typeof rows)[number]>();
+    const copies = new Map<string, string[]>();
+    for (const r of rows) {
+      const k = (r.rfc_id as string) ||
+        `${emailOf((r.from_addr as string) || '')}|${r.subject}|${Math.floor(new Date(r.received_at as string).getTime() / 60000)}`;
+      copies.set(k, [...(copies.get(k) || []), r.mailbox as string]);
+      const cur = best.get(k);
+      if (!cur || weight(r) > weight(cur)) best.set(k, r);
+    }
+    const unique = [...best.entries()].map(([k, r]) => Object.assign(r, { copies: copies.get(k) }));
+
+    const items = unique.map((r) => {
       const docs = (r.docs || []) as { name?: string }[];
       const act = classifyActivity({
         subject: (r.subject as string) || '',

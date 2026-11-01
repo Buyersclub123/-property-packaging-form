@@ -65,6 +65,8 @@
 .imx .reasons button:hover { background: var(--dont-bg); }
 .imx .reasons kbd { font: 500 11px/1 var(--font-field); color: var(--muted); }
 
+.imx .srow { border-bottom: 2px solid var(--line); }
+.imx .srow.active { box-shadow: inset 4px 0 0 var(--brand); }
 .imx .why { padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .imx .excerpt { margin: 0; font-size: 16px; line-height: 1.5; padding: 12px 16px; border-radius: 8px; background: var(--soft); border: 2px solid var(--brand); white-space: pre-wrap; max-height: 20rem; overflow: auto; font-family: inherit; }
 .imx .excerpt mark { background: rgba(255, 214, 10, .45); border: 2px solid #F59E0B; color: inherit; border-radius: 2px; padding: 0 2px; }
