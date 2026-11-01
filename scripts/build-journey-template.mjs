@@ -129,8 +129,9 @@ swap('let dq="", dCons="", dBA="", dSat="";', 'let dq="", dCons="", dBA="", dSat
 // On Hold marker (detached, grey) at the start of Property Team; step numbers skip detached tiles.
 swap('const first=i===0||s.detached||(stair&&list0[i-1].phase!==s.phase),', 'const first=i===0||s.detached||list0[i-1].detached||(stair&&list0[i-1].phase!==s.phase),');
 swap('<button class="node${first?" first":""}${last?" last":""}"', '<button class="node${first?" first":""}${last?" last":""}${s.hold?" hold":""}"');
-swap('<span class="step">${i+1}</span>', '<span class="step">${list0.slice(0,i+1).filter(x=>!x.detached).length}</span>');
-swap('Stage ${idx+1} of ${steps} · ', 'Stage ${list.slice(0,idx+1).filter(x=>!x.detached).length} of ${steps} · ');
+// No stage-number badges on tiles (stages are still changing).
+swap('<span class="step">${i+1}</span>', '');
+swap('Stage ${idx+1} of ${steps} · ', '');
 // A lane wider than the screen continues on the row below, right-aligned under the last tile, joined by a drop line.
 swap('    </div>`).join("");\n}\n\nfunction renderPanel(){', `    </div>\`).join("");
   fixWrap();
