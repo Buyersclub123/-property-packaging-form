@@ -19,7 +19,7 @@ export interface Match {
   propertyRecordId?: string; fact1?: string; fact2?: string; reason?: string;
   geoscape: { status: string; parcelId?: string; address?: string; reason?: string }; flags: string[]; trackerEvidence: string[];
 }
-export interface Suggestion { target: string; fieldKey: string; fieldLabel: string; fieldId?: string; proposed: string | string[]; source: string; notInGhl?: boolean; note?: string }
+export interface Suggestion { target: string; fieldKey: string; fieldLabel: string; fieldId?: string; proposed: string | string[]; source: string; notInGhl?: boolean; note?: string; noEvidence?: boolean }
 
 export let precedentCache: Promise<PrecedentSummary | null> | null = null;
 export const loadPrecedent = () => {

@@ -104,6 +104,8 @@ export interface Suggestion {
   source: string;
   notInGhl?: boolean;
   note?: string;
+  /** No evidence in the text (e.g. based on the email date only): shown in its own group, graded lower. */
+  noEvidence?: boolean;
 }
 
 export const FEEDBACK_OUTCOMES = ['accept', 'wrong_field', 'wrong_value', 'wrong_opportunity', 'not_needed'] as const;

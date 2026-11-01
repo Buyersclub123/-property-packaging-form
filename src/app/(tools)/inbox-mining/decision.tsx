@@ -1,16 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { driveFilePath, driveFolder } from '@/lib/inboxMining/driveTarget';
 import { precedentFor, type PrecedentSummary } from '@/lib/inboxMining/precedentShared';
 import {
-  BodyMarks, GRADE_STYLE, PdfPages, clsLabel, factLabel, findLoose, loadPrecedent, needleFor, outcomeLabel, show, suggestionKey, sydney,
+  BodyMarks, GRADE_STYLE, PdfPages, clsLabel, factLabel, findLoose, loadPrecedent, needleFor, outcomeLabel, show, suggestionKey,
   type Detail, type Fact, type FactPos, type Suggestion,
 } from './shared';
 
-// Decision screen (JT redesign): the suggested change first, the evidence under it, everything else collapsed.
-// Accept / Reject write only inbox_items.feedback; a fully decided item is marked done in inbox_items.workflow.
-// Nothing is written to GHL and no email is sent.
+// Item pane, JT wireframe v2 ("Inbox Mining Item Layout"): From · Regarding · Suggestion · Accept/Reject/Skip · Why,
+// then Full email / Attachments / Details collapsed. Decisions write only inbox_items.feedback / workflow, thread
+// confirmation only inbox_thread_memory, mute only inbox_muted_opps. Nothing is written to GHL and no email is sent.
 
 const REJECT_REASONS = [
   { key: 'wrong_field', label: 'Wrong field' },
@@ -19,149 +20,96 @@ const REJECT_REASONS = [
   { key: 'not_needed', label: 'Not needed' },
 ];
 
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "27 Oct 2026" for a YYYY-MM-DD value; other values unchanged. */
+export const niceValue = (v: string) => {
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${parseInt(m[3], 10)} ${MON[parseInt(m[2], 10) - 1]} ${m[1]}` : v;
+};
+/** "27 Oct 2026, 9:46 pm" in Sydney time. */
+export const niceDate = (iso: string, time = true) => {
+  const d = new Date(iso);
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+      .formatToParts(d).map((x) => [x.type, x.value])
+  );
+  return `${p.day} ${p.month} ${p.year}${time ? `, ${p.hour}:${p.minute} ${String(p.dayPeriod || '').toLowerCase()}` : ''}`;
+};
+
 export const normField = (k: string) =>
   k.toLowerCase().replace(/^(opportunity|property_record|custom_objects\.[a-z_]+)\./, '').replace(/[^a-z0-9]/g, '');
-
 const suggestionMatches = (s: Suggestion, field: string) =>
   [s.fieldKey, s.fieldId || '', s.fieldLabel].some((k) => k && normField(k) === normField(field));
+const senderName = (from: string) => (from.match(/^\s*"?([^"<]+?)"?\s*</)?.[1] || from).trim();
 
-/** The extracted fact a suggestion was built from (suggest.ts writes source as `<source>: "<quote>"`). */
 function factFor(s: Suggestion, facts: [string, Fact][]): [string, Fact] | null {
   return facts.find(([, f]) => s.source === `${f.source}: "${f.quote}"`) || null;
 }
 
+/** Evidence suggestions first; suggestions with no evidence in the text in their own group after them. */
+export const orderSuggestions = (list: Suggestion[]) => [...list.filter((s) => !s.noEvidence), ...list.filter((s) => s.noEvidence)];
+
 function Excerpt({ body, hit, idKey }: { body: string; hit: { start: number; end: number }; idKey: string }) {
   const from = Math.max(0, body.lastIndexOf('\n', Math.max(0, hit.start - 240)) + 1);
-  const toNl = body.indexOf('\n', Math.min(body.length, hit.end + 240));
-  const to = toNl === -1 ? body.length : toNl;
-  const slice = body.slice(from, to);
+  const nl = body.indexOf('\n', Math.min(body.length, hit.end + 240));
+  const to = nl === -1 ? body.length : nl;
   return (
-    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded border bg-gray-50 p-2 text-xs">
+    <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded border bg-gray-50 p-3 text-sm">
       {from > 0 && '… '}
-      <BodyMarks body={slice} hits={{ [idKey]: { start: hit.start - from, end: hit.end - from } }} active={idKey} idPrefix="ex-" />
+      <BodyMarks body={body.slice(from, to)} hits={{ [idKey]: { start: hit.start - from, end: hit.end - from } }} active={idKey} idPrefix="ex-" />
       {to < body.length && ' …'}
     </pre>
   );
 }
 
-function SuggestionRow({ itemId, s, current, oppName, d, facts, onLocated, decided, evidenceOnly, focused, onDecided }: {
-  itemId: number; s: Suggestion; current?: { value: string | null; note?: string }; oppName: string | null; d: Detail;
-  facts: [string, Fact][]; onLocated: (k: string, p: FactPos) => void; decided?: { outcome: string; by: string; at: string };
-  evidenceOnly: boolean; focused: boolean; onDecided: () => void;
-}) {
-  const [rejecting, setRejecting] = useState(false);
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const fact = factFor(s, facts);
-  const body = d.body || '';
-  const hit = fact && fact[1].source === 'email' && body ? findLoose(body, needleFor(fact[0], fact[1])) : null;
-  const doc = fact && fact[1].source !== 'email' ? d.item.docs.find((x) => (x.zipEntry || x.name) === fact[1].source) : undefined;
-
-  const save = async (outcome: string) => {
-    setBusy(true);
-    setErr(null);
-    try {
-      const res = await fetch('/api/inbox-mining/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId, key: suggestionKey(s), outcome, note }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setRejecting(false);
-      onDecided();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const where = s.target === 'action'
-    ? `Expected action on ${oppName || 'the opportunity'} (no field write)`
-    : s.target === 'property_record'
-      ? `Entered in ${s.fieldLabel} of the Property Record for ${oppName || 'the matched opportunity'}`
-      : `Entered in ${s.fieldLabel} of ${oppName || 'the matched opportunity'}`;
-
-  return (
-    <div className={`rounded border p-3 ${focused ? 'border-blue-600 shadow-[inset_3px_0_0_#2563eb]' : ''}`}>
-      <div className="text-xl font-semibold leading-snug text-brand-charcoal">
-        {s.target === 'action' ? s.fieldLabel : <>{s.fieldLabel} <span className="text-gray-400">→</span> {show(s.proposed)}</>}
-      </div>
-      <div className="mt-1 text-sm text-gray-600">{where}</div>
-      {s.target !== 'action' && (
-        <div className="mt-0.5 text-xs text-gray-500">
-          Now in GHL: {current?.note ? <span className="italic">{current.note}</span> : current?.value || <span className="italic">(blank)</span>}
-          {s.note && <> · {s.note}</>}
-        </div>
-      )}
-
-      {!evidenceOnly && (
-        <div className="mt-3">
-          {decided ? (
-            <div className={`text-sm ${decided.outcome === 'accept' ? 'text-green-700' : 'text-red-700'}`}>
-              {decided.outcome === 'accept' ? '✓ Accepted' : `✗ Rejected: ${outcomeLabel(decided.outcome).toLowerCase()}`} · {decided.by} · {sydney(decided.at)}
-              <button onClick={() => setRejecting((r) => !r)} className="ml-2 text-xs text-blue-700 underline">change</button>
-            </div>
-          ) : null}
-          {(!decided || rejecting) && (
-            <div className="flex flex-wrap items-center gap-2">
-              <button disabled={busy} onClick={() => save('accept')}
-                className="rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Accept</button>
-              <button disabled={busy} onClick={() => setRejecting((r) => !r)}
-                className={`rounded border px-4 py-1.5 text-sm font-semibold disabled:opacity-50 ${rejecting ? 'border-red-500 bg-red-50 text-red-800' : 'bg-white hover:bg-gray-50'}`}>Reject…</button>
-            </div>
-          )}
-          {rejecting && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-red-200 bg-red-50/40 p-2 text-xs">
-              <span className="text-gray-600">Why?</span>
-              {REJECT_REASONS.map((r) => (
-                <button key={r.key} disabled={busy} onClick={() => save(r.key)}
-                  className="rounded border border-red-300 bg-white px-2 py-1 font-semibold text-red-800 hover:bg-red-50 disabled:opacity-50">{r.label}</button>
-              ))}
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="min-w-[12rem] flex-1 rounded border bg-white px-2 py-1" />
-            </div>
-          )}
-          {err && <div className="mt-1 text-xs text-red-700">{err}</div>}
-        </div>
-      )}
-
-      <div className="mt-3">
-        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Why</div>
-        {hit ? (
-          <Excerpt body={body} hit={hit} idKey={fact![0]} />
-        ) : doc && doc.status === 'read' ? (
-          <div className="max-h-[28rem] overflow-auto rounded border">
-            <PdfPages itemId={itemId} doc={doc} facts={[fact!]} active={fact![0]} autoRender onLocated={onLocated} />
-          </div>
-        ) : (
-          <div className="rounded border bg-gray-50 p-2 text-xs text-gray-600">
-            {fact ? `${fact[1].source}: “${fact[1].quote}”` : s.source}
-            {fact && fact[1].source === 'email' && !hit && <span className="text-gray-400"> (subject line, or not found in the body)</span>}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function Label({ children }: { children: ReactNode }) {
+  return <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{children}</div>;
 }
 
-export function DecisionPanel({ id, onDone, onSkip, focusField, evidenceOnly = false, processed = false, onReopen }: {
-  id: number; onDone?: () => void; onSkip?: () => void; focusField?: string; evidenceOnly?: boolean;
+function Why({ s, d, facts, onLocated, itemId }: { s: Suggestion; d: Detail; facts: [string, Fact][]; onLocated: (k: string, p: FactPos) => void; itemId: number }) {
+  const fact = factFor(s, facts);
+  if (s.noEvidence || !fact) {
+    return (
+      <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <span className="mr-2 rounded-full bg-amber-500 px-2 font-bold text-white">!</span>
+        {s.noEvidence ? 'No evidence in the text — based on the email date only' : `No evidence in the text — ${s.source}`}
+      </div>
+    );
+  }
+  const body = d.body || '';
+  const hit = fact[1].source === 'email' && body ? findLoose(body, needleFor(fact[0], fact[1])) : null;
+  if (hit) return <Excerpt body={body} hit={hit} idKey={fact[0]} />;
+  const doc = fact[1].source !== 'email' ? d.item.docs.find((x) => (x.zipEntry || x.name) === fact[1].source) : undefined;
+  if (doc && doc.status === 'read') {
+    return (
+      <div className="max-h-[30rem] overflow-auto rounded border">
+        <PdfPages itemId={itemId} doc={doc} facts={[fact]} active={fact[0]} autoRender onLocated={onLocated} />
+      </div>
+    );
+  }
+  return <div className="rounded border bg-gray-50 p-3 text-sm text-gray-700">{fact[1].source}: “{fact[1].quote}”</div>;
+}
+
+export function DecisionPanel({ id, onDone, onSkip, onChanged, focusField, evidenceOnly = false, processed = false, onReopen }: {
+  id: number; onDone?: () => void; onSkip?: () => void; onChanged?: () => void; focusField?: string; evidenceOnly?: boolean;
   processed?: boolean; onReopen?: () => void;
 }) {
   const [d, setD] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [located, setLocated] = useState<Record<string, FactPos>>({});
   const [precedent, setPrecedent] = useState<PrecedentSummary | null>(null);
+  const [step, setStep] = useState(0);
+  const [rejecting, setRejecting] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [changing, setChanging] = useState(false);
   const [oppId, setOppId] = useState('');
   const [recId, setRecId] = useState('');
-  const [memBusy, setMemBusy] = useState(false);
-  const [memMsg, setMemMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [muted, setMuted] = useState<string[]>([]);
 
   useEffect(() => {
     loadPrecedent().then(setPrecedent);
+    fetch('/api/inbox-mining/mute', { cache: 'no-store' }).then((r) => r.json()).then((x) => setMuted(x.muted || [])).catch(() => {});
   }, []);
 
   const load = useCallback(async () => {
@@ -181,17 +129,17 @@ export function DecisionPanel({ id, onDone, onSkip, focusField, evidenceOnly = f
   useEffect(() => {
     setD(null);
     setLocated({});
+    setStep(0);
+    setRejecting(false);
     setChanging(false);
-    setMemMsg(null);
+    setMsg(null);
     load();
   }, [load]);
 
   const onLocated = useCallback((key: string, pos: FactPos) => {
     setLocated((prev) => ({ ...prev, [key]: pos }));
     fetch('/api/inbox-mining/fact-position', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId: id, key, pos }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: id, key, pos }),
     }).catch(() => {});
   }, [id]);
 
@@ -205,161 +153,260 @@ export function DecisionPanel({ id, onDone, onSkip, focusField, evidenceOnly = f
     return out;
   }, [facts, d]);
 
-  const markDone = async () => {
+  const ordered = useMemo(() => {
+    const all = orderSuggestions(d?.item.suggestions || []);
+    if (!focusField) return all;
+    const hit = all.filter((s) => suggestionMatches(s, focusField));
+    return evidenceOnly && hit.length ? hit : [...hit, ...all.filter((s) => !hit.includes(s))];
+  }, [d, focusField, evidenceOnly]);
+
+  const m = d?.item.match;
+  const isMuted = !!m?.opportunityId && muted.includes(m.opportunityId);
+  const current = ordered[Math.min(step, Math.max(0, ordered.length - 1))];
+
+  const markDone = useCallback(async () => {
     const res = await fetch('/api/inbox-mining/workflow', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id], status: 'done' }),
     });
-    if (!res.ok) {
-      setError((await res.json()).error || `HTTP ${res.status}`);
-      return;
-    }
-    onDone?.();
-  };
+    if (!res.ok) setError((await res.json()).error || `HTTP ${res.status}`);
+    else onDone?.();
+  }, [id, onDone]);
 
-  const afterDecision = async () => {
-    const fresh = await load();
-    if (!fresh) return;
-    const all = fresh.item.suggestions || [];
-    if (all.length && all.every((s) => fresh.item.feedback?.[suggestionKey(s)])) await markDone();
-  };
+  const decide = useCallback(async (outcome: string) => {
+    if (!current || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/inbox-mining/feedback', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: id, key: suggestionKey(current), outcome, note: '' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setRejecting(false);
+      const fresh = await load();
+      if (!fresh) return;
+      const rest = ordered.findIndex((s, i) => i > step && !fresh.item.feedback?.[suggestionKey(s)]);
+      const anyLeft = ordered.findIndex((s) => !fresh.item.feedback?.[suggestionKey(s)]);
+      if (rest !== -1) setStep(rest);
+      else if (anyLeft !== -1) setStep(anyLeft);
+      else await markDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [current, busy, id, load, ordered, step, markDone]);
+
+  const skip = useCallback(() => {
+    setRejecting(false);
+    onSkip?.();
+  }, [onSkip]);
+
+  // Keyboard: A accept, R reject (then 1-4 for the reason), S skip, Esc closes the reasons.
+  useEffect(() => {
+    if (evidenceOnly || processed) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (rejecting && /^[1-4]$/.test(k)) decide(REJECT_REASONS[parseInt(k, 10) - 1].key);
+      else if (k === 'escape') setRejecting(false);
+      else if (k === 'a' && current && !isMuted) decide('accept');
+      else if (k === 'r' && current && !isMuted) setRejecting((r) => !r);
+      else if (k === 's') skip();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [evidenceOnly, processed, rejecting, current, isMuted, decide, skip]);
 
   const saveMemory = async (opportunityId: string, propertyRecordId: string | null) => {
-    setMemBusy(true);
-    setMemMsg(null);
+    setBusy(true);
+    setMsg(null);
     try {
       const res = await fetch('/api/inbox-mining/thread-memory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId: id, opportunityId, propertyRecordId }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: id, opportunityId, propertyRecordId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setChanging(false);
-      if (opportunityId !== d?.item.match.opportunityId) setMemMsg('Saved. Later emails in this thread match to the new opportunity; this email keeps its suggestions until it is re-read.');
+      if (opportunityId !== d?.item.match.opportunityId) setMsg('Saved for the thread. This email keeps its suggestions until it is re-read.');
       await load();
+      onChanged?.();
     } catch (e) {
-      setMemMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setMsg(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      setMemBusy(false);
+      setBusy(false);
     }
   };
 
-  if (error) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>;
-  if (!d) return <div className="text-sm text-gray-500">Loading…</div>;
+  const toggleMute = async () => {
+    if (!m?.opportunityId) return;
+    const res = await fetch('/api/inbox-mining/mute', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ opportunityId: m.opportunityId, muted: !isMuted }),
+    });
+    if (res.ok) setMuted((prev) => (isMuted ? prev.filter((x) => x !== m.opportunityId) : [...prev, m.opportunityId!]));
+  };
 
-  const { item, live, current, memory } = d;
-  const m = item.match;
+  if (error) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>;
+  if (!d || !m) return <div className="text-sm text-gray-500">Loading…</div>;
+
+  const { item, live, memory } = d;
   const oppName = live?.name || m.opportunityName || null;
   const matched = ['A', 'B', 'C'].includes(m.grade);
   const confirmed = !!memory && memory.confirmed_by !== 'auto' && memory.opportunity_id === m.opportunityId;
-  const indexed = (item.suggestions || []).map((s, i) => ({ s, i }));
-  const focusedRows = focusField ? indexed.filter(({ s }) => suggestionMatches(s, focusField)) : [];
-  const rows = evidenceOnly && focusedRows.length ? focusedRows : focusField ? [...focusedRows, ...indexed.filter((r) => !focusedRows.includes(r))] : indexed;
-  const focusFact = focusField && !focusedRows.length ? facts.find(([k]) => normField(k) === normField(focusField)) : undefined;
-  const targetOpp = matched ? oppName : null;
+  const idx = current ? (item.suggestions || []).indexOf(current) : -1;
+  const now = idx >= 0 ? d.current[idx] : undefined;
+  const decided = current ? item.feedback?.[suggestionKey(current)] : undefined;
+  const btn = 'flex w-36 items-center justify-center gap-2 rounded px-4 py-2 text-sm font-semibold disabled:opacity-40';
+  const kbd = 'rounded border border-current/30 px-1 text-[11px] font-normal opacity-80';
+  const detailRows: [string, ReactNode][] = [
+    ['Class', <>{clsLabel(item.cls)} <span className="text-gray-500">— {item.cls_rule}</span></>],
+    ['Match', <><span className={`rounded px-1.5 font-semibold ${GRADE_STYLE[m.grade] || ''}`}>{m.grade}</span> <span className="text-gray-500">via {m.source === 'thread_memory' ? 'thread memory' : m.source}</span>{m.reason && <div className="text-gray-600">{m.reason}</div>}</>],
+    ['Rules', <>{m.fact1 && <div>1. {m.fact1}</div>}{m.fact2 && <div>2. {m.fact2}</div>}{m.flags.map((f, i) => <div key={i} className="text-amber-800">⚑ {f}</div>)}</>],
+    ['Precedent', <>{(item.suggestions || []).map((s, i) => { const p = precedentFor(precedent, item.cls, s); return p ? <div key={i}><span className="text-gray-500">{s.fieldLabel}:</span> {p.line}</div> : null; })}</>],
+    ['Geoscape', <>{m.geoscape.status}{m.geoscape.parcelId && ` (${m.geoscape.parcelId})`}{m.geoscape.address && ` — ${m.geoscape.address}`}{m.geoscape.reason && ` — ${m.geoscape.reason}`}</>],
+    ['Drive target', matched && oppName ? <><div className="break-all font-mono">{driveFolder(oppName)}\</div>{item.docs.filter((x) => x.status === 'read').map((x, i) => <div key={i} className="break-all font-mono text-gray-500">→ {driveFilePath(oppName, item.cls, item.received_at, x.zipEntry || x.name)}</div>)}<div className="text-gray-500">Display only, not copied</div></> : 'None until the match is graded A, B or C'],
+    ['Thread memory', memory ? `→ ${memory.opportunity_id} (${memory.confirmed_by === 'auto' ? 'auto' : memory.confirmed_by})` : 'None for this thread'],
+    ['Live GHL', live ? `${live.pipelineName} — ${live.stageName} (${live.status})` : '—'],
+    ...m.trackerEvidence.map((t, i): [string, ReactNode] => [i === 0 ? 'Trackers' : '', t]),
+    ['Extracted facts', facts.length ? <>{facts.map(([k, f]) => <div key={k}><span className="font-mono">{factLabel(k)}</span> = <span className="font-medium">{f.value}</span> <span className="text-gray-500">({f.source})</span></div>)}</> : 'None'],
+    ['Fetched', niceDate(d.fetchedAt)],
+  ];
 
   return (
     <div className="space-y-5 text-sm">
+      {d.errors.length > 0 && <div className="rounded border border-red-300 bg-red-50 p-2 text-red-800">{d.errors.map((e, i) => <div key={i}>{e}</div>)}</div>}
+
       <div>
-        <div className="text-xs text-gray-500">{item.mailbox} · {item.direction === 'outbound' ? 'outbound' : 'inbound'} · {sydney(item.received_at)}</div>
-        <div className="text-base font-semibold">{item.subject || '(no subject)'}</div>
-        <div className="text-gray-600">{item.from_addr}</div>
+        <Label>From</Label>
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-base font-semibold" title={item.from_addr}>{senderName(item.from_addr || '')}</span>
+          <span className="shrink-0 text-gray-500">{niceDate(item.received_at)}</span>
+        </div>
+        <div className="text-gray-600">{item.subject || '(no subject)'}</div>
       </div>
-      {d.errors.length > 0 && (
-        <div className="rounded border border-red-300 bg-red-50 p-2 text-red-800">{d.errors.map((e, i) => <div key={i}>{e}</div>)}</div>
-      )}
 
-      {/* Suggested changes */}
-      <section className="space-y-3">
-        {evidenceOnly && focusField && !focusedRows.length && !focusFact && (
-          <div className="rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">No suggestion or fact for “{focusField}” on this email.</div>
-        )}
-        {focusFact && (
-          <div className="rounded border border-blue-600 p-3 shadow-[inset_3px_0_0_#2563eb]">
-            <div className="text-xl font-semibold">{factLabel(focusFact[0])} <span className="text-gray-400">=</span> {focusFact[1].value}</div>
-            <div className="mt-3">
-              {bodyHits[focusFact[0]] && d.body ? (
-                <Excerpt body={d.body} hit={bodyHits[focusFact[0]]!} idKey={focusFact[0]} />
-              ) : (() => {
-                const doc = item.docs.find((x) => (x.zipEntry || x.name) === focusFact[1].source);
-                return doc && doc.status === 'read' ? (
-                  <div className="max-h-[28rem] overflow-auto rounded border">
-                    <PdfPages itemId={item.id} doc={doc} facts={[focusFact]} active={focusFact[0]} autoRender onLocated={onLocated} />
-                  </div>
-                ) : <div className="rounded border bg-gray-50 p-2 text-xs">{focusFact[1].source}: “{focusFact[1].quote}”</div>;
-              })()}
-            </div>
-          </div>
-        )}
-        {rows.length === 0 && !focusFact && (
-          <div className="rounded border bg-gray-50 p-3 text-gray-600">
-            No suggested change {matched ? 'for this email' : `(match ${m.grade})`}.
-          </div>
-        )}
-        {rows.map(({ s, i }) => (
-          <SuggestionRow key={`${item.id}-${suggestionKey(s)}`} itemId={item.id} s={s} current={current[i]} oppName={oppName} d={d} facts={facts}
-            onLocated={onLocated} decided={item.feedback?.[suggestionKey(s)]} evidenceOnly={evidenceOnly}
-            focused={!!focusField && focusedRows.some((r) => r.i === i)} onDecided={afterDecision} />
-        ))}
-        {!evidenceOnly && (
-          <div className="flex flex-wrap items-center gap-2">
-            {processed ? (
-              <button onClick={onReopen} className="rounded border px-4 py-1.5 text-sm font-semibold hover:bg-gray-50">Reopen</button>
-            ) : (
-              <>
-                {(item.suggestions || []).length === 0 && (
-                  <button onClick={markDone} className="rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-700">Done</button>
-                )}
-                <button onClick={onSkip} className="rounded border px-4 py-1.5 text-sm font-semibold hover:bg-gray-50">Skip</button>
-              </>
-            )}
-            <span className="text-xs text-gray-400">Read-only demo: nothing is written to GHL and no email is sent.</span>
-          </div>
-        )}
-      </section>
-
-      {/* Opportunity confirmation */}
-      {!evidenceOnly && (
-        <section className="rounded border p-3">
-          {m.opportunityId ? (
+      <div>
+        <Label>Regarding</Label>
+        {m.opportunityId ? (
+          <>
             <div className="flex flex-wrap items-center gap-2">
-              {confirmed ? (
-                <span className="font-semibold text-green-700">✓ This thread belongs to {oppName}</span>
-              ) : (
-                <button disabled={memBusy} onClick={() => saveMemory(m.opportunityId!, m.propertyRecordId || null)}
-                  className="rounded border border-blue-300 bg-white px-3 py-1 font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40">
-                  Confirm this thread belongs to {oppName}
-                </button>
+              <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-900">{oppName} <span className="ml-1 text-[11px] font-normal text-blue-700">Opp</span></span>
+              {(live?.registeredAddress || m.propertyRecordId) && (
+                <span className="rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-900">{live?.registeredAddress || m.propertyRecordId} <span className="ml-1 text-[11px] text-blue-700">PR</span></span>
               )}
               <span className={`rounded px-1.5 text-xs font-semibold ${GRADE_STYLE[m.grade] || ''}`}>{m.grade}</span>
-              <button onClick={() => setChanging((c) => !c)} className="text-xs text-blue-700 underline">Change opportunity</button>
             </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-gray-600">No opportunity matched ({m.grade}).</span>
-              <button onClick={() => setChanging((c) => !c)} className="text-xs text-blue-700 underline">Set opportunity</button>
+            {!evidenceOnly && (
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+                {confirmed ? <span className="font-semibold text-green-700">✓ Link confirmed (whole thread)</span> : (
+                  <button disabled={busy} onClick={() => saveMemory(m.opportunityId!, m.propertyRecordId || null)} className="font-semibold text-blue-700 underline disabled:opacity-40">Confirm link</button>
+                )}
+                <button onClick={() => setChanging((c) => !c)} className="text-blue-700 underline">Change opportunity</button>
+                <button onClick={toggleMute} className="text-gray-600 underline">{isMuted ? 'Unmute suggestions for this opportunity' : 'Mute suggestions for this opportunity'}</button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3 text-gray-600">
+            No opportunity matched{m.reason ? ` — ${m.reason}` : ''}.
+            {!evidenceOnly && <button onClick={() => setChanging((c) => !c)} className="text-xs text-blue-700 underline">Set opportunity</button>}
+          </div>
+        )}
+        {changing && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <input value={oppId} onChange={(e) => setOppId(e.target.value)} placeholder="Opportunity ID" className="rounded border bg-white px-2 py-1" />
+            <input value={recId} onChange={(e) => setRecId(e.target.value)} placeholder="Property Record ID (optional)" className="rounded border bg-white px-2 py-1" />
+            <button disabled={busy || !oppId.trim()} onClick={() => saveMemory(oppId.trim(), recId.trim() || null)} className="rounded bg-blue-600 px-3 py-1 font-semibold text-white disabled:opacity-40">Save for the thread</button>
+          </div>
+        )}
+        {msg && <div className={`mt-1 text-xs ${msg.startsWith('Error') ? 'text-red-700' : 'text-green-700'}`}>{msg}</div>}
+      </div>
+
+      <div className="rounded border p-4">
+        <div className="flex items-center justify-between">
+          <Label>Suggestion{current?.noEvidence ? ' — no evidence in the text' : ''}</Label>
+          {ordered.length > 1 && (
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <button onClick={() => setStep((s) => (s - 1 + ordered.length) % ordered.length)} className="rounded border px-1.5">‹</button>
+              {step + 1} of {ordered.length}
+              <button onClick={() => setStep((s) => (s + 1) % ordered.length)} className="rounded border px-1.5">›</button>
             </div>
           )}
-          {changing && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <input value={oppId} onChange={(e) => setOppId(e.target.value)} placeholder="Opportunity ID" className="rounded border bg-white px-2 py-1" />
-              <input value={recId} onChange={(e) => setRecId(e.target.value)} placeholder="Property Record ID (optional)" className="rounded border bg-white px-2 py-1" />
-              <button disabled={memBusy || !oppId.trim()} onClick={() => saveMemory(oppId.trim(), recId.trim() || null)}
-                className="rounded bg-blue-600 px-3 py-1 font-semibold text-white disabled:opacity-40">Save</button>
+        </div>
+        {isMuted ? (
+          <div className="text-gray-600">Suggestions are muted for this opportunity.</div>
+        ) : !current ? (
+          <div className="text-gray-600">No suggested change {matched ? 'for this email' : `(match ${m.grade})`}.</div>
+        ) : (
+          <>
+            <div className={`text-2xl font-semibold leading-snug ${current.noEvidence ? 'text-gray-600' : 'text-brand-charcoal'}`}>
+              {current.target === 'action' ? current.fieldLabel : <>Set {current.fieldLabel} to {niceValue(show(current.proposed))}</>}
             </div>
-          )}
-          {memMsg && <div className={`mt-1 text-xs ${memMsg.startsWith('Error') ? 'text-red-700' : 'text-green-700'}`}>{memMsg}</div>}
-        </section>
+            <div className="mt-1 text-gray-600">
+              {current.target === 'action' ? 'Expected action on the opportunity above (no field write)'
+                : current.target === 'property_record' ? 'On the Property Record above' : 'On the opportunity above'}
+              {current.target !== 'action' && <span className="text-gray-400"> · now: {now?.note || (now?.value ? niceValue(now.value) : '(blank)')}</span>}
+            </div>
+            {decided && (
+              <div className={`mt-2 text-sm ${decided.outcome === 'accept' ? 'text-green-700' : 'text-red-700'}`}>
+                {decided.outcome === 'accept' ? '✓ Accepted' : `✗ Rejected: ${outcomeLabel(decided.outcome).toLowerCase()}`} · {decided.by} · {niceDate(decided.at)}
+              </div>
+            )}
+          </>
+        )}
+
+        {!evidenceOnly && (
+          <div className="relative mt-4 flex flex-wrap gap-2">
+            {processed ? (
+              <button onClick={onReopen} className={`${btn} border bg-white hover:bg-gray-50`}>Reopen</button>
+            ) : (
+              <>
+                {current && !isMuted ? (
+                  <>
+                    <button disabled={busy} onClick={() => decide('accept')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>Accept <span className={kbd}>A</span></button>
+                    <button disabled={busy} onClick={() => setRejecting((r) => !r)} className={`${btn} border ${rejecting ? 'border-red-500 bg-red-50 text-red-800' : 'bg-white hover:bg-gray-50'}`}>Reject <span className={kbd}>R</span></button>
+                  </>
+                ) : (
+                  <button onClick={markDone} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>Done</button>
+                )}
+                <button onClick={skip} className={`${btn} border bg-white hover:bg-gray-50`}>Skip <span className={kbd}>S</span></button>
+                {rejecting && (
+                  <div className="absolute left-0 top-full z-10 mt-1 w-64 rounded border bg-white p-1 shadow-lg">
+                    {REJECT_REASONS.map((r, i) => (
+                      <button key={r.key} disabled={busy} onClick={() => decide(r.key)} className="flex w-full items-center justify-between rounded px-3 py-1.5 text-left hover:bg-red-50">
+                        {r.label} <span className="text-xs text-gray-400">{i + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {current && !isMuted && (
+        <div>
+          <Label>Why</Label>
+          <Why s={current} d={d} facts={facts} onLocated={onLocated} itemId={item.id} />
+        </div>
       )}
 
-      {/* Full email and attachments */}
       <details className="rounded border">
-        <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold">Full email and attachments</summary>
-        <div className="space-y-3 p-3">
-          <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border bg-gray-50 p-2 text-xs">
-            {d.body == null ? '(not loaded)' : <BodyMarks body={d.body} hits={bodyHits} active={null} idPrefix={`fb-${item.id}-`} />}
-          </pre>
-          {item.docs.length === 0 && <div className="text-xs text-gray-500">No PDF / zip attachments or document links</div>}
+        <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold">Full email</summary>
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap p-3 text-xs">
+          {d.body == null ? '(not loaded)' : <BodyMarks body={d.body} hits={bodyHits} active={null} idPrefix={`fb-${item.id}-`} />}
+        </pre>
+      </details>
+
+      <details className="rounded border">
+        <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold">Attachments <span className="font-normal text-gray-500">{item.docs.length}</span></summary>
+        <div className="space-y-2 p-3">
+          {item.docs.length === 0 && <div className="text-xs text-gray-500">No PDF / zip attachments or document links.</div>}
           {item.docs.map((doc, i) => (
             <div key={i} className="rounded border p-2">
               <div className="text-xs">
@@ -367,80 +414,30 @@ export function DecisionPanel({ id, onDone, onSkip, focusField, evidenceOnly = f
                 <span className="text-gray-500">[{doc.source}] {doc.status}{doc.pages ? ` · ${doc.pages} pages` : ''}{doc.isDocuSign ? ' · DocuSign' : ''}</span>
                 {doc.reason && <div className="text-red-700">{doc.reason}</div>}
               </div>
-              {doc.status === 'read' && (
-                <PdfPages itemId={item.id} doc={doc} facts={facts.filter(([, f]) => f.source === (doc.zipEntry || doc.name))} active={null} autoRender={false} onLocated={onLocated} />
-              )}
+              {doc.status === 'read' && <PdfPages itemId={item.id} doc={doc} facts={facts.filter(([, f]) => f.source === (doc.zipEntry || doc.name))} active={null} autoRender={false} onLocated={onLocated} />}
             </div>
           ))}
           {item.links.map((l, i) => (
             <div key={i} className="break-all text-xs">
               <span className={l.status === 'read' ? 'text-green-700' : 'text-red-700'}>{l.status === 'read' ? 'read' : 'link not read'}</span>{' '}
-              <a href={l.url} target="_blank" rel="noreferrer" className="underline">{l.url}</a>
-              {l.reason && <span className="text-gray-500"> — {l.reason}</span>}
+              <a href={l.url} target="_blank" rel="noreferrer" className="underline">{l.url}</a>{l.reason && <span className="text-gray-500"> — {l.reason}</span>}
             </div>
           ))}
         </div>
       </details>
 
-      {/* Details */}
       <details className="rounded border">
         <summary className="cursor-pointer bg-gray-50 px-3 py-2 font-semibold">Details</summary>
-        <div className="space-y-3 p-3 text-xs">
-          <div><span className="font-semibold">Class:</span> {clsLabel(item.cls)} <span className="text-gray-500">({item.cls_rule})</span></div>
-          <div>
-            <div className="font-semibold">Match</div>
-            <div><span className={`rounded px-1.5 font-semibold ${GRADE_STYLE[m.grade] || ''}`}>{m.grade}</span> {m.opportunityName || m.reason} <span className="text-gray-500">via {m.source === 'thread_memory' ? 'thread memory' : m.source}</span></div>
-            {m.fact1 && <div>1. {m.fact1}</div>}
-            {m.fact2 && <div>2. {m.fact2}</div>}
-            {m.flags.map((f, i) => <div key={i} className="text-amber-800">⚑ {f}</div>)}
-            {m.trackerEvidence.map((t, i) => <div key={i} className="text-gray-600">{t}</div>)}
-            {live && <div className="text-gray-600">Live GHL: {live.pipelineName} / {live.stageName} ({live.status}) · {live.registeredAddress || 'no Registered Address'}</div>}
-            {m.propertyRecordId && <div className="text-gray-600">Property Record: {m.propertyRecordId}</div>}
-          </div>
-          <div>
-            <span className="font-semibold">Geoscape:</span> {m.geoscape.status}
-            {m.geoscape.parcelId && ` (${m.geoscape.parcelId})`}{m.geoscape.address && ` — ${m.geoscape.address}`}{m.geoscape.reason && ` — ${m.geoscape.reason}`}
-          </div>
-          <div>
-            <span className="font-semibold">Thread memory:</span>{' '}
-            {memory ? `→ ${memory.opportunity_id} (${memory.confirmed_by === 'auto' ? 'auto' : memory.confirmed_by})` : 'none for this thread'}
-          </div>
-          <div>
-            <div className="font-semibold">Drive target (display only, not copied)</div>
-            {targetOpp ? (
-              <>
-                <div className="break-all font-mono">{driveFolder(targetOpp)}\</div>
-                {item.docs.filter((x) => x.status === 'read').map((x, i) => (
-                  <div key={i} className="break-all font-mono text-gray-500">→ {driveFilePath(targetOpp, item.cls, item.received_at, x.zipEntry || x.name)}</div>
-                ))}
-              </>
-            ) : <div className="text-gray-500">none until the match is graded A, B or C</div>}
-          </div>
-          {(item.suggestions || []).length > 0 && (
-            <div>
-              <div className="font-semibold">Precedent</div>
-              {item.suggestions.map((s, i) => {
-                const p = precedentFor(precedent, item.cls, s);
-                return p ? <div key={i}><span className="text-gray-500">{s.fieldLabel}:</span> <span className={p.ok === false ? 'text-amber-800' : ''}>{p.line}</span></div> : null;
-              })}
-            </div>
-          )}
-          {facts.length > 0 && (
-            <div>
-              <div className="font-semibold">Extracted facts</div>
-              <table className="w-full">
-                <tbody>
-                  {facts.map(([k, f]) => (
-                    <tr key={k} className="border-t align-top">
-                      <td className="p-1 font-mono">{k}</td><td className="p-1 font-medium">{f.value}</td><td className="p-1 text-gray-500">{f.source}: “{f.quote}”</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="text-gray-400">Live data fetched {sydney(d.fetchedAt)}</div>
-        </div>
+        <table className="w-full text-xs">
+          <tbody>
+            {detailRows.map(([k, v], i) => (
+              <tr key={i} className="border-t align-top">
+                <td className="w-32 bg-gray-50 p-2 font-semibold text-gray-600">{k}</td>
+                <td className="p-2">{v}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </details>
     </div>
   );

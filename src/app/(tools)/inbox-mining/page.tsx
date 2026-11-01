@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import TopNavBar from '@/components/portal/TopNavBar';
-import { clsLabel, sydney, type Item } from './shared';
-import { DecisionPanel } from './decision';
+import { clsLabel, type Item } from './shared';
+import { DecisionPanel, niceDate } from './decision';
 
 // Inbox decision screen (JT redesign): lists as tabs, the selected list down the left, the decision on the right.
 // Decisions write only inbox_items.feedback / inbox_items.workflow. Nothing is written to GHL and no email is sent.
@@ -61,7 +61,10 @@ function Card({ i, open, onOpen }: { i: WorkItem; open: boolean; onOpen: () => v
       <div className="truncate font-semibold text-brand-charcoal" title={i.from_addr}>{senderName(i.from_addr || '')}</div>
       <div className="truncate text-gray-700" title={i.subject}>{i.subject || '(no subject)'}</div>
       <div className="truncate text-gray-500">{i.match?.opportunityName || 'No opportunity matched'}</div>
-      <div className="text-xs text-gray-400">{sydney(i.received_at)}</div>
+      <div className="flex justify-between text-xs text-gray-400">
+        <span>{niceDate(i.received_at)}</span>
+        {(i.suggestions || []).length > 0 && <span className="text-blue-700">{i.suggestions.length} suggestion{i.suggestions.length > 1 ? 's' : ''}</span>}
+      </div>
     </button>
   );
 }
@@ -108,7 +111,13 @@ export default function InboxDecisionPage() {
     [items, list, tab]
   );
   const groups = useMemo(() => {
-    if (!group) return [{ key: '', items: shown }];
+    if (!group) {
+      // No-evidence suggestions (email date only) in their own group, after the ones with evidence.
+      const weak = (i: WorkItem) => (i.suggestions || []).length > 0 && i.suggestions.every((s) => s.noEvidence);
+      const strong = shown.filter((i) => !weak(i));
+      const low = shown.filter(weak);
+      return low.length ? [{ key: '', items: strong }, { key: 'No evidence in the text (email date only)', items: low }] : [{ key: '', items: shown }];
+    }
     const m = new Map<string, WorkItem[]>();
     for (const i of shown) {
       const k = groupKey(i, group);
@@ -209,7 +218,7 @@ export default function InboxDecisionPage() {
                 {!loading && shown.length === 0 && <div className="p-3 text-sm text-gray-500">{tab === 'open' ? 'Nothing to do here.' : 'Nothing processed yet.'}</div>}
                 {groups.map((g) => (
                   <div key={g.key || 'all'}>
-                    {group && <div className="border-b bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-500">{g.key} <span className="font-normal">({g.items.length})</span></div>}
+                    {g.key && <div className="border-b bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-500">{g.key} <span className="font-normal">({g.items.length})</span></div>}
                     {g.items.map((i) => <Card key={i.id} i={i} open={openId === i.id} onOpen={() => setOpenId(i.id)} />)}
                   </div>
                 ))}
@@ -219,7 +228,7 @@ export default function InboxDecisionPage() {
             <section className="min-w-0 rounded border bg-white p-5 [overflow-wrap:anywhere] lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
               {openId ? (
                 <DecisionPanel key={openId} id={openId} processed={tab === 'processed'}
-                  onDone={() => onDone(openId)} onSkip={() => onSkip(openId)} onReopen={() => reopen(openId)} />
+                  onDone={() => onDone(openId)} onSkip={() => onSkip(openId)} onReopen={() => reopen(openId)} onChanged={load} />
               ) : (
                 <div className="text-sm text-gray-500">{loading ? 'Loading…' : 'Nothing selected.'}</div>
               )}

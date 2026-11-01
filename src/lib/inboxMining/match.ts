@@ -192,8 +192,10 @@ export async function matchMessage(inp: MatchInput): Promise<MatchResult> {
       result.grade = 'B';
     }
   } else {
-    result.grade = 'C';
-    result.fact2 = ghlLot ? 'No lot in the email/documents to compare' : 'No GHL lot to compare';
+    // JT 01/11: never match on name alone; a name needs a lot/address match too.
+    result.grade = 'UNMATCHED';
+    result.reason = `Name only (${opp.name}): ${ghlLot ? 'no lot in the email/documents to compare' : 'no GHL lot to compare'}`;
+    result.fact2 = result.reason;
   }
 
   const surnames = clientNames(opp.name).surnames;

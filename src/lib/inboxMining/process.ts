@@ -106,7 +106,7 @@ async function processMessage(mailbox: string, id: string, runId: number, ctx: C
   const haystack = [msg.subject, facts.purchaser?.value || '', msg.text.slice(0, 20000), ...read.map((r) => r.text.slice(0, 30000))].join('\n');
   const memory = await getThreadMemory(mailbox, msg.threadId);
   const match = await matchMessage({ facts, haystack, memory, opps: ctx.opps, records: ctx.records, trackers: ctx.trackers });
-  const suggestions = ['A', 'B', 'C'].includes(match.grade) ? buildSuggestions(cls, facts, msg.date) : [];
+  const suggestions = ['A', 'B', 'C'].includes(match.grade) ? buildSuggestions(cls, facts, msg.date, !!(ctx.trackers.builderSenders.get(msg.fromEmail) || ctx.trackers.builderSenders.get(msg.fromEmail.split('@')[1] || ''))) : [];
 
   if (match.grade === 'A' && match.source === 'rules' && match.opportunityId) {
     await autoConfirmThread(mailbox, msg.threadId, msg.subject, msg.date, msg.from, match.opportunityId, match.propertyRecordId || null);

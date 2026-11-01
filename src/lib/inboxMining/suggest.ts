@@ -43,7 +43,7 @@ function sydneyDate(d: Date): string {
  * docs/planning/agent-plans/class-to-field-map-proposal.md). Values are formatted the way phase (b)
  * would write them. No pipeline stage suggestions.
  */
-export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date): Suggestion[] {
+export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date, fromBuilder = false): Suggestion[] {
   const out: Suggestion[] = [];
   switch (cls) {
     case 'registration_titles_issued': {
@@ -66,7 +66,7 @@ export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date
       out.push(
         exchange
           ? opp('exchangeDate', 'Exchange Date', exchange, src(facts.contractDate!))
-          : opp('exchangeDate', 'Exchange Date', sydneyDate(receivedAt), 'email received date (no date found in the contract)')
+          : { ...opp('exchangeDate', 'Exchange Date', sydneyDate(receivedAt), 'email received date (no date found in the contract)'), noEvidence: true }
       );
       break;
     }
@@ -87,6 +87,11 @@ export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date
       break;
     }
     case 'build_update_progress_claim': {
+      // JT 01/11: construction fields only from builder senders (Kata's tracker), never from client emails.
+      if (fromBuilder) {
+        if (facts.constructionStage) out.push(opp('constructionStage', 'Construction stage', facts.constructionStage.value, src(facts.constructionStage)));
+        out.push({ ...opp('lastConstructionUpdateDate', 'Last Construction Update Date', sydneyDate(receivedAt), 'email received date'), noEvidence: true });
+      }
       out.push(action('pass_build_update', 'Pass the build update on to the client',
         facts.constructionStage ? src(facts.constructionStage) : `email received ${sydneyDate(receivedAt)}`));
       break;
