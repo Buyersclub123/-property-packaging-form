@@ -153,6 +153,7 @@ const expected = (r, why) => {
   if (!yes(r, 'financeStatus') && r.pipelineId === FINANCE) return /castillo|nadeem ali/i.test(v(r, 'name')) ? 'EXPECTED: blank Finance Status (Castillo / Nadeem Ali)' : 'CHECK: Finance opp with blank Finance Status';
   if (r.pipelineId === CONSTRUCTION && /pipeline equals "Finance"/.test(why)) return 'RULE: Construction opp with Finance Status in NEW Finance views';
   if (/(constructionTrack|fcTrack) equals/.test(why) && !yes(r, 'co_construction_stage')) return 'CHECK: Property Record has no Construction stage';
+  if (/co_project_name contains/.test(why)) return v(r, 'co_project_name') ? `CHECK: record project name is "${v(r, 'co_project_name')}"` : 'CHECK: record has no project name';
   if (/address contains/i.test(why)) return 'CHECK: project filter – address differs between Opp and Property Record';
   if (/property_type|typeOfProperty/.test(why)) return 'CHECK: property type differs between Opp and Property Record';
   return 'CHECK: other';

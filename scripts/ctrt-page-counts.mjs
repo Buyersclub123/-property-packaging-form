@@ -51,14 +51,18 @@ try {
     await send('Page.reload', { ignoreCache: true });
     const t0 = Date.now();
     while (!dataDone && Date.now() - t0 < 180000) await sleep(500);
-    await sleep(2500);
-    const read = await evaluate(`(() => {
-      const spans = [...document.querySelectorAll('span')];
-      const n = spans.find((s) => /^\\d+ records$/.test(s.textContent.trim()));
-      const v = spans.find((s) => s.textContent.trim().startsWith('View: '));
-      return JSON.stringify({ count: n ? parseInt(n.textContent, 10) : null, view: v ? v.textContent.trim().replace(/^View: /, '').split(' | ')[0] : '' });
-    })()`);
-    const r = JSON.parse(read || '{}');
+    // Wait for the grid to render the loaded data (header count + view name), up to 20 s.
+    let r = {};
+    for (let i = 0; i < 40 && !(r.count !== null && r.count !== undefined && r.view); i++) {
+      await sleep(i === 0 ? 2500 : 500);
+      const read = await evaluate(`(() => {
+        const spans = [...document.querySelectorAll('span')];
+        const n = spans.find((s) => /^\\d+ records$/.test(s.textContent.trim()));
+        const v = spans.find((s) => s.textContent.trim().startsWith('View: '));
+        return JSON.stringify({ count: n ? parseInt(n.textContent, 10) : null, view: v ? v.textContent.trim().replace(/^View: /, '').split(' | ')[0] : '' });
+      })()`);
+      r = JSON.parse(read || '{}');
+    }
     out.push({ id: view, name: r.view, count: dataDone ? r.count : null });
     console.log(`${view}\t${r.view}\t${dataDone ? r.count : 'TIMEOUT'}`);
   }
