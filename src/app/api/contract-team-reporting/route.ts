@@ -506,15 +506,16 @@ function transformOpportunity(
   base.propertyRecordIds = propertyValues?.__ids ?? '';
 
   // New-mapping computed values (Finance Status / Construction stage instead of pipelines).
-  // One in-flight definition for every tab and view (JT 1/11): open AND (Property Team at an in-flight stage,
-  // OR Finance except Settled, OR Construction except Handover). SMSF Construction duplicates (no record of
-  // their own, same contact has a Finance opp with the record) count once, via the Finance opp.
+  // In flight = run sheet rule D45, used by every NEW view and Pipeline Journey: open AND (Property Team at
+  // Deal Closed / Contract Review / Exchange WIP / Conditional / Unconditional, OR Finance except Settled, OR
+  // Construction except Handover). SMSF Construction duplicates (no record of their own, same contact has a
+  // Finance opp with the record) are flagged in smsfConstructionDuplicate but still counted, as D45 does.
   const stageLower = stageName.toLowerCase();
   const fallen = !!base.dealFallenOver;
   const constructionStage = base.co_construction_stage || '';
   const contactKey = String((opp as unknown as { contactId?: string }).contactId || '');
   const smsfDuplicate = opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !propertyValues && !!contactKey && financeContactsWithRecord.has(contactKey);
-  const inFlight = opp.status === 'open' && !fallen && !smsfDuplicate && (
+  const inFlight = opp.status === 'open' && !fallen && (
     (opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM && PT_IN_FLIGHT_STAGES.has(stageLower)) ||
     (opp.pipelineId === PIPELINE_ID.FINANCE && stageLower !== 'settled') ||
     (opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !stageLower.includes('handover')));

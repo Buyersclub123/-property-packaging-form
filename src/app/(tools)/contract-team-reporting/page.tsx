@@ -1405,7 +1405,9 @@ export default function ContractTeamReportingPage() {
     if (!showViewBuilder || builderDraft) return;
     setBuilderName(activeView.builtin ? '' : activeView.name);
     setBuilderSection(activeView.builtin ? 'Custom' : activeView.section);
-    const pipelineFilter = activeView.filters.find((f) => f.field === 'pipelineId');
+    // Only a pipeline SELECTION (equals / in) maps to the pipeline ticks; "not equals Construction" (Finance NEW views) stays a field filter.
+    const isPipelineSelection = (f: ViewFilter) => f.field === 'pipelineId' && (f.operator === 'equals' || f.operator === 'in');
+    const pipelineFilter = activeView.filters.find(isPipelineSelection);
     if (pipelineFilter) {
       setBuilderPipelines(new Set(pipelineFilter.value.split(',').map((s) => s.trim())));
     } else {
@@ -1417,7 +1419,7 @@ export default function ContractTeamReportingPage() {
     // plus anything the user filtered on the grid — promoted here so it can be
     // reviewed, edited and saved. The grid state is then cleared to avoid
     // filtering twice by two different mechanisms.
-    const inherited = activeView.filters.filter((f) => f.field !== 'pipelineId' && !(f.field === 'pipelineStage' && f.operator === 'in'));
+    const inherited = activeView.filters.filter((f) => !isPipelineSelection(f) && !(f.field === 'pipelineStage' && f.operator === 'in'));
     const promoted = gridFiltersToViewFilters();
     setBuilderExtraFilters([...inherited, ...promoted]);
     if (promoted.length > 0) {

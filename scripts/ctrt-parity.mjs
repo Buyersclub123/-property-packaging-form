@@ -10,8 +10,8 @@ const FINANCE = 'zgBRaMnACpskyf1wHCEV';
 const CONSTRUCTION = 'XMKCHlqekS7IU87PNLKB';
 const PROPERTY_TEAM = 'zrb34FRmPnbIyAGFDeXJ';
 
-// fresh=1: rebuild from GHL so the check sees today's data, not the shared cache.
-const res = await fetch(`${BASE}/api/contract-team-reporting?fresh=1`, {
+// Same request as the CTRT page (shared copy), so the counts can be compared with what the page renders.
+const res = await fetch(`${BASE}/api/contract-team-reporting`, {
   headers: { 'Cf-Access-Authenticated-User-Email': 'john.t@buyersclub.com.au' },
 });
 if (!res.ok) { console.error(`CTRT API ${res.status}: ${(await res.text()).slice(0, 300)}`); process.exit(1); }
@@ -109,7 +109,14 @@ const IN_FLIGHT_NEW = { field: 'inFlightNew', operator: 'equals', value: 'Yes' }
 const evalNode = (node) => new Function('FINANCE_PIPELINE_ID', 'CONSTRUCTION_PIPELINE_ID', 'PIPELINE_ID', 'EXCLUDE_CONSTRUCTION', 'IN_FLIGHT_NEW',
   `return ${ts.transpile(`(${node.getText(sf)})`, { target: ts.ScriptTarget.ES2020 }).trim().replace(/;$/, '')}`)(FINANCE, CONSTRUCTION, PIPELINE_ID, EXCLUDE_CONSTRUCTION, IN_FLIGHT_NEW);
 const propOf = (obj, name) => obj.properties.find((p) => p.name && p.name.getText(sf) === name)?.initializer;
-const oldViews = presetNode.elements.map((e) => ({ id: evalNode(propOf(e, 'id')), name: evalNode(propOf(e, 'name')), filters: evalNode(propOf(e, 'filters')) }));
+const presetViews = presetNode.elements.map((e) => ({ id: evalNode(propOf(e, 'id')), name: evalNode(propOf(e, 'name')), filters: evalNode(propOf(e, 'filters')) }));
+// A saved public view with a preset's id replaces it on the page (old view only; NEW copies are built from the preset).
+const publicViews = await fetch(`${BASE}/api/contract-team-reporting/views`, { headers: { 'Cf-Access-Authenticated-User-Email': 'john.t@buyersclub.com.au' } })
+  .then((r) => r.json()).then((d) => (Array.isArray(d) ? d : d.views || [])).catch(() => []);
+const oldViews = presetViews.map((p) => {
+  const o = publicViews.find((v) => v.id === p.id);
+  return o ? { ...p, oldFilters: o.filters, overridden: true } : { ...p, oldFilters: p.filters };
+});
 const NEW_VIEW_FILTERS = evalNode(newFiltersNode);
 const newFiltersFor = (view) => NEW_VIEW_FILTERS[view.id] ?? [
   ...view.filters.filter((f) => f.field !== 'pipelineId').map((f) => (f.field === 'registeredAddress' ? { ...f, field: 'co_property_address' } : f)),
@@ -156,11 +163,11 @@ const viewDetail = [];
 const viewSummary = [];
 for (const view of oldViews) {
   const nf = newFiltersFor(view);
-  const o = rows.filter((r) => view.filters.every((f) => passes(r, f))), n = rows.filter((r) => nf.every((f) => passes(r, f)));
+  const o = rows.filter((r) => view.oldFilters.every((f) => passes(r, f))), n = rows.filter((r) => nf.every((f) => passes(r, f)));
   const oIds = new Set(o.map((r) => r.id)), nIds = new Set(n.map((r) => r.id));
   const diffs = [
     ...o.filter((r) => !nIds.has(r.id)).map((r) => ({ r, side: 'Old only', why: failed(r, nf) })),
-    ...n.filter((r) => !oIds.has(r.id)).map((r) => ({ r, side: 'NEW only', why: failed(r, view.filters) })),
+    ...n.filter((r) => !oIds.has(r.id)).map((r) => ({ r, side: 'NEW only', why: failed(r, view.oldFilters) })),
   ].map((d) => ({ ...d, tag: expected(d.r, d.why) }));
   const toCheck = diffs.filter((d) => !d.tag.startsWith('EXPECTED')).length;
   const has = (k) => `${n.filter((r) => yes(r, k)).length} / ${n.length}`;
@@ -169,7 +176,7 @@ for (const view of oldViews) {
   for (const d of diffs) cats[`${d.side}: ${d.tag}`] = (cats[`${d.side}: ${d.tag}`] || 0) + 1;
   viewSummary.push(`${view.name}: old ${o.length}, NEW ${n.length}, differences ${diffs.length} (to check ${toCheck})`,
     ...Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([k, c]) => `    ${c} ${k}`));
-  viewDetail.push(`### ${view.name}`, '', `Old filters: ${view.filters.map((f) => `${f.field} ${f.operator} ${f.field === 'pipelineId' ? pipeName(f.value) : `"${f.value}"`}`).join(' AND ')}`, `NEW filters: ${nf.map((f) => `${f.field} ${f.operator} "${f.value}"`).join(' AND ')}`, '');
+  viewDetail.push(`### ${view.name}`, '', `Old filters${view.overridden ? ' (saved public version)' : ''}: ${view.oldFilters.map((f) => `${f.field} ${f.operator} ${f.field === 'pipelineId' ? pipeName(f.value) : `"${f.value}"`}`).join(' AND ')}`, `NEW filters: ${nf.map((f) => `${f.field} ${f.operator} "${f.value}"`).join(' AND ')}`, '');
   if (diffs.length) {
     viewDetail.push('| Side | Opportunity | Pipeline / Stage | Finance Status | PR status | Category | Why (filter it fails) |', '|---|---|---|---|---|---|---|');
     for (const d of diffs.sort((a, b) => a.tag.localeCompare(b.tag) || v(a.r, 'name').localeCompare(v(b.r, 'name')))) {
