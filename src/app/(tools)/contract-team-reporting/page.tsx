@@ -1123,6 +1123,12 @@ export default function ContractTeamReportingPage() {
   type PresetFilter = 'none' | 'blankPropertyType' | 'blankBpDueDate' | 'blankBpRequested' | 'bpDueNext5' | 'settlementNext5'
     | 'valNoAccessDate' | 'valNotRequested' | 'valRequestedNoBooking' | 'valAttendedNoOutcome' | 'valShortfall';
   const [activePreset, setActivePreset] = useState<PresetFilter>('none');
+  // ?opp=<id> (from Pipeline Journey "Open in CTRT"): show only that opportunity until cleared.
+  const [oppFilter, setOppFilter] = useState('');
+  useEffect(() => {
+    const opp = new URLSearchParams(window.location.search).get('opp');
+    if (opp) setOppFilter(opp);
+  }, []);
 
   // Filter state (Excel-style excluded values)
   const [excludedFilters, setExcludedFilters] = useState<Partial<Record<RecordKey, Set<string>>>>({});
@@ -2125,8 +2131,8 @@ export default function ContractTeamReportingPage() {
 
   // Records the active view actually shows, before any ad-hoc grid filtering.
   const viewScopedRecords = useMemo(
-    () => applyViewFilters(records, effectiveView.filters),
-    [records, effectiveView]
+    () => (oppFilter ? records.filter((r) => r.id === oppFilter) : applyViewFilters(records, effectiveView.filters)),
+    [records, effectiveView, oppFilter]
   );
 
   // Values offered in a column's filter dropdown. Scoped to the view's own data —
@@ -3049,6 +3055,12 @@ export default function ContractTeamReportingPage() {
               {(showViewBuilder || builderDraft) && <span className="text-amber-400"> (live preview)</span>}
             </span>
             {' | '}{describeView(effectiveView)}
+            {oppFilter && (
+              <span className="text-amber-400">
+                {' | One opportunity (from Pipeline Journey) '}
+                <button className="underline" onClick={() => { setOppFilter(''); window.history.replaceState(null, '', window.location.pathname); }}>Show all</button>
+              </span>
+            )}
             {activePreset !== 'none' && (
               <span>
                 {' | Quick filter: '}

@@ -4,6 +4,7 @@ import { ghlFetch } from '@/lib/ghlFetch';
 import { getRedisClient } from '@/lib/redis';
 
 const CACHE_SEC = 5 * 60;
+const LAST_SEC = 24 * 60 * 60; // last good copy for ?snapshot=1 (page refreshes it in the background)
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,8 @@ export async function GET(request: Request) {
     const cacheKey = `journey:reconcile:${historical ? 'all' : 'open'}`;
     let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
     try { redis = await getRedisClient(); } catch { redis = null; }
-    const hit = redis ? await redis.get(cacheKey) : null;
+    const snapshot = new URL(request.url).searchParams.get('snapshot') === '1';
+    const hit = redis ? (await redis.get(cacheKey)) || (snapshot ? await redis.get(`${cacheKey}:last`) : null) : null;
     if (hit) return NextResponse.json(JSON.parse(hit));
     const res = await ghlFetch(`${GHL_BASE_URL}/opportunities/pipelines?locationId=${GHL_LOCATION_ID}`, { headers, cache: 'no-store' }, 'journey-pipelines');
     if (!res.ok) throw new Error(`GHL pipelines ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -47,7 +49,10 @@ export async function GET(request: Request) {
       pipelines.push({ id: p.id, name: PIPELINE_NAMES[p.id] || p.name, stages });
     }
     const payload = { fetchedAt: new Date().toISOString(), status: historical ? 'all' : 'open', pipelines };
-    if (redis) await redis.set(cacheKey, JSON.stringify(payload), { EX: CACHE_SEC });
+    if (redis) {
+      await redis.set(cacheKey, JSON.stringify(payload), { EX: CACHE_SEC });
+      await redis.set(`${cacheKey}:last`, JSON.stringify(payload), { EX: LAST_SEC });
+    }
     return NextResponse.json(payload);
   } catch (error) {
     console.error('JOURNEY RECONCILE FAILED:', error);

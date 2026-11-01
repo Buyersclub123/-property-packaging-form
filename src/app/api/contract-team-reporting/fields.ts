@@ -92,6 +92,10 @@ export const FIELD_MAP: Record<string, string> = {
   'K2L0idGtMv7dzEahtl6S': 'valuationAmountResidential', // opportunity.valuation_amount_residential
   'kUCdsznXZTMDcjqDETE7': 'valuationShortfall',        // opportunity.valuation_shortfall (checkbox)
   'Poj7K875EpZgW8a5yM4O': 'valuationNotes',            // opportunity.valuation_notes (large text)
+  // Deal information – Residential (created 1/11; live schema read 1/11). Set by the tool, never edited by hand.
+  'u25HksjBK0UJt44k8Tgn': 'propertyRecordCtrtLink',    // opportunity.property_record_ctrt_link
+  'n7y1sc93hFREV0Gv3xk8': 'linkedPropertyAddress',     // opportunity.linked_property_address
+  'H3BCzZ95gKFw7cI1qnwo': 'linkedPropertyRecordId',    // opportunity.linked_property_record_id
 };
 
 // Opportunity custom fields not in FIELD_MAP are sent as opp_<GHL key> columns from the live schema (read-only).
@@ -3038,6 +3042,8 @@ export const READ_ONLY_FIELDS = new Set([
   'valuationRequested', 'valuationRequestedDate', 'valuationAccessAvailable', 'valuationAccessEstimate',
   'valuationBookedDate', 'valuationAttended', 'valuationAttendedDate', 'valuationOutcome', 'valuationAmountResidential',
   'valuationShortfall', 'valuationNotes',
+  // Sourced from the Property Record / set by the tool ("do not edit" in GHL).
+  'propertyRecordCtrtLink', 'linkedPropertyAddress', 'linkedPropertyRecordId',
 ]);
 
 // Property Review fields the user explicitly requested for this report
@@ -3233,6 +3239,9 @@ const OPPORTUNITY_FIELD_LABELS: Record<string, string> = {
   valuationAmountResidential: 'Valuation amount',
   valuationShortfall: 'Valuation shortfall',
   valuationNotes: 'Valuation notes',
+  propertyRecordCtrtLink: 'Property Record – open in CTRT',
+  linkedPropertyAddress: 'Linked property address',
+  linkedPropertyRecordId: 'Linked Property Record ID',
   financeTrack: 'Finance track (Finance Status set)',
   constructionTrack: 'Construction track (Construction stage set)',
   fcTrack: 'Finance or Construction track',

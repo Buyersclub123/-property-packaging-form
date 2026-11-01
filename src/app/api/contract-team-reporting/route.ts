@@ -24,6 +24,9 @@ const SHARED_TTL_SEC = 60;
 // Longer-lived copy for quick snapshots (/journey uses ?snapshot=1): up to 15 minutes old.
 const SNAPSHOT_KEY = 'ctr:records:snapshot';
 const SNAPSHOT_TTL_SEC = 15 * 60;
+// Last good copy for ?snapshot=1 (Pipeline Journey): opens instantly from it, then refreshes in the background.
+const LAST_KEY = 'ctr:records:last';
+const LAST_TTL_SEC = 24 * 60 * 60;
 const LOCK_TTL_SEC = 30;
 const WAIT_FOR_LOCK_MS = 15000;
 const WAIT_POLL_MS = 400;
@@ -445,6 +448,9 @@ function transformOpportunity(
     solicitorPhone: customFieldValues['solicitorPhone'] || '',
     personalName: customFieldValues['personalName'] || '',
     latestStatusUpdate: customFieldValues['latestStatusUpdate'] || '',
+    propertyRecordCtrtLink: customFieldValues['propertyRecordCtrtLink'] || '',
+    linkedPropertyAddress: customFieldValues['linkedPropertyAddress'] || '',
+    linkedPropertyRecordId: customFieldValues['linkedPropertyRecordId'] || '',
     agentBuilderDetails: customFieldValues['agentBuilderDetails'] || '',
     briefNotes: customFieldValues['briefNotes'] || '',
     settlementDate: customFieldValues['settlementDate'] || '',
@@ -645,9 +651,10 @@ export async function GET(request: Request) {
       const body = JSON.stringify({ fetchedAt: now, records });
       await redis.set(SHARED_KEY, body, { EX: SHARED_TTL_SEC });
       await redis.set(SNAPSHOT_KEY, body, { EX: SNAPSHOT_TTL_SEC });
+      await redis.set(LAST_KEY, body, { EX: LAST_TTL_SEC });
     };
     if (redis && !fresh && new URL(request.url).searchParams.get('snapshot') === '1') {
-      const snap = (await redis.get(SHARED_KEY)) || (await redis.get(SNAPSHOT_KEY));
+      const snap = (await redis.get(SHARED_KEY)) || (await redis.get(SNAPSHOT_KEY)) || (await redis.get(LAST_KEY));
       if (snap) {
         const { fetchedAt, records } = JSON.parse(snap) as { fetchedAt: number; records: ReportRecord[] };
         return respond(records, fetchedAt, 'shared');

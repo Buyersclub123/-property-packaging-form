@@ -168,7 +168,7 @@ function toOpp(r: Rec, today: string) {
     broker: party(r.brokerName, r.brokerCompany), solicitor: party(r.solicitorName, r.solicitorCompany),
     builder: r.co_builder_mined || r.agentBuilderDetails || '',
     latest: r.latestStatusUpdate || '',
-    ctrtLink: r.co_property_record_ctrt_link || r.property_record_ctrt_link || '/contract-team-reporting',
+    ctrtLink: `/contract-team-reporting/record?opp=${encodeURIComponent(r.id || '')}`,
     landReg: r.co_land_registration || '',
     bp: r.bpConditionStatus || '',
     pci: r.preSettlementInspectionStatus || '',

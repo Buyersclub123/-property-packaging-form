@@ -17,6 +17,9 @@ const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 const SALES_PIPELINES = ['9TzDdGVTuDbyLCOQgoVY', 'YxZ4JWUVQoR3UtQMbBJb']; // 02. SALES TEAM Pipeline, *Active Clients
 const CACHE_KEY = 'journey:sales:v4';
 const CACHE_SEC = 15 * 60;
+// Last good copy for ?snapshot=1: the page opens from it instantly and refreshes in the background when stale.
+const LAST_KEY = 'journey:sales:last';
+const LAST_SEC = 24 * 60 * 60;
 const DAY_MS = 86400000;
 
 const headers = () => ({ Authorization: `Bearer ${GHL_API_TOKEN}`, Version: GHL_API_VERSION });
@@ -149,12 +152,16 @@ export async function GET(request: Request) {
     const fresh = new URL(request.url).searchParams.get('fresh') === '1';
     let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
     try { redis = await getRedisClient(); } catch { redis = null; }
+    const snapshot = new URL(request.url).searchParams.get('snapshot') === '1';
     if (redis && !fresh) {
-      const hit = await redis.get(CACHE_KEY);
+      const hit = (await redis.get(CACHE_KEY)) || (snapshot ? await redis.get(LAST_KEY) : null);
       if (hit) return NextResponse.json(JSON.parse(hit));
     }
     const data = await build();
-    if (redis) await redis.set(CACHE_KEY, JSON.stringify(data), { EX: CACHE_SEC });
+    if (redis) {
+      await redis.set(CACHE_KEY, JSON.stringify(data), { EX: CACHE_SEC });
+      await redis.set(LAST_KEY, JSON.stringify(data), { EX: LAST_SEC });
+    }
     return NextResponse.json(data);
   } catch (error) {
     console.error('JOURNEY SALES FAILED:', error);
