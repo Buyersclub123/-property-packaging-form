@@ -55,7 +55,7 @@ Object.values(JOURNEYS).flat().forEach(s=>{
   s.periods = s.periods || STD; s.head = s.head || "week";
   s.rows.forEach(x => { x.d = pd(x.date); });
   s.counts = {}; if (s.hasLand) s.land = {};
-  s.periods.forEach(p => { const rs = inRange(s.rows, p); s.counts[p] = rs.length; if (s.land) s.land[p] = rs.filter(x => x.land).length; });
+  [...new Set([...s.periods, "ever"])].forEach(p => { const rs = inRange(s.rows, p); s.counts[p] = rs.length; if (s.land) s.land[p] = rs.filter(x => x.land).length; });
 });
 const DETAIL_CONSULTANTS = J.consultants;
 const BAS = J.bas;
@@ -151,6 +151,18 @@ let fixWrapT; window.addEventListener("resize",()=>{clearTimeout(fixWrapT); fixW
 
 function renderPanel(){`);
 
+// Reconciliation: "All" prominent, a ≠ GHL flag on tiles whose All differs, and the per-stage reconciliation panel.
+swap('<small>${PERIODS[s.head].label.toLowerCase()}</small></span>',
+  '<small>${PERIODS[s.head].label.toLowerCase()} · <b class="all">${n(s.counts.ever)}</b> all</small>${s.mismatch?`<i class="neq" title="All differs from GHL: see reconciliation">≠ GHL</i>`:""}</span>');
+swap('    <div class="cards">${cards}</div>\n', '    <div class="cards">${cards}</div>\n    ${s.recon||""}\n');
+// Derived filter chips (not stages) on the Finance tab.
+swap('const list0=JOURNEYS[tab], sel=selBy[tab], groups={};', 'const list0=JOURNEYS[tab].filter(s=>!s.chip), sel=selBy[tab], groups={};');
+swap('  fixWrap();\n}\nfunction fixWrap(){', `  const chips=JOURNEYS[tab].filter(s=>s.chip);
+  if(chips.length) track.insertAdjacentHTML("beforeend", \`<div class="chipbar"><span class="chipbar-lbl">Derived filters (not stages)</span>\${chips.map(c=>\`<button class="node chip" data-id="\${c.id}" aria-pressed="\${c.id===sel}">\${esc(c.name)} <b>\${n(c.counts.ever)}</b>\${c.mismatch?'<i class="neq">≠ GHL</i>':""}</button>\`).join("")}</div>\`);
+  fixWrap();
+}
+function fixWrap(){`);
+
 // Tiles with no data source yet: count 0 plus a "not wired" note (never removed).
 swap('<span class="name">${s.name}</span>', '<span class="name">${s.name}</span>${s.notWired?`<small class="nw">not wired</small>`:""}');
 swap('    ${stageDef(s)}\n', '    ${stageDef(s)}\n    ${s.notWired?`<p class="hint nw">Not wired yet: no data source for this tile, so it shows 0.</p>`:""}\n');
@@ -168,10 +180,32 @@ swap('</style>', `#opp .seg .bar.est i{background:transparent;box-shadow:inset 0
 .node.wrap-first::before{left:50%}
 .node.wrap-last::before{right:50%}
 .node.wrap-down::after{content:"";position:absolute;left:calc(50% - 1.5px);top:34px;width:3px;height:var(--drop,0);background:var(--line);z-index:0}
-.node.hold{width:104px;opacity:.7}
-.node.hold .circle{width:88px;height:50px;border-color:var(--line);border-style:dashed;border-width:2px}
+.node.hold{width:124px;opacity:.7}
+.node.hold .circle{width:112px;height:50px;border-color:var(--line);border-style:dashed;border-width:2px}
+.node .name{position:relative;z-index:1;background:var(--bg);padding:0 2px}
 .node.hold .circle b{font-size:16px;color:var(--muted)}
 .node.hold .name{font-size:11px;font-weight:600;color:var(--muted)}
+.circle small b.all{font-weight:800;color:var(--ink)}
+.neq{position:absolute;bottom:-9px;left:50%;transform:translateX(-50%);font-style:normal;font-size:9.5px;font-weight:700;color:#fff;background:#C2410C;border-radius:999px;padding:1px 6px;white-space:nowrap}
+.card[data-period="ever"]{border:2px solid var(--ink)}
+.card[data-period="ever"] .num{font-size:36px}
+.recon-wrap{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.recon-wrap h4{margin:0;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.recon table{border-collapse:collapse;font-size:13px;min-width:320px}
+.recon td{padding:3px 10px 3px 0}
+.recon td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.recon tr.bad td{color:#C2410C}
+.recon tr.ok td,.recon p.ok{color:#15803D}
+.recon ul{margin:6px 0 0;padding-left:18px;font-size:12.5px}
+.recon details{display:inline;margin-left:6px}
+.recon summary{display:inline;cursor:pointer;color:var(--muted);font-size:11.5px}
+.recon + .recon{border-top:1px dashed var(--line);padding-top:10px}
+.chipbar{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px}
+.chipbar-lbl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.chipbar .node.chip{width:auto;flex-direction:row;gap:6px;padding:5px 12px;border:1.5px dashed var(--line);border-radius:999px;font-size:12px;font-weight:600;background:var(--bg)}
+.chipbar .node.chip::before{display:none}
+.chipbar .node.chip .neq{position:static;transform:none}
+.chipbar .node.chip[aria-pressed="true"]{border-style:solid;border-color:var(--brand-ink);background:var(--brand);color:var(--brand-ink)}
 </style>`);
 
 if (/OPP-2\d{4}|Sample Estate|seed\(o\.ref\)/.test(html)) throw new Error('Sample data still present in the template');

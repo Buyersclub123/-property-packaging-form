@@ -565,10 +565,11 @@ function buildPropertyLookup(
   return { propertyByOppId, allPropertyKeys: allKeys };
 }
 
-async function buildReport(): Promise<ReportRecord[]> {
+// historical = every status (won / lost / abandoned too) and Finance Settled kept: used by the Journey "Show historical" button.
+async function buildReport(historical = false): Promise<ReportRecord[]> {
   const started = Date.now();
   const [opportunityData, propertyData, schemaKeys, oppDynamicKeys] = await Promise.all([
-    Promise.all([fetchPipelineStages(), fetchUsers()]).then(() => fetchAllOpportunities()),
+    Promise.all([fetchPipelineStages(), fetchUsers()]).then(() => fetchAllOpportunities(historical)),
     fetchPropertyRecords(),
     fetchPropertySchemaKeys(),
     fetchOpportunityDynamicKeys(),
@@ -580,9 +581,10 @@ async function buildReport(): Promise<ReportRecord[]> {
   const { propertyByOppId } = buildPropertyLookup(propertyRecords, allPropertyKeys);
 
   const report = allOpportunities
-    .filter((opp) => opp.status === 'open')
+    .filter((opp) => historical || opp.status === 'open')
     .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys, oppDynamicKeys))
     .filter((r) => {
+      if (historical) return true;
       if (r.pipelineId === PIPELINE_ID.FINANCE && r.pipelineStage.toLowerCase() === 'settled') return false;
       // Construction HANDOVER is NOT excluded here: Build Deposit Status has to
       // include it to match the original report. Views that should leave it out
@@ -624,6 +626,11 @@ export async function GET(request: Request) {
     }
 
     const fresh = new URL(request.url).searchParams.get('fresh') === '1';
+    // Historical (all statuses) is built live every time and never written to the shared cache.
+    if (new URL(request.url).searchParams.get('historical') === '1') {
+      const records = await buildReport(true);
+      return respond(records, Date.now(), 'live');
+    }
     let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
     try {
       redis = await getRedisClient();
@@ -692,7 +699,7 @@ export async function GET(request: Request) {
   }
 }
 
-async function fetchAllOpportunities(): Promise<GHLOpportunity[]> {
+async function fetchAllOpportunities(historical = false): Promise<GHLOpportunity[]> {
   const allOpportunities: GHLOpportunity[] = [];
 
   for (const pipelineId of PIPELINE_IDS) {
@@ -706,7 +713,7 @@ async function fetchAllOpportunities(): Promise<GHLOpportunity[]> {
       url.searchParams.set('location_id', GHL_LOCATION_ID);
       url.searchParams.set('pipeline_id', pipelineId);
       url.searchParams.set('limit', '100');
-      url.searchParams.set('status', 'open');
+      url.searchParams.set('status', historical ? 'all' : 'open');
       if (startAfter !== undefined && startAfterId) {
         url.searchParams.set('startAfter', String(startAfter));
         url.searchParams.set('startAfterId', startAfterId);

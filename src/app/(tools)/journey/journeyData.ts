@@ -1,36 +1,66 @@
-// Turns CTRT API records into the data the Journey Map mock-up renders (read-only).
+// Turns CTRT API records (+ GHL's own stage counts) into the data the Journey Map mock-up renders (read-only).
+// Stage rules: GHL Field Run Sheet, tab "Stage definitions" (v2, 1/11).
 type Rec = Record<string, string | undefined>;
+export type Recon = { pipelines: { id: string; name: string; stages: { id: string; name: string; total: number }[] }[] };
+
+const PT_ID = 'zrb34FRmPnbIyAGFDeXJ';
+const FIN_ID = 'zgBRaMnACpskyf1wHCEV';
+const CON_ID = 'XMKCHlqekS7IU87PNLKB';
 
 const CONTRACT = ['Deal Closed', 'Contract Review', 'Exchange WIP', 'Conditional', 'Unconditional', 'Settled'];
 const FINANCE = ['Pending finance', 'Valuation ordered', 'Application lodged', 'Formally approved'];
-const BUILD = ['Pre-BA', 'BA Issued', 'Slab', 'Frame / Plate Height', 'Enclosed / Roof Cover', 'Tiling / Lock-up', 'Fixing / Plastering', 'Practical Completion', 'Landscaping pending', 'Handover'];
-// Property Record lane positions, read straight from co_status.
-const PROP_LANE: Record<string, number> = { '01_available': 0, '02_eoi': 1, '03_contr_exchanged': 2, '04_settled': 3, '08_resold': 4 };
-// Every Sales & Property tile from the mock-up, in order. match = Property Team stage(s); notWired = no data source yet (shows 0).
-type SalesStage = { id: string; name: string; phase: string; kind: string; match?: string[]; notWired?: boolean; head?: string; periods?: string[]; detached?: boolean; hold?: boolean };
-const SALES_STAGES: SalesStage[] = [
-  { id: 'contacts', phase: 'sales', name: 'New contacts', kind: 'contact', notWired: true },
-  { id: 'booked', phase: 'sales', name: 'Sales meetings booked', kind: 'meeting', notWired: true, head: 'weekAll', periods: ['today', 'tomorrow', 'weekAll'] },
-  { id: 'outcomes', phase: 'sales', name: 'Sales meeting outcomes', kind: 'outcome', notWired: true, head: 'lastWeek', periods: ['today', 'lastDay', 'lastWeek', 'lastMonth'] },
-  { id: 'newopps', phase: 'sales', name: 'New opportunities (client sign-up)', kind: 'opp', notWired: true },
-  // On Hold sits outside the journey: a small grey marker at the start of Property Team (not a numbered step).
-  { id: 'onhold', phase: 'property', name: 'On Hold', kind: 'opp', match: ['On Hold'], detached: true, hold: true },
-  { id: 'toproperty', phase: 'property', name: 'Moved to property team', kind: 'opp' },
-  { id: 'eoisub', phase: 'property', name: 'EOI submitted', kind: 'opp', notWired: true },
-  { id: 'eoiwait', phase: 'property', name: 'Awaiting EOI response', kind: 'opp', notWired: true },
-  { id: 'eoiacc', phase: 'property', name: 'EOI accepted (deal closed)', kind: 'opp', match: ['Deal Closed'] },
-  { id: 'review', phase: 'contract', name: 'Contract review', kind: 'opp', match: ['Contract Review'] },
-  { id: 'exwip', phase: 'contract', name: 'Exchange WIP', kind: 'opp', match: ['Exchange WIP'] },
-  { id: 'conditional', phase: 'contract', name: 'Conditional', kind: 'opp', match: ['Conditional'] },
-  { id: 'uncond', phase: 'contract', name: 'Unconditional', kind: 'opp', match: ['Unconditional'] },
-  { id: 'settled', phase: 'contract', name: 'Settled', kind: 'opp', match: ['Settled'] },
+// Finance Status values (finance_status__residential) and the Finance pipeline stages each one replaces today.
+const FINANCE_VALUES: [string, string[]][] = [
+  ['Pending finance', ['Unregistered | Pending FInance', 'SMSF /SINGLE CONTRACT', 'No val access', 'Pending Finance']],
+  ['Valuation ordered', ['Valuation Ordered']],
+  ['Application lodged', ['Application Lodged']],
+  ['Formally approved', ['Formal Approval/unregistered', 'Formal Approval']],
+  ['Not Tracked', []],
 ];
-const LATER_STAGES = new Set(SALES_STAGES.flatMap((s) => s.match || []).map((s) => s.toLowerCase().replace(/[^a-z0-9]/g, '')));
+// Property Record construction_stage values (key, label) and the Construction pipeline stages each one replaces.
+const CONSTRUCTION_VALUES: [string, string, string[]][] = [
+  ['preba', 'Pre-BA', ['PRE BA SMSF| IN CONSTRUCTION', 'Pre BA']],
+  ['ba_issued', 'BA Issued', ['BA Issued']],
+  ['slab', 'Slab', ['Slab']],
+  ['frame__plate_height', 'Frame / Plate Height', ['FRAME/PLATE HEIGHT']],
+  ['enclosed__roof_cover', 'Enclosed / Roof Cover', ['Enclosed/ ROOF COVER']],
+  ['tiling__lockup', 'Tiling / Lock-up', ['TILING/Lock up']],
+  ['fixing__plastering', 'Fixing / Plastering', ['Fixing/ PLASTERING']],
+  ['practical_completion', 'Practical Completion', ['PRACTICAL COMPLETION']],
+  ['landscaping_pending', 'Landscaping pending', ['LANDSCAPING PENDING']],
+  ['handover', 'Handover', ['HANDOVER']],
+];
+const BUILD = CONSTRUCTION_VALUES.map((c) => c[1]);
+const PROP_LANE: Record<string, number> = { '01_available': 0, '02_eoi': 1, '03_contr_exchanged': 2, '04_settled': 3, '08_resold': 4 };
+// Sales tiles from the mock-up: no data source yet (show 0, "not wired").
+const SALES_TILES = [
+  { id: 'contacts', name: 'New contacts', kind: 'contact' },
+  { id: 'booked', name: 'Sales meetings booked', kind: 'meeting', head: 'weekAll', periods: ['today', 'tomorrow', 'weekAll'] },
+  { id: 'outcomes', name: 'Sales meeting outcomes', kind: 'outcome', head: 'lastWeek', periods: ['today', 'lastDay', 'lastWeek', 'lastMonth'] },
+  { id: 'newopps', name: 'New opportunities (client sign-up)', kind: 'opp' },
+];
 
 const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const yes = (v?: string) => !!v && !/^(no|false|0|n)$/i.test(v.trim());
 const num = (v?: string) => { const n = parseFloat((v || '').replace(/[^0-9.\-]/g, '')); return Number.isFinite(n) ? n : null; };
 const sydney = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(d);
+const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+
+// Run Sheet rules.
+const registered = (r: Rec) => (r.co_land_registration || '') === 'Registered';
+const settled = (r: Rec) => yes(r.opp_settlement_confirmed) || r.co_construction_stage === 'handover';
+const isFallen = (r: Rec) => yes(r.dealFallenOver) || !!r.dealFallenOverDate;
+const isNew = (r: Rec) => r.co_property_type === 'new';
+const CHIPS: { id: string; name: string; rule: (r: Rec) => boolean }[] = [
+  { id: 'c-unreg-pending', name: 'Unregistered | Pending Finance', rule: (r) => isNew(r) && !registered(r) && r.financeStatus === 'Pending finance' },
+  { id: 'c-smsf-single', name: 'SMSF / SINGLE CONTRACT', rule: (r) => /^smsf$/i.test(r.purchasingEntityType || '') && !registered(r) && r.financeStatus === 'Pending finance' },
+  { id: 'c-no-val-access', name: 'No val access', rule: (r) => r.financeStatus === 'Pending finance' && !yes(r.valuationAccessAvailable) && !registered(r) },
+  { id: 'c-formal-unreg', name: 'Formal Approval/unregistered', rule: (r) => isNew(r) && !registered(r) && r.financeStatus === 'Formally approved' },
+];
+const CHIP_STAGE: Record<string, string> = {
+  'c-unreg-pending': 'Unregistered | Pending FInance', 'c-smsf-single': 'SMSF /SINGLE CONTRACT',
+  'c-no-val-access': 'No val access', 'c-formal-unreg': 'Formal Approval/unregistered',
+};
 
 /** YYYY-MM-DD (Sydney) for a date or timestamp field; '' when blank. */
 function day(v?: string): string {
@@ -46,15 +76,14 @@ function daysSince(today: string, v?: string): number | null {
 }
 const intOrNull = (v?: string) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Math.max(0, Number(v)));
 
-function contractIndex(r: Rec, today: string): number {
-  if (norm(r.pipelineName) === 'propertyteam') {
+function contractIndex(r: Rec): number {
+  if (r.pipelineId === PT_ID) {
     const s = norm(r.pipelineStage);
     if (s === 'settled') return 6;
     return CONTRACT.findIndex((x) => norm(x) === s); // before Deal Closed (Onboarding, Proposals, On Hold…) = -1
   }
-  // Opps still in the old Finance / Construction pipelines: position from the deal facts.
-  const settle = day(r.confirmedSettlementDate);
-  if ((r.co_status || '').startsWith('04') || (settle && settle <= today)) return 6;
+  // Opps still in the old Finance / Construction pipelines: estimated (Run Sheet: Settled = settlement confirmed or Handover).
+  if (settled(r) || (r.co_status || '').startsWith('04')) return 6;
   if (r.unconditionalDate) return 4;
   if (r.exchangeDate || (r.co_status || '').startsWith('03')) return 3;
   return 2;
@@ -84,7 +113,7 @@ function toOpp(r: Rec, today: string) {
   const fs = r.financeStatus || '';
   const fin = !fs ? undefined : norm(fs) === 'nottracked' ? null : norm(fs) === 'formallyapproved' ? 4 : FINANCE.findIndex((x) => norm(x) === norm(fs));
   const build = r.co_construction_stage ? BUILD.findIndex((x) => norm(x) === norm(r.co_construction_stage)) : undefined;
-  const c = contractIndex(r, today);
+  const c = contractIndex(r);
   const addr = r.co_property_address || '';
   const missing: string[] = [];
   if (!hasPr) missing.push('Property Record');
@@ -100,14 +129,14 @@ function toOpp(r: Rec, today: string) {
     client: r.contactName || '',
     type, c, fin, build,
     prop: PROP_LANE[r.co_status || ''] ?? -1,
-    cEst: norm(r.pipelineName) !== 'propertyteam',
+    cEst: r.pipelineId !== PT_ID,
     addr,
     consultant: r.owner || r.assignedTo || '',
     ba: r.assignedBA || '',
     ghlLink: r.ghlLink || '',
     reselling: yes(r.co_reselling),
     days: {
-      contract: norm(r.pipelineName) === 'propertyteam' ? intOrNull(r.daysSinceStageChange) : null,
+      contract: r.pipelineId === PT_ID ? intOrNull(r.daysSinceStageChange) : null,
       finance: intOrNull(r.daysInFinanceStatus),
       build: intOrNull(r.daysInConstructionStage),
       prop: daysSince(today, r.co_status_change_date),
@@ -124,15 +153,134 @@ function toOpp(r: Rec, today: string) {
 }
 
 const stageRow = (r: Rec, date?: string, land = false) => ({
-  date: day(date), client: r.contactName || '', ref: r.opportunityName || r.name || '',
+  id: r.id || '', date: day(date), client: r.contactName || '', ref: r.opportunityName || r.name || '',
   lot: r.co_property_address || r.registeredAddress || '', consultant: r.owner || r.assignedTo || '', ba: r.assignedBA || '', land,
 });
 
-export function buildJourneyData(records: Rec[]) {
+/** Why a loaded opp is not in the default (in-flight) journey. */
+function notInFlight(r: Rec): string {
+  if (r.status && r.status !== 'open') return `Opportunity ${r.status}`;
+  if (isFallen(r)) return 'Deal fallen over';
+  if (r.pipelineId === PT_ID && norm(r.pipelineStage) === 'settled') return 'Property Team Settled (not in flight)';
+  if (r.pipelineId === CON_ID && norm(r.pipelineStage).includes('handover')) return 'Construction pipeline Handover (not in flight)';
+  if (r.pipelineId === FIN_ID && norm(r.pipelineStage) === 'settled') return 'Finance Settled (not in flight)';
+  return 'Not in flight';
+}
+const where = (r: Rec) => `${r.pipelineName || '?'} / ${r.pipelineStage || '?'}`;
+
+type Compare = { label: string; ghl: number | null; ghlRecs: Rec[]; why: (r: Rec) => string };
+/** Reconciliation panel: journey All vs a GHL count, every difference grouped by reason. */
+function reconcile(tileRecs: Rec[], cmp: Compare, whyExtra: (r: Rec) => string) {
+  const tileIds = new Set(tileRecs.map((r) => r.id));
+  const ghlIds = new Set(cmp.ghlRecs.map((r) => r.id));
+  const groups = new Map<string, Rec[]>();
+  const add = (k: string, r: Rec) => groups.set(k, [...(groups.get(k) || []), r]);
+  for (const r of cmp.ghlRecs) if (!tileIds.has(r.id)) add(`− in GHL, not on this tile: ${cmp.why(r)}`, r);
+  for (const r of tileRecs) if (!ghlIds.has(r.id)) add(`+ on this tile, not in GHL here: ${whyExtra(r)}`, r);
+  const ghl = cmp.ghl ?? cmp.ghlRecs.length;
+  const unloaded = cmp.ghl === null ? 0 : cmp.ghl - cmp.ghlRecs.length;
+  const diff = tileRecs.length - ghl;
+  const rows = [...groups.entries()].sort((a, b) => b[1].length - a[1].length).map(([k, rs]) =>
+    `<li><b>${rs.length}</b> ${esc(k)}<details><summary>names</summary>${rs.slice(0, 40).map((r) => esc(r.opportunityName || r.name)).join('<br>')}${rs.length > 40 ? `<br>… ${rs.length - 40} more` : ''}</details></li>`);
+  if (unloaded) rows.push(`<li><b>${Math.abs(unloaded)}</b> ${unloaded > 0 ? 'in the GHL count but not loaded by the tool (cache or timing; press Refresh in CTRT)' : 'loaded by the tool but no longer in the GHL count (cache or timing)'}</li>`);
+  return {
+    mismatch: diff !== 0,
+    html: `<div class="recon"><table><tr><td>Journey · All</td><td class="n">${tileRecs.length}</td></tr>
+      <tr><td>${esc(cmp.label)}</td><td class="n">${ghl}</td></tr>
+      <tr class="${diff ? 'bad' : 'ok'}"><td>Difference</td><td class="n">${diff > 0 ? '+' : ''}${diff}</td></tr></table>
+      ${rows.length ? `<ul>${rows.join('')}</ul>` : '<p class="ok">Matches GHL.</p>'}</div>`,
+  };
+}
+
+export function buildJourneyData(records: Rec[], recon: Recon, historical: boolean) {
   const today = sydney(new Date());
-  const isFallen = (r: Rec) => yes(r.dealFallenOver) || !!r.dealFallenOverDate;
-  // Same in-flight rule as the NEW views: Property Team / Finance except Settled, Construction except Handover.
-  const inFlight = records.filter((r) => !isFallen(r) && r.inFlight === 'Yes');
+  const pop = historical ? records : records.filter((r) => r.inFlight === 'Yes' && !isFallen(r));
+  const popIds = new Set(pop.map((r) => r.id));
+  const inPop = (r: Rec) => popIds.has(r.id);
+  const ghlStage = (pipelineId: string, names: string[]) => {
+    const p = recon.pipelines.find((x) => x.id === pipelineId);
+    const stages = (p?.stages || []).filter((s) => names.some((n) => norm(n) === norm(s.name)));
+    return { ids: new Set(stages.map((s) => s.id)), total: stages.reduce((a, s) => a + s.total, 0), names: stages.map((s) => s.name) };
+  };
+  const scope = historical ? 'all statuses' : 'open';
+  const panel = (title: string, sections: string[]) => `<div class="recon-wrap"><h4>${esc(title)}</h4>${sections.join('')}</div>`;
+
+  // Sales & Property: the mock-up's Sales tiles, then every Property Team stage exactly as in GHL.
+  const pt = recon.pipelines.find((p) => p.id === PT_ID)?.stages || [];
+  const dealClosedAt = pt.findIndex((s) => norm(s.name) === 'dealclosed');
+  const stages = [
+    ...SALES_TILES.map((s) => ({ ...s, phase: 'sales', notWired: true, rows: [] as ReturnType<typeof stageRow>[] })),
+    ...pt.map((s, i) => {
+      const all = records.filter((r) => r.pipelineStageId === s.id);
+      const tile = all.filter(inPop);
+      const rc = reconcile(tile, { label: `GHL pipeline column: Property Team / ${s.name} (${scope})`, ghl: s.total, ghlRecs: all, why: notInFlight }, where);
+      return {
+        id: 'pt-' + s.id, name: s.name, kind: 'opp',
+        phase: i <= dealClosedAt ? 'property' : 'contract',
+        ...(norm(s.name) === 'onhold' ? { detached: true, hold: true } : {}),
+        rows: tile.map((r) => stageRow(r, r.lastStageChangeAt)),
+        mismatch: rc.mismatch, recon: panel('Reconciliation', [rc.html]),
+      };
+    }).sort((a, b) => Number(!!b.hold) - Number(!!a.hold)),
+  ];
+
+  // Finance: the 5 Finance Status values; today compared with the Finance pipeline stages they replace.
+  const finance = [
+    ...FINANCE_VALUES.map(([value, stageNames]) => {
+      const tile = pop.filter((r) => r.financeStatus === value);
+      const g = ghlStage(FIN_ID, stageNames);
+      const today_ = reconcile(tile, {
+        label: `Today · GHL Finance pipeline: ${g.names.join(' + ') || 'no matching stage'} (${scope})`, ghl: g.total,
+        ghlRecs: records.filter((r) => g.ids.has(r.pipelineStageId || '')),
+        why: (r) => (inPop(r) ? `Finance Status = ${r.financeStatus || 'blank'}` : notInFlight(r)),
+      }, (r) => `pipeline ${where(r)}`);
+      const after = reconcile(tile, {
+        label: `After cutover · GHL Finance Status = ${value} (loaded opps)`, ghl: null,
+        ghlRecs: records.filter((r) => r.financeStatus === value), why: notInFlight,
+      }, () => '');
+      return {
+        id: 'f-' + norm(value), phase: 'finance', name: value, kind: 'fin', hasLand: true,
+        rows: tile.map((r) => stageRow(r, r.financeStatusChangeDate, registered(r))),
+        mismatch: today_.mismatch, recon: panel('Reconciliation', [today_.html, after.html]),
+      };
+    }),
+    // Derived filter chips (not stages), compared with the old Finance stage of the same name.
+    ...CHIPS.map((c) => {
+      const tile = pop.filter(c.rule);
+      const g = ghlStage(FIN_ID, [CHIP_STAGE[c.id]]);
+      const rc = reconcile(tile, {
+        label: `Old GHL Finance stage: ${g.names[0] || CHIP_STAGE[c.id]} (${scope})`, ghl: g.total,
+        ghlRecs: records.filter((r) => g.ids.has(r.pipelineStageId || '')),
+        why: (r) => (inPop(r) ? 'does not meet the chip rule (Finance Status / registration / entity / valuation access)' : notInFlight(r)),
+      }, (r) => `pipeline ${where(r)}`);
+      return {
+        id: c.id, phase: 'finance', name: c.name, kind: 'fin', chip: true, detached: true,
+        rows: tile.map((r) => stageRow(r, r.financeStatusChangeDate, registered(r))),
+        mismatch: rc.mismatch, recon: panel('Derived filter (not a stage) · Run Sheet rule', [rc.html]),
+      };
+    }),
+  ];
+
+  // Construction: the 10 Property Record construction_stage values; today compared with the Construction pipeline.
+  const build = CONSTRUCTION_VALUES.map(([key, label, stageNames]) => {
+    const tile = pop.filter((r) => r.co_construction_stage === key);
+    const g = ghlStage(CON_ID, stageNames);
+    const today_ = reconcile(tile, {
+      label: `Today · GHL Construction pipeline: ${g.names.join(' + ') || 'no matching stage'} (${scope})`, ghl: g.total,
+      ghlRecs: records.filter((r) => g.ids.has(r.pipelineStageId || '')),
+      why: (r) => (!inPop(r) ? notInFlight(r) : !r.propertyRecordIds ? 'no Property Record' : `Property Record Construction stage = ${r.co_construction_stage || 'blank'}`),
+    }, (r) => `pipeline ${where(r)}`);
+    const after = reconcile(tile, {
+      label: `After cutover · Property Record Construction stage = ${label} (loaded opps)`, ghl: null,
+      ghlRecs: records.filter((r) => r.co_construction_stage === key), why: notInFlight,
+    }, () => '');
+    return {
+      id: 'b-' + key, phase: 'build', name: label, kind: 'property',
+      rows: tile.map((r) => stageRow(r, r.co_construction_stage_change_date)),
+      mismatch: today_.mismatch, recon: panel('Reconciliation', [today_.html, after.html]),
+    };
+  });
+
   const fallen = records.filter(isFallen).map((r) => {
     const o = toOpp(r, today);
     const fell = typeof o.fin === 'number' && o.fin < 4 && o.c >= 3
@@ -140,28 +288,15 @@ export function buildJourneyData(records: Rec[]) {
       : { lane: 'contract', i: Math.min(5, Math.max(0, o.c)) };
     return { ...o, fell, reason: r.dealFallenOverReason || 'Reason not set', date: day(r.dealFallenOverDate) };
   });
-  const pt = records.filter((r) => norm(r.pipelineName) === 'propertyteam');
   const uniq = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort((a, b) => a.localeCompare(b));
   return {
     today,
-    opps: inFlight.map((r) => toOpp(r, today)),
+    historical,
+    opps: pop.filter((r) => !isFallen(r)).map((r) => toOpp(r, today)),
     fallen,
-    stages: SALES_STAGES.map(({ match, ...s }) => ({
-      ...s,
-      rows: s.notWired ? []
-        : pt.filter((r) => (match ? match.some((m) => norm(m) === norm(r.pipelineStage)) : !LATER_STAGES.has(norm(r.pipelineStage))))
-          .map((r) => stageRow(r, r.lastStageChangeAt)),
-    })),
-    build: BUILD.map((name) => ({
-      id: 'b-' + norm(name), phase: 'build', name, kind: 'property',
-      rows: inFlight.filter((r) => r.co_property_type !== 'established' && norm(r.co_construction_stage) === norm(name))
-        .map((r) => stageRow(r, r.co_construction_stage_change_date)),
-    })),
-    finance: FINANCE.map((name) => ({
-      id: 'f-' + norm(name), phase: 'finance', name, kind: 'fin', hasLand: true,
-      rows: inFlight.filter((r) => norm(r.financeStatus) === norm(name))
-        .map((r) => stageRow(r, r.financeStatusChangeDate, /^registered$/i.test(r.co_land_registration || ''))),
-    })),
+    stages,
+    build,
+    finance,
     consultants: uniq(records.map((r) => r.owner || r.assignedTo || '')),
     bas: uniq(records.map((r) => r.assignedBA || '')),
   };
