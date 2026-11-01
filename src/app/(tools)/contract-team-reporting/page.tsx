@@ -829,6 +829,18 @@ const MINED_KEYS = new Set([
 function minedSourceMessageId(record: object, key: string): string {
   return (record as Record<string, string | undefined>)[`${key}_source_message_id`] || '';
 }
+// NEW / MINED views never show a blank cell; this is the muted placeholder text.
+function emptyCellLabel(record: object, key: string): string {
+  const r = record as Record<string, string | undefined>;
+  if (key === 'co_construction_stage' || key === 'daysInConstructionStage') {
+    if (!r.propertyRecordIds) return 'No record';
+    if (r.co_property_type === 'established') return 'Not applicable';
+    return 'Not started';
+  }
+  return 'Not set';
+}
+const isNewOrMinedView = (id: string) => id.endsWith('-new') || id.endsWith('-mined');
+
 const NEW_VIEW_FILTERS: Record<string, ViewFilter[]> = {
   'builtin-bp': [
     { field: 'financeTrack', operator: 'equals', value: 'Yes' },
@@ -3374,6 +3386,8 @@ export default function ContractTeamReportingPage() {
                           Draft email
                         </a>
                       );
+                    } else if (!displayValue && isNewOrMinedView(activeView.id)) {
+                      cellContent = <span className="italic text-gray-400 text-[0.9em]">{emptyCellLabel(record, col.key)}</span>;
                     } else {
                       cellContent = displayValue;
                     }
