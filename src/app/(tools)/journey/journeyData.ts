@@ -159,7 +159,8 @@ function toOpp(r: Rec, today: string) {
       contract: r.pipelineId === PT_ID ? intOrNull(r.daysSinceStageChange) : null,
       finance: intOrNull(r.daysInFinanceStatus),
       build: intOrNull(r.daysInConstructionStage),
-      prop: daysSince(today, r.co_status_change_date),
+      // No days-since on the Property Record lane (JT 2/11).
+      prop: null,
     },
     ...valuation(r),
     finDue: day(r.financeDueDate),
