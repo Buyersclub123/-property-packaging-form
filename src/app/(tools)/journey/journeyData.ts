@@ -4,19 +4,27 @@ type Rec = Record<string, string | undefined>;
 const CONTRACT = ['Deal Closed', 'Contract Review', 'Exchange WIP', 'Conditional', 'Unconditional', 'Settled'];
 const FINANCE = ['Pending finance', 'Valuation ordered', 'Application lodged', 'Formally approved'];
 const BUILD = ['Pre-BA', 'BA Issued', 'Slab', 'Frame / Plate Height', 'Enclosed / Roof Cover', 'Tiling / Lock-up', 'Fixing / Plastering', 'Practical Completion', 'Landscaping pending', 'Handover'];
-const PROP_PREFIX = ['01', '02', '03', '04', '08'];
-const SALES_STAGES: { name: string; phase: string; match: string }[] = [
-  { name: 'Onboarding', phase: 'property', match: 'Onboarding' },
-  { name: 'Buying Brief', phase: 'property', match: 'Buying Brief' },
-  { name: 'Proposals', phase: 'property', match: 'Proposals' },
-  { name: 'EOI accepted (deal closed)', phase: 'property', match: 'Deal Closed' },
-  { name: 'Contract review', phase: 'contract', match: 'Contract Review' },
-  { name: 'Exchange WIP', phase: 'contract', match: 'Exchange WIP' },
-  { name: 'Conditional', phase: 'contract', match: 'Conditional' },
-  { name: 'Unconditional', phase: 'contract', match: 'Unconditional' },
-  { name: 'Settled', phase: 'contract', match: 'Settled' },
-  { name: 'On Hold', phase: 'outside', match: 'On Hold' },
+// Property Record lane positions, read straight from co_status.
+const PROP_LANE: Record<string, number> = { '01_available': 0, '02_eoi': 1, '03_contr_exchanged': 2, '04_settled': 3, '08_resold': 4 };
+// Every Sales & Property tile from the mock-up, in order. match = Property Team stage(s); notWired = no data source yet (shows 0).
+type SalesStage = { id: string; name: string; phase: string; kind: string; match?: string[]; notWired?: boolean; head?: string; periods?: string[] };
+const SALES_STAGES: SalesStage[] = [
+  { id: 'contacts', phase: 'sales', name: 'New contacts', kind: 'contact', notWired: true },
+  { id: 'booked', phase: 'sales', name: 'Sales meetings booked', kind: 'meeting', notWired: true, head: 'weekAll', periods: ['today', 'tomorrow', 'weekAll'] },
+  { id: 'outcomes', phase: 'sales', name: 'Sales meeting outcomes', kind: 'outcome', notWired: true, head: 'lastWeek', periods: ['today', 'lastDay', 'lastWeek', 'lastMonth'] },
+  { id: 'newopps', phase: 'sales', name: 'New opportunities (client sign-up)', kind: 'opp', notWired: true },
+  { id: 'toproperty', phase: 'property', name: 'Moved to property team', kind: 'opp' },
+  { id: 'eoisub', phase: 'property', name: 'EOI submitted', kind: 'opp', notWired: true },
+  { id: 'eoiwait', phase: 'property', name: 'Awaiting EOI response', kind: 'opp', notWired: true },
+  { id: 'eoiacc', phase: 'property', name: 'EOI accepted (deal closed)', kind: 'opp', match: ['Deal Closed'] },
+  { id: 'review', phase: 'contract', name: 'Contract review', kind: 'opp', match: ['Contract Review'] },
+  { id: 'exwip', phase: 'contract', name: 'Exchange WIP', kind: 'opp', match: ['Exchange WIP'] },
+  { id: 'conditional', phase: 'contract', name: 'Conditional', kind: 'opp', match: ['Conditional'] },
+  { id: 'uncond', phase: 'contract', name: 'Unconditional', kind: 'opp', match: ['Unconditional'] },
+  { id: 'settled', phase: 'contract', name: 'Settled', kind: 'opp', match: ['Settled'] },
+  { id: 'onhold', phase: 'outside', name: 'On Hold', kind: 'opp', match: ['On Hold'] },
 ];
+const LATER_STAGES = new Set(SALES_STAGES.flatMap((s) => s.match || []).map((s) => s.toLowerCase().replace(/[^a-z0-9]/g, '')));
 
 const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const yes = (v?: string) => !!v && !/^(no|false|0|n)$/i.test(v.trim());
@@ -90,7 +98,8 @@ function toOpp(r: Rec, today: string) {
     name: r.opportunityName || r.name || '',
     client: r.contactName || '',
     type, c, fin, build,
-    prop: PROP_PREFIX.indexOf((r.co_status || '').slice(0, 2)),
+    prop: PROP_LANE[r.co_status || ''] ?? -1,
+    cEst: norm(r.pipelineName) !== 'propertyteam',
     addr,
     consultant: r.owner || r.assignedTo || '',
     ba: r.assignedBA || '',
@@ -121,7 +130,8 @@ const stageRow = (r: Rec, date?: string, land = false) => ({
 export function buildJourneyData(records: Rec[]) {
   const today = sydney(new Date());
   const isFallen = (r: Rec) => yes(r.dealFallenOver) || !!r.dealFallenOverDate;
-  const inFlight = records.filter((r) => !isFallen(r) && (r.propertyRecordIds || r.financeStatus));
+  // Same in-flight rule as the NEW views: Property Team / Finance except Settled, Construction except Handover.
+  const inFlight = records.filter((r) => !isFallen(r) && r.inFlight === 'Yes');
   const fallen = records.filter(isFallen).map((r) => {
     const o = toOpp(r, today);
     const fell = typeof o.fin === 'number' && o.fin < 4 && o.c >= 3
@@ -135,9 +145,11 @@ export function buildJourneyData(records: Rec[]) {
     today,
     opps: inFlight.map((r) => toOpp(r, today)),
     fallen,
-    stages: SALES_STAGES.map((s) => ({
-      id: 'pt-' + norm(s.name), phase: s.phase, name: s.name, kind: 'opp',
-      rows: pt.filter((r) => norm(r.pipelineStage) === norm(s.match)).map((r) => stageRow(r, r.lastStageChangeAt)),
+    stages: SALES_STAGES.map(({ match, ...s }) => ({
+      ...s,
+      rows: s.notWired ? []
+        : pt.filter((r) => (match ? match.some((m) => norm(m) === norm(r.pipelineStage)) : !LATER_STAGES.has(norm(r.pipelineStage))))
+          .map((r) => stageRow(r, r.lastStageChangeAt)),
     })),
     build: BUILD.map((name) => ({
       id: 'b-' + norm(name), phase: 'build', name, kind: 'property',
