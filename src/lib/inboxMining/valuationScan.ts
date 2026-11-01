@@ -178,23 +178,25 @@ export function segments(text: string, by: string, at: Date): Segment[] {
 // ---- rules ----
 
 const KW = /\bvaluations?\b|\bvaluers?\b|\bvals?\b|\bvalued at\b|\bbe valued\b|\bcan be valued\b/i;
-const BOILERPLATE = /if a valuation inspection is required|valued (?:client|member|employee|customer)|for bank valuation or inspection requirements|valuation intervention team|matters to valuers|for valuers|valuers can recognise|tested later by valuation|bookings: valuations|not a valuation|valuation on your timepiece|will order a valuation and progress your file|may require a valuation/i;
-const CONSTRUCTION = /progress (?:inspection|claim|payment|valuation)|final (?:valuation|payment|claim|inspection)|releasing payment|before payment|100%|practical completion|\bPCI\b|final account|lock ?up|frame stage|internal valuation/i;
+const BOILERPLATE = /if a valuation inspection is required|valued (?:client|member|employee|customer)|for bank valuation or inspection requirements|valuation intervention team|matters to valuers|for valuers|valuers can recognise|tested later by valuation|bookings: valuations|not a valuation|valuation on your timepiece|will order a valuation and progress your file|may require a valuation|any valuation required by your lender/i;
+const CONSTRUCTION = /progress (?:inspection|claim|payment|valuation)|final (?:valuation|payment|claim|inspection)|releasing payment|before payment|proceeding with payment|authori[sz]ed[^.]{0,20}payment|payment to the builder|100%|practical completion|\bPCI\b|final account|lock ?up|frame stage|internal valuation|works are complete|scope of works/i;
 
 const OUTCOME: [string, RegExp][] = [
-  ['Shortfall', /shortfall|came (?:in|back) (?:short|under|below|low)|(?:under|below)[- ]value|valued? (?:under|below|less than)|short of (?:the )?(?:contract|purchase)|lower than (?:the )?(?:contract|purchase)/i],
+  ['Shortfall', /shortfall|came (?:in|back) (?:short|under|below|low)|(?:under|below)[- ]value|valued? (?:under|below|less than)|valued at \$[\d,]+k? (?:below|under|less)|short of (?:the )?(?:contract|purchase)|lower than (?:the )?(?:contract|purchase)|\$[\d,]+k? short\b|short by \$/i],
   ['Above value', /came (?:in|back) (?:above|over|higher)|above (?:the )?(?:contract|purchase) (?:price|value)|above value|over value/i],
-  ['At value', /(?:came|come|coming|has come|is back|came back) (?:in |back )?(?:at|on) (?:full )?(?:value|contract|purchase price)|\bat value\b|valued at (?:the )?(?:contract|purchase) price|supports? the (?:contract|purchase) price|no shortfall|met (?:the )?(?:contract|purchase) price/i],
+  ['At value', /(?:came|come|coming|has come|is back|came back|come back) (?:in |back )?(?:at|on) (?:full )?(?:value|contract|purchase price)|\bat value\b|valued at (?:the )?(?:contract|purchase) price|supports? the (?:contract|purchase) price|no shortfall|met (?:the )?(?:contract|purchase) price|in line with the contract price/i],
   ['Pending', /valuation (?:is )?(?:still )?(?:pending|outstanding|to come|awaited)|awaiting (?:the )?valuation|waiting (?:on|for) (?:the )?valuation|valuation (?:report )?(?:is )?not (?:yet )?(?:back|received|in)|working with the (?:bank )?valuer to update/i],
 ];
-const AMOUNT = /(?:valued at|valuation (?:amount|figure|came in at|came back at|of|at|is|was|:)|market value(?: of| is| :|:)?)\s*:?\s*\$\s?(\d{1,3}(?:,\d{3})+|\d{5,})(?:\.\d{2})?/i;
-const ATTENDED = /(?:valuer|valuation|valuation inspection)\b[^.]{0,40}?\b(?:attended|has been completed|was completed|conducted|carried out|took place|has been done|was done|done today|inspected)|valuer (?:has )?(?:been|went) (?:out|to (?:the )?(?:site|property))|attended (?:the )?(?:site|property) for (?:the )?valuation/i;
-const BOOKED = /(?:valuation|valuer|val)\b[^.]{0,50}?\b(?:booked|scheduled|arranged|confirmed) (?:in )?(?:for|on)\b|valuer (?:will|is going to|is due to) (?:attend|inspect|be (?:on site|attending|at))|booked (?:in )?(?:the |a )?valuation|valuation (?:appointment|inspection) (?:is )?(?:on|for)\b/i;
-const REQUESTED = /(?:valuation|valuer)\b[^.]{0,30}?\b(?:has been |was |been |have )?(?:ordered|requested|instructed|submitted|initiated)\b|\b(?:has|have|had|we've|I've|broker has|lender has|bank has)\s+(?:now\s+)?(?:ordered|requested|instructed|initiated|submitted)\s+(?:a |the |an )?(?:\w+ ){0,2}valuations?\b|valuation request (?:has been |was )?(?:sent|submitted|lodged)/i;
-const NOT_DONE = /\b(?:will|to order|reorder|re-order|need(?:s)? to|please|can you|could you|once|when|if|as soon as|waiting for (?:your|the) instructions?)\b/i;
-const CANCELLED = /cancel+ed|unable to (?:access|attend)|access issues?|could not (?:access|attend)|couldn't (?:access|attend)/i;
-const ACCESS_YES = /(?:is|are|now|site is|lot is|land is|property is) (?:now )?(?:ready|available|accessible|open) (?:for|to) (?:the |a )?(?:valuation|valuer|val)\b|valuation access (?:is |has been )?(?:now )?(?:available|confirmed|granted|ready)|access (?:for|to) (?:the )?(?:valu\w+|valuer) (?:is |has been )?(?:now )?(?:available|confirmed|granted)|can now be valued|ready to be valued/i;
-const ACCESS_NO = /not (?:yet )?(?:ready|available|accessible) for (?:the )?valu|not in a state that the land can be valued|would not be ready for|cannot be valued|can't be valued|no valuation access|valuation access (?:is )?not|until (?:valuation )?access|once valuation access|as soon as valuation access|when valuation access|update on valuation access|civil works are still underway/i;
+const AMOUNT = /(?:valued at|valuation (?:amount|figure|came in at|came back at|of|at|is|was|:)|valuation (?:that )?(?:has )?(?:come|came) (?:in|back) at|market value(?: of| is| :|:)?)\s*:?\s*\$\s?(\d{1,3}(?:,\d{3})+|\d{5,})(?:\.\d{2})?(?!\s*(?:below|under|less|short|above|over|more))/i;
+const ATTENDED = /(?:valuer|valuation|valuation inspection|valuation report)\b[^.,]{0,25}?\b(?:attended|has (?:now )?been completed|was completed|conducted|carried out|took place|has been done|was done|done today|(?:fully )?inspected)|valuer (?:has )?(?:been|went) (?:out|to (?:the )?(?:site|property))|attended (?:the )?(?:site|property) for (?:the )?valuation|valuation report[^.]{0,30}(?:has (?:now )?been completed|completed and returned)/i;
+const BOOKED = /(?:valuation|valuer)\b[^.]{0,50}?\b(?:booked|scheduled|arranged) (?:in )?(?:for|on)\b|valuer (?:will|is going to|is due to) (?:attend|inspect|be (?:on site|attending|at))|booked (?:in )?(?:the |a )?valuation|valuation (?:appointment|inspection) (?:is )?(?:on|for)\b|inspection to be conducted on/i;
+const REQUESTED = /(?:valuation|valuer)\b[^.]{0,30}?\b(?:has been |was |been |have )?(?:ordered|requested|instructed|submitted|initiated)\b|\b(?:has|have|had|we've|I've|broker has|lender has|bank has)\s+(?:now\s+)?(?:ordered|requested|instructed|initiated|submitted)\s+(?:a |the |an |some )?(?:\w+ ){0,2}valuations?\b|valuation request (?:has been |was )?(?:sent|submitted|lodged)/i;
+const NOT_DONE = /\b(?:will|to order|reorder|re-order|need(?:s)? to|please|can you|could you|once|when|if|until|as soon as|waiting for (?:your|the) instructions?|to be)\b/i;
+const NEGATED = /\b(?:hasn['’]t|has not|have not|haven['’]t|not (?:yet )?(?:been )?(?:ordered|requested|booked|attended|completed|available)|not as of yet|yet to be)\b/i;
+const QUESTION = /\?|please confirm|can you confirm|confirm (?:if|whether)|just confirming/i;
+const CANCELLED = /cancel+ed|unable to (?:access|attend)|access issues?|could not (?:access|attend)|couldn't (?:access|attend)|fenced off|still under construction/i;
+const ACCESS_YES = /(?:is|are|now|site is|lot is|land is|property is) (?:now )?(?:ready|available|accessible|open) (?:for|to) (?:the |a )?(?:valuation|valuer|val)\b|valuation access (?:is |has been |has just been )?(?:now )?(?:available|confirmed|granted|ready)|access (?:for|to) (?:the )?(?:valu\w+|valuer) (?:is |has been )?(?:now )?(?:available|confirmed|granted)|can now be valued|ready to be valued|accessible for valuation/i;
+const ACCESS_NO = /not (?:yet )?(?:ready|available|accessible) for (?:the )?valu|not in a state that the land can be valued|would not be ready for|cannot be valued|can't be valued|no valuation access|valuation access (?:is )?not|until (?:valuation )?access|once valuation access|as soon as valuation access|when valuation access|update on valuation access|civil works are still underway|until next year/i;
 const ACCESS_FROM = /(?:access|valu\w+)[^.]{0,60}?\b(?:from|after|expected|estimated|anticipated|by|around|in)\b/i;
 
 /** Sentences that mention a valuation, from a segment's text. */
@@ -203,10 +205,14 @@ export function sentences(text: string): string[] {
   const out: string[] = [];
   for (const s of flat.split(/(?<=[.!?])\s+(?=[A-Z0-9"'(])/)) {
     const t = s.trim();
-    if (t.length < 8 || !KW.test(t) || BOILERPLATE.test(t) || (t.match(/@/g) || []).length >= 3) continue;
+    if (!keepSentence(t)) continue;
     out.push(t.length > 360 ? `${t.slice(0, 360)}…` : t);
   }
   return out;
+}
+
+export function keepSentence(t: string): boolean {
+  return t.length >= 8 && KW.test(t) && !BOILERPLATE.test(t) && (t.match(/@/g) || []).length < 3;
 }
 
 export function valuationHits(line: string, ref: Date): ValHit[] {
@@ -219,45 +225,63 @@ export function valuationHits(line: string, ref: Date): ValHit[] {
     C('construction progress / final valuation (not the purchase valuation; no field proposed)');
     return hits;
   }
+  const question = QUESTION.test(line);
+  const negated = NEGATED.test(line);
   for (const [label, re] of OUTCOME) {
-    if (re.test(line)) {
-      P('valuation_outcome', label, `outcome wording → ${label}`);
-      break;
-    }
+    if (!re.test(line)) continue;
+    if (label === 'Pending' && /has (?:now )?been completed|completed and returned|came back|come back at/i.test(line)) continue;
+    P('valuation_outcome', label, `outcome wording → ${label}`);
+    break;
   }
   const amt = line.match(AMOUNT);
-  if (amt && /valuation|valuer|market value|property|dwelling|land/i.test(line) && !/complimentary|review \(valued|offer/i.test(line)) P('valuation_amount_residential', `$${amt[1].replace(/,/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`, 'valuation amount');
-  if (CANCELLED.test(line)) C('valuation cancelled / no access (no field proposed)');
-  else if (ATTENDED.test(line) && !NOT_DONE.test(line.match(ATTENDED)![0])) {
+  if (amt && /valuation|valuer|market value|property|dwelling|land/i.test(line) && !/complimentary|review \(valued|offer/i.test(line)) {
+    P('valuation_amount_residential', `$${amt[1].replace(/,/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`, 'valuation amount');
+  }
+  if (question) C('question, not a statement (no field proposed)');
+  else if (CANCELLED.test(line)) C('valuation cancelled / no access (no field proposed)');
+  else if (ATTENDED.test(line) && !NOT_DONE.test(line.match(ATTENDED)![0]) && !/to be conducted|will be (?:conducted|completed)/i.test(line) && !negated) {
     const d = date && date.iso <= emailDay ? date : null;
     P('valuation_attended', 'Yes', 'valuer attended / valuation done');
     P('valuation_attended_date', d ? d.iso : emailDay, d ? `date in text "${d.raw}"` : 'no date in text: email date');
-  } else if (BOOKED.test(line)) {
+  } else if (BOOKED.test(line) && !negated && !/report (?:is )?expected/i.test(line)) {
     if (date) P('valuation_booked_date', date.iso, `booked, date in text "${date.raw}"`);
     else C('valuation booked, no date stated');
   }
-  if (/\bvaluer (?:is|has been) (?:requesting|asking)\b/i.test(line)) {
-    P('valuation_requested', 'Yes', 'valuer already engaged (asking for documents); request date not stated');
-  } else if (REQUESTED.test(line) && !NOT_DONE.test(line)) {
-    const d = date && date.iso <= emailDay ? date : null;
-    P('valuation_requested', 'Yes', 'valuation ordered / requested');
-    P('valuation_requested_date', d ? d.iso : emailDay, d ? `date in text "${d.raw}"` : 'no date in text: email date');
+  if (!question && !negated) {
+    if (/\bvaluer (?:is|has been) (?:requesting|asking)\b/i.test(line)) {
+      P('valuation_requested', 'Yes', 'valuer already engaged (asking for documents); request date not stated');
+    } else if (REQUESTED.test(line) && !NOT_DONE.test(line)) {
+      const d = date && date.iso <= emailDay ? date : null;
+      P('valuation_requested', 'Yes', 'valuation ordered / requested');
+      P('valuation_requested_date', d ? d.iso : emailDay, d ? `date in text "${d.raw}"` : 'no date in text: email date');
+    }
   }
+  const fromM = line.match(ACCESS_FROM);
+  const near = fromM ? line.slice(fromM.index ?? 0, (fromM.index ?? 0) + 90) : line;
+  const nearDate = findDate(near, ref);
   if (ACCESS_NO.test(line)) {
-    const my = monthYear(line, ref);
-    if (date && date.iso > emailDay) P('valuation_expected_access_date', date.iso, `access expected from "${date.raw}"`);
+    const my = monthYear(near, ref) || monthYear(line, ref);
+    if (nearDate && nearDate.iso > emailDay) P('valuation_expected_access_date', nearDate.iso, `access expected from "${nearDate.raw}"`);
     else if (my) P('valuation_access_estimate', my, 'access not yet available; month estimate in text');
     else C('valuation access not yet available, no date given (no field proposed)');
-  } else if (ACCESS_YES.test(line)) {
+  } else if (ACCESS_YES.test(line) && !question && !negated && !/\b(?:until|when|once|resubmit)\b/i.test(line)) {
     if (date && date.iso > emailDay) P('valuation_expected_access_date', date.iso, `access from "${date.raw}"`);
     else P('valuation_access_available', 'Yes', 'access available / ready for valuation');
-  } else if (ACCESS_FROM.test(line) && /access|ready/i.test(line)) {
-    const my = !date ? monthYear(line, ref) : null;
-    if (date && date.iso > emailDay) P('valuation_expected_access_date', date.iso, `access expected from "${date.raw}"`);
+  } else if (fromM && /access|ready|available/i.test(near) && !question) {
+    const my = !nearDate ? monthYear(near, ref) : null;
+    if (nearDate && nearDate.iso > emailDay) P('valuation_expected_access_date', nearDate.iso, `access expected from "${nearDate.raw}"`);
     else if (my) P('valuation_access_estimate', my, 'access estimate (month)');
   }
   if (!hits.length) C('mentions a valuation; no rule fired');
   return hits;
+}
+
+/** Re-applies the current rules to stored evidence without reading Gmail again. */
+export function rehit(items: { quote: string; at: string }[]): { keep: boolean; hits: ValHit[] }[] {
+  return items.map((it) => {
+    const q = it.quote.replace(/…$/, '');
+    return { keep: keepSentence(q), hits: valuationHits(q, new Date(it.at)) };
+  });
 }
 
 // ---- opportunity matching ----
@@ -320,10 +344,21 @@ function cur(o: Opp, f: ValField): string {
 
 // ---- scan ----
 
-export async function scanValuations(mailbox: string, days = 7): Promise<{ mailbox: string; listed: number; threads: ValThread[] }> {
-  const { start, end } = sydneyWindow(days);
+export interface ScanRange {
+  /** List emails received in [from, to). Defaults to the last 7 Sydney days. */
+  from?: Date;
+  to?: Date;
+  /** Evidence (incl. quoted replies) dated before this is ignored. Defaults to `from`; set it to the overall start when scanning in chunks. */
+  since?: Date;
+}
+
+export async function scanValuations(mailbox: string, range: ScanRange = {}): Promise<{ mailbox: string; listed: number; threads: ValThread[] }> {
+  const win = sydneyWindow(7);
+  const listFrom = range.from || win.start;
+  const end = range.to || win.end;
+  const start = range.since || listFrom;
   const gmail = gmailFor(mailbox);
-  const q = `after:${Math.floor(start.getTime() / 1000)} before:${Math.ceil(end.getTime() / 1000)} (valuation OR valuations OR valuer OR valuers OR valued OR filename:valuation)`;
+  const q = `after:${Math.floor(listFrom.getTime() / 1000)} before:${Math.ceil(end.getTime() / 1000)} (valuation OR valuations OR valuer OR valuers OR valued OR filename:valuation)`;
   const ids: string[] = [];
   let pageToken: string | undefined;
   do {

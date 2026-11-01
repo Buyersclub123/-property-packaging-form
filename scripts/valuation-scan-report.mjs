@@ -1,10 +1,12 @@
 // Builds the valuation mail scan report (markdown) from the JSON saved by
 // GET /api/inbox-mining/valuation-scan?mailbox=... (one file per mailbox). Read-only; writes only the report file.
-// Usage: node scripts/valuation-scan-report.mjs <dir-with-valscan-*.json> <out.md>
+// Usage: node scripts/valuation-scan-report.mjs <dir-with-valscan-*.json> <out.md> [days, default 7]
+// A mailbox may have several chunk files (valscan-<mailbox>-NN.json from valuation-scan-run.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 
-const [dir, out] = process.argv.slice(2);
+const [dir, out, daysArg] = process.argv.slice(2);
+const DAYS = parseInt(daysArg || '7', 10);
 const MAILBOXES = ['property', 'contracts', 'construction', 'sydney.m'];
 const FIELDS = [
   ['valuation_access_estimate', 'Valuation access estimate (Month YYYY)'],
@@ -30,14 +32,23 @@ let listed = 0;
 const scanned = {};
 const groups = new Map();
 const seen = new Map();
+const files = fs.readdirSync(dir);
 for (const m of MAILBOXES) {
-  const j = JSON.parse(fs.readFileSync(path.join(dir, `valscan-${m}.json`), 'utf8'));
-  if (j.error) throw new Error(`${m}: ${j.error}`);
-  listed += j.listed;
-  scanned[m] = j.listed;
-  for (const t of j.threads) {
+  scanned[m] = 0;
+  const mine = files.filter((f) => f === `valscan-${m}.json` || (f.startsWith(`valscan-${m}-`) && f.endsWith('.json')));
+  if (!mine.length) throw new Error(`no scan files for ${m} in ${dir}`);
+  const threads = [];
+  for (const f of mine.sort()) {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    if (j.error) throw new Error(`${f}: ${j.error}`);
+    listed += j.listed;
+    scanned[m] += j.listed;
+    threads.push(...j.threads);
+  }
+  for (const t of threads) {
     const gk = t.opp ? `opp:${t.opp.id}` : `subj:${t.subject.replace(/^((re|fw|fwd)\s*:\s*)+/i, '').toLowerCase().trim()}`;
     const g = groups.get(gk) || { opp: t.opp, cands: t.oppCandidates, current: t.current, subject: t.subject, ev: [] };
+    if (t.opp && !Object.keys(g.current || {}).length) g.current = t.current;
     groups.set(gk, g);
     for (const e of t.evidence) {
       const k = key(e.quote);
@@ -70,25 +81,49 @@ for (const g of withProp) {
     }
   }
 }
+// What the miner would have filled: per matched opportunity and field, the latest proposal vs the live GHL value.
+const norm = (f, v) => {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (/_date$/.test(f)) return s.slice(0, 10);
+  if (f === 'valuation_amount_residential') return s.replace(/[^0-9.]/g, '').replace(/\.0+$/, '');
+  return s;
+};
+const fill = Object.fromEntries(FIELDS.map(([f]) => [f, { fill: 0, same: 0, differs: 0, undated: 0 }]));
+const latest = [];
+for (const g of matched(withProp)) {
+  const best = {};
+  for (const e of g.ev) for (const h of proposes(e)) if (!best[h.field] || e.at > best[h.field].e.at) best[h.field] = { e, h };
+  for (const [f, { e, h }] of Object.entries(best)) {
+    const cur = g.current?.[f] || '';
+    if (/not stated/.test(h.proposed)) { fill[f].undated++; continue; }
+    const state = !cur ? 'fill' : norm(f, cur) === norm(f, h.proposed) ? 'same' : 'differs';
+    fill[f][state]++;
+    latest.push({ opp: g.opp.name, field: f, proposed: h.proposed, cur, state, at: e.at, by: e.by, quote: e.quote });
+  }
+}
 const ctxCounts = {};
 for (const g of all) for (const e of g.ev) for (const h of e.hits) if (h.kind === 'context') ctxCounts[h.rule] = (ctxCounts[h.rule] || 0) + 1;
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date());
 const L = [];
-L.push(`# Valuation fields: evidence in the last 7 days of mail (${today})`);
+L.push(`# Valuation fields: evidence in the last ${DAYS} days of mail (${today})`);
 L.push('');
 L.push('Read-only scan. Gmail and GHL were only read; nothing was written to GHL, nothing was sent, no Gmail state changed.');
 L.push('');
 L.push('## Copy-paste summary');
 L.push('');
 L.push('```');
-L.push(`Valuation mail scan, last 7 days (${today}), mailboxes: property@, contracts@, construction@, sydney.m@`);
+L.push(`Valuation mail scan, last ${DAYS} days (${today}), mailboxes: property@, contracts@, construction@, sydney.m@`);
 L.push(`Emails mentioning valuation/valuer: ${listed} (${MAILBOXES.map((m) => `${m} ${scanned[m]}`).join(', ')}; the same thread often sits in several mailboxes)`);
 L.push(`Threads/opportunities with valuation wording in the window: ${all.length} (${matched(all).length} matched to an opportunity)`);
 L.push(`With a value the tool would propose: ${withProp.length} (${matched(withProp).length} matched)`);
 L.push('');
-L.push('Field                                   Opps  Evidence items');
-for (const [f, l] of FIELDS) L.push(`${l.padEnd(40)}${String(perField[f].opps.size).padStart(4)}  ${String(perField[f].items).padStart(5)}${perField[f].unmatched ? `  (+${perField[f].unmatched} unmatched)` : ''}`);
+L.push('Field                                   Opps  Evidence  Would fill (GHL empty)  Same as GHL  Differs from GHL');
+for (const [f, l] of FIELDS) {
+  const x = fill[f];
+  L.push(`${l.padEnd(40)}${String(perField[f].opps.size).padStart(4)}  ${String(perField[f].items).padStart(8)}  ${String(x.fill).padStart(22)}  ${String(x.same).padStart(11)}  ${String(x.differs).padStart(16)}${perField[f].unmatched ? `   (+${perField[f].unmatched} evidence unmatched)` : ''}${x.undated ? `   (${x.undated} booked, no date)` : ''}`);
+}
+L.push('Opps / Would fill / Same / Differs use the latest proposal per opportunity and field; Evidence counts every quote.');
 L.push('');
 L.push('Valuation wording with no field to propose:');
 for (const [r, n] of Object.entries(ctxCounts).sort((a, b) => b[1] - a[1])) L.push(`  ${String(n).padStart(3)}  ${r}`);
@@ -103,6 +138,14 @@ L.push('- Builder/broker boilerplate is ignored (e.g. "If a Valuation Inspection
 L.push('- Construction progress/final-payment valuations (progress claim, PCI, lock-up, final account) are listed but not proposed: they are not the purchase valuation these fields track.');
 L.push('- Opportunity: the inbox queue match (grade A/B/C) where the email is in the queue, otherwise client name in the subject, lot + street in the subject, or client name in the body. Test, portfolio-review and staff-named opportunities are excluded.');
 L.push('- "Current GHL" is the live value on the matched opportunity at scan time.');
+L.push('');
+L.push('## What the miner would have filled (latest proposal per opportunity and field)');
+L.push('');
+L.push('| Opportunity | Field | Proposed | Current GHL | State | Latest evidence (Sydney) | Sender | Quote |');
+L.push('|---|---|---|---|---|---|---|---|');
+for (const r of latest.sort((a, b) => a.opp.localeCompare(b.opp) || a.field.localeCompare(b.field))) {
+  L.push(`| ${esc(r.opp)} | ${label[r.field]} | ${esc(r.proposed)} | ${esc(r.cur) || '(empty)'} | ${{ fill: 'would fill', same: 'same as GHL', differs: 'differs' }[r.state]} | ${syd(r.at)} | ${who(r.by)} | "${esc(r.quote).slice(0, 220)}" |`);
+}
 L.push('');
 L.push('## Per opportunity: values the tool would propose');
 L.push('');
