@@ -1,10 +1,13 @@
 // Turns CTRT API records (+ GHL's own stage counts) into the data the Journey Map mock-up renders (read-only).
 // Stage rules: GHL Field Run Sheet, tab "Stage definitions" (v2, 1/11).
 type Rec = Record<string, string | undefined>;
+// Last-7-days snapshot from /api/journey/sales (cached 15 minutes).
 export type Sales = {
-  contacts: Record<string, number>;
+  asAt: string;
+  contacts: { id: string; date: string; name: string; source: string; createdBy: string }[];
   meetings: { id: string; date: string; client: string; calendar: string; consultant: string; outcome: string }[];
   opps: { id: string; created: string; name: string; client: string; consultant: string }[];
+  duplicates: { id: string; date: string; newContact: string; existing: string; existingCreated: string; createdBy: string; why: string }[];
 };
 export type Recon = { pipelines: { id: string; name: string; stages: { id: string; name: string; total: number }[] }[] };
 
@@ -190,7 +193,7 @@ function reconcile(tileRecs: Rec[], cmp: Compare, whyExtra: (r: Rec) => string) 
   if (unloaded) rows.push(`<li><b>${Math.abs(unloaded)}</b> ${unloaded > 0 ? 'in the GHL count but not loaded by the tool (cache or timing; press Refresh in CTRT)' : 'loaded by the tool but no longer in the GHL count (cache or timing)'}</li>`);
   return {
     mismatch: diff !== 0,
-    html: `<div class="recon"><table><tr><td>Journey · All</td><td class="n">${tileRecs.length}</td></tr>
+    html: `<div class="recon" data-diff="${diff}"><table><tr><td>Journey · All</td><td class="n">${tileRecs.length}</td></tr>
       <tr><td>${esc(cmp.label)}</td><td class="n">${ghl}</td></tr>
       <tr class="${diff ? 'bad' : 'ok'}"><td>Difference</td><td class="n">${diff > 0 ? '+' : ''}${diff}</td></tr></table>
       ${rows.length ? `<ul>${rows.join('')}</ul>` : '<p class="ok">Matches GHL.</p>'}</div>`,
@@ -199,7 +202,7 @@ function reconcile(tileRecs: Rec[], cmp: Compare, whyExtra: (r: Rec) => string) 
 
 function salesTile(id: string, sales: Sales | null) {
   if (!sales) return { notWired: true, rows: [] };
-  if (id === 'contacts') return { fixedCounts: sales.contacts, rows: [] };
+  if (id === 'contacts') return { rows: sales.contacts.map((c) => ({ id: c.id, date: c.date, client: c.name, source: c.source || c.createdBy, consultant: c.createdBy })) };
   if (id === 'booked') return { rows: sales.meetings.map((m) => ({ id: m.id, date: m.date, client: m.client, consultant: m.consultant, satBy: m.calendar })) };
   if (id === 'outcomes') return { rows: sales.meetings.filter((m) => m.outcome).map((m) => ({ id: m.id, date: m.date, client: m.client, outcome: m.outcome, consultant: m.consultant, satBy: m.calendar })) };
   return { rows: sales.opps.map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, consultant: o.consultant, ba: '' })) };
@@ -216,13 +219,19 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
     return { ids: new Set(stages.map((s) => s.id)), total: stages.reduce((a, s) => a + s.total, 0), names: stages.map((s) => s.name) };
   };
   const scope = historical ? 'all statuses' : 'open';
-  const panel = (title: string, sections: string[]) => `<div class="recon-wrap"><h4>${esc(title)}</h4>${sections.join('')}</div>`;
+  // Collapsed to one line (first comparison: Matches GHL / ≠ GHL: diff); detail behind a toggle. Kept for cutover.
+  const panel = (title: string, sections: string[]) => {
+    const d = Number(/data-diff="(-?\d+)"/.exec(sections[0] || '')?.[1] || 0);
+    const line = d === 0 ? '<span class="rok">Matches GHL</span>' : `<span class="rbad">≠ GHL: ${d > 0 ? '+' : ''}${d}</span>`;
+    return `<details class="recon-wrap"><summary>${line} <span class="rmore">${esc(title)} detail</span></summary>${sections.join('')}</details>`;
+  };
 
   // Sales & Property: the mock-up's Sales tiles, then every Property Team stage exactly as in GHL.
   const pt = recon.pipelines.find((p) => p.id === PT_ID)?.stages || [];
   const dealClosedAt = pt.findIndex((s) => norm(s.name) === 'dealclosed');
   const stages = [
-    ...SALES_TILES.map((s) => ({ ...s, phase: 'sales', ...salesTile(s.id, sales) })),
+    // Sales: movement only (last 24 hours / last 7 days), no all-time totals.
+    ...SALES_TILES.map((s) => ({ ...s, head: 'd7', periods: ['d1', 'd7'], tileKey: 'd7', phase: 'sales', ...salesTile(s.id, sales) })),
     ...pt.map((s, i) => {
       const all = records.filter((r) => r.pipelineStageId === s.id);
       const tile = all.filter(inPop);
@@ -302,8 +311,16 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
     return { ...o, fell, reason: r.dealFallenOverReason || 'Reason not set', date: day(r.dealFallenOverDate) };
   });
   const uniq = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  // Duplicate contacts created in the last 7 days (same name + same email or mobile as an older contact). Visibility only.
+  const dups = [{
+    id: 'dups', phase: 'dups', name: 'Duplicate contacts', kind: 'dup', head: 'd7', periods: ['d1', 'd7'], tileKey: 'd7',
+    ...(sales ? {} : { notWired: true }),
+    rows: (sales?.duplicates || []).map((d) => ({ id: d.id, date: d.date, client: d.newContact, existing: d.existing, existingCreated: d.existingCreated, why: d.why, createdBy: d.createdBy })),
+  }];
+  stages.splice(SALES_TILES.length, 0, ...(dups as unknown as typeof stages));
   return {
     today,
+    salesAsAt: sales?.asAt || '',
     historical,
     opps: pop.filter((r) => !isFallen(r)).map((r) => toOpp(r, today)),
     fallen,

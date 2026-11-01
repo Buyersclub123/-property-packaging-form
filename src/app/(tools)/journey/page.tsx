@@ -28,7 +28,7 @@ export default function JourneyPage() {
       const json = JSON.stringify(buildJourneyData(records, recon, hist, salesData)).replace(/</g, '\\u003c');
       setHtml(JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${json};</script>\n<script>`));
     };
-    Promise.all([getJson(`/api/contract-team-reporting${q}`), getJson(`/api/journey/reconcile${q}`)])
+    Promise.all([getJson(hist ? `/api/contract-team-reporting${q}` : '/api/contract-team-reporting?snapshot=1'), getJson(`/api/journey/reconcile${q}`)])
       .then(([records, recon]) => {
         render(records, recon, null);
         setHistorical(hist);
@@ -43,16 +43,8 @@ export default function JourneyPage() {
   return (
     <div className="flex flex-col h-screen bg-white">
       <div className="flex items-center gap-3 px-4 h-10 border-b border-gray-200 text-sm text-gray-700 shrink-0">
-        <span className="font-medium">{historical ? 'Historical: all opportunities, every status' : 'In-flight opportunities only'}</span>
-        <button
-          onClick={() => load(!historical)}
-          disabled={loading}
-          className="px-3 py-1 rounded bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
-        >
-          {historical ? 'Back to in-flight' : 'Show historical'}
-        </button>
-        {!historical && <span className="text-xs text-amber-700">Loads settled and closed opps; may take up to 60 seconds.</span>}
-        {loading && <span className="text-xs text-gray-500">Loading live data from GHL…{historical ? '' : ' (historical may take up to 60 seconds)'}</span>}
+        <span className="font-medium">Quick snapshot: in-flight opportunities</span>
+        {loading && <span className="text-xs text-gray-500">Loading live data from GHL…</span>}
         {error && <span className="text-xs text-red-600">{error}</span>}
       </div>
       {html && <iframe title="Pipeline Journey" srcDoc={html} className="block w-full flex-1 border-0" />}

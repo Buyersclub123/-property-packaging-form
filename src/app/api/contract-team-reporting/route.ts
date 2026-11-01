@@ -21,6 +21,9 @@ import {
 const SHARED_KEY = 'ctr:report';
 const SHARED_LOCK = 'ctr:report:lock';
 const SHARED_TTL_SEC = 60;
+// Longer-lived copy for quick snapshots (/journey uses ?snapshot=1): up to 15 minutes old.
+const SNAPSHOT_KEY = 'ctr:records:snapshot';
+const SNAPSHOT_TTL_SEC = 15 * 60;
 const LOCK_TTL_SEC = 30;
 const WAIT_FOR_LOCK_MS = 15000;
 const WAIT_POLL_MS = 400;
@@ -637,14 +640,25 @@ export async function GET(request: Request) {
     } catch (e) {
       console.warn('CTR: Redis unavailable, falling back to live fetch:', e);
     }
+    const saveShared = async (now: number, records: ReportRecord[]) => {
+      if (!redis) return;
+      const body = JSON.stringify({ fetchedAt: now, records });
+      await redis.set(SHARED_KEY, body, { EX: SHARED_TTL_SEC });
+      await redis.set(SNAPSHOT_KEY, body, { EX: SNAPSHOT_TTL_SEC });
+    };
+    if (redis && !fresh && new URL(request.url).searchParams.get('snapshot') === '1') {
+      const snap = (await redis.get(SHARED_KEY)) || (await redis.get(SNAPSHOT_KEY));
+      if (snap) {
+        const { fetchedAt, records } = JSON.parse(snap) as { fetchedAt: number; records: ReportRecord[] };
+        return respond(records, fetchedAt, 'shared');
+      }
+    }
 
     // Manual refresh or no Redis → straight to GHL
     if (fresh || !redis) {
       const records = await buildReport();
       const now = Date.now();
-      if (redis) {
-        await redis.set(SHARED_KEY, JSON.stringify({ fetchedAt: now, records }), { EX: SHARED_TTL_SEC });
-      }
+      await saveShared(now, records);
       return respond(records, now, 'live');
     }
 
@@ -661,7 +675,7 @@ export async function GET(request: Request) {
       try {
         const records = await buildReport();
         const now = Date.now();
-        await redis.set(SHARED_KEY, JSON.stringify({ fetchedAt: now, records }), { EX: SHARED_TTL_SEC });
+        await saveShared(now, records);
         return respond(records, now, 'live');
       } finally {
         await redis.del(SHARED_LOCK).catch(() => {});
@@ -682,7 +696,7 @@ export async function GET(request: Request) {
     // 4. Waited too long (the fetcher probably failed) — fetch ourselves.
     const records = await buildReport();
     const now = Date.now();
-    await redis.set(SHARED_KEY, JSON.stringify({ fetchedAt: now, records }), { EX: SHARED_TTL_SEC });
+    await saveShared(now, records);
     return respond(records, now, 'live');
   } catch (err) {
     console.error('Contract Team Reporting API error:', err);

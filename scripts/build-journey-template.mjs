@@ -38,13 +38,15 @@ const PERIODS = {
   weekAll:  {label:"This week",   range:[MON, addD(MON,6)]},
   month:    {label:"This month",  range:[MONTH1, TODAY]},
   ytd:      {label:"YTD",         range:[FY, TODAY], sub:"FY from 1 Jul"},
+  d1:       {label:"Last 24 hours", range:[addD(TODAY,-1), TODAY]},
+  d7:       {label:"Last 7 days",   range:[addD(TODAY,-6), TODAY]},
   ever:     {label:"All",         range:[D(2000,1,1), TODAY], sub:"Everything now in this stage", all:true},
   lastDay:  {label:"Yesterday",   range:[addD(TODAY,-1), addD(TODAY,-1)]},
   lastWeek: {label:"Last week",   range:[addD(MON,-7), addD(MON,-1)]},
   lastMonth:{label:"Last month",  range:[new Date(TODAY.getFullYear(), TODAY.getMonth()-1, 1), addD(MONTH1,-1)]},
 };`);
 
-swapBetween('const STD = [', '\nconst COLS = {', `const STD = ["today","week","month","ytd","ever"];
+swapBetween('const STD = [', '\nconst COLS = {', `const STD = ["d1","d7","ever"]; // quick snapshot: now + last 24 hours / last 7 days
 // Rows are the opportunities now in each stage; "entered" = the stage change date (blank dates only count under All).
 const inRange = (rows, pkey) => { const P = PERIODS[pkey]; if (P.all) return rows; const [a,b] = P.range; return rows.filter(x => x.d && x.d >= a && x.d <= b); };
 const STAGES = J.stages, BUILD = J.build, FINANCE = J.finance;
@@ -52,7 +54,7 @@ const JOURNEYS = {sales:STAGES, construction:BUILD, finance:FINANCE,
   fallen:[{id:"fallen", phase:"fallen", name:"Deals Fallen Over", kind:"opp", rows:[]}],
   valshort:[{id:"valshort", phase:"valshort", name:"Val Shortfall", kind:"opp", rows:[]}]};
 Object.values(JOURNEYS).flat().forEach(s=>{
-  s.periods = s.periods || STD; s.head = s.head || "week";
+  s.periods = s.periods || STD; s.head = s.head || "d7";
   s.rows.forEach(x => { x.d = pd(x.date); });
   s.counts = {}; if (s.hasLand) s.land = {};
   [...new Set([...s.periods, "ever"])].forEach(p => { const rs = inRange(s.rows, p); s.counts[p] = rs.length; if (s.land) s.land[p] = rs.filter(x => x.land).length; });
@@ -154,7 +156,7 @@ function renderPanel(){`);
 // Reconciliation: "All" prominent, a ≠ GHL flag on tiles whose All differs, and the per-stage reconciliation panel.
 // One number per tile: All (bold). Period movement stays in the panel below.
 swap('<b>${n(s.counts[s.head])}</b><small>${PERIODS[s.head].label.toLowerCase()}</small></span>',
-  '<b>${n(s.counts.ever)}</b><small>all</small>${s.mismatch?`<i class="neq" title="All differs from GHL: see reconciliation">≠ GHL</i>`:""}</span>');
+  '<b>${n(s.counts[s.tileKey||"ever"])}</b><small>${s.tileKey?PERIODS[s.tileKey].label.toLowerCase():"now"}</small>${s.mismatch?`<i class="neq" title="All differs from GHL: see reconciliation">≠ GHL</i>`:""}</span>');
 // Counts supplied by the server (e.g. GHL contacts) are used as-is.
 swap('  s.counts = {}; if (s.hasLand) s.land = {};\n  [...new Set', '  s.counts = s.fixedCounts || {}; if (s.hasLand) s.land = {};\n  if (!s.fixedCounts) [...new Set');
 swap('    <div class="cards">${cards}</div>\n', '    <div class="cards">${cards}</div>\n    ${s.recon||""}\n');
@@ -162,6 +164,7 @@ swap('    <div class="cards">${cards}</div>\n', '    <div class="cards">${cards}
 swap('const list0=JOURNEYS[tab], sel=selBy[tab], groups={};', 'const list0=JOURNEYS[tab].filter(s=>!s.chip), sel=selBy[tab], groups={};');
 swap('  fixWrap();\n}\nfunction fixWrap(){', `  const nw=JOURNEYS[tab].filter(s=>s.notWired);
   if(nw.length){ const ph=track.querySelector('.node[data-id="'+nw[0].id+'"]')?.closest(".phase"); if(ph) ph.insertAdjacentHTML("beforeend", '<div class="nw-overlay">Sales figures coming — these tiles will read from the Review Outcomes tool and GHL contacts. Nothing to do here yet.</div>'); }
+  if(tab==="sales" && J.salesAsAt){ const h=track.querySelector('.node[data-id="contacts"]')?.closest(".phase")?.querySelector(".phase-head"); if(h) h.insertAdjacentHTML("beforeend", '<span class="asat">as at '+new Date(J.salesAsAt).toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",timeZone:"Australia/Sydney"})+' (refreshes every 15 min)</span>'); }
   const chips=JOURNEYS[tab].filter(s=>s.chip);
   if(chips.length) track.insertAdjacentHTML("beforeend", \`<div class="chipbar"><span class="chipbar-lbl">Derived filters (not stages)</span>\${chips.map(c=>\`<button class="node chip" data-id="\${c.id}" aria-pressed="\${c.id===sel}">\${esc(c.name)} <b>\${n(c.counts.ever)}</b>\${c.mismatch?'<i class="neq">≠ GHL</i>':""}</button>\`).join("")}</div>\`);
   fixWrap();
@@ -182,6 +185,7 @@ swap('</style>', `#opp .seg .bar.est i{background:transparent;box-shadow:inset 0
 #opp .seg .bar.est i.done{background:transparent;box-shadow:none;border:1.5px dotted var(--done)}
 #opp .seg .bar.est i.doing{background:transparent;box-shadow:none;border:1.5px dotted var(--doing)}
 .nw{display:block;font-size:10px;font-style:italic;color:var(--muted)}
+.asat{font-weight:600;letter-spacing:0;text-transform:none;margin-left:6px}
 .node.wrap-first::before{left:50%}
 .node.wrap-last::before{right:50%}
 .node.wrap-down::after{content:"";position:absolute;left:calc(50% - 1.5px);top:34px;width:3px;height:var(--drop,0);background:var(--line);z-index:0}
@@ -223,6 +227,13 @@ swap('</style>', `#opp .seg .bar.est i{background:transparent;box-shadow:inset 0
 .chipbar .node.chip .neq{position:static;transform:none}
 .chipbar .node.chip[aria-pressed="true"]{border-style:solid;border-color:var(--brand-ink);background:var(--brand);color:var(--brand-ink)}
 </style>`);
+
+// Clicking a tile opens its record list straight away (All; movement-only tiles open on their head period).
+swap('selBy[tab]=b.dataset.id;detail=null;render()});', 'selBy[tab]=b.dataset.id;const st=JOURNEYS[tab].find(x=>x.id===b.dataset.id);detail={period:st&&st.periods.includes("ever")?"ever":(st?st.head:"ever"),matches:false,land:false};render()});');
+swap('</style>', '.recon-wrap>summary{cursor:pointer;font-weight:700;list-style:none}\n.recon-wrap>summary::-webkit-details-marker{display:none}\n.rok{color:#2e7d32}.rbad{color:#c62828}\n.rmore{font-size:12px;color:var(--muted);text-decoration:underline;font-weight:500;margin-left:8px}\n</style>');
+
+// Duplicate contacts group (visibility only; merging is a later build).
+swap('const OPP_KINDS=["opp","fin","property"];', 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
 
 if (/OPP-2\d{4}|Sample Estate|seed\(o\.ref\)/.test(html)) throw new Error('Sample data still present in the template');
 
