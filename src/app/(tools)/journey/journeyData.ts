@@ -110,13 +110,15 @@ function valuation(r: Rec) {
   steps.forEach((v, i) => { if (v) last = i; });
   return {
     valStep: last < 0 ? -1 : last + 1,
+    valAccess: r.valuationAccessEstimate || r.valuationExpectedAccessDate || '',
     short: yes(r.valuationShortfall) || /shortfall/i.test(r.valuationOutcome || ''),
     valDate: day(r.valuationRequestedDate || r.valuationBookedDate || r.valuationAttendedDate || r.valuationExpectedAccessDate),
   };
 }
 
 function toOpp(r: Rec, today: string) {
-  const hasPr = !!r.propertyRecordIds;
+  // Seller records (08 Resold etc.) link via linked_property_record_id, not the record's own opp association.
+  const hasPr = !!r.propertyRecordIds || !!r.co_status;
   const type = !hasPr ? 'nopr' : r.co_property_type === 'established' ? 'est' : r.co_contract_type === 'split_contract' ? 'split' : 'single';
   const fs = r.financeStatus || '';
   const fin = !fs ? undefined : norm(fs) === 'nottracked' ? null : norm(fs) === 'formallyapproved' ? 4 : FINANCE.findIndex((x) => norm(x) === norm(fs));

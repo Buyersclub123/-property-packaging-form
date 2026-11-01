@@ -621,8 +621,32 @@ async function buildReport(historical = false): Promise<ReportRecord[]> {
       const dateB = b.confirmedSettlementDate || '9999-12-31';
       return new Date(dateA).getTime() - new Date(dateB).getTime();
     });
+  markSmsfConstructionDuplicates(report);
   lastBuildMs = Date.now() - started;
   return report;
+}
+
+// SMSF Construction duplicates (JT 1/11): a Construction opp pairs with a Finance opp that has the same
+// normalised name (client + entity + IP) or the same Registered Address. Not keyed on the word "Duplicate".
+const dupName = (s: string) => s.toLowerCase()
+  .replace(/\b(duplicate|dup|copy|construction|finance|build)\b/g, ' ')
+  .replace(/\band\b/g, '&').replace(/\b(smsf|pers?)\s*(?:ip\s*)?(\d+)\b/g, '$1ip$2').replace(/[^a-z0-9&]/g, '');
+const dupAddr = (s: string) => s.split(/\r?\n/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+
+function markSmsfConstructionDuplicates(report: ReportRecord[]) {
+  const names = new Set<string>(), addrs = new Set<string>();
+  for (const r of report) {
+    if (r.pipelineId !== PIPELINE_ID.FINANCE || r.status !== 'open' || r.pipelineStage.toLowerCase() === 'settled') continue;
+    const n = dupName(String(r.opportunityName || r.name || '')); if (n) names.add(n);
+    const a = dupAddr(String(r.registeredAddress || '')); if (a.length >= 8) addrs.add(a);
+  }
+  for (const r of report) {
+    if (r.pipelineId !== PIPELINE_ID.CONSTRUCTION || r.smsfConstructionDuplicate === 'Yes') continue;
+    const a = dupAddr(String(r.registeredAddress || ''));
+    // A name match only counts when the Construction opp has no record of its own (else it is a separate property).
+    const byName = !r.propertyRecordIds && names.has(dupName(String(r.opportunityName || r.name || '')));
+    if (byName || (a.length >= 8 && addrs.has(a))) r.smsfConstructionDuplicate = 'Yes';
+  }
 }
 
 function sleep(ms: number) {

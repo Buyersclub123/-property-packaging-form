@@ -213,6 +213,23 @@ swap('if(!st) return {t:"Not applicable",cls:"state-todo"};', 'if(!st) return {t
 // Contract lane estimated from dates (opps outside Property Team): dotted bar + tooltip.
 swap('<div class="bar">${st.map((s,i)=>`<i class="${s}" ${tip(l,i,s,o)}></i>`).join("")}</div>',
   '<div class="bar${l==="contract"&&o.cEst?" est":""}"${l==="contract"&&o.cEst?` title="estimated from dates"`:""}>${st.map((s,i)=>`<i class="${s}" ${tip(l,i,s,o)}${l==="contract"&&o.cEst?" data-est=1":""}></i>`).join("")}</div>');
+// JT 1/11: valuation = one text chip under the Finance bar (no dots); "Not tracked" gets an info tooltip.
+swap('const val = l==="finance" ? `<div class="val-marks" aria-label="Valuation steps">${states(o,"val").map((s,i)=>`<i class="${s}" ${tip("val",i,s)}></i>`).join("")}</div>` : "";',
+  'const val = l==="finance" ? valChip(o) : "";');
+swap('if(l==="finance"&&o.short) cap=`<span class="cap alert">Val shortfall</span>`;',
+  'if(l==="finance"&&o.fin===null) cap=`<span class="cap state-todo">Not tracked <span class="nt-info" tabindex="0" title="${NT_TIP}">&#9432;</span></span>`;');
+swap('function nowText(o, lane){', `const NT_TIP="Finance is not tracked by the Contracts Team for this deal — the purchaser (usually a staff member) manages their own finance.";
+function valChip(o){
+  if(o.valStep<1 && !o.short) return "";
+  const mo=s=>{const d=new Date(s); return isNaN(d)?s:d.toLocaleDateString("en-AU",{month:"short",year:"numeric"})};
+  const t=o.short?"shortfall":o.valStep>=6?"at value":["",o.valAccess?"access "+mo(o.valAccess):"access","available","requested","booked","attended"][o.valStep];
+  return \`<span class="val-chip\${o.short?" alert":""}">Val: \${esc(t)}</span>\`;
+}
+function nowText(o, lane){`);
+swap('</style>', `#opp .val-chip{display:inline-block;font-size:11px;line-height:16px;color:var(--muted);background:var(--chip);border-radius:8px;padding:0 6px;margin:2px 0 1px}
+#opp .val-chip.alert{color:#fff;background:var(--alert)}
+#opp .nt-info{cursor:help;font-style:normal;margin-left:3px}
+</style>`);
 swap('<div class="tm">${st.m}</div>', '<div class="tm">${st.m}${el.dataset.est?" Estimated from dates: this opp is in the Finance / Construction pipeline, not Property Team.":""}</div>');
 swap('</style>', `#opp .seg .bar.est i{outline:1.5px dotted rgba(0,0,0,.35);outline-offset:-1.5px}
 #opp .seg .bar.est i.done,#opp .seg .bar.est i.doing{opacity:.55}
