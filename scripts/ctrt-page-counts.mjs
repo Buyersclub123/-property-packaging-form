@@ -47,7 +47,8 @@ try {
 
   const out = [];
   for (const view of VIEWS) {
-    await evaluate(`localStorage.setItem('ctr-view-id', ${JSON.stringify(view)})`);
+    // Fresh layout per view: saved columns would otherwise carry over from the previous view.
+    await evaluate(`localStorage.removeItem('ctr-columns'); localStorage.setItem('ctr-theme', 'light'); localStorage.setItem('ctr-view-id', ${JSON.stringify(view)})`);
     dataRequestId = null; dataDone = false;
     await send('Page.reload', { ignoreCache: true });
     const t0 = Date.now();
