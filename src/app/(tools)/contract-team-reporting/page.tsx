@@ -841,16 +841,32 @@ function emptyCellLabel(record: object, key: string): string {
 }
 const isNewOrMinedView = (id: string) => id.endsWith('-new') || id.endsWith('-mined');
 
+// Finance NEW views leave out Construction-pipeline opps unless "include deals in construction" is ticked (JT, parity 1/11).
+const EXCLUDE_CONSTRUCTION: ViewFilter = { field: 'pipelineId', operator: 'not equals', value: CONSTRUCTION_PIPELINE_ID };
+const isExcludeConstruction = (f: ViewFilter) =>
+  f.field === EXCLUDE_CONSTRUCTION.field && f.operator === EXCLUDE_CONSTRUCTION.operator && f.value === EXCLUDE_CONSTRUCTION.value;
+const IN_FLIGHT_NEW: ViewFilter = { field: 'inFlightNew', operator: 'equals', value: 'Yes' };
+
 const NEW_VIEW_FILTERS: Record<string, ViewFilter[]> = {
   'builtin-bp': [
     { field: 'financeTrack', operator: 'equals', value: 'Yes' },
     { field: 'co_property_type', operator: 'equals', value: 'established' },
+    EXCLUDE_CONSTRUCTION,
   ],
   'builtin-full-fc': [{ field: 'fcTrack', operator: 'equals', value: 'Yes' }],
   'builtin-build-deposit': [{ field: 'fcTrack', operator: 'equals', value: 'Yes' }],
-  'builtin-settlement': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
-  'builtin-uncon': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
-  'builtin-finance-tracking': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
+  'builtin-settlement': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
+  'builtin-uncon': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
+  'builtin-finance-tracking': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
+  // Project views filter on the Property Record project_name (picked from Deal Sheet → Project names), not address text.
+  'builtin-ocean-rise': [{ field: 'co_project_name', operator: 'contains', value: 'ocean rise' }, IN_FLIGHT_NEW],
+  'builtin-huntly': [
+    { field: 'co_project_name', operator: 'contains', value: 'huntly' },
+    { field: 'name', operator: 'not contains', value: 'Bilal Darwich' },
+    { field: 'name', operator: 'not contains', value: 'Cooper Rigg' },
+    IN_FLIGHT_NEW,
+  ],
+  'builtin-golden-horizon': [{ field: 'co_project_name', operator: 'contains', value: 'golden horizon' }, IN_FLIGHT_NEW],
   'builtin-pm-intro': [
     { field: 'constructionTrack', operator: 'equals', value: 'Yes' },
     { field: 'co_construction_stage', operator: 'not equals', value: 'handover' },
@@ -915,7 +931,7 @@ PRESET_VIEWS.push(
       col('valuationAttended', 90), col('valuationAttendedDate'), col('valuationOutcome'), col('valuationAmountResidential'),
       col('valuationShortfall', 90), col('valuationNotes', 250), col('financeDueDate'), col('confirmedSettlementDate'), col('latestStatusUpdate', 250),
     ],
-    filters: [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }],
+    filters: [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
     sortBy: 'valuationExpectedAccessDate',
     sortDir: 'asc',
   },
@@ -1125,6 +1141,7 @@ export default function ContractTeamReportingPage() {
   const [activePreset, setActivePreset] = useState<PresetFilter>('none');
   // ?opp=<id> (from Pipeline Journey "Open in CTRT"): show only that opportunity until cleared.
   const [oppFilter, setOppFilter] = useState('');
+  const [includeConstruction, setIncludeConstruction] = useState(false);
   useEffect(() => {
     const opp = new URLSearchParams(window.location.search).get('opp');
     if (opp) setOppFilter(opp);
@@ -2131,8 +2148,10 @@ export default function ContractTeamReportingPage() {
 
   // Records the active view actually shows, before any ad-hoc grid filtering.
   const viewScopedRecords = useMemo(
-    () => (oppFilter ? records.filter((r) => r.id === oppFilter) : applyViewFilters(records, effectiveView.filters)),
-    [records, effectiveView, oppFilter]
+    () => (oppFilter
+      ? records.filter((r) => r.id === oppFilter)
+      : applyViewFilters(records, includeConstruction ? effectiveView.filters.filter((f) => !isExcludeConstruction(f)) : effectiveView.filters)),
+    [records, effectiveView, oppFilter, includeConstruction]
   );
 
   // Values offered in a column's filter dropdown. Scoped to the view's own data —
@@ -3043,6 +3062,12 @@ export default function ContractTeamReportingPage() {
         >
           {viewBarCollapsed ? '▶' : '▼'}
         </button>
+        {effectiveView.filters.some(isExcludeConstruction) && (
+          <label className="shrink-0 mr-2 flex items-center gap-1 opacity-100 font-medium">
+            <input type="checkbox" checked={includeConstruction} onChange={(e) => setIncludeConstruction(e.target.checked)} />
+            include deals in construction
+          </label>
+        )}
         {viewBarCollapsed ? (
           <span className="font-medium truncate">
             View: {effectiveView.name}

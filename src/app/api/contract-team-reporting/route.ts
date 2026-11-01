@@ -365,11 +365,15 @@ function daysSinceDay(value: string): string {
   return String(Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / DAY_MS));
 }
 
+// Property Team stages that count as in flight (lower case).
+const PT_IN_FLIGHT_STAGES = new Set(['deal closed', 'contract review', 'exchange wip', 'conditional', 'unconditional']);
+
 function transformOpportunity(
   opp: GHLOpportunity,
   propertyByOppId: Map<string, Record<string, string>>,
   allPropertyKeys: Set<string>,
-  oppDynamicKeys: Map<string, string>
+  oppDynamicKeys: Map<string, string>,
+  financeContactsWithRecord: Set<string>
 ): ReportRecord {
   const customFieldValues: Record<string, string> = {};
   if (opp.customFields) {
@@ -502,22 +506,24 @@ function transformOpportunity(
   base.propertyRecordIds = propertyValues?.__ids ?? '';
 
   // New-mapping computed values (Finance Status / Construction stage instead of pipelines).
+  // One in-flight definition for every tab and view (JT 1/11): open AND (Property Team at an in-flight stage,
+  // OR Finance except Settled, OR Construction except Handover). SMSF Construction duplicates (no record of
+  // their own, same contact has a Finance opp with the record) count once, via the Finance opp.
   const stageLower = stageName.toLowerCase();
-  const ptSettled = opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM && stageLower === 'settled';
   const fallen = !!base.dealFallenOver;
   const constructionStage = base.co_construction_stage || '';
-  base.financeTrack = base.financeStatus && !ptSettled && !fallen ? 'Yes' : '';
-  base.constructionTrack = constructionStage && !ptSettled && !fallen ? 'Yes' : '';
-  base.fcTrack = base.financeTrack || base.constructionTrack ? 'Yes' : '';
-  base.inFlight =
-    (opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM && stageLower !== 'settled') ||
+  const contactKey = String((opp as unknown as { contactId?: string }).contactId || '');
+  const smsfDuplicate = opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !propertyValues && !!contactKey && financeContactsWithRecord.has(contactKey);
+  const inFlight = opp.status === 'open' && !fallen && !smsfDuplicate && (
+    (opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM && PT_IN_FLIGHT_STAGES.has(stageLower)) ||
     (opp.pipelineId === PIPELINE_ID.FINANCE && stageLower !== 'settled') ||
-    (opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !stageLower.includes('handover'))
-      ? 'Yes' : '';
-  base.inFlightNew =
-    !fallen && !ptSettled &&
-    (opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM || !!base.financeStatus || (!!constructionStage && constructionStage !== 'handover'))
-      ? 'Yes' : '';
+    (opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !stageLower.includes('handover')));
+  base.smsfConstructionDuplicate = smsfDuplicate ? 'Yes' : '';
+  base.inFlight = inFlight ? 'Yes' : '';
+  base.inFlightNew = base.inFlight;
+  base.financeTrack = inFlight && base.financeStatus ? 'Yes' : '';
+  base.constructionTrack = inFlight && constructionStage ? 'Yes' : '';
+  base.fcTrack = base.financeTrack || base.constructionTrack ? 'Yes' : '';
   base.daysInFinanceStatus = base.financeStatus ? daysSinceDay(base.financeStatusChangeDate) : '';
   base.daysInConstructionStage = constructionStage ? daysSinceDay(base.co_construction_stage_change_date || '') : '';
 
@@ -589,9 +595,16 @@ async function buildReport(historical = false): Promise<ReportRecord[]> {
   for (const k of schemaKeys) allPropertyKeys.add(k);
   const { propertyByOppId } = buildPropertyLookup(propertyRecords, allPropertyKeys);
 
+  // Contacts with an open, not-settled Finance opp that has a Property Record (SMSF Construction duplicates count via it).
+  const financeContactsWithRecord = new Set(
+    allOpportunities
+      .filter((o) => o.status === 'open' && o.pipelineId === PIPELINE_ID.FINANCE && propertyByOppId.has(o.id))
+      .map((o) => String((o as unknown as { contactId?: string }).contactId || ''))
+      .filter(Boolean)
+  );
   const report = allOpportunities
     .filter((opp) => historical || opp.status === 'open')
-    .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys, oppDynamicKeys))
+    .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys, oppDynamicKeys, financeContactsWithRecord))
     .filter((r) => {
       if (historical) return true;
       if (r.pipelineId === PIPELINE_ID.FINANCE && r.pipelineStage.toLowerCase() === 'settled') return false;

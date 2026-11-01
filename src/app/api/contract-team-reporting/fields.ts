@@ -103,7 +103,7 @@ export const OPP_DYNAMIC_PREFIX = 'opp_';
 
 // Values computed by the reporting API (never written to GHL). Used by the NEW-mapping views.
 export const COMPUTED_FIELDS = [
-  'financeTrack', 'constructionTrack', 'fcTrack', 'inFlight', 'inFlightNew',
+  'financeTrack', 'constructionTrack', 'fcTrack', 'inFlight', 'inFlightNew', 'smsfConstructionDuplicate',
   'daysInFinanceStatus', 'daysInConstructionStage', 'propertyRecordCount', 'propertyRecordIds',
 ] as const;
 

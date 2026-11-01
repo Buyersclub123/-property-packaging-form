@@ -104,8 +104,10 @@ ts.forEachChild(sf, (n) => {
   }
 });
 const PIPELINE_ID = { FINANCE, CONSTRUCTION, PROPERTY_TEAM };
-const evalNode = (node) => new Function('FINANCE_PIPELINE_ID', 'CONSTRUCTION_PIPELINE_ID', 'PIPELINE_ID',
-  `return ${ts.transpile(`(${node.getText(sf)})`, { target: ts.ScriptTarget.ES2020 }).trim().replace(/;$/, '')}`)(FINANCE, CONSTRUCTION, PIPELINE_ID);
+const EXCLUDE_CONSTRUCTION = { field: 'pipelineId', operator: 'not equals', value: CONSTRUCTION };
+const IN_FLIGHT_NEW = { field: 'inFlightNew', operator: 'equals', value: 'Yes' };
+const evalNode = (node) => new Function('FINANCE_PIPELINE_ID', 'CONSTRUCTION_PIPELINE_ID', 'PIPELINE_ID', 'EXCLUDE_CONSTRUCTION', 'IN_FLIGHT_NEW',
+  `return ${ts.transpile(`(${node.getText(sf)})`, { target: ts.ScriptTarget.ES2020 }).trim().replace(/;$/, '')}`)(FINANCE, CONSTRUCTION, PIPELINE_ID, EXCLUDE_CONSTRUCTION, IN_FLIGHT_NEW);
 const propOf = (obj, name) => obj.properties.find((p) => p.name && p.name.getText(sf) === name)?.initializer;
 const oldViews = presetNode.elements.map((e) => ({ id: evalNode(propOf(e, 'id')), name: evalNode(propOf(e, 'name')), filters: evalNode(propOf(e, 'filters')) }));
 const NEW_VIEW_FILTERS = evalNode(newFiltersNode);
