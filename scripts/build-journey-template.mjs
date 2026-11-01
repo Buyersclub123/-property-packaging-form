@@ -230,7 +230,7 @@ function valChip(o){
   return \`<span class="val-chip\${o.short?" alert":""}">Val: \${esc(t)}</span>\`;
 }
 function nowText(o, lane){`);
-swap('</style>', `#opp .val-chip{display:inline-block;font-size:11px;line-height:16px;color:var(--muted);background:var(--chip);border-radius:8px;padding:0 6px;margin:2px 0 1px}
+swap('</style>', `#opp .val-chip{display:inline-block;align-self:flex-start;font-size:11px;line-height:16px;color:var(--muted);background:var(--chip);border-radius:8px;padding:0 6px;margin:2px 0 1px}
 #opp .val-chip.alert{color:#fff;background:var(--alert)}
 #opp .nt-info{cursor:help;font-style:normal;margin-left:3px}
 </style>`);
