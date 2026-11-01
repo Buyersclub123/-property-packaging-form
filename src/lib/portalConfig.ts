@@ -113,6 +113,12 @@ export const teams: TeamTile[] = [
         href: '/contract-team-reporting',
         newTab: true,
       },
+      {
+        name: 'Pipeline Journey',
+        description: 'Where every deal is across Contract, Finance, Construction and Property Record (read-only)',
+        href: '/journey',
+        newTab: true,
+      },
     ],
   },
   {
