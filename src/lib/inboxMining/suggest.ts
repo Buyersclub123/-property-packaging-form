@@ -1,5 +1,5 @@
 import { FRIENDLY_TO_FIELD_ID, PROPERTY_FIELD_MAP, PROPERTY_FIELD_LABELS } from '@/app/api/contract-team-reporting/fields';
-import type { Facts, InboxClass, Suggestion } from './types';
+import type { ClassBasis, Facts, InboxClass, Suggestion } from './types';
 
 const RECORD_KEYS = new Set(Object.values(PROPERTY_FIELD_MAP));
 
@@ -43,7 +43,7 @@ function sydneyDate(d: Date): string {
  * docs/planning/agent-plans/class-to-field-map-proposal.md). Values are formatted the way phase (b)
  * would write them. No pipeline stage suggestions.
  */
-export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date, fromBuilder = false): Suggestion[] {
+export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date, fromBuilder = false, basis?: ClassBasis): Suggestion[] {
   const out: Suggestion[] = [];
   switch (cls) {
     case 'registration_titles_issued': {
@@ -99,5 +99,6 @@ export function buildSuggestions(cls: InboxClass, facts: Facts, receivedAt: Date
     default:
       break;
   }
-  return out;
+  // JT 01/11: the classification text (subject line included) is evidence; "no evidence" only when there is none.
+  return basis ? out.map((s) => ({ ...s, basis, noEvidence: undefined })) : out;
 }

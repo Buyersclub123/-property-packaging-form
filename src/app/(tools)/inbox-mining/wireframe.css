@@ -67,6 +67,7 @@
 
 .imx .why { padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .imx .excerpt { margin: 0; font-size: 16px; line-height: 1.5; padding: 12px 16px; border-radius: 8px; background: var(--soft); border: 2px solid var(--brand); white-space: pre-wrap; max-height: 20rem; overflow: auto; font-family: inherit; }
+.imx .excerpt mark { background: rgba(255, 214, 10, .45); border: 2px solid #F59E0B; color: inherit; border-radius: 2px; padding: 0 2px; }
 .imx .excerpt-doc { border: 2px solid var(--brand); border-radius: 8px; max-height: 32rem; overflow: auto; }
 .imx .noev { display: flex; gap: 12px; align-items: center; font-size: 17px; padding: 12px 16px; border-radius: 8px; border: 2px dashed var(--brand); }
 .imx .noev .ic { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; font-weight: 700; }

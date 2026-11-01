@@ -3,7 +3,8 @@
 // Usage: node scripts/inbox-rerun.mjs [days=7]
 const days = parseInt(process.argv[2] || '7', 10);
 const MAILBOXES = ['property@buyersclub.com.au', 'contracts@buyersclub.com.au', 'construction@buyersclub.com.au', 'sydney.m@buyersclub.com.au'];
-for (const mailbox of MAILBOXES) {
+// Mailboxes run in parallel.
+await Promise.all(MAILBOXES.map(async (mailbox) => {
   let runId;
   const skip = [];
   for (let chunk = 0; chunk < 500; chunk++) {
@@ -25,5 +26,5 @@ for (const mailbox of MAILBOXES) {
     console.log(new Date().toISOString(), mailbox, 'chunk', chunk, 'written', data.written, 'remaining', data.remaining, 'errors', (data.errors || []).length);
     if (!data.remaining) break;
   }
-}
+}));
 console.log('done');

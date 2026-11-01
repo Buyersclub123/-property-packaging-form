@@ -106,6 +106,14 @@ export interface Suggestion {
   note?: string;
   /** No evidence in the text (e.g. based on the email date only): shown in its own group, graded lower. */
   noEvidence?: boolean;
+  /** The text the classification was based on; WHY quotes it when no extracted fact backs the suggestion. */
+  basis?: ClassBasis;
+}
+
+export interface ClassBasis {
+  where: 'subject' | 'file' | 'email';
+  text: string;
+  match: string;
 }
 
 export const FEEDBACK_OUTCOMES = ['accept', 'wrong_field', 'wrong_value', 'wrong_opportunity', 'not_needed'] as const;

@@ -63,8 +63,24 @@ function Excerpt({ body, hit, idKey }: { body: string; hit: { start: number; end
   );
 }
 
+/** WHY quotes the text the classification was based on (subject line, file name or email line). */
+function BasisQuote({ s }: { s: Suggestion }) {
+  const b = s.basis!;
+  const at = b.text.toLowerCase().indexOf(b.match.toLowerCase());
+  const where = b.where === 'subject' ? 'Subject line' : b.where === 'file' ? 'Attachment name' : 'Email';
+  const dated = /email received/i.test(s.source);
+  return (
+    <div className="excerpt">
+      <div className="lbl">{where}</div>
+      {at < 0 ? b.text : <>{b.text.slice(0, at)}<mark>{b.text.slice(at, at + b.match.length)}</mark>{b.text.slice(at + b.match.length)}</>}
+      {dated && <div className="on-what">Date taken from the email received date.</div>}
+    </div>
+  );
+}
+
 function Why({ s, d, facts, onLocated, itemId }: { s: Suggestion; d: Detail; facts: [string, Fact][]; onLocated: (k: string, p: FactPos) => void; itemId: number }) {
   const fact = factFor(s, facts);
+  if (!fact && s.basis) return <BasisQuote s={s} />;
   if (s.noEvidence || !fact) {
     return (
       <div className="noev">

@@ -39,7 +39,9 @@ const fieldSuggestions = (i: WorkItem) => (i.suggestions || []).filter((s) => s.
 function listOf(i: WorkItem): ListKey {
   if (i.direction === 'outbound') return 'other';
   if (i.activity === 'complaint') return 'unhappy';
-  if (fieldSuggestions(i).length && ['A', 'B', 'C'].includes(i.match?.grade)) return 'priority';
+  if ((i.cls_rule || '').startsWith('client question')) return 'replies';
+  // Only suggestions with text evidence reach the priority list; no-evidence ones sit in the lower group of their own list.
+  if (fieldSuggestions(i).some((s) => !s.noEvidence) && ['A', 'B', 'C'].includes(i.match?.grade)) return 'priority';
   if (i.cls === 'build_update_progress_claim' || i.activity === 'build_update') return 'build';
   if (i.activity === 'client_request') return 'replies';
   if (i.activity === 'thank_you') return 'thanks';
