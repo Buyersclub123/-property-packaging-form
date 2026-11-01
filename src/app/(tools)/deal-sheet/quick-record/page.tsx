@@ -6,6 +6,7 @@ import { UserEmailPrompt } from '@/components/UserEmailPrompt';
 import { getUserEmail } from '@/lib/userAuth';
 import {
   FIELDS, SECTIONS, FIELD_BY_KEY, dependentsOf, fieldOptions, fieldWidth, isDual, isLocked, isVisible, validateValues, hasCashbackRebate,
+  PROJECT_NAME_OPTS,
 } from '@/lib/propertyFields/registry';
 import type { FieldDef, SectionId, Values } from '@/lib/propertyFields/registry';
 import { deriveAll, composePropertyAddress, formatCurrency, priceGroupLabel } from '@/lib/propertyFields/calcs';
@@ -77,6 +78,16 @@ function QuickRecordInner() {
   // Sourcer list (same source as the packaging form)
   useEffect(() => {
     fetch('/api/sourcers').then((r) => r.json()).then((d) => { if (Array.isArray(d.sourcers)) setSourcerOptions(d.sourcers); }).catch(() => setSourcerOptions([]));
+  }, []);
+
+  // Project name dropdown (Deal Sheet → Project names)
+  const [, setProjectNamesLoaded] = useState(0);
+  useEffect(() => {
+    fetch('/api/deal-sheet/project-names').then((r) => r.json()).then((d) => {
+      if (!Array.isArray(d.names)) return;
+      PROJECT_NAME_OPTS.splice(0, PROJECT_NAME_OPTS.length, ...d.names.map((n: string) => ({ value: n, label: n })));
+      setProjectNamesLoaded((x) => x + 1);
+    }).catch(() => {});
   }, []);
 
   // Copy mode: load source record (registry fields only)

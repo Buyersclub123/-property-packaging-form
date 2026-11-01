@@ -1389,6 +1389,15 @@ export default function DealSheetPage() {
           >
             Duplicate Links{duplicateLinkCount > 0 && ` (${duplicateLinkCount})`}
           </a>
+          <a
+            href="/deal-sheet/project-names"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2 py-1 text-[10px] font-medium rounded transition-colors bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white"
+            title="Project names that Property Records pick from"
+          >
+            Project names
+          </a>
         </div>
 
         {/* Live Records */}

@@ -91,6 +91,13 @@ const MONTH_YEAR_EXPIRY: Option[] = [{ value: 'TBC', label: 'TBC' }, { value: 'P
 const MONTH_YEAR_LAND_REG: Option[] = [{ value: 'Registered', label: 'Registered' }, { value: 'TBC', label: 'TBC' }];
 const MONTH_YEAR_COMPLETION: Option[] = [{ value: 'Completed', label: 'Completed' }, { value: 'TBC', label: 'TBC' }];
 
+// Filled at runtime from Deal Sheet → Project names (/api/deal-sheet/project-names).
+export const PROJECT_NAME_OPTS: Option[] = [];
+const projectNameOptions = (v: Values): Option[] =>
+  v.projectName && !PROJECT_NAME_OPTS.some((o) => o.value === v.projectName)
+    ? [{ value: v.projectName, label: v.projectName }, ...PROJECT_NAME_OPTS]
+    : PROJECT_NAME_OPTS;
+
 export const FIELDS: FieldDef[] = [
   // ---------------- Decision tree (Step1DecisionTree order) ----------------
   { key: 'propertyType', ghlKey: 'property_type', label: 'Property Type', section: 'decision', type: 'select',
@@ -129,6 +136,8 @@ export const FIELDS: FieldDef[] = [
   { key: 'suburbName', ghlKey: 'suburb_name', label: 'Suburb', section: 'address', type: 'text', width: 'half' },
   { key: 'state', ghlKey: 'state', label: 'State', section: 'address', type: 'select', options: STATE_OPTS, width: 'half' },
   { key: 'postCode', ghlKey: 'post_code', label: 'Post Code', section: 'address', type: 'text', width: 'half' },
+  { key: 'projectName', ghlKey: 'project_name', label: 'Project name', section: 'description', type: 'select', options: projectNameOptions,
+    required: false, width: 'half', help: 'From Deal Sheet → Project names. Leave blank if the property is not part of a project.' },
   { key: 'lga', ghlKey: 'lga', label: 'LGA', section: 'address', type: 'readonly', width: 'half',
     help: 'Resolved automatically once Suburb, State and Post Code are entered.' },
 
