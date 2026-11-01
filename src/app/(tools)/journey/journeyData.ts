@@ -1,6 +1,11 @@
 // Turns CTRT API records (+ GHL's own stage counts) into the data the Journey Map mock-up renders (read-only).
 // Stage rules: GHL Field Run Sheet, tab "Stage definitions" (v2, 1/11).
 type Rec = Record<string, string | undefined>;
+export type Sales = {
+  contacts: Record<string, number>;
+  meetings: { id: string; date: string; client: string; calendar: string; consultant: string; outcome: string }[];
+  opps: { id: string; created: string; name: string; client: string; consultant: string }[];
+};
 export type Recon = { pipelines: { id: string; name: string; stages: { id: string; name: string; total: number }[] }[] };
 
 const PT_ID = 'zrb34FRmPnbIyAGFDeXJ';
@@ -192,7 +197,15 @@ function reconcile(tileRecs: Rec[], cmp: Compare, whyExtra: (r: Rec) => string) 
   };
 }
 
-export function buildJourneyData(records: Rec[], recon: Recon, historical: boolean) {
+function salesTile(id: string, sales: Sales | null) {
+  if (!sales) return { notWired: true, rows: [] };
+  if (id === 'contacts') return { fixedCounts: sales.contacts, rows: [] };
+  if (id === 'booked') return { rows: sales.meetings.map((m) => ({ id: m.id, date: m.date, client: m.client, consultant: m.consultant, satBy: m.calendar })) };
+  if (id === 'outcomes') return { rows: sales.meetings.filter((m) => m.outcome).map((m) => ({ id: m.id, date: m.date, client: m.client, outcome: m.outcome, consultant: m.consultant, satBy: m.calendar })) };
+  return { rows: sales.opps.map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, consultant: o.consultant, ba: '' })) };
+}
+
+export function buildJourneyData(records: Rec[], recon: Recon, historical: boolean, sales: Sales | null = null) {
   const today = sydney(new Date());
   const pop = historical ? records : records.filter((r) => r.inFlight === 'Yes' && !isFallen(r));
   const popIds = new Set(pop.map((r) => r.id));
@@ -209,7 +222,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
   const pt = recon.pipelines.find((p) => p.id === PT_ID)?.stages || [];
   const dealClosedAt = pt.findIndex((s) => norm(s.name) === 'dealclosed');
   const stages = [
-    ...SALES_TILES.map((s) => ({ ...s, phase: 'sales', notWired: true, rows: [] as ReturnType<typeof stageRow>[] })),
+    ...SALES_TILES.map((s) => ({ ...s, phase: 'sales', ...salesTile(s.id, sales) })),
     ...pt.map((s, i) => {
       const all = records.filter((r) => r.pipelineStageId === s.id);
       const tile = all.filter(inPop);

@@ -21,11 +21,18 @@ export default function JourneyPage() {
     setLoading(true);
     setError('');
     const q = hist ? '?historical=1' : '';
+    // Sales tiles load separately (slow: GHL contacts + sales opps); the journey renders first with them "not wired",
+    // then re-renders once they arrive. If they fail they stay "not wired".
+    const sales = getJson('/api/journey/sales').catch((e) => { console.error('Journey sales tiles:', e); return null; });
+    const render = (records: Record<string, string>[], recon: Parameters<typeof buildJourneyData>[1], salesData: Parameters<typeof buildJourneyData>[3]) => {
+      const json = JSON.stringify(buildJourneyData(records, recon, hist, salesData)).replace(/</g, '\\u003c');
+      setHtml(JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${json};</script>\n<script>`));
+    };
     Promise.all([getJson(`/api/contract-team-reporting${q}`), getJson(`/api/journey/reconcile${q}`)])
       .then(([records, recon]) => {
-        const json = JSON.stringify(buildJourneyData(records, recon, hist)).replace(/</g, '\\u003c');
-        setHtml(JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${json};</script>\n<script>`));
+        render(records, recon, null);
         setHistorical(hist);
+        sales.then((salesData) => { if (salesData) render(records, recon, salesData); });
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));

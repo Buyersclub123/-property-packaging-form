@@ -139,12 +139,12 @@ function fixWrap(){
     nodes.forEach(nd=>{nd.style.marginLeft="";nd.style.removeProperty("--drop");nd.classList.remove("wrap-first","wrap-last","wrap-down");});
     const rows=[]; nodes.forEach(nd=>{const r=rows[rows.length-1]; if(r&&r[0].offsetTop===nd.offsetTop) r.push(nd); else rows.push([nd]);});
     if(rows.length<2) return;
-    const right=rows[0][rows[0].length-1].offsetLeft+rows[0][rows[0].length-1].offsetWidth;
-    rows.forEach((r,k)=>{
-      if(k>0){ const w=r[r.length-1].offsetLeft+r[r.length-1].offsetWidth-r[0].offsetLeft; r[0].style.marginLeft=Math.max(0,right-w)+"px"; r[0].classList.add("wrap-first"); }
-      if(k<rows.length-1){ const end=r[r.length-1]; end.classList.add("wrap-last","wrap-down"); }
-    });
-    rows.forEach((r,k)=>{ if(k<rows.length-1){ const end=r[r.length-1], below=rows[k+1][rows[k+1].length-1]; end.style.setProperty("--drop",(below.offsetTop-end.offsetTop)+"px"); } });
+    // Overflow tiles sit directly below the last tile of the row above, joined by a short vertical line.
+    for(let k=1;k<rows.length;k++){
+      const above=rows[k-1][rows[k-1].length-1], first=rows[k][0];
+      first.style.marginLeft=Math.max(0,above.offsetLeft-first.offsetLeft)+"px"; first.classList.add("wrap-first");
+      above.classList.add("wrap-last","wrap-down"); above.style.setProperty("--drop",(first.offsetTop-above.offsetTop)+"px");
+    }
   });
 }
 let fixWrapT; window.addEventListener("resize",()=>{clearTimeout(fixWrapT); fixWrapT=setTimeout(fixWrap,80);});
@@ -152,12 +152,17 @@ let fixWrapT; window.addEventListener("resize",()=>{clearTimeout(fixWrapT); fixW
 function renderPanel(){`);
 
 // Reconciliation: "All" prominent, a ≠ GHL flag on tiles whose All differs, and the per-stage reconciliation panel.
-swap('<small>${PERIODS[s.head].label.toLowerCase()}</small></span>',
-  '<small>${PERIODS[s.head].label.toLowerCase()} · <b class="all">${n(s.counts.ever)}</b> all</small>${s.mismatch?`<i class="neq" title="All differs from GHL: see reconciliation">≠ GHL</i>`:""}</span>');
+// One number per tile: All (bold). Period movement stays in the panel below.
+swap('<b>${n(s.counts[s.head])}</b><small>${PERIODS[s.head].label.toLowerCase()}</small></span>',
+  '<b>${n(s.counts.ever)}</b><small>all</small>${s.mismatch?`<i class="neq" title="All differs from GHL: see reconciliation">≠ GHL</i>`:""}</span>');
+// Counts supplied by the server (e.g. GHL contacts) are used as-is.
+swap('  s.counts = {}; if (s.hasLand) s.land = {};\n  [...new Set', '  s.counts = s.fixedCounts || {}; if (s.hasLand) s.land = {};\n  if (!s.fixedCounts) [...new Set');
 swap('    <div class="cards">${cards}</div>\n', '    <div class="cards">${cards}</div>\n    ${s.recon||""}\n');
 // Derived filter chips (not stages) on the Finance tab.
 swap('const list0=JOURNEYS[tab], sel=selBy[tab], groups={};', 'const list0=JOURNEYS[tab].filter(s=>!s.chip), sel=selBy[tab], groups={};');
-swap('  fixWrap();\n}\nfunction fixWrap(){', `  const chips=JOURNEYS[tab].filter(s=>s.chip);
+swap('  fixWrap();\n}\nfunction fixWrap(){', `  const nw=JOURNEYS[tab].filter(s=>s.notWired);
+  if(nw.length){ const ph=track.querySelector('.node[data-id="'+nw[0].id+'"]')?.closest(".phase"); if(ph) ph.insertAdjacentHTML("beforeend", '<div class="nw-overlay">Sales figures coming — these tiles will read from the Review Outcomes tool and GHL contacts. Nothing to do here yet.</div>'); }
+  const chips=JOURNEYS[tab].filter(s=>s.chip);
   if(chips.length) track.insertAdjacentHTML("beforeend", \`<div class="chipbar"><span class="chipbar-lbl">Derived filters (not stages)</span>\${chips.map(c=>\`<button class="node chip" data-id="\${c.id}" aria-pressed="\${c.id===sel}">\${esc(c.name)} <b>\${n(c.counts.ever)}</b>\${c.mismatch?'<i class="neq">≠ GHL</i>':""}</button>\`).join("")}</div>\`);
   fixWrap();
 }
@@ -183,6 +188,17 @@ swap('</style>', `#opp .seg .bar.est i{background:transparent;box-shadow:inset 0
 .node.hold{width:124px;opacity:.7}
 .node.hold .circle{width:112px;height:50px;border-color:var(--line);border-style:dashed;border-width:2px}
 .node .name{position:relative;z-index:1;background:var(--bg);padding:0 2px}
+/* One page at laptop width: smaller tiles, sections stacked left-aligned (no staircase). */
+.track.stair .phase,.track.stair .phase:first-child,.track.stair .phase:last-child{align-self:flex-start}
+.node{width:118px;gap:6px}
+.node::before,.node.wrap-down::after{top:28px}
+.circle{width:106px;height:58px;border-radius:12px}
+.circle b{font-size:22px}
+.node .name{font-size:11.5px;max-width:112px}
+.node.hold{width:96px}
+.node.hold .circle{width:84px;height:46px}
+.phase{position:relative}
+.nw-overlay{position:absolute;inset:22px -4px -4px -4px;display:flex;align-items:center;justify-content:center;text-align:center;padding:8px 16px;background:rgba(255,255,255,.78);backdrop-filter:blur(1px);border:1.5px dashed var(--line);border-radius:12px;font-size:13px;font-weight:600;color:var(--muted);z-index:3}
 .node.hold .circle b{font-size:16px;color:var(--muted)}
 .node.hold .name{font-size:11px;font-weight:600;color:var(--muted)}
 .circle small b.all{font-weight:800;color:var(--ink)}
