@@ -67,7 +67,10 @@ async function fetchAllFromGHL(): Promise<DealSheetRow[]> {
       hasMore = false;
     }
 
-    if (page > 20) hasMore = false;
+    // No page cap (it truncated the shared cache past 2,000 records); the ceiling only stops a runaway loop, loudly.
+    if (hasMore && page > 1000) {
+      throw new Error(`Deal Sheet sync paging passed 1000 pages (${allRecords.length} records); cache left unchanged.`);
+    }
   }
 
   const rows = allRecords.map((record) => transformRecord(record)) as DealSheetRow[];

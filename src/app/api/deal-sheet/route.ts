@@ -16,6 +16,7 @@ const SHARED_LOCK = 'ds:records:lock';
 const LOCK_TTL_SEC = 30;
 const WAIT_FOR_LOCK_MS = 15000;
 const WAIT_POLL_MS = 400;
+const RUNAWAY_PAGES = 1000;
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -75,11 +76,12 @@ async function buildDealSheet(): Promise<DealSheetRow[]> {
       hasMore = false;
     }
 
-    // Safety limit
-    if (page > 20) {
-      hasMore = false;
+    // No page cap: page until GHL returns a short page. The ceiling only stops a runaway loop, loudly.
+    if (hasMore && page > RUNAWAY_PAGES) {
+      throw new Error(`Deal Sheet paging passed ${RUNAWAY_PAGES} pages (${allRecords.length} records); refusing to cache a partial set.`);
     }
   }
+  console.log(`Deal Sheet: loaded ${allRecords.length} records in ${page - 1} page(s).`);
 
   // Transform all records (no status filter — cache holds everything)
   const rows = allRecords.map((record) => transformRecord(record)) as DealSheetRow[];
@@ -244,9 +246,30 @@ export async function GET(request: Request) {
     await redis.set(SHARED_KEY, JSON.stringify({ fetchedAt: now, records: rows }), {});
     return respond(rows, allLinks, now, 'live', statusesParam);
   } catch (error) {
-    console.error('Deal sheet fetch error:', error);
+    console.error('DEAL SHEET LOAD FAILED:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch deal sheet data' },
+      { error: `Failed to fetch deal sheet data: ${error instanceof Error ? error.message : String(error)}` },
+      { status: 500 }
+    );
+  }
+}
+
+// Cache-refresh trigger for loads: POST /api/deal-sheet rebuilds the shared cache from GHL
+// (same as pressing Refresh), so every user sees the loaded records on their next poll.
+export async function POST() {
+  try {
+    if (!GHL_API_TOKEN || !GHL_LOCATION_ID) {
+      return NextResponse.json({ error: 'Missing GHL configuration' }, { status: 500 });
+    }
+    const rows = await buildDealSheet();
+    const fetchedAt = new Date().toISOString();
+    const redis = await getRedisClient();
+    await redis.set(SHARED_KEY, JSON.stringify({ fetchedAt, records: rows }), {});
+    return NextResponse.json({ ok: true, records: rows.length, fetchedAt });
+  } catch (error) {
+    console.error('DEAL SHEET CACHE REFRESH FAILED:', error);
+    return NextResponse.json(
+      { error: `Deal Sheet cache refresh failed: ${error instanceof Error ? error.message : String(error)}` },
       { status: 500 }
     );
   }
