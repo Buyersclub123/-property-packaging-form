@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { getRedisClient } from '@/lib/redis';
 import { ghlUsers } from '@/lib/reviewOutcomes/sync';
+import { loadMeetings } from '@/lib/reviewOutcomes/load';
+import { loadSettings } from '@/lib/reviewOutcomes/store';
+import { addDays, sydYmd } from '@/lib/reviewOutcomes/types';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -13,7 +15,7 @@ const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 // "New opportunities" = opps created in these pipelines.
 const SALES_PIPELINES = ['9TzDdGVTuDbyLCOQgoVY', 'YxZ4JWUVQoR3UtQMbBJb']; // 02. SALES TEAM Pipeline, *Active Clients
-const CACHE_KEY = 'journey:sales:v2';
+const CACHE_KEY = 'journey:sales:v4';
 const CACHE_SEC = 15 * 60;
 const DAY_MS = 86400000;
 
@@ -108,15 +110,14 @@ async function build() {
   const now = new Date();
   const since7 = new Date(now.getTime() - 7 * DAY_MS);
   const users = new Map((await ghlUsers()).map((u) => [u.id, u.name]));
-  const sql = getDb();
-  const [created, rows, opps] = await Promise.all([
-    contactsSince(since7),
-    sql`SELECT m.appointment_id, m.calendar_name, m.assigned_user_id, m.start_at, m.ghl_status, c.name, o.outcome
-        FROM review_meetings m LEFT JOIN review_contacts c ON c.contact_id = m.contact_id
-        LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id
-        WHERE NOT m.deleted AND m.start_at >= ${since7.toISOString()} AND m.start_at <= ${now.toISOString()}`,
-    salesOpps(since7, users),
-  ]);
+  // Meetings exactly as the Review Outcomes tool loads them: Presentation Meeting One + Portfolio Review (GHL),
+  // plus Google Calendar 'Portfolio Review' events with no GHL appointment.
+  const today = sydYmd(now);
+  const loadAll = async () => {
+    const settings = await loadSettings();
+    return loadMeetings({ email: 'journey', recorder: true, consultantIds: [] }, addDays(today, -7), today, settings.callCentre, settings.salesAliases);
+  };
+  const [created, loaded, opps] = await Promise.all([contactsSince(since7), loadAll(), salesOpps(since7, users)]);
   const matches = await mapLimit(created, 8, existingMatch);
   const who = (c: Contact) => users.get(c.createdBy?.sourceId || '') || users.get(c.assignedTo || '') || c.createdBy?.source || c.source || '';
   const duplicates = created.map((c, i) => ({ c, m: matches[i] })).filter((x) => x.m).map(({ c, m }) => ({
@@ -124,11 +125,16 @@ async function build() {
     existingCreated: m!.dateAdded ? sydDay(new Date(m!.dateAdded)) : '', createdBy: who(c),
     why: c.email && m!.email && c.email.toLowerCase() === m!.email.toLowerCase() ? 'name + email' : 'name + mobile',
   }));
-  const meetings = (rows as Record<string, unknown>[]).map((r) => ({
-    id: String(r.appointment_id), at: new Date(r.start_at as string).toISOString(), date: sydDay(new Date(r.start_at as string)),
-    client: String(r.name || ''), calendar: String(r.calendar_name || ''), consultant: users.get(String(r.assigned_user_id || '')) || '',
-    outcome: outcomeOf(r.outcome as string | null, r.ghl_status as string | null),
-  }));
+  const inWindow = (iso: string) => { const t = Date.parse(iso); return t >= since7.getTime() && t <= now.getTime(); };
+  const meetings = [
+    ...loaded.meetings.filter((m) => inWindow(m.start)).map((m) => ({
+      id: m.id, at: m.start, date: m.ymd, client: m.contactName, calendar: m.calendar, consultant: m.consultant,
+      outcome: outcomeOf(m.outcome, null),
+    })),
+    ...loaded.gcalUnmatched.filter((e) => !e.allDay && inWindow(e.start)).map((e) => ({
+      id: e.id, at: e.start, date: e.ymd, client: e.title, calendar: 'Portfolio Review (Google Calendar only)', consultant: e.staff, outcome: '',
+    })),
+  ];
   return {
     asAt: now.toISOString(),
     contacts: created.map((c) => ({ id: c.id, created: c.dateAdded || '', date: sydDay(new Date(c.dateAdded || now)), name: label(c), source: c.source || '', createdBy: who(c) })),

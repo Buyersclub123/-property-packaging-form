@@ -233,6 +233,12 @@ swap('</style>', `#opp .seg .bar.est i{background:transparent;box-shadow:inset 0
 swap('selBy[tab]=b.dataset.id;detail=null;render()});', 'selBy[tab]=b.dataset.id;const st=JOURNEYS[tab].find(x=>x.id===b.dataset.id);detail={period:st&&st.periods.includes("ever")?"ever":(st?st.head:"ever"),matches:false,land:false};render()});');
 swap('</style>', '.recon-wrap>summary{cursor:pointer;font-weight:700;list-style:none}\n.recon-wrap>summary::-webkit-details-marker{display:none}\n.rok{color:#2e7d32}.rbad{color:#c62828}\n.rmore{font-size:12px;color:var(--muted);text-decoration:underline;font-weight:500;margin-left:8px}\n</style>');
 
+// Sales meetings: show the meeting type (Presentation Meeting One / Portfolio Review) instead of "Sat by".
+swap('["Meeting",x=>fmtT(x.d)],["Consultant",x=>x.consultant],["Sat by",x=>x.satBy]]', '["Meeting",x=>fmtT(x.at?new Date(x.at):x.d)],["Meeting type",x=>x.calendar||""],["Consultant",x=>x.consultant]]');
+swap('<span>Sat by</span><select id="d-sat"><option value="">All</option>${opts(DETAIL_CONSULTANTS,dSat)}</select>', '<span>Meeting type</span><select id="d-sat"><option value="">All</option>${opts(["Presentation Meeting One","Portfolio Review Meeting","Portfolio Review (Google Calendar only)"],dSat)}</select>');
+swap('if(isMeet && dSat && x.satBy!==dSat) return false;', 'if(isMeet && dSat && x.calendar!==dSat) return false;');
+swap('["Consultant",x=>x.consultant],["Sat by",x=>x.satBy]]', '["Meeting type",x=>x.calendar||""],["Consultant",x=>x.consultant]]');
+
 // Duplicate contacts group (visibility only; merging is a later build).
 swap('const OPP_KINDS=["opp","fin","property"];', 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
 
