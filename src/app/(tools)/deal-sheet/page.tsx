@@ -340,6 +340,19 @@ export default function DealSheetPage() {
     { value: '07_test_record', label: '07 Test Record' },
   ];
 
+  // Status filter list comes from the live Property Record status schema (01 Available … 08 Resold), not the data.
+  const [schemaStatuses, setSchemaStatuses] = useState<string[]>([]);
+  useEffect(() => {
+    fetch('/api/contract-team-reporting/schema')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((schema) => {
+        const field = schema?.propertyFields?.find((f: { key: string }) => f.key === 'status');
+        const keys: string[] = (field?.options || []).map((o: { key: string }) => o.key);
+        setSchemaStatuses(keys.map((k) => k.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())));
+      })
+      .catch((e) => console.error('Deal Sheet: status schema failed to load', e));
+  }, []);
+
   // Load saved state from localStorage
   useEffect(() => {
     // Always use DEFAULT_COLUMNS - no localStorage caching of columns
@@ -1023,13 +1036,13 @@ export default function DealSheetPage() {
 
   // Multi-select filter: get unique values for a column (from current quick-filtered view)
   const getUniqueValues = useCallback((column: keyof DealRecord): string[] => {
-    const values = new Set<string>();
+    const values = new Set<string>(column === 'status' ? schemaStatuses : []);
     quickFilteredRecords.forEach((r) => {
       const val = r[column];
       values.add(val || '(blank)');
     });
     return Array.from(values).sort();
-  }, [quickFilteredRecords]);
+  }, [quickFilteredRecords, schemaStatuses]);
 
   // Parse ID filter into a set of trimmed IDs
   const idFilterSet = useMemo(() => {
