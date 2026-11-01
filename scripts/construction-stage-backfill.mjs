@@ -37,7 +37,9 @@ const plan = rows
     const hasFinanceOpp = financePeople.has(person(r));
     const changes = {};
     if (opt) changes.co_construction_stage = opt.key;
-    if (!hasFinanceOpp && !r.financeStatus) changes.financeStatus = notTracked.label || notTracked.key;
+    // JT 1/11: Finance Status untouched, except staff deals with no Finance opp -> Not Tracked.
+    const staff = /\bstaff\b/i.test(String(r.name || ''));
+    if (staff && !hasFinanceOpp && !r.financeStatus) changes.financeStatus = notTracked.label || notTracked.key;
     return { r, opt, hasFinanceOpp, changes };
   })
   .sort((a, b) => String(a.r.name).localeCompare(String(b.r.name)));
@@ -46,8 +48,6 @@ const esc = (s) => String(s ?? '').replace(/\|/g, '/');
 const lines = [
   `# Construction stage backfill ${APPLY ? 'APPLY' : 'DRY RUN'} ${new Date().toISOString()}`, '',
   `${plan.length} Construction opps with a Property Record whose construction_stage is blank.`, '',
-  '| Opportunity | Opp stage | Record stage to write | Finance opp? | Finance Status now | Finance Status to write | Result |',
-  '|---|---|---|---|---|---|---|',
 ];
 for (const p of plan) {
   let result = APPLY ? '' : 'dry run';
@@ -60,10 +60,35 @@ for (const p of plan) {
     });
     result = res.ok ? 'written' : `FAILED ${res.status}: ${(await res.text()).slice(0, 120)}`;
   }
-  lines.push(`| ${esc(p.r.name)} | ${esc(p.r.pipelineStage)} | ${p.opt ? `${esc(p.opt.label)} (${p.opt.key})` : '-'} | ${p.hasFinanceOpp ? 'Yes' : 'No'} | ${esc(p.r.financeStatus) || '-'} | ${esc(p.changes.financeStatus) || '-'} | ${esc(result)} |`);
+  p.result = result;
 }
+// Read back from GHL (fresh CTRT build; GHL search can lag, so wait first and retry once).
+if (APPLY) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await new Promise((r) => setTimeout(r, 60000));
+    const fresh = new Map((await getJson('/api/contract-team-reporting?fresh=1')).map((r) => [r.id, r]));
+    for (const p of plan) {
+      const f = fresh.get(p.r.id) || {};
+      p.readStage = String(f.co_construction_stage ?? '');
+      p.readFinance = String(f.financeStatus ?? '');
+      p.ok = (!p.changes.co_construction_stage || p.readStage === p.changes.co_construction_stage) &&
+        (!p.changes.financeStatus || p.readFinance === p.changes.financeStatus);
+    }
+    if (plan.every((p) => p.ok || p.result !== 'written')) break;
+  }
+}
+lines.push('| Opportunity | Record ID | Opp stage | Record stage to write | Finance opp? | Finance Status now | Finance Status to write | Write | Read back |',
+  '|---|---|---|---|---|---|---|---|---|');
+for (const p of plan) {
+  const rb = !APPLY ? '' : `${p.ok ? 'OK' : 'MISMATCH'} (stage ${esc(p.readStage) || '-'}, Finance Status ${esc(p.readFinance) || '-'})`;
+  lines.push(`| ${esc(p.r.name)} | ${p.r.co_record_id} | ${esc(p.r.pipelineStage)} | ${p.opt ? `${esc(p.opt.label)} (${p.opt.key})` : '-'} | ${p.hasFinanceOpp ? 'Yes' : 'No'} | ${esc(p.r.financeStatus) || '-'} | ${esc(p.changes.financeStatus) || '-'} | ${esc(p.result)} | ${rb} |`);
+}
+const n = (f) => plan.filter(f).length;
+lines.push('', `Stage writes ${n((p) => p.changes.co_construction_stage)}, Not Tracked ${n((p) => p.changes.financeStatus)}; written ${n((p) => p.result === 'written')}, failed ${n((p) => String(p.result).startsWith('FAILED'))}` +
+  (APPLY ? `; read back OK ${n((p) => p.ok)}, mismatch ${n((p) => p.result === 'written' && !p.ok)}` : ''));
 mkdirSync('scripts/tmp-ctrt-out', { recursive: true });
 const file = `scripts/tmp-ctrt-out/construction-stage-backfill-${new Date().toISOString().slice(0, 10)}${APPLY ? '-apply' : ''}.md`;
 writeFileSync(file, lines.join('\n'));
 console.log(lines.slice(2).join('\n'));
+
 console.log(`Report: ${file}`);
