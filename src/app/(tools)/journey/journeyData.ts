@@ -7,12 +7,14 @@ const BUILD = ['Pre-BA', 'BA Issued', 'Slab', 'Frame / Plate Height', 'Enclosed 
 // Property Record lane positions, read straight from co_status.
 const PROP_LANE: Record<string, number> = { '01_available': 0, '02_eoi': 1, '03_contr_exchanged': 2, '04_settled': 3, '08_resold': 4 };
 // Every Sales & Property tile from the mock-up, in order. match = Property Team stage(s); notWired = no data source yet (shows 0).
-type SalesStage = { id: string; name: string; phase: string; kind: string; match?: string[]; notWired?: boolean; head?: string; periods?: string[] };
+type SalesStage = { id: string; name: string; phase: string; kind: string; match?: string[]; notWired?: boolean; head?: string; periods?: string[]; detached?: boolean; hold?: boolean };
 const SALES_STAGES: SalesStage[] = [
   { id: 'contacts', phase: 'sales', name: 'New contacts', kind: 'contact', notWired: true },
   { id: 'booked', phase: 'sales', name: 'Sales meetings booked', kind: 'meeting', notWired: true, head: 'weekAll', periods: ['today', 'tomorrow', 'weekAll'] },
   { id: 'outcomes', phase: 'sales', name: 'Sales meeting outcomes', kind: 'outcome', notWired: true, head: 'lastWeek', periods: ['today', 'lastDay', 'lastWeek', 'lastMonth'] },
   { id: 'newopps', phase: 'sales', name: 'New opportunities (client sign-up)', kind: 'opp', notWired: true },
+  // On Hold sits outside the journey: a small grey marker at the start of Property Team (not a numbered step).
+  { id: 'onhold', phase: 'property', name: 'On Hold', kind: 'opp', match: ['On Hold'], detached: true, hold: true },
   { id: 'toproperty', phase: 'property', name: 'Moved to property team', kind: 'opp' },
   { id: 'eoisub', phase: 'property', name: 'EOI submitted', kind: 'opp', notWired: true },
   { id: 'eoiwait', phase: 'property', name: 'Awaiting EOI response', kind: 'opp', notWired: true },
@@ -22,7 +24,6 @@ const SALES_STAGES: SalesStage[] = [
   { id: 'conditional', phase: 'contract', name: 'Conditional', kind: 'opp', match: ['Conditional'] },
   { id: 'uncond', phase: 'contract', name: 'Unconditional', kind: 'opp', match: ['Unconditional'] },
   { id: 'settled', phase: 'contract', name: 'Settled', kind: 'opp', match: ['Settled'] },
-  { id: 'onhold', phase: 'outside', name: 'On Hold', kind: 'opp', match: ['On Hold'] },
 ];
 const LATER_STAGES = new Set(SALES_STAGES.flatMap((s) => s.match || []).map((s) => s.toLowerCase().replace(/[^a-z0-9]/g, '')));
 

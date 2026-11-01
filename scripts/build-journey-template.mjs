@@ -124,6 +124,33 @@ swap('<thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead>',
   '<thead><tr>${cols.map((c,i)=>`<th data-sort="${i}" style="cursor:pointer" title="Sort">${c[0]}${dSort.i===i?(dSort.dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead>');
 swap('let dq="", dCons="", dBA="", dSat="";', 'let dq="", dCons="", dBA="", dSat="", dSort={i:-1,dir:1};\npanel.addEventListener("click",e=>{const th=e.target.closest&&e.target.closest("th[data-sort]"); if(!th) return; const i=+th.dataset.sort; dSort = dSort.i===i ? {i, dir:-dSort.dir} : {i, dir:/Days/.test(th.textContent)?-1:1}; refreshDetail();});');
 
+// On Hold marker (detached, grey) at the start of Property Team; step numbers skip detached tiles.
+swap('const first=i===0||s.detached||(stair&&list0[i-1].phase!==s.phase),', 'const first=i===0||s.detached||list0[i-1].detached||(stair&&list0[i-1].phase!==s.phase),');
+swap('<button class="node${first?" first":""}${last?" last":""}"', '<button class="node${first?" first":""}${last?" last":""}${s.hold?" hold":""}"');
+swap('<span class="step">${i+1}</span>', '<span class="step">${list0.slice(0,i+1).filter(x=>!x.detached).length}</span>');
+swap('Stage ${idx+1} of ${steps} · ', 'Stage ${list.slice(0,idx+1).filter(x=>!x.detached).length} of ${steps} · ');
+// A lane wider than the screen continues on the row below, right-aligned under the last tile, joined by a drop line.
+swap('    </div>`).join("");\n}\n\nfunction renderPanel(){', `    </div>\`).join("");
+  fixWrap();
+}
+function fixWrap(){
+  track.querySelectorAll(".nodes").forEach(box=>{
+    const nodes=[...box.children];
+    nodes.forEach(nd=>{nd.style.marginLeft="";nd.style.removeProperty("--drop");nd.classList.remove("wrap-first","wrap-last","wrap-down");});
+    const rows=[]; nodes.forEach(nd=>{const r=rows[rows.length-1]; if(r&&r[0].offsetTop===nd.offsetTop) r.push(nd); else rows.push([nd]);});
+    if(rows.length<2) return;
+    const right=rows[0][rows[0].length-1].offsetLeft+rows[0][rows[0].length-1].offsetWidth;
+    rows.forEach((r,k)=>{
+      if(k>0){ const w=r[r.length-1].offsetLeft+r[r.length-1].offsetWidth-r[0].offsetLeft; r[0].style.marginLeft=Math.max(0,right-w)+"px"; r[0].classList.add("wrap-first"); }
+      if(k<rows.length-1){ const end=r[r.length-1]; end.classList.add("wrap-last","wrap-down"); }
+    });
+    rows.forEach((r,k)=>{ if(k<rows.length-1){ const end=r[r.length-1], below=rows[k+1][rows[k+1].length-1]; end.style.setProperty("--drop",(below.offsetTop-end.offsetTop)+"px"); } });
+  });
+}
+let fixWrapT; window.addEventListener("resize",()=>{clearTimeout(fixWrapT); fixWrapT=setTimeout(fixWrap,80);});
+
+function renderPanel(){`);
+
 // Tiles with no data source yet: count 0 plus a "not wired" note (never removed).
 swap('<span class="name">${s.name}</span>', '<span class="name">${s.name}</span>${s.notWired?`<small class="nw">not wired</small>`:""}');
 swap('    ${stageDef(s)}\n', '    ${stageDef(s)}\n    ${s.notWired?`<p class="hint nw">Not wired yet: no data source for this tile, so it shows 0.</p>`:""}\n');
@@ -138,6 +165,13 @@ swap('</style>', `#opp .seg .bar.est i{background:transparent;box-shadow:inset 0
 #opp .seg .bar.est i.done{background:transparent;box-shadow:none;border:1.5px dotted var(--done)}
 #opp .seg .bar.est i.doing{background:transparent;box-shadow:none;border:1.5px dotted var(--doing)}
 .nw{display:block;font-size:10px;font-style:italic;color:var(--muted)}
+.node.wrap-first::before{left:50%}
+.node.wrap-last::before{right:50%}
+.node.wrap-down::after{content:"";position:absolute;left:calc(50% - 1.5px);top:34px;width:3px;height:var(--drop,0);background:var(--line);z-index:0}
+.node.hold{width:104px;opacity:.7}
+.node.hold .circle{width:88px;height:50px;border-color:var(--line);border-style:dashed;border-width:2px}
+.node.hold .circle b{font-size:16px;color:var(--muted)}
+.node.hold .name{font-size:11px;font-weight:600;color:var(--muted)}
 </style>`);
 
 if (/OPP-2\d{4}|Sample Estate|seed\(o\.ref\)/.test(html)) throw new Error('Sample data still present in the template');
