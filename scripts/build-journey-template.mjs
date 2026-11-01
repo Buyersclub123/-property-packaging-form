@@ -116,6 +116,9 @@ swap('`<span class="pill done"><i></i>Settled ${fmt(o.settle)}</span>`', '`<span
 swap('const people=[["Consultant",o.consultant],["Contract",o.actors.contract],["Finance",o.fin===null?"Not tracked":o.actors.finance],["Construction",isNew?o.actors.build:"Not applicable"]];',
   'const people=[["Consultant",o.consultant||"Not set"],["Assigned BA",o.ba||"Not set"],["Contact",o.client||"Not set"]];');
 swap('<div class="tbc">Fields to be confirmed · sample values</div>', '<div class="tbc">Live from GHL · read-only · <a href="${esc(o.ghlLink)}" target="_blank" rel="noopener noreferrer">Open in GHL</a></div>');
+// Expanded row: Money / Dates / Progress / People / Latest (JT spec), from scripts/journey-row-detail.js.
+swapBetween('function detail(o){', '\nfunction toggleRow', fs.readFileSync(new URL('./journey-row-detail.js', import.meta.url), 'utf8').trimEnd());
+swap('</style>', '#opp .dt-latest{grid-column:1/-1}\n#opp .ns{color:var(--muted);font-style:italic;font-size:.92em;font-weight:400}\n#opp .kv .sub{padding-left:12px}\n#opp .ticks{display:inline-flex;gap:12px}\n#opp .dt-val{display:inline-flex;margin:0}\n#opp .lsu{white-space:pre-line;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;color:var(--ink);max-width:110ch}\n#opp .lsu.full{display:block}\n#opp .lsu-more{border:0;background:none;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px;padding:0;align-self:flex-start}\n</style>');
 
 // Drill-down: sortable columns; default oldest stage entry first so long-stayers stand out.
 swap('  const shown=rows.slice(0,100), filtered=rows.length!==all.length;',

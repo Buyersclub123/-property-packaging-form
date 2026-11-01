@@ -128,9 +128,16 @@ function toOpp(r: Rec, today: string) {
   if (hasPr && !addr) missing.push('Address');
   if (fin === undefined) missing.push('Finance status');
   if ((type === 'split' || type === 'single') && c >= 6 && build === undefined) missing.push('Construction stage');
+  const land = num(r.co_closing_price_land), buildP = num(r.co_closing_price_build);
+  const closing = num(r.co_closing_price) ?? (type === 'split' && (land != null || buildP != null) ? (land || 0) + (buildP || 0) : null);
   const prices: [string, number | null][] = type === 'split'
-    ? [['Land price', num(r.co_closing_price_land)], ['Build price', num(r.co_closing_price_build)]]
-    : [[type === 'single' ? 'Total price' : 'Price', num(r.co_closing_price)]];
+    ? [['Closing price', closing], ['Land', land], ['Build', buildP]]
+    : [['Closing price', closing]];
+  const count = (...keys: string[]) => { const v = keys.map((k) => num(r[k])); return v.every((n) => n == null) ? null : v.reduce<number>((a, n) => a + (n || 0), 0); };
+  const beds = count('co_beds_primary', 'co_beds_additional__secondary__dual_key');
+  const baths = count('co_bath_primary', 'co_baths_additional__secondary__dual_key');
+  const cars = count('co_garage_primary', 'co_carport_primary', 'co_carspace_primary', 'co_garage_additional__secondary__dual_key', 'co_carport_additional__secondary__dual_key', 'co_carspace_additional__secondary__dual_key');
+  const party = (name?: string, company?: string) => [name, company].filter(Boolean).join(' · ');
   return {
     ref: r.id || '',
     name: r.opportunityName || r.name || '',
@@ -153,6 +160,15 @@ function toOpp(r: Rec, today: string) {
     finDue: day(r.financeDueDate),
     settle: day(r.confirmedSettlementDate),
     prices,
+    format: beds == null && baths == null && cars == null ? '' : `${beds ?? '–'} / ${baths ?? '–'} / ${cars ?? '–'}`,
+    landDep: yes(r.landDepositPaid), buildDep: yes(r.buildDepositPaid),
+    valAmt: num(r.valuationAmountResidential),
+    purchase: day(r.co_land_contract_date_mined), exchange: day(r.exchangeDate), uncond: day(r.unconditionalDate),
+    finStatus: fs, buildStage: build != null && build >= 0 ? BUILD[build] : '',
+    broker: party(r.brokerName, r.brokerCompany), solicitor: party(r.solicitorName, r.solicitorCompany),
+    builder: r.co_builder_mined || r.agentBuilderDetails || '',
+    latest: r.latestStatusUpdate || '',
+    ctrtLink: r.co_property_record_ctrt_link || r.property_record_ctrt_link || '/contract-team-reporting',
     landReg: r.co_land_registration || '',
     bp: r.bpConditionStatus || '',
     pci: r.preSettlementInspectionStatus || '',
