@@ -255,6 +255,7 @@ function displayLabelFor(key: string, raw: string): string {
 const MONEY_FIELDS = new Set([
   'monetaryValue', 'valuationAmountResidential', 'co_land_price', 'co_build_price', 'co_total_price', 'co_closing_price',
   'co_offer_price', 'co_offer_price_land', 'co_offer_price_build', 'co_net_price', 'co_holding_deposit_amount', 'co_asking',
+  'co_closing_price_land', 'co_closing_price_build',
 ]);
 // Fields that are large text (get expand button in edit mode)
 const LARGE_TEXT_FIELDS = new Set(['latestStatusUpdate', 'bpNegotiationDetail', 'agentBuilderDetails', 'briefNotes']);
@@ -351,6 +352,8 @@ const DROPDOWN_FIELD_OPTIONS: Record<string, string[]> = {
 const DEFAULT_COLUMN_SETTINGS: Record<string, ColumnSettings> = {
   name: { isFYI: true },
   pipelineStage: { isFYI: true, endStateValues: ['Formal Approval'] },
+  // B&P NEW: Finance Status replaces the Finance stage, same end state.
+  financeStatus: { endStateValues: ['Formally approved'] },
   assignedTo: { isFYI: true },
   assignedBA: { isFYI: true },
   owner: { isFYI: true },
@@ -782,18 +785,50 @@ const PRESET_VIEWS: ViewDef[] = [
 // financeTrack / constructionTrack / fcTrack / inFlightNew exclude Deal Fallen Over and Property Team Settled.
 // ----------------------------------------------------------------------------
 // Every property fact in a NEW view comes from the linked Property Record (co_), never the Opportunity.
+// Rulebook: recreate the old view exactly; only fields whose information MOVED are re-pointed.
+// Stage, Exchange / Unconditional / Confirmed Settlement dates, B&P, deposits and contacts stay on the Opportunity.
 const NEW_COLUMN_SWAP: Record<string, string[]> = {
   registeredAddress: ['co_property_address'],
   settlementDate: ['settlementDate', 'co_settlement_date_mined'],
-  pipelineName: ['financeStatus'],
-  pipelineStage: ['co_construction_stage', 'pipelineStage'],
-  daysSinceStageChange: ['daysInFinanceStatus', 'daysInConstructionStage'],
   smsfName: ['purchasingEntityName', 'purchasingEntityType'],
   personalName: ['purchasingEntityName', 'purchasingEntityType'],
+  trustName: ['purchasingEntityName', 'purchasingEntityType'],
+  opp_trust_entity_name: ['purchasingEntityName', 'purchasingEntityType'],
+  opp_entity_type: ['purchasingEntityType'],
   typeOfProperty: ['co_property_type'],
+  opp_contract_type: ['co_contract_type'],
   registration: ['co_land_registration'],
   registrationDateETA: ['co_land_registration'],
+  estimatedRegistrationDate: ['co_land_registration'],
+  agentBuilderDetails: ['co_builder_mined'],
+  opp_total_purchase_price: ['co_closing_price', 'co_closing_price_land', 'co_closing_price_build'],
 };
+// Which pipeline the old view read: its Stage / Pipeline / days columns move to that pipeline's new field.
+type NewScope = 'finance' | 'construction' | 'mixed';
+const VIEW_SCOPE: Record<string, NewScope> = {
+  'builtin-bp': 'finance', 'builtin-settlement': 'finance', 'builtin-uncon': 'finance', 'builtin-finance-tracking': 'finance',
+  'builtin-pm-intro': 'construction',
+};
+const STAGE_SWAP: Record<NewScope, Record<string, string[]>> = {
+  finance: { pipelineName: ['financeStatus'], pipelineStage: ['financeStatus', 'pipelineStage'], daysSinceStageChange: ['daysInFinanceStatus'] },
+  construction: { pipelineName: ['co_construction_stage'], pipelineStage: ['co_construction_stage', 'pipelineStage'], daysSinceStageChange: ['daysInConstructionStage'] },
+  mixed: { pipelineName: ['financeStatus'], pipelineStage: ['co_construction_stage', 'pipelineStage'], daysSinceStageChange: ['daysInFinanceStatus', 'daysInConstructionStage'] },
+};
+// MINED copies: each mined Property Record value sits beside the Opportunity field it could update.
+const MINED_PAIRS: Record<string, string[]> = {
+  confirmedSettlementDate: ['confirmedSettlementDate', 'co_settlement_date_mined'],
+  exchangeDate: ['exchangeDate', 'co_land_contract_date_mined'],
+  agentBuilderDetails: ['agentBuilderDetails', 'co_builder_mined'],
+  opp_total_purchase_price: ['opp_total_purchase_price', 'co_closing_price', 'co_closing_price_land', 'co_closing_price_build'],
+};
+const MINED_KEYS = new Set([
+  'co_settlement_date_mined', 'co_land_contract_date_mined', 'co_build_contract_date_mined', 'co_builder_mined',
+  'co_closing_price', 'co_closing_price_land', 'co_closing_price_build',
+]);
+// Gmail message id the miner took a value from, stored on the Property Record as <field>_source_message_id.
+function minedSourceMessageId(record: object, key: string): string {
+  return (record as Record<string, string | undefined>)[`${key}_source_message_id`] || '';
+}
 const NEW_VIEW_FILTERS: Record<string, ViewFilter[]> = {
   'builtin-bp': [
     { field: 'financeTrack', operator: 'equals', value: 'Yes' },
@@ -811,13 +846,14 @@ const NEW_VIEW_FILTERS: Record<string, ViewFilter[]> = {
 };
 
 // Column labels that differ in the NEW views.
-const NEW_LABELS: Record<string, string> = { settlementDate: 'Settlement terms' };
+const NEW_LABELS: Record<string, string> = { settlementDate: 'Settlement terms', name: 'Opportunity Name' };
 
-function toNewColumns(cols: ColumnDef[]): ColumnDef[] {
+function toNewColumns(cols: ColumnDef[], scope: NewScope, mined: boolean): ColumnDef[] {
   const out: ColumnDef[] = [];
   const seen = new Set<string>();
   for (const c of cols) {
-    for (const key of NEW_COLUMN_SWAP[c.key] || [c.key]) {
+    const keys = (mined && MINED_PAIRS[c.key]) || STAGE_SWAP[scope][c.key] || NEW_COLUMN_SWAP[c.key] || [c.key];
+    for (const key of keys) {
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(key === c.key ? { ...c, label: NEW_LABELS[key] ?? c.label } : { key, label: getFieldLabel(key), width: c.width });
@@ -826,11 +862,11 @@ function toNewColumns(cols: ColumnDef[]): ColumnDef[] {
   return out;
 }
 
-function toNewView(v: ViewDef): ViewDef {
-  const constructionOnly = v.id === 'builtin-pm-intro';
+function toNewView(v: ViewDef, mined = false): ViewDef {
+  const scope = VIEW_SCOPE[v.id] ?? 'mixed';
   const swapSort = (col: string) =>
-    col === 'daysSinceStageChange' ? (constructionOnly ? 'daysInConstructionStage' : 'daysInFinanceStatus')
-      : col === 'pipelineStage' ? 'co_construction_stage'
+    col === 'daysSinceStageChange' ? (scope === 'construction' ? 'daysInConstructionStage' : 'daysInFinanceStatus')
+      : col === 'pipelineStage' ? (scope === 'finance' ? 'financeStatus' : 'co_construction_stage')
       : col === 'registeredAddress' ? 'co_property_address' : col;
   const filters = NEW_VIEW_FILTERS[v.id]
     // Project views keep their address / name filters (address read from the Property Record) and add the in-flight scope.
@@ -841,19 +877,20 @@ function toNewView(v: ViewDef): ViewDef {
     ];
   return {
     ...v,
-    id: `${v.id}-new`,
-    name: `${v.name} NEW`,
-    columns: toNewColumns(v.columns),
+    id: `${v.id}-${mined ? 'mined' : 'new'}`,
+    name: `${v.name} ${mined ? 'MINED' : 'NEW'}`,
+    columns: toNewColumns(v.columns, scope, mined),
     filters,
     sortBy: swapSort(v.sortBy),
     sorts: v.sorts?.map((s) => ({ ...s, column: swapSort(s.column) })),
   };
 }
 
-const col = (key: string, width = 120): ColumnDef => ({ key, label: getFieldLabel(key), width });
+const col = (key: string, width = 120): ColumnDef => ({ key, label: NEW_LABELS[key] ?? getFieldLabel(key), width });
 
 PRESET_VIEWS.push(
-  ...PRESET_VIEWS.map(toNewView),
+  ...PRESET_VIEWS.map((v) => toNewView(v)),
+  ...PRESET_VIEWS.map((v) => toNewView(v, true)),
   {
     id: 'builtin-valuation-access',
     name: 'Valuation access',
@@ -2425,7 +2462,7 @@ export default function ContractTeamReportingPage() {
               </button>
             );
           })}
-          {(activeView.name === 'B&P' || activeView.name === 'B&P NEW') && (['none', 'blankPropertyType', 'blankBpDueDate', 'blankBpRequested', 'bpDueNext5', 'settlementNext5'] as PresetFilter[]).map((preset) => {
+          {(activeView.name === 'B&P' || activeView.name === 'B&P NEW' || activeView.name === 'B&P MINED') && (['none', 'blankPropertyType', 'blankBpDueDate', 'blankBpRequested', 'bpDueNext5', 'settlementNext5'] as PresetFilter[]).map((preset) => {
             const labels: Partial<Record<PresetFilter, string>> = {
               none: 'All *',
               blankPropertyType: 'Blank P-type',
@@ -3309,6 +3346,20 @@ export default function ContractTeamReportingPage() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           Open
+                        </a>
+                      );
+                    } else if (activeView.id.endsWith('-mined') && MINED_KEYS.has(col.key) && displayValue && minedSourceMessageId(record, col.key)) {
+                      const field = col.key.slice(CO_PREFIX.length);
+                      cellContent = (
+                        <a
+                          href={`/inbox-mining/workflow?message=${encodeURIComponent(minedSourceMessageId(record, col.key))}&field=${encodeURIComponent(field)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:underline"
+                          title="Open the source email"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {displayValue} <span aria-hidden>✉</span>
                         </a>
                       );
                     } else if (col.key === 'exchangeEmail' && rawValue) {
