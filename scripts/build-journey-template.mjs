@@ -165,7 +165,7 @@ swap('let dq="", dCons="", dBA="", dSat="";', 'let dq="", dCons="", dBA="", dSat
 swap('const first=i===0||s.detached||(stair&&list0[i-1].phase!==s.phase),', 'const first=i===0||s.detached||list0[i-1].detached||(stair&&list0[i-1].phase!==s.phase),');
 swap('<button class="node${first?" first":""}${last?" last":""}"', '<button class="node${first?" first":""}${last?" last":""}${s.hold?" hold":""}${s.alert?" alert":""}"');
 // Exception tiles (e.g. No Property Record): red count when above 0.
-swap('</style>', '.node.hold.alert{opacity:1}\n.node.hold.alert .circle b{color:var(--alert)}\n</style>');
+swap('</style>', '.node.hold.alert{opacity:1}\n.node.hold.alert .circle b{color:#D23B2E}\n</style>');
 // No stage-number badges on tiles (stages are still changing).
 swap('<span class="step">${i+1}</span>', '');
 swap('Stage ${idx+1} of ${steps} · ', '');
