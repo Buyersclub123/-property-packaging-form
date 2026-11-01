@@ -51,8 +51,7 @@ function detail(o){
 
   const long=o.latest&&(o.latest.length>160||o.latest.split("\n").length>2);
   const latestB=`<div class="dt-group dt-latest"><span class="f-lbl">Latest status update</span>
-    ${o.latest?`<div class="lsu">${esc(o.latest)}</div>${long?`<button type="button" class="lsu-more" onclick="var l=this.previousElementSibling;l.classList.toggle('full');this.textContent=l.classList.contains('full')?'Show less':'Show more'">Show more</button>`:""}`:NS}
-    ${o.missing&&o.missing.length?`<div class="kv"><span>Needs data</span><span class="miss-txt">${esc(o.missing.join(", "))}</span></div>`:""}</div>`;
+    ${o.latest?`<div class="lsu">${esc(o.latest)}</div>${long?`<button type="button" class="lsu-more" onclick="var l=this.previousElementSibling;l.classList.toggle('full');this.textContent=l.classList.contains('full')?'Show less':'Show more'">Show more</button>`:""}`:NS}</div>`;
 
   return `<div class="detail d4">
     ${moneyB}${datesB}${progressB}${peopleB}

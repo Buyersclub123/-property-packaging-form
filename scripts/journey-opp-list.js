@@ -4,7 +4,7 @@
   const row=o=>`<div class="item${o.ref===openRef?" open":""}${o.short?" short":""}"><div class="d" role="button" tabindex="0" aria-expanded="${o.ref===openRef}" data-ref="${o.ref}">
       <div style="min-width:0"><div class="o-name" title="${esc(o.name)}">${esc(o.name)}</div>
         ${addr(o)}
-        <div class="d-sub"><span>${esc(o.client)}</span>${ptype(o)}${o.missing.length?`<span class="needs" title="Missing: ${esc(o.missing.join(", "))}">Needs data</span>`:""}</div></div>
+        <div class="d-sub"><span>${esc(o.client)}</span>${ptype(o)}</div></div>
       ${ROW_LANES.map(l=>seg(o,l)).join("")}
     </div>${o.ref===openRef?detail(o):""}</div>`;
   const order=[...GROUP_ORDER, ...[...new Set(OPPS.map(o=>o.group||"Other"))].filter(g=>!GROUP_ORDER.includes(g))];

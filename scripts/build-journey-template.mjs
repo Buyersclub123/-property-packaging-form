@@ -125,6 +125,8 @@ swap('if(lane==="finance" && o.fin===undefined) return {t:"No status",cls:"miss"
 html = html.split('"No status"').join('"Not started"').split('>No status<').join('>Not started<');
 // OPPS is normalised in place below, so duplicates are dropped only after that (else unticking shows half-built rows).
 swap('const OPPS = window.JOURNEY.opps;', 'const OPPS_ALL = window.JOURNEY.opps.slice();\nlet hideDup = true; // "Hide SMSF Construction duplicates": drop once the duplicates are closed\nconst OPPS = window.JOURNEY.opps;');
+// No "Needs data" chip or filter (JT 2/11): empty lanes already read "Not set" / "Not started".
+swap('\n    + `<button class="chip needs-chip" data-needs="1" aria-pressed="${needsOnly}">Needs data <em>${nNeeds}</em></button>`', '');
 swap('function states(o, lane){', 'OPPS.splice(0, OPPS.length, ...OPPS_ALL.filter(o=>!o.smsfDup));\n\nfunction states(o, lane){');
 swapBetween("  // two lists side by side only when there's room for both; otherwise one list", '\n}\n\n/* ---------- lists, filters, modes ---------- */',
   fs.readFileSync(new URL('./journey-opp-list.js', import.meta.url), 'utf8').trimEnd());
