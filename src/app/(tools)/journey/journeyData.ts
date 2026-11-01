@@ -187,6 +187,16 @@ const stageRow = (r: Rec, date?: string, land = false) => ({
   lot: r.co_property_address || r.registeredAddress || '', consultant: r.owner || r.assignedTo || '', ba: r.assignedBA || '', land,
 });
 
+const CONTRACT_STAGES = ['dealclosed', 'contractreview', 'exchangewip', 'conditional', 'unconditional'];
+/** Exception tile (JT 2/11): open Property Team opps from Deal Closed to Unconditional with no Property Record linked to them (record-side link). */
+function noRecordTile(records: Rec[]) {
+  const rows = records.filter((r) => r.pipelineId === PT_ID && r.status === 'open' && CONTRACT_STAGES.includes(norm(r.pipelineStage)) && !r.propertyRecordIds);
+  return {
+    id: 'pt-no-record', name: 'No Property Record', kind: 'opp', phase: 'contract', detached: true, hold: true, alert: rows.length > 0,
+    rows: rows.map((r) => stageRow(r, r.lastStageChangeAt)), mismatch: false, recon: '',
+  };
+}
+
 /** Why a loaded opp is not in the default (in-flight) journey. */
 function notInFlight(r: Rec): string {
   if (r.status && r.status !== 'open') return `Opportunity ${r.status}`;
@@ -267,6 +277,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
         mismatch: rc.mismatch, recon: panel('Reconciliation', [rc.html]),
       };
     }).sort((a, b) => Number(!!b.hold) - Number(!!a.hold)),
+    noRecordTile(records),
   ];
 
   // Finance: the 5 Finance Status values; today compared with the Finance pipeline stages they replace.
