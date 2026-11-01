@@ -10,6 +10,9 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_STASH_WEBHOOK_URL: process.env.NEXT_PUBLIC_STASH_WEBHOOK_URL,
   },
+  async rewrites() {
+    return [{ source: '/guide', destination: '/guide/index.html' }];
+  },
   experimental: {
     outputFileTracingIncludes: {
       '/api/purchase-analytics/data/[file]': ['./data/purchase-analytics/*.csv'],

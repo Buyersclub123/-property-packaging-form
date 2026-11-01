@@ -9,6 +9,7 @@ import SettingsView from '@/components/reviewOutcomes/SettingsView';
 import StatsView from '@/components/reviewOutcomes/StatsView';
 import SalesView from '@/components/reviewOutcomes/SalesView';
 import { dmy, outcomeStyle, Stat, time, weekday } from '@/components/reviewOutcomes/ui';
+import BackLink from '@/components/BackLink';
 
 type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
 
@@ -236,6 +237,7 @@ export default function ReviewOutcomesPage() {
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1400px] px-4 py-6">
+        <div className="mb-4"><BackLink fallback="/new-initiatives" /></div>
         <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Sales Meeting Outcomes</h1>
         <p className="mb-4 text-[13px] text-[#7A7575]">
           Source: GHL Calendars - Portfolio Review Meeting (2nd meetings aren't recorded) and Presentation Meeting One (New Lead / Referral, with the calendar schedule sheet). Outcomes are saved to our database{data?.settings.writeTarget === 'db+ghl' ? ' and the GHL appointment status' : ' only'}.

@@ -113,12 +113,6 @@ export const teams: TeamTile[] = [
         href: '/contract-team-reporting',
         newTab: true,
       },
-      {
-        name: 'Pipeline Journey',
-        description: 'Where every deal is across Contract, Finance, Construction and Property Record (read-only)',
-        href: '/journey',
-        newTab: true,
-      },
     ],
   },
   {
@@ -322,6 +316,18 @@ export const newInitiatives: TeamTile = {
   description: 'Sandpit for work in progress: read-only demos before they become team tools.',
   subTiles: [
     {
+      name: 'Pipeline Journey',
+      description: 'Where every deal is across Contract, Finance, Construction and Property Record (read-only).',
+      href: '/journey',
+      newTab: true,
+    },
+    {
+      name: 'Sales Meeting Outcomes',
+      accessKey: 'review-outcomes',
+      description: 'Record Portfolio Review and Presentation Meeting 1 outcomes, with stats, sales and lists.',
+      href: '/review-outcomes',
+    },
+    {
       name: 'Portfolio View',
       description:
         'Client picture: contact, opportunities and properties with purchase cost, valuation and growth, from the unloaded purchase files and GHL snapshots.',
@@ -331,6 +337,17 @@ export const newInitiatives: TeamTile = {
       name: 'Inbox Mining',
       description: 'Team mailbox emails matched to GHL opportunities and classified by activity.',
       href: '/inbox-mining',
+    },
+    {
+      name: 'Purchase Analytics',
+      description: 'Client property purchases 2019–2026.',
+      href: '/team/research/purchase-analytics',
+    },
+    {
+      name: "What's changed in GHL",
+      description: 'Staff guide to the GHL changes: fields, stages, statuses, what updates automatically.',
+      href: '/guide',
+      newTab: true,
     },
   ],
 };

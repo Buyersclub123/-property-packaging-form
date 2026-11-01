@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DataIssue, PortfolioClient, PortfolioData, PortfolioOpportunity, PortfolioProperty } from '@/lib/portfolio/types';
 import RecordPopout from '@/components/records/RecordPopout';
 import { propertyPageKey, type RecordPage } from '@/lib/records/types';
+import BackLink from '@/components/BackLink';
 
 const PAGE_SIZE = 100;
 
@@ -575,6 +576,7 @@ export default function PortfolioPage() {
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1400px] px-4 py-6">
+        <div className="mb-4"><BackLink fallback="/new-initiatives" /></div>
         <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Portfolio View</h1>
         <p className="mb-4 text-[13px] text-[#7A7575]">
           Demo from UNLOADED data (in-flight load file + historical candidate file + 27/10 GHL snapshots + Master Deal List valuations). Read-only; files are read fresh on every load.

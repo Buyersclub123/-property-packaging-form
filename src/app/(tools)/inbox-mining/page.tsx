@@ -5,6 +5,7 @@ import TopNavBar from '@/components/portal/TopNavBar';
 import { clsLabel, type Item } from './shared';
 import { DecisionPanel, niceDate } from './decision';
 import './wireframe.css';
+import BackLink from '@/components/BackLink';
 
 // Inbox decision screen (JT redesign): lists as tabs, the selected list down the left, the decision on the right.
 // Decisions write only inbox_items.feedback / inbox_items.workflow. Nothing is written to GHL and no email is sent.
@@ -182,7 +183,10 @@ export default function InboxDecisionPage() {
       <main className="min-h-screen bg-white text-brand-charcoal">
         <div className="mx-auto max-w-[1600px] px-4 py-5">
           <div className="flex items-baseline justify-between gap-4">
-            <h1 className="text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Inbox</h1>
+            <div className="flex items-baseline gap-4">
+              <BackLink fallback="/new-initiatives" />
+              <h1 className="text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Inbox</h1>
+            </div>
             <div className="flex items-center gap-4 text-xs font-semibold">
               <span className="font-normal text-gray-500">Read-only demo: nothing is written to GHL and no email is sent.</span>
               <a href="/inbox-mining/reporting" className="text-blue-700 hover:underline">Reporting</a>
