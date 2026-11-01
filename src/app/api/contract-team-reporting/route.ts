@@ -520,6 +520,8 @@ function transformOpportunity(
     (opp.pipelineId === PIPELINE_ID.FINANCE && stageLower !== 'settled') ||
     (opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !stageLower.includes('handover')));
   base.smsfConstructionDuplicate = smsfDuplicate ? 'Yes' : '';
+  // Test / ZZZ opps: excluded from every NEW / MINED view so counts compare like for like.
+  base.testOpp = /^\s*zzz|\btest\b/i.test(String(base.opportunityName || opp.name || '')) ? 'Yes' : '';
   base.inFlight = inFlight ? 'Yes' : '';
   base.inFlightNew = base.inFlight;
   base.financeTrack = inFlight && base.financeStatus ? 'Yes' : '';

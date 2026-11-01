@@ -140,6 +140,9 @@ function toOpp(r: Rec, today: string) {
   const party = (name?: string, company?: string) => [name, company].filter(Boolean).join(' · ');
   return {
     ref: r.id || '',
+    // Opportunity Progress sections: Property Team stage, else the pipeline (until cutover).
+    group: r.pipelineId === PT_ID ? (r.pipelineStage || 'Property Team') : r.pipelineId === FIN_ID ? 'Finance pipeline' : 'Construction pipeline',
+    smsfDup: r.smsfConstructionDuplicate === 'Yes',
     name: r.opportunityName || r.name || '',
     client: r.contactName || '',
     type, c, fin, build,
@@ -250,7 +253,8 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
     ...SALES_TILES.map((s) => ({ ...s, head: 'd7', periods: ['d1', 'd7'], tileKey: 'd7', phase: 'sales', ...salesTile(s.id, sales) })),
     ...pt.map((s, i) => {
       const all = records.filter((r) => r.pipelineStageId === s.id);
-      const tile = all.filter(inPop);
+      // Sales & Property tiles: every OPEN opp at the stage, as GHL counts it (no in-flight filter; JT 1/11).
+      const tile = historical ? all : all.filter((r) => r.status === 'open');
       const rc = reconcile(tile, { label: `GHL pipeline column: Property Team / ${s.name} (${scope})`, ghl: s.total, ghlRecs: all, why: notInFlight }, where);
       return {
         id: 'pt-' + s.id, name: s.name, kind: 'opp',

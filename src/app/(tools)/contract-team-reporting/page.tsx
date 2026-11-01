@@ -898,6 +898,9 @@ function toNewColumns(cols: ColumnDef[], scope: NewScope, mined: boolean): Colum
   return out;
 }
 
+// ZZZ / test opps never appear in NEW / MINED views (JT 1/11), so counts compare like for like.
+const NOT_TEST_OPP: ViewFilter = { field: 'testOpp', operator: 'not equals', value: 'Yes' };
+
 function toNewView(v: ViewDef, mined = false): ViewDef {
   const scope = VIEW_SCOPE[v.id] ?? 'mixed';
   const swapSort = (col: string) =>
@@ -916,7 +919,7 @@ function toNewView(v: ViewDef, mined = false): ViewDef {
     id: `${v.id}-${mined ? 'mined' : 'new'}`,
     name: `${v.name} ${mined ? 'MINED' : 'NEW'}`,
     columns: toNewColumns(v.columns, scope, mined),
-    filters,
+    filters: [...filters, NOT_TEST_OPP],
     sortBy: swapSort(v.sortBy),
     sorts: v.sorts?.map((s) => ({ ...s, column: swapSort(s.column) })),
   };
@@ -1179,13 +1182,19 @@ export default function ContractTeamReportingPage() {
   // Column state (persisted so custom report layouts survive refresh)
   const [columns, setColumns] = useState<ColumnDef[]>(() => {
     if (typeof window !== 'undefined') {
+      // Saved layout is only reused for the view it was saved on; otherwise a refresh on a NEW view
+      // would show the previous view's columns.
+      const viewId = localStorage.getItem('ctr-view-id') || 'builtin-bp';
+      const preset = PRESET_VIEWS.find((v) => v.id === viewId);
       try {
         const saved = localStorage.getItem('ctr-columns');
-        if (saved) {
+        const savedFor = localStorage.getItem('ctr-columns-view');
+        if (saved && (savedFor === viewId || (!savedFor && !preset))) {
           const parsed = JSON.parse(saved) as ColumnDef[];
           if (Array.isArray(parsed) && parsed.length > 0 && parsed.every((c) => c.key && c.label)) return parsed;
         }
       } catch { /* corrupt localStorage — fall through */ }
+      if (preset) return preset.columns;
     }
     return DEFAULT_COLUMNS;
   });
@@ -1830,7 +1839,8 @@ export default function ContractTeamReportingPage() {
   // Persist column layout (keys, order, widths)
   useEffect(() => {
     localStorage.setItem('ctr-columns', JSON.stringify(columns));
-  }, [columns]);
+    localStorage.setItem('ctr-columns-view', activeViewId);
+  }, [columns, activeViewId]);
 
   // Internal duplicate keys hidden from the column chooser (the API returns
   // these twice under different names for backwards compatibility):

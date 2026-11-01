@@ -118,6 +118,34 @@ swap('const people=[["Consultant",o.consultant],["Contract",o.actors.contract],[
 swap('<div class="tbc">Fields to be confirmed · sample values</div>', '<div class="tbc">Live from GHL · read-only · <a href="${esc(o.ghlLink)}" target="_blank" rel="noopener noreferrer">Open in GHL</a></div>');
 // Expanded row: Money / Dates / Progress / People / Latest (JT spec), from scripts/journey-row-detail.js.
 swapBetween('function detail(o){', '\nfunction toggleRow', fs.readFileSync(new URL('./journey-row-detail.js', import.meta.url), 'utf8').trimEnd());
+
+// Opportunity Progress (JT 1/11): sections by stage, sticky / repeated lane headers, hide SMSF Construction duplicates,
+// blank Finance lane = "Not started" (grey italic), never "No status".
+swap('if(lane==="finance" && o.fin===undefined) return {t:"No status",cls:"miss"};', 'if(lane==="finance" && o.fin===undefined) return {t:"Not started",cls:"state-todo blank"};');
+html = html.split('"No status"').join('"Not started"').split('>No status<').join('>Not started<');
+swap('const OPPS = window.JOURNEY.opps;', 'const OPPS_ALL = window.JOURNEY.opps;\nlet hideDup = true; // "Hide SMSF Construction duplicates": drop once the duplicates are closed\nconst OPPS = OPPS_ALL.filter(o=>!o.smsfDup);');
+swapBetween("  // two lists side by side only when there's room for both; otherwise one list", '\n}\n\n/* ---------- lists, filters, modes ---------- */',
+  fs.readFileSync(new URL('./journey-opp-list.js', import.meta.url), 'utf8').trimEnd());
+swap('/* ---------- lists, filters, modes ---------- */', `const GROUP_ORDER=["Deal Closed","Contract Review","Exchange WIP","Conditional","Unconditional","Finance pipeline","Construction pipeline"];
+let openGroups=null;
+const OPP_ORDER=(a,b)=>(a.c-b.c)||((a.fin??-1)-(b.fin??-1))||((a.build??-1)-(b.build??-1))||a.name.localeCompare(b.name);
+document.addEventListener("toggle",e=>{const d=e.target; if(d&&d.classList&&d.classList.contains("grp")&&openGroups){ if(d.open) openGroups.add(d.dataset.grp); else openGroups.delete(d.dataset.grp);} },true);
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("#opp .grp-all"); if(!b) return; e.stopPropagation(); openGroups=new Set(b.dataset.all==="1"?[...document.querySelectorAll("#opp .grp")].map(d=>d.dataset.grp):[]); render();},true);
+document.addEventListener("change",e=>{ if(e.target&&e.target.id==="hide-dup"){ hideDup=e.target.checked; OPPS.splice(0,OPPS.length,...OPPS_ALL.filter(o=>!(hideDup&&o.smsfDup))); OPPS.sort(OPP_ORDER); render(); } });
+/* ---------- lists, filters, modes ---------- */`);
+swap('#opp .d.head{', `#opp .grp{margin:0 0 8px}
+#opp .grp>summary{cursor:pointer;display:flex;gap:8px;align-items:center;font-family:var(--display);font-weight:600;padding:8px 4px;border-bottom:1px solid var(--line);list-style:none}
+#opp .grp>summary::-webkit-details-marker{display:none}
+#opp .grp>summary::before{content:"\\25B8";color:var(--muted)}
+#opp .grp[open]>summary::before{content:"\\25BE"}
+#opp .grp-n{font-size:12px;color:var(--muted);background:var(--chip);border-radius:10px;padding:0 8px}
+#opp .grp .d.head{position:sticky;top:0;z-index:4;background:var(--bg)}
+#opp .grp-bar{display:flex;gap:16px;align-items:center;justify-content:space-between;margin:0 0 8px}
+#opp .grp-btns{display:inline-flex;gap:6px}
+#opp .grp-all{font:inherit;font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card,#fff);color:var(--ink);cursor:pointer}
+#opp .dup-toggle{display:flex;gap:6px;align-items:center;font-size:13px;margin:0;color:var(--muted)}
+#opp .cap.blank{font-style:italic;color:var(--muted);font-size:.92em}
+#opp .d.head{`);
 swap('</style>', '#opp .detail.d4{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 22px}\n#opp .detail.d4 .kv{align-items:baseline}\n#opp .detail.d4 .kv>span:first-child{flex:0 0 auto}\n#opp .detail.d4 .kv>:last-child{text-align:right}\n@media (max-width:1100px){#opp .detail.d4{grid-template-columns:repeat(2,minmax(0,1fr))}}\n#opp .dt-latest{grid-column:1/-1}\n#opp .ns{color:var(--muted);font-style:italic;font-size:.92em;font-weight:400}\n#opp .kv .sub{padding-left:12px}\n#opp .ticks{display:inline-flex;gap:12px}\n#opp .dt-val{display:inline-flex;margin:0}\n#opp .lsu{white-space:pre-line;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;color:var(--ink);max-width:110ch}\n#opp .lsu.full{display:block}\n#opp .lsu-more{border:0;background:none;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px;padding:0;align-self:flex-start}\n</style>');
 
 // Drill-down: sortable columns; default oldest stage entry first so long-stayers stand out.
@@ -184,10 +212,10 @@ swap('} else if(lane==="prop"){', '} else if(lane==="prop"){\n    if(o.type==="n
 swap('if(!st) return {t:"Not applicable",cls:"state-todo"};', 'if(!st) return {t:o.type==="nopr"&&(lane==="prop"||lane==="build")?"No record":"Not applicable",cls:"state-todo"};');
 // Contract lane estimated from dates (opps outside Property Team): dotted bar + tooltip.
 swap('<div class="bar">${st.map((s,i)=>`<i class="${s}" ${tip(l,i,s,o)}></i>`).join("")}</div>',
-  '<div class="bar${l==="contract"&&o.cEst?" est":""}"${l==="contract"&&o.cEst?` title="estimated from dates"`:""}>${st.map((s,i)=>`<i class="${s}" ${l==="contract"&&o.cEst?"":tip(l,i,s,o)}></i>`).join("")}</div>');
-swap('</style>', `#opp .seg .bar.est i{background:transparent;box-shadow:inset 0 0 0 1.5px var(--todo);outline:none}
-#opp .seg .bar.est i.done{background:transparent;box-shadow:none;border:1.5px dotted var(--done)}
-#opp .seg .bar.est i.doing{background:transparent;box-shadow:none;border:1.5px dotted var(--doing)}
+  '<div class="bar${l==="contract"&&o.cEst?" est":""}"${l==="contract"&&o.cEst?` title="estimated from dates"`:""}>${st.map((s,i)=>`<i class="${s}" ${tip(l,i,s,o)}${l==="contract"&&o.cEst?" data-est=1":""}></i>`).join("")}</div>');
+swap('<div class="tm">${st.m}</div>', '<div class="tm">${st.m}${el.dataset.est?" Estimated from dates: this opp is in the Finance / Construction pipeline, not Property Team.":""}</div>');
+swap('</style>', `#opp .seg .bar.est i{outline:1.5px dotted rgba(0,0,0,.35);outline-offset:-1.5px}
+#opp .seg .bar.est i.done,#opp .seg .bar.est i.doing{opacity:.55}
 .nw{display:block;font-size:10px;font-style:italic;color:var(--muted)}
 .asat{font-weight:600;letter-spacing:0;text-transform:none;margin-left:6px}
 .node.wrap-first::before{left:50%}
