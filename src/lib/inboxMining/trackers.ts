@@ -54,10 +54,13 @@ export async function loadTrackers(): Promise<Trackers> {
   for (const row of construction.rows) {
     if (/update tracker/i.test(row.tab)) continue;
     const emails = row.text.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) || [];
-    const builder = /key builders/i.test(row.tab) ? row.text.split(' | ')[0] : row.tab;
+    const keyTab = /key builders/i.test(row.tab);
+    const builder = keyTab ? row.text.split(' | ')[0] : row.tab;
     for (const e of emails) {
       const email = e.toLowerCase();
       if (email.endsWith('@buyersclub.com.au')) continue;
+      // Per-builder tabs also list the clients' own (gmail etc.) addresses: only the Key builders tab may name a free-mail builder.
+      if (!keyTab && FREE_MAIL.test(email.split('@')[1])) continue;
       builderSenders.set(email, builder);
       const domain = email.split('@')[1];
       if (!FREE_MAIL.test(domain)) builderSenders.set(domain, builder);
