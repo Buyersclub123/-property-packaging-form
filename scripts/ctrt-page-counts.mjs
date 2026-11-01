@@ -9,7 +9,8 @@ const args = process.argv.slice(2);
 const BASE = args.find((a) => a.startsWith('http')) || 'http://localhost:3000';
 const OLD = ['builtin-bp', 'builtin-full-fc', 'builtin-settlement', 'builtin-ocean-rise', 'builtin-build-deposit', 'builtin-uncon',
   'builtin-pm-intro', 'builtin-huntly', 'builtin-golden-horizon', 'builtin-finance-tracking'];
-const ids = args.filter((a) => !a.startsWith('http'));
+const SHOT = args.includes('--shot');
+const ids = args.filter((a) => !a.startsWith('http') && !a.startsWith('--'));
 const VIEWS = ids.length ? ids : [...OLD.flatMap((id) => [id, `${id}-new`, `${id}-mined`]),
   'builtin-valuation-access', 'builtin-fallen-deals', 'builtin-duplicate-records'];
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
@@ -62,6 +63,11 @@ try {
         return JSON.stringify({ count: n ? parseInt(n.textContent, 10) : null, view: v ? v.textContent.trim().replace(/^View: /, '').split(' | ')[0] : '' });
       })()`);
       r = JSON.parse(read || '{}');
+    }
+    if (SHOT) {
+      const shot = await send('Page.captureScreenshot', { format: 'png' });
+      mkdirSync('scripts/tmp-ctrt-out', { recursive: true });
+      writeFileSync(`scripts/tmp-ctrt-out/${view}.png`, Buffer.from(shot.result.data, 'base64'));
     }
     out.push({ id: view, name: r.view, count: dataDone ? r.count : null });
     console.log(`${view}\t${r.view}\t${dataDone ? r.count : 'TIMEOUT'}`);

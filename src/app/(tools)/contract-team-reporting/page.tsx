@@ -1207,6 +1207,8 @@ export default function ContractTeamReportingPage() {
   // Ref so colour helpers (defined above the view state) can read the active
   // view at render time without declaration-order issues.
   const activeViewRef = useRef<{ name: string }>({ name: 'B&P' });
+  // B&P formatting (coloured column groups, end-state greens) also applies to its NEW / MINED copies.
+  const isBpView = () => ['B&P', 'B&P NEW', 'B&P MINED'].includes(activeViewRef.current.name);
 
   function getColumnBg(colKey: string, isHeader: boolean): string {
     const s = columnSettings[colKey];
@@ -1219,7 +1221,7 @@ export default function ContractTeamReportingPage() {
       if (c) return isHeader ? c.header : c.cell;
     }
     // Baked-in coloured column groups only apply on the B&P view (feedback item 18)
-    if (activeViewRef.current.name !== 'B&P') return '';
+    if (!isBpView()) return '';
     if (s?.color) {
       const c = COLUMN_COLOURS.find((cc) => cc.name === s.color);
       if (c) return isHeader ? c.header : c.cell;
@@ -1236,7 +1238,7 @@ export default function ContractTeamReportingPage() {
     const colDef = columns.find((c) => c.key === colKey);
     if (colDef?.endStateValues?.length && colDef.endStateValues.includes(value)) return END_STATE_BG;
     // Baked-in green end-state / cascade colouring only applies on the B&P view (feedback item 18)
-    if (activeViewRef.current.name === 'B&P') {
+    if (isBpView()) {
       const s = columnSettings[colKey];
       // Direct end state match
       if (s?.endStateValues?.length && s.endStateValues.includes(value)) return END_STATE_BG;
