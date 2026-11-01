@@ -9,12 +9,20 @@ await Promise.all(MAILBOXES.map(async (mailbox) => {
   let runId;
   const skip = [];
   for (let chunk = 0; chunk < 500; chunk++) {
-    const res = await fetch('http://localhost:3000/api/inbox-mining/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mailbox, days, rerun: true, runId, skip }),
-    });
-    const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    let data;
+    try {
+      const res = await fetch('http://localhost:3000/api/inbox-mining/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mailbox, days, rerun: true, runId, skip }),
+      });
+      data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    } catch (e) {
+      // A hung or dropped request (dev server busy/recompiling): log and retry the chunk.
+      console.log(new Date().toISOString(), mailbox, 'retry after', String(e.cause?.code || e.name || e));
+      await new Promise((r) => setTimeout(r, 10_000));
+      continue;
+    }
     if (data.error) {
       console.log(new Date().toISOString(), mailbox, 'error', data.error);
       break;
