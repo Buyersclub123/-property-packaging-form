@@ -66,7 +66,7 @@ const DAY=86400000;
 function records(stage, pkey, onlyMatches, onlyLand){
   const rows = inRange(stage.rows, pkey);
   const out = onlyLand ? rows.filter(x=>x.land) : rows.slice();
-  out.sort((x,y)=>(y.d||0)-(x.d||0));
+  out.sort((x,y)=>(x.d?x.d.getTime():Infinity)-(y.d?y.d.getTime():Infinity)); // longest in stage first; unknown dates last
   return out;
 }
 `);
@@ -114,6 +114,15 @@ swap('`<span class="pill done"><i></i>Settled ${fmt(o.settle)}</span>`', '`<span
 swap('const people=[["Consultant",o.consultant],["Contract",o.actors.contract],["Finance",o.fin===null?"Not tracked":o.actors.finance],["Construction",isNew?o.actors.build:"Not applicable"]];',
   'const people=[["Consultant",o.consultant||"Not set"],["Assigned BA",o.ba||"Not set"],["Contact",o.client||"Not set"]];');
 swap('<div class="tbc">Fields to be confirmed · sample values</div>', '<div class="tbc">Live from GHL · read-only · <a href="${esc(o.ghlLink)}" target="_blank" rel="noopener noreferrer">Open in GHL</a></div>');
+
+// Drill-down: sortable columns; default oldest stage entry first so long-stayers stand out.
+swap('  const shown=rows.slice(0,100), filtered=rows.length!==all.length;',
+  `  if(dSort.i>=0 && cols[dSort.i]){ const v=x=>{const t=String(cols[dSort.i][1](x)).replace(/<[^>]+>/g,"").trim(); const n=Number(t.replace(/[$,]/g,"")); return t===""||t==="Not set"?null:!isNaN(n)&&/\\d/.test(t)?n:t.toLowerCase();};
+    rows.sort((a,b)=>{const x=v(a),y=v(b); if(x===y) return 0; if(x==null) return 1; if(y==null) return -1; return (x<y?-1:1)*dSort.dir;}); }
+  const shown=rows.slice(0,100), filtered=rows.length!==all.length;`);
+swap('<thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead>',
+  '<thead><tr>${cols.map((c,i)=>`<th data-sort="${i}" style="cursor:pointer" title="Sort">${c[0]}${dSort.i===i?(dSort.dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead>');
+swap('let dq="", dCons="", dBA="", dSat="";', 'let dq="", dCons="", dBA="", dSat="", dSort={i:-1,dir:1};\npanel.addEventListener("click",e=>{const th=e.target.closest&&e.target.closest("th[data-sort]"); if(!th) return; const i=+th.dataset.sort; dSort = dSort.i===i ? {i, dir:-dSort.dir} : {i, dir:/Days/.test(th.textContent)?-1:1}; refreshDetail();});');
 
 // Tiles with no data source yet: count 0 plus a "not wired" note (never removed).
 swap('<span class="name">${s.name}</span>', '<span class="name">${s.name}</span>${s.notWired?`<small class="nw">not wired</small>`:""}');
