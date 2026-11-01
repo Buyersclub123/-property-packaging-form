@@ -46,6 +46,8 @@ const CHECKBOX_ON_VALUE: Record<string, string> = {
   registration: 'Registered',
 };
 
+const EXCHANGE_KEEP_STATUSES = new Set(['03_contr_exchanged', '04_settled', '08_resold']);
+
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
@@ -106,6 +108,16 @@ export async function PUT(request: NextRequest) {
     const todaySyd = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
     if ('financeStatus' in (changes || {}) && !('financeStatusChangeDate' in (changes || {}))) {
       customFields.push({ id: FRIENDLY_TO_FIELD_ID.financeStatusChangeDate, field_value: new Date(todaySyd).toISOString() });
+    }
+    // Exchange Date written -> linked Property Record moves to 03_contr_exchanged with status_change_date = the exchange date
+    // (unless the record is already exchanged / settled / resold, or the user set Status in the same save).
+    const exchangeValue = changes && 'exchangeDate' in changes ? String(changes.exchangeDate ?? '') : '';
+    if (exchangeValue && propertyRecordId && !('status' in propertyProps)) {
+      const current = await readRecordProps(`${GHL_BASE_URL}/objects/${PROPERTY_OBJECT_ID}/records/${propertyRecordId}?locationId=${GHL_LOCATION_ID}`);
+      if (current && !EXCHANGE_KEEP_STATUSES.has(asText(current.status))) {
+        propertyProps.status = '03_contr_exchanged';
+        propertyProps.status_change_date = new Date(exchangeValue).toISOString();
+      }
     }
     for (const [field, dateField] of Object.entries(CO_CHANGE_DATE_FIELDS)) {
       if (field in propertyProps && !(dateField in propertyProps)) {

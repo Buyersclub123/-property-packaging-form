@@ -27,6 +27,14 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
     log: 'Postgres ctr_edit_log (every Property Record field written by a CTRT save, old -> new, with user); failures emailed (CTR alerts)',
   },
   {
+    name: 'Exchange Date -> Property Record exchanged',
+    what: 'When a user writes Exchange Date on an opportunity in CTRT, the linked Property Record moves to 03 Contr\' Exchanged',
+    trigger: 'Same save call as the user edit (/api/contract-team-reporting/update)',
+    fieldsWritten: 'Property Record status = 03_contr_exchanged, status_change_date = the exchange date',
+    rule: 'Only when Exchange Date is set (not cleared) and the opp has a linked Property Record. Skipped if the record is already 03 / 04 Settled / 08 Resold, if its current status cannot be read, or if the user set Status in the same save.',
+    log: 'Postgres ctr_edit_log (old -> new, with user); failures emailed (CTR alerts)',
+  },
+  {
     name: 'Sales Meeting Outcomes GHL write-back',
     what: 'Writes the meeting outcome a user clicks to the GHL appointment',
     trigger: 'User clicks an outcome in /review-outcomes, when Settings > "Write outcomes to" = DB + GHL appointment status',
