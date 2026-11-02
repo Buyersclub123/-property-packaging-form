@@ -20,6 +20,38 @@ function swapBetween(start, end, to) {
 
 swap('<span class="sample">Mock-up · sample data only</span>', '<span class="sample">Live from GHL · read-only</span>');
 swap('<span class="asof">As at Sat 31 Oct 2026</span>', '<span class="asof" id="asof"></span>');
+// Header on one line (JT 2/11): "‹ Back · BUYERS CLUB · CRM" left, title centred, live/as-at right; whole header collapsible via a
+// discreet chevron top-right. Sections (Sales, Duplicate contacts, Property Team, Contract to Settlement) collapsible via a chevron
+// on the section label. Standard: collapsible, DEFAULT EXPANDED, remembered per browser (localStorage).
+swapBetween('<header>', '</header>', `<header id="hdr" class="hdr">
+    <div class="hdr-left"><a href="/new-initiatives" class="backlink">&#8249; Back</a><span class="brand">Buyers Club · CRM</span></div>
+    <h1><span>Pipeline journey</span></h1>
+    <div class="hdr-right"><span class="sample">Live from GHL · read-only</span><span class="asof"><span id="asof"></span> · <button type="button" class="rfr" id="rfr" title="Refresh from GHL" aria-label="Refresh from GHL">&#10227;</button><span id="rfr-note"></span> · <button type="button" class="allbtn" id="all-btn" title="Expand or collapse every section">Collapse all</button></span></div>
+    <button type="button" class="chev hdr-chev" id="hdr-chev" aria-label="Hide header" aria-expanded="true" title="Hide header"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 5 4 4 4-4"/></svg></button>
+  `);
+swap('.asof{font-size:13px;color:var(--muted)}', `.asof{font-size:13px;color:var(--muted)}
+.hdr{position:relative;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px}
+.hdr h1{margin:0;text-align:center}
+.hdr-left{display:flex;align-items:center;gap:10px;justify-self:start}
+.hdr-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;justify-self:end;padding-right:26px}
+.backlink{color:var(--ink);text-decoration:none;font-weight:700;font-size:13px}
+.rfr{background:none;border:0;padding:0 2px;color:var(--muted);font-size:14px;line-height:1;cursor:pointer;vertical-align:middle}.rfr:hover{color:var(--ink)}.rfr.pending{color:#1d4ed8;font-weight:700}
+#rfr-note{font-size:12px;color:var(--muted);margin-left:4px}.backlink:hover{text-decoration:underline}
+.chev{background:none;border:0;padding:4px;color:var(--muted);display:inline-flex;align-items:center;border-radius:6px;line-height:0}
+.chev:hover{color:var(--ink);background:var(--chip)}
+.chev svg{transition:transform .15s ease}
+.chev[aria-expanded="false"] svg{transform:rotate(-90deg)}
+.hdr-chev{position:absolute;top:0;right:0}
+.allbtn{background:none;border:0;padding:0 2px;font:inherit;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;vertical-align:middle}.allbtn:hover{color:var(--ink);text-decoration:underline}
+.hdr.collapsed{grid-template-columns:1fr auto;gap:8px}
+.hdr.collapsed h1,.hdr.collapsed .hdr-right{display:none}
+.hdr.collapsed .hdr-chev{position:static;justify-self:end}
+.phase-head{cursor:pointer;user-select:none}
+.phase-head .chev{margin-left:2px}
+.phase.collapsed .nodes{display:none}
+@media (max-width:900px){.hdr{grid-template-columns:1fr auto}.hdr h1{grid-column:1/-1;text-align:left}}`);
+// Section heads: add a chevron and remember open/closed per section (default open).
+swap('<div class="phase-head"><i></i>${PHASES[ph].name}</div>', '<div class="phase-head" data-ph="${ph}"><i></i>${PHASES[ph].name}<button type="button" class="chev" aria-expanded="true" aria-label="Collapse section"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 5 4 4 4-4"/></svg></button></div>');
 
 // ---- Journey tabs (Sales & Property, Construction, Finance): periods and stage lists from live data
 swapBetween('const TODAY = new Date(2026, 9, 31);\nconst D = ', '\n\nconst PHASES', `const J = window.JOURNEY;
@@ -30,7 +62,7 @@ const addD = (d,n)=>new Date(d.getFullYear(), d.getMonth(), d.getDate()+n);
 const MON = addD(TODAY, -((TODAY.getDay()+6)%7));
 const FY = new Date(TODAY.getMonth()>=6 ? TODAY.getFullYear() : TODAY.getFullYear()-1, 6, 1);
 const MONTH1 = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
-document.getElementById("asof").textContent = "As at " + TODAY.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+document.getElementById("asof").textContent = "As at " + (J.asAt ? new Date(J.asAt).toLocaleString("en-AU",{weekday:"short",day:"numeric",month:"short",year:"numeric",hour:"numeric",minute:"2-digit"}) : TODAY.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short",year:"numeric"}));
 const PERIODS = {
   today:    {label:"Today",       range:[TODAY, TODAY]},
   tomorrow: {label:"Tomorrow",    range:[addD(TODAY,1), addD(TODAY,1)]},
@@ -299,6 +331,58 @@ swap('["Consultant",x=>x.consultant],["Sat by",x=>x.satBy]]', '["Meeting type",x
 swap('const OPP_KINDS=["opp","fin","property"];', 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
 
 if (/OPP-2\d{4}|Sample Estate|seed\(o\.ref\)/.test(html)) throw new Error('Sample data still present in the template');
+
+// Collapse behaviour (header + sections): default expanded, remembered per browser. Appended as its own script.
+html = html.trimEnd() + `\n<script>
+(function(){
+  var KEY='journey-collapsed', st={};
+  var mem=null; try{ mem=window.localStorage; st=JSON.parse(mem.getItem(KEY)||'{}')||{}; }catch(e){ mem=null; }
+  function save(){ if(!mem) return; try{ mem.setItem(KEY, JSON.stringify(st)); }catch(e){} }
+  function setChev(btn,open,hideT,showT){ if(!btn) return; btn.setAttribute('aria-expanded',String(open)); if(hideT){ btn.title=open?hideT:showT; btn.setAttribute('aria-label',btn.title);} }
+  function init(){
+    var hdr=document.getElementById('hdr'), hc=document.getElementById('hdr-chev');
+    if(hdr&&hc&&!hc.dataset.wired){ hc.dataset.wired='1';
+      var openH = st.hdr!==false; hdr.classList.toggle('collapsed',!openH); setChev(hc,openH,'Hide header','Show header');
+      hc.addEventListener('click',function(){ var open=hdr.classList.contains('collapsed'); hdr.classList.toggle('collapsed',!open); setChev(hc,open,'Hide header','Show header'); st.hdr=open; save(); });
+    }
+    var ab=document.getElementById('all-btn');
+    if(ab&&!ab.dataset.wired){ ab.dataset.wired='1'; ab.addEventListener('click',function(){
+      var heads=document.querySelectorAll('.phase-head[data-ph]'), anyOpen=false;
+      for(var i=0;i<heads.length;i++){ if(!heads[i].parentElement.classList.contains('collapsed')) anyOpen=true; }
+      var open=!anyOpen; for(var j=0;j<heads.length;j++){ st['ph:'+heads[j].getAttribute('data-ph')]=open; }
+      save(); applySections(); }); }
+    var rfr=document.getElementById('rfr');
+    if(rfr&&!rfr.dataset.wired){ rfr.dataset.wired='1'; rfr.addEventListener('click',function(){ try{ parent.postMessage({journey:'refresh'},'*'); }catch(e){} }); }
+    applySections();
+  }
+  function applySections(){
+    var heads=document.querySelectorAll('.phase-head[data-ph]');
+    for(var i=0;i<heads.length;i++){ var head=heads[i], ph=head.getAttribute('data-ph'), open=st['ph:'+ph]!==false;
+      if(head.parentElement.classList.contains('collapsed')===open) head.parentElement.classList.toggle('collapsed',!open); var cv=head.querySelector('.chev'); if(cv&&cv.getAttribute('aria-expanded')!==String(open)) setChev(cv,open); }
+    var ab=document.getElementById('all-btn'); if(ab){ var anyOpen=false; for(var k=0;k<heads.length;k++){ if(!heads[k].parentElement.classList.contains('collapsed')) anyOpen=true; } var lbl=anyOpen?'Collapse all':'Expand all'; if(ab.textContent!==lbl) ab.textContent=lbl; }
+  }
+  document.addEventListener('click',function(e){
+    var head=e.target.closest ? e.target.closest('.phase-head[data-ph]') : null; if(!head) return;
+    var phase=head.parentElement, ph=head.getAttribute('data-ph'), open=phase.classList.contains('collapsed');
+    phase.classList.toggle('collapsed',!open); setChev(head.querySelector('.chev'),open); st['ph:'+ph]=open; save();
+  });
+  window.addEventListener('message',function(e){ var m=e.data||{}; if(m.journey!=='state') return;
+    var rfr=document.getElementById('rfr'), note=document.getElementById('rfr-note');
+    if(rfr){ rfr.classList.toggle('pending',!!m.pending); rfr.title=m.pending?'Newer data ready - click to refresh':'Refresh from GHL'; }
+    if(note) note.textContent=m.refreshing?'refreshing…':(m.pending?'newer data ready':''); });
+  // Keep the user's place across a manual refresh: report tab + scroll to the parent; restore when handed back.
+  function report(){ try{ var sel=document.querySelector('.tab[aria-selected="true"]'); parent.postMessage({journey:'pos', tab: sel?sel.getAttribute('data-tab'):null, y: window.scrollY||0},'*'); }catch(e){} }
+  document.addEventListener('click',function(){ setTimeout(report,0); },true);
+  window.addEventListener('scroll',function(){ if(report._t) clearTimeout(report._t); report._t=setTimeout(report,150); },{passive:true});
+  function restore(){ var R=(window.JOURNEY&&window.JOURNEY.restore)||null; if(!R) return;
+    if(R.tab){ var b=document.querySelector('.tab[data-tab="'+R.tab+'"]'); if(b && b.getAttribute('aria-selected')!=='true') b.click(); }
+    if(R.y) setTimeout(function(){ window.scrollTo(0,R.y); },50); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ init(); restore(); }); else { init(); restore(); }
+  // Re-apply remembered section state after the track re-renders (tab switch / period change) - no MutationObserver (looped 3/11).
+  document.addEventListener('click',function(){ setTimeout(applySections,0); },true);
+  setTimeout(applySections,300); setTimeout(applySections,1500);
+})();
+</script>\n`;
 
 const out = `// Generated by scripts/build-journey-template.mjs from the Journey Map mock-up (v0.21). Do not edit by hand.\n/* eslint-disable */\nexport const JOURNEY_TEMPLATE = ${JSON.stringify(html)};\n`;
 fs.writeFileSync(new URL('../src/app/(tools)/journey/journeyTemplate.ts', import.meta.url), out);

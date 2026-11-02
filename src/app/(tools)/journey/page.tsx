@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { JOURNEY_TEMPLATE } from './journeyTemplate';
 import { buildJourneyData } from './journeyData';
 
@@ -9,12 +9,12 @@ type Sales = Parameters<typeof buildJourneyData>[3];
 const STALE_MS = 15 * 60 * 1000;
 
 /** JSON plus whether the server's copy is older than 15 minutes (X-Fetched-At header, or asAt / fetchedAt in the body). */
-async function getJson<T>(url: string): Promise<{ data: T; stale: boolean }> {
+async function getJson<T>(url: string): Promise<{ data: T; stale: boolean; at: number }> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
   const data = await res.json();
   const at = Number(res.headers.get('X-Fetched-At')) || Date.parse(data?.asAt || data?.fetchedAt || '') || Date.now();
-  return { data, stale: Date.now() - at > STALE_MS };
+  return { data, stale: Date.now() - at > STALE_MS, at };
 }
 
 // Read-only Pipeline Journey: Claude's Journey Map mock-up rendered on live CTRT data, reconciled to GHL's own stage counts.
@@ -25,25 +25,46 @@ export default function JourneyPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingHtml, setPendingHtml] = useState('');
+  const frame = useRef<HTMLIFrameElement>(null);
+  const pos = useRef<{ tab: string | null; y: number }>({ tab: null, y: 0 });
+  const applyPending = useCallback(() => { if (pendingHtml) { setHtml(pendingHtml); setPendingHtml(''); } }, [pendingHtml]);
+  // Tell the page inside the iframe what the refresh button should show (pending newer data / refreshing).
+  useEffect(() => { frame.current?.contentWindow?.postMessage({ journey: 'state', pending: !!pendingHtml, refreshing }, '*'); }, [pendingHtml, refreshing, html]);
+  useEffect(() => {
+    const onShow = () => { if (document.visibilityState === 'visible') applyPending(); };
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.journey === 'pos') pos.current = { tab: e.data.tab ?? null, y: Number(e.data.y) || 0 };
+      if (e.data?.journey === 'refresh') { if (pendingHtml) applyPending(); else load(true); }
+    };
+    document.addEventListener('visibilitychange', onShow);
+    window.addEventListener('message', onMsg);
+    return () => { document.removeEventListener('visibilitychange', onShow); window.removeEventListener('message', onMsg); };
+  }, [applyPending, pendingHtml]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((force = false) => {
+    setLoading(!force);
     setError('');
-    let records: Record<string, string>[] | null = null, recon: Recon | null = null, sales: Sales = null;
+    let records: Record<string, string>[] | null = null, recon: Recon | null = null, sales: Sales = null, asAt = 0;
+    let rendered = false;
+    const build = () => JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${JSON.stringify({ ...buildJourneyData(records!, recon!, false, sales), asAt: new Date(asAt || Date.now()).toISOString(), restore: pos.current }).replace(/</g, '\\u003c')};</script>\n<script>`);
+    // Render the iframe once; later (background) data is held in pendingHtml and applied only when the user asks
+    // (Refresh button) or comes back to the tab, so the page never jumps back to the first tab mid-use (JT 2/11).
     const render = () => {
       if (!records || !recon) return;
-      const json = JSON.stringify(buildJourneyData(records, recon, false, sales)).replace(/</g, '\\u003c');
-      setHtml(JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${json};</script>\n<script>`));
+      // First render and manual refresh (force) apply at once; background refreshes are parked until the user asks.
+      if ((!rendered && !force) || force) { rendered = true; setHtml(build()); setPendingHtml(''); } else setPendingHtml(build());
     };
     const refresh: Promise<unknown>[] = [];
     // Sales tiles load separately (slow: GHL contacts + meetings); they show "not wired" until they arrive or if they fail.
-    const salesP = getJson<Sales>('/api/journey/sales?snapshot=1').then((s) => {
+    if (force) setRefreshing(true);
+    const salesP = getJson<Sales>(force ? '/api/journey/sales' : '/api/journey/sales?snapshot=1').then((s) => {
       sales = s.data; render();
       if (s.stale) refresh.push(getJson<Sales>('/api/journey/sales').then((f) => { sales = f.data; render(); }));
     }).catch((e) => console.error('Journey sales tiles:', e));
-    Promise.all([getJson<Record<string, string>[]>('/api/contract-team-reporting?snapshot=1'), getJson<Recon>('/api/journey/reconcile?snapshot=1')])
+    Promise.all([getJson<Record<string, string>[]>(force ? '/api/contract-team-reporting' : '/api/contract-team-reporting?snapshot=1'), getJson<Recon>(force ? '/api/journey/reconcile' : '/api/journey/reconcile?snapshot=1')])
       .then(([r, c]) => {
-        records = r.data; recon = c.data; render();
+        records = r.data; recon = c.data; asAt = r.at; render();
         if (r.stale) refresh.push(getJson<Record<string, string>[]>('/api/contract-team-reporting').then((f) => { records = f.data; render(); }));
         if (c.stale) refresh.push(getJson<Recon>('/api/journey/reconcile').then((f) => { recon = f.data; render(); }));
       })
@@ -51,6 +72,7 @@ export default function JourneyPage() {
       .finally(() => {
         setLoading(false);
         salesP.then(() => {
+          if (force) { setRefreshing(false); return; }
           if (!refresh.length) return;
           setRefreshing(true);
           Promise.allSettled(refresh).finally(() => setRefreshing(false));
@@ -61,14 +83,13 @@ export default function JourneyPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="flex flex-col h-screen bg-white">
-      <div className="flex items-center gap-3 px-4 h-10 border-b border-gray-200 text-sm text-gray-700 shrink-0">
-        <span className="font-medium">Quick snapshot: in-flight opportunities</span>
-        {loading && <span className="text-xs text-gray-500">Loading live data from GHL…</span>}
-        {!loading && refreshing && <span className="text-xs text-gray-500">Showing last saved copy · refreshing from GHL…</span>}
-        {error && <span className="text-xs text-red-600">{error}</span>}
-      </div>
-      {html && <iframe title="Pipeline Journey" srcDoc={html} className="block w-full flex-1 border-0" />}
+    <div className="relative flex h-screen flex-col bg-white">
+      {(loading || error) && (
+        <div className={`absolute right-4 top-2 z-10 rounded px-2 py-1 text-xs ${error ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+          {error || 'Loading live data from GHL…'}
+        </div>
+      )}
+      {html && <iframe ref={frame} title="Pipeline Journey" srcDoc={html} className="block w-full flex-1 border-0" />}
     </div>
   );
 }
