@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TopNavBar from '@/components/portal/TopNavBar';
 import { clsLabel, type Item } from './shared';
 import { DecisionPanel, niceDate } from './decision';
@@ -157,6 +157,15 @@ export default function InboxDecisionPage() {
   useEffect(() => {
     if (openId === null && ordered.length) setOpenId(ordered[0].id);
   }, [ordered, openId]);
+  // Selecting an item scrolls the page to the pane top once; nothing else moves the page (JT 02/11).
+  const paneRef = useRef<HTMLElement>(null);
+  const firstOpen = useRef(true);
+  useEffect(() => {
+    if (openId === null) return;
+    if (firstOpen.current) { firstOpen.current = false; return; }
+    const el = paneRef.current;
+    if (el && el.getBoundingClientRect().top < 0) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 8 });
+  }, [openId]);
   const openGone = openId !== null && !loading && !ordered.some((i) => i.id === openId);
 
   const nextAfter = (id: number) => {
@@ -256,7 +265,7 @@ export default function InboxDecisionPage() {
               </div>
             </section>
 
-            <section className="pane [overflow-wrap:anywhere] lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+            <section ref={paneRef} className="pane self-start [overflow-wrap:anywhere]">
               {openId ? (
                 <>
                   {openGone && <div className="m-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">This item is no longer in this list.</div>}

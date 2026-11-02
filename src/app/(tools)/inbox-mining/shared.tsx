@@ -190,6 +190,8 @@ export function PdfPages({ itemId, doc, facts, active, autoRender, onLocated }: 
       el.innerHTML = '';
       wraps.current = [];
       const pages: TextItem[][] = [];
+      // Lay out every page at its final size first, so rendering never shifts the content around it.
+      const laid = [];
       for (let i = 1; i <= max; i++) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 1.4 });
@@ -198,10 +200,13 @@ export function PdfPages({ itemId, doc, facts, active, autoRender, onLocated }: 
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        canvas.className = 'block max-w-full border shadow-sm';
+        canvas.className = 'block h-auto max-w-full border bg-white shadow-sm';
         wrap.appendChild(canvas);
-        el.appendChild(wrap);
         wraps.current.push(wrap);
+        laid.push({ page, viewport, canvas, wrap });
+      }
+      el.append(...laid.map((p) => p.wrap));
+      for (const { page, viewport, canvas } of laid) {
         await page.render({ canvasContext: canvas.getContext('2d')!, viewport, canvas }).promise;
         const tc = await page.getTextContent();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -254,7 +259,7 @@ export function PdfPages({ itemId, doc, facts, active, autoRender, onLocated }: 
     }
     if (active !== scrolled.current) {
       if (activeEl) {
-        (activeEl as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' });
+        scrollWithin(holder.current, activeEl);
         scrolled.current = active;
       } else if (!facts.some(([k]) => k === active)) {
         scrolled.current = active;
@@ -278,6 +283,14 @@ export function PdfPages({ itemId, doc, facts, active, autoRender, onLocated }: 
       <div ref={holder} className="max-h-[900px] overflow-auto" />
     </div>
   );
+}
+
+/** Centre `el` inside its own scroll box only; never scrolls the page (JT 02/11: the pane must not jump). */
+function scrollWithin(box: HTMLElement | null, el: HTMLElement) {
+  if (!box) return;
+  const b = box.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  box.scrollTo({ top: box.scrollTop + r.top - b.top - (box.clientHeight - r.height) / 2, behavior: 'smooth' });
 }
 
 export function FeedbackCell({ itemId, s, entry, onSaved }: { itemId: number; s: Suggestion; entry?: FeedbackEntry; onSaved: () => void }) {
@@ -396,7 +409,8 @@ export function DetailPanel({ id, onChanged }: { id: number; onChanged: () => vo
 
   useEffect(() => {
     if (active && d?.item.facts[active]?.source === 'email') {
-      document.getElementById(`ev-${id}-${active}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const el = document.getElementById(`ev-${id}-${active}`);
+      if (el) scrollWithin(el.closest('pre'), el);
     }
   }, [active, id, d]);
 
