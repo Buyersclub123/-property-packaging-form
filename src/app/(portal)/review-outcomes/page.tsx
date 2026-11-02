@@ -10,6 +10,8 @@ import StatsView from '@/components/reviewOutcomes/StatsView';
 import SalesView from '@/components/reviewOutcomes/SalesView';
 import { dmy, outcomeStyle, Stat, time, weekday } from '@/components/reviewOutcomes/ui';
 import BackLink from '@/components/BackLink';
+import AsAtRefresh from '@/components/AsAtRefresh';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
 
@@ -128,10 +130,14 @@ export default function ReviewOutcomesPage() {
     [demo, demoAll, live, from, to],
   );
 
-  const load = useCallback(async (sync: 'auto' | 'none' | 'force' = 'auto') => {
+  // ⟳ = re-read GHL now; every 15 min in the background. Both apply in place (quiet: no spinner, no cleared list).
+  const lr = useLiveRefresh((manual) => (demo ? Promise.resolve(false) : load(manual ? 'force' : 'auto', true)));
+  const { stamp } = lr;
+
+  const load = useCallback(async (sync: 'auto' | 'none' | 'force' = 'auto', quiet = false) => {
     const seq = ++loadSeq;
-    if (sync !== 'none') setLoading(true);
-    setError(null);
+    if (sync !== 'none' && !quiet) setLoading(true);
+    if (!quiet) setError(null);
     const get = async (s: string) => {
       const res = await fetch(`/api/review-outcomes?from=${from}&to=${to}&sync=${s}`, { cache: 'no-store' });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status} (response was not JSON)` }));
@@ -140,18 +146,20 @@ export default function ReviewOutcomesPage() {
     };
     try {
       // Show the saved copy straight away; the GHL / Google re-read follows and replaces it.
-      if (sync === 'auto') {
+      if (sync === 'auto' && !quiet) {
         const quick = await get('none');
         if (seq === loadSeq) setLive(quick);
       }
       const body = await get(sync);
-      if (seq === loadSeq) setLive(body);
+      if (seq === loadSeq) { setLive(body); setError(null); stamp(); }
+      return true;
     } catch (e) {
       if (seq === loadSeq) setError((e as Error).message);
+      return false;
     } finally {
       if (seq === loadSeq) setLoading(false);
     }
-  }, [from, to]);
+  }, [from, to, stamp]);
 
   useEffect(() => { if (!demo) load(); }, [load, demo]);
 
@@ -219,7 +227,12 @@ export default function ReviewOutcomesPage() {
     } catch (e) {
       setSaveError(`${m.contactName}: ${(e as Error).message}`);
     }
-    load('none');
+    // Update only this meeting's row from the saved copy; the list itself is not reloaded.
+    try {
+      const res = await fetch(`/api/review-outcomes?from=${m.ymd}&to=${m.ymd}&sync=none`, { cache: 'no-store' });
+      const row = res.ok ? ((await res.json()) as ReviewData).meetings.find((x) => x.id === m.id) : undefined;
+      if (row) setLive((d) => d && { ...d, meetings: d.meetings.map((x) => (x.id === m.id ? row : x)) });
+    } catch { /* keep the row as tapped */ }
   };
 
   const meetings = useMemo(() => {
@@ -237,8 +250,11 @@ export default function ReviewOutcomesPage() {
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1400px] px-4 py-6">
-        <div className="mb-4"><BackLink fallback="/new-initiatives" /></div>
-        <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Sales Meeting Outcomes</h1>
+        <div className="mb-1 flex items-baseline gap-4">
+          <BackLink fallback="/new-initiatives" />
+          <h1 className="text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Sales Meeting Outcomes</h1>
+          {!demo && <div className="ml-auto"><AsAtRefresh asAt={lr.asAt} refreshing={lr.refreshing} onRefresh={lr.refreshNow} /></div>}
+        </div>
         <p className="mb-4 text-[13px] text-[#7A7575]">
           Source: GHL Calendars - Portfolio Review Meeting (2nd meetings aren't recorded) and Presentation Meeting One (New Lead / Referral, with the calendar schedule sheet). Outcomes are saved to our database{data?.settings.writeTarget === 'db+ghl' ? ' and the GHL appointment status' : ' only'}.
         </p>

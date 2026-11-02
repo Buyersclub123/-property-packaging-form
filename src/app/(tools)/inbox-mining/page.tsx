@@ -6,6 +6,8 @@ import { clsLabel, type Item } from './shared';
 import { DecisionPanel, niceDate } from './decision';
 import './wireframe.css';
 import BackLink from '@/components/BackLink';
+import AsAtRefresh from '@/components/AsAtRefresh';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 // Inbox decision screen (JT redesign): lists as tabs, the selected list down the left, the decision on the right.
 // Decisions write only inbox_items.feedback / inbox_items.workflow. Nothing is written to GHL and no email is sent.
@@ -79,14 +81,19 @@ export default function InboxDecisionPage() {
   const [group, setGroup] = useState('');
   const [openId, setOpenId] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // ⟳ and the 15-minute background refresh update the items in place: list, tab, grouping, open item and scroll stay.
+  const lr = useLiveRefresh(() => load(true));
+  const { stamp } = lr;
+
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const res = await fetch(`/api/inbox-mining/items?days=${days}`, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setItems(data.items);
       setError(null);
+      stamp();
       // Deep link: /inbox-mining?item=<id> opens that item in its list.
       const want = new URLSearchParams(window.location.search).get('item');
       const hit = want ? (data.items as WorkItem[]).find((x) => String(x.id) === want) : undefined;
@@ -101,6 +108,16 @@ export default function InboxDecisionPage() {
     } finally {
       setLoading(false);
     }
+  }, [days, stamp]);
+
+  // After a decision is saved, update only that item (the rest of the list is untouched).
+  const refreshItem = useCallback(async (id: number) => {
+    try {
+      const res = await fetch(`/api/inbox-mining/items?days=${days}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const fresh = ((await res.json()).items as WorkItem[]).find((x) => x.id === id);
+      if (fresh) setItems((prev) => prev.map((i) => (i.id === id ? fresh : i)));
+    } catch { /* keep the item as shown */ }
   }, [days]);
 
   useEffect(() => {
@@ -136,10 +153,11 @@ export default function InboxDecisionPage() {
   }, [shown, group]);
   const ordered = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
-  // Open the first item of the list when nothing (or something outside the list) is selected.
+  // Open the first item only when nothing is selected. If the open item leaves the list (e.g. on a refresh) it stays open.
   useEffect(() => {
-    if (!ordered.some((i) => i.id === openId)) setOpenId(ordered[0]?.id ?? null);
+    if (openId === null && ordered.length) setOpenId(ordered[0].id);
   }, [ordered, openId]);
+  const openGone = openId !== null && !loading && !ordered.some((i) => i.id === openId);
 
   const nextAfter = (id: number) => {
     const idx = ordered.findIndex((i) => i.id === id);
@@ -189,6 +207,7 @@ export default function InboxDecisionPage() {
             </div>
             <div className="flex items-center gap-4 text-xs font-semibold">
               <span className="font-normal text-gray-500">Read-only demo: nothing is written to GHL and no email is sent.</span>
+              <AsAtRefresh asAt={lr.asAt} refreshing={lr.refreshing} onRefresh={lr.refreshNow} />
               <a href="/inbox-mining/reporting" className="text-blue-700 hover:underline">Reporting</a>
               <a href="/inbox-mining/console" className="text-blue-700 hover:underline">Console</a>
             </div>
@@ -239,8 +258,11 @@ export default function InboxDecisionPage() {
 
             <section className="pane [overflow-wrap:anywhere] lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
               {openId ? (
-                <DecisionPanel key={openId} id={openId} processed={tab === 'processed'}
-                  onDone={() => onDone(openId)} onSkip={() => onSkip(openId)} onReopen={() => reopen(openId)} onChanged={load} />
+                <>
+                  {openGone && <div className="m-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">This item is no longer in this list.</div>}
+                  <DecisionPanel key={openId} id={openId} processed={tab === 'processed'}
+                    onDone={() => onDone(openId)} onSkip={() => onSkip(openId)} onReopen={() => reopen(openId)} onChanged={() => refreshItem(openId)} />
+                </>
               ) : (
                 <div className="p-5 text-sm text-gray-500">{loading ? 'Loading…' : 'Nothing selected.'}</div>
               )}

@@ -5,6 +5,8 @@ import type { DataIssue, PortfolioClient, PortfolioData, PortfolioOpportunity, P
 import RecordPopout from '@/components/records/RecordPopout';
 import { propertyPageKey, type RecordPage } from '@/lib/records/types';
 import BackLink from '@/components/BackLink';
+import AsAtRefresh from '@/components/AsAtRefresh';
+import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 const PAGE_SIZE = 100;
 
@@ -482,21 +484,27 @@ export default function PortfolioPage() {
   const [consultant, setConsultant] = useState('');
   const [view, setView] = useState<'contact' | 'person'>('contact');
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setData(null);
+  // ⟳ / Reload and the 15-minute background refresh re-read in place: the list, filters, open client and scroll stay.
+  const lr = useLiveRefresh(() => load(true));
+  const { stamp } = lr;
+
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const res = await fetch('/api/portfolio', { cache: 'no-store' });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status} (response was not JSON)` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       setData(body as PortfolioData);
+      setError(null);
+      stamp();
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [stamp]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setLimit(PAGE_SIZE); }, [search, group, sortBy, consultant]);
@@ -576,24 +584,27 @@ export default function PortfolioPage() {
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1400px] px-4 py-6">
-        <div className="mb-4"><BackLink fallback="/new-initiatives" /></div>
-        <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Portfolio View</h1>
+        <div className="mb-1 flex items-baseline gap-4">
+          <BackLink fallback="/new-initiatives" />
+          <h1 className="text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Portfolio View</h1>
+          <div className="ml-auto"><AsAtRefresh asAt={lr.asAt} refreshing={lr.refreshing} onRefresh={lr.refreshNow} /></div>
+        </div>
         <p className="mb-4 text-[13px] text-[#7A7575]">
           Demo from UNLOADED data (in-flight load file + historical candidate file + 27/10 GHL snapshots + Master Deal List valuations). Read-only; files are read fresh on every load.
         </p>
 
-        {loading && <div className="rounded border bg-white p-4 text-sm text-gray-600">Reading source files…</div>}
+        {loading && !data && <div className="rounded border bg-white p-4 text-sm text-gray-600">Reading source files…</div>}
         {error && (
           <div className="mb-4 rounded border border-red-300 bg-red-50 p-4 text-sm text-red-800">
             <div className="font-semibold">Could not load the portfolio data</div>
             <div className="mt-1 whitespace-pre-wrap">{error}</div>
-            <button onClick={load} className="mt-2 rounded border border-red-300 bg-white px-2 py-1 text-xs">Retry</button>
+            <button onClick={() => load()} className="mt-2 rounded border border-red-300 bg-white px-2 py-1 text-xs">Retry</button>
           </div>
         )}
 
         {data && (
           <>
-            <SourcesBar data={data} onReload={load} />
+            <SourcesBar data={data} onReload={lr.refreshNow} />
 
             {data.consultantError && (
               <div className="mb-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
