@@ -120,7 +120,13 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
       const m = nl ? undefined : matches.get(String(r.appointment_id));
       const ev = m ? eventById.get(m.eventId) : undefined;
       const consEmail = userEmail.get(String(r.assigned_user_id || ''));
-      const bookerEmail = ev?.attendees.map((a) => a.email).find((e) => cc.has(e) && e !== consEmail) || null;
+      // Booker (JT 3/11). GHL appointments carry no guests, so on the GHL side it is the user who created the appointment,
+      // when they are Call Centre staff. Else a Call Centre attendee on the Google invite; NL then falls back to the sheet's Agent.
+      const createdEmail = (userEmail.get(String(r.created_by || '')) || '').toLowerCase();
+      const ghlBooker = cc.has(createdEmail) && createdEmail !== consEmail ? createdEmail : null;
+      const inviteBooker = ev?.attendees.map((a) => a.email).find((e) => cc.has(e) && e !== consEmail) || null;
+      const bookerEmail = ghlBooker || inviteBooker;
+      const sheetBooker = nl && !bookerEmail && sr?.agent ? agentOf(sr.agent) : null;
       const leadType: LeadType = !nl ? 'PR'
         : ymd < LEAD_SPLIT_FROM || !sr ? 'Unknown'
         : /^referr?al/i.test(sr.lead) ? 'Referral'
@@ -153,8 +159,10 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
         recordedBy: dbOutcome ? String(r.recorded_by) : null,
         recordedAt: dbOutcome ? iso(r.recorded_at) : null,
         gcal: m && ev ? { event: toEvent(ev), basis: m.basis, minutesApart: m.minutesApart } : null,
-        booker: nl ? (sr?.agent ? agentOf(sr.agent) : null) : bookerEmail ? staffByEmail.get(bookerEmail) || emailName(bookerEmail) : null,
+        booker: bookerEmail ? staffByEmail.get(bookerEmail) || emailName(bookerEmail) : sheetBooker,
         bookerEmail,
+        bookerFrom: ghlBooker ? 'ghl' : inviteBooker ? 'invite' : sheetBooker ? 'sheet' : null,
+        createdByEmail: createdEmail || null,
         mode: nl ? scheduleMode(sr?.location || '') : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
       };
     });

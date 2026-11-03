@@ -778,7 +778,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
                     <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
                     <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
                     <td className={TDN}>{m.consultant}</td>
-                    <td className={TDN}>{m.booker || ''}</td>
+                    <td className={TDN} title={m.bookerFrom ? `Booker from ${m.bookerFrom === 'ghl' ? 'GHL (created the appointment)' : m.bookerFrom === 'invite' ? 'the Google invite attendees' : 'the calendar schedule sheet'}` : m.createdByEmail ? `No Call Centre booker; GHL creator ${m.createdByEmail}` : undefined}>{m.booker || ''}</td>
                     <td className={TDN}>{m.mode}</td>
                     <td className={TDN}>{m.ghlStatus}</td>
                     <td className={TDN}>{m.outcome || 'No outcome'}{m.invalidReason ? ` - ${m.invalidReason}` : ''}</td>

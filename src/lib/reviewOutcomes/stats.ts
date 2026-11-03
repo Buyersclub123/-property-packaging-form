@@ -6,7 +6,7 @@ export type Kind = StatsKind;
 export interface Period { kind: Kind; anchor: string }
 
 export const KINDS: [Kind, string][] = [['day', 'Day'], ['week', 'Week (Fri–Thu)'], ['month', 'Month'], ['quarter', 'Quarter'], ['ytd', 'YTD'], ['year', 'Year'], ['all', 'All']];
-export const NO_BOOKER = 'No booker on invite';
+export const NO_BOOKER = 'No booker found';
 export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export const pad = (n: number) => String(n).padStart(2, '0');

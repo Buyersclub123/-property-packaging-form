@@ -191,9 +191,13 @@ export interface ReviewMeeting {
   recordedBy: string | null;
   recordedAt: string | null;
   gcal: GcalMatch | null;
-  /** Call Centre person on the matched Google invite; null when none is on it. */
+  /** Call Centre booker: GHL appointment creator if Call Centre staff, else a Call Centre attendee on the Google invite,
+   *  else (NL) the schedule sheet's Agent; null when none is found. */
   booker: string | null;
   bookerEmail: string | null;
+  bookerFrom: 'ghl' | 'invite' | 'sheet' | null;
+  /** Who created the appointment in GHL (email), whether or not they are Call Centre. */
+  createdByEmail: string | null;
   /** From the matched Google event's location: Meet link = Google, street address = F2F. */
   mode: MeetingMode;
 }

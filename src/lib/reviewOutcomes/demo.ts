@@ -45,6 +45,8 @@ export function demoData(): ReviewData {
       gcal: hasG ? { event: gcal, basis: 'Email + Name', minutesApart: Math.round(Math.abs(Date.parse(gStart) - Date.parse(start)) / 60e3) } : null,
       booker: hasG && i % 5 ? CALL_CENTRE[i % 3] : null,
       bookerEmail: null,
+      bookerFrom: hasG && i % 5 ? ('invite' as const) : null,
+      createdByEmail: null,
       mode: hasG ? gcal.mode : 'Unknown',
       kind: 'PR' as const, leadType: 'PR' as const, schedule: null, selfBooked: false,
     };
