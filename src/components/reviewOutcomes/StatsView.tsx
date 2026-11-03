@@ -6,7 +6,7 @@ import { aud, emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow
 import { dmy, weekday } from './ui';
 import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
 import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
-import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, NO_BOOKER, pct, periodRange, shift, sumRows, tally, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
+import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
 
 // Item 15: CC Stats (left) and Sales Stats (right) for one shared period, laid out like the team's STATS sheet.
 // PR = Portfolio Review meetings; New Lead / Referral = Presentation Meeting One (lead type and Sat? from the calendar
@@ -128,7 +128,7 @@ function CcTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: 
   );
 }
 
-function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf; typeOf: TypeOf; pickT: PickT }) {
+function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT, selfOf, pickSelf }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf; typeOf: TypeOf; pickT: PickT; selfOf: (name: string) => number; pickSelf: (name: string) => void }) {
   const line = (r: Row, total = false) => {
     const s = soldOf(total ? 'TOTAL' : r.name);
     const t = typeOf(total ? 'TOTAL' : r.name);
@@ -139,6 +139,7 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { row
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
         <td className={TDN}>{r.name}</td>
         {T(t.nl.booked, 'booked', 'nl')}{T(t.ref.booked, 'booked', 'ref')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`} title={t.unk.booked ? `Includes ${t.unk.booked} with unknown lead type` : ''}>{r.booked + exB}</td>
+        <NumCell v={selfOf(total ? 'TOTAL' : r.name)} total={total} onClick={() => pickSelf(total ? 'TOTAL' : r.name)} />
         {T(t.nl.sat, 'sat', 'nl')}{T(t.nl.dnq, 'dnq', 'nl')}<td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>{pct(s.nl, t.nl.sat)}</td>
         {T(t.ref.sat, 'sat', 'ref')}{T(t.ref.dnq, 'dnq', 'ref')}<td className={TD}>{n0(s.ref)}</td><td className={`${TD} ${SHADE}`}>{pct(s.ref, t.ref.sat)}</td>
         <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td><td className={`${TD} ${SHADE}`}>{pct(s.pr, r.sat)}</td>
@@ -153,7 +154,7 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { row
       <thead>
         <tr>
           <th className={TH} rowSpan={3}>Name</th>
-          <th className={TH} colSpan={4}>BOOKED</th>
+          <th className={TH} colSpan={5}>BOOKED</th>
           <th className={TH} colSpan={12}>Sat</th>
           <th className={TH} colSpan={4}>Sold</th>
           <th className={TH} rowSpan={3}><V>Revenue $</V></th>
@@ -162,6 +163,7 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { row
         </tr>
         <tr>
           {['New Lead', 'Referral', 'PR', 'TOTAL'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
+          <th className={TH} rowSpan={2} title="Created in GHL by the consultant themselves (included in TOTAL)"><V>Self-booked</V></th>
           <th className={TH} colSpan={4}>New Lead</th>
           <th className={TH} colSpan={4}>Referral</th>
           <th className={TH} colSpan={4}>PR</th>
@@ -219,7 +221,7 @@ function MarketingTable() {
 const ratio = (n: number, d: number) => (d ? n / d : 0);
 
 /** Download the period in the STATS sheet's column order; only the PR columns are filled for now. */
-async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, ccSold: SoldOf, salesSold: SoldOf, ccT: TypeOf, salesT: TypeOf) {
+async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, ccSold: SoldOf, salesSold: SoldOf, ccT: TypeOf, salesT: TypeOf, selfOf: (name: string) => number) {
   const XLSX = await import('xlsx');
   const ccHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sat %',
     'Ref Sat', 'Ref DNQ', 'Ref Sold', 'PR Sat', 'PR DNQ', 'PR Sold', 'Total (Excl PR) Booked', 'Total (Excl PR) Sat', 'SOLD', 'Cancelled', 'Revenue $', 'N/L Sat %', 'Sold %'];
@@ -230,14 +232,14 @@ async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, 
     const exS = t.nl.sat + t.ref.sat + t.unk.sat;
     return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, t.nl.sat, t.nl.dnq, s.nl, ratio(t.nl.sat, t.nl.booked), t.ref.sat, t.ref.dnq, s.ref, r.sat, r.dnq, s.pr, exB, exS, s.total, s.cancelled, s.revenue, ratio(t.nl.sat, t.nl.booked), ratio(s.total, r.sat + exS)];
   };
-  const salesHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sold %',
+  const salesHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'Self-booked', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sold %',
     'Ref Sat', 'Ref DNQ', 'Ref Sold', 'Ref Sold %', 'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Cancelled', 'Revenue $', 'Overall Sat %', 'Overall Sold %'];
   const salesRow = (r: Row) => {
     const s = salesSold(r.name);
     const t = salesT(r.name);
     const exB = t.nl.booked + t.ref.booked + t.unk.booked;
     const allSat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
-    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, t.nl.sat, t.nl.dnq, s.nl, ratio(s.nl, t.nl.sat), t.ref.sat, t.ref.dnq, s.ref, ratio(s.ref, t.ref.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, s.revenue, ratio(allSat, r.booked + exB), ratio(s.total, allSat)];
+    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, selfOf(r.name), t.nl.sat, t.nl.dnq, s.nl, ratio(s.nl, t.nl.sat), t.ref.sat, t.ref.dnq, s.ref, ratio(s.ref, t.ref.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, s.revenue, ratio(allSat, r.booked + exB), ratio(s.total, allSat)];
   };
   const aoa: unknown[][] = [
     [`Sales Meeting Outcomes stats - ${label}`],
@@ -535,7 +537,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const periodItems = useMemo(() => itemsIn(items, r.from, r.to), [items, r.from, r.to]);
   const ccSold = useMemo(() => soldBy(periodItems, ccKey, view.net), [periodItems, view.net]);
   const consSold = useMemo(() => soldBy(periodItems, consKey, view.net), [periodItems, view.net]);
-  const allBookers = useMemo(() => [...new Set([...pool.map((m) => m.booker || NO_BOOKER), ...salePool.map(ccKey)])], [pool, salePool]);
+  const allBookers = useMemo(() => [...new Set([...pool.map(bookerKey), ...salePool.map(ccKey)])], [pool, salePool]);
   const allConsultants = useMemo(() => [...new Set([...pool.map((m) => m.consultant), ...salePool.map(consKey)])], [pool, salePool]);
   const cc = useMemo(() => {
     const t = tally(prList, bookerKey, names.mode === 'active' ? [...new Set([...ccSold.by.keys(), ...ccTypes.by.keys()])] : allBookers);
@@ -628,8 +630,12 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
     return { weeks: chosen.length, from: chosen[0].from, to: chosen[chosen.length - 1].to, s, t: tally(covered, () => 'x').total };
   }, [sheet, data, r.from, r.to]);
   const years = Array.from({ length: Number(today.slice(0, 4)) - 2023 }, (_, i) => 2024 + i);
+  const shownSales = new Set(sales.rows.map((x) => x.name));
+  const selfList = (name: string) => list.filter((m) => m.selfBooked && (name === 'TOTAL' ? shownSales.has(m.consultant) : m.consultant === name));
+  const selfOf = (name: string) => selfList(name).length;
+  const pickSelf = (name: string) => setDrill({ title: `${name === 'TOTAL' ? 'Sales total' : name} - Self-booked - ${r.label}`, meetings: selfList(name).sort((a, b) => a.start.localeCompare(b.start)) });
   const pickFrom = (side: 'cc' | 'sales', name: string, f: Field, type: 'PR' | TypeKey = 'PR') => {
-    const key = side === 'cc' ? (m: ReviewMeeting) => m.booker || NO_BOOKER : (m: ReviewMeeting) => m.consultant;
+    const key = side === 'cc' ? bookerKey : (m: ReviewMeeting) => m.consultant;
     const meetings = list
       .filter((m) => name === 'TOTAL' || key(m) === name)
       .filter((m) => (type === 'PR' ? isPR(m) : !isPR(m) && typeKeyOf(m) === type))
@@ -693,7 +699,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
                     <div key={field}>
                       <div className="mb-1 text-xs font-semibold text-gray-600">{title}</div>
                       <div className="max-h-[260px] overflow-y-auto">
-                        {[...all].sort((a, b) => (a === NO_BOOKER ? 1 : b === NO_BOOKER ? -1 : a.localeCompare(b))).map((n) => (
+                        {[...all].sort(bookerOrder).map((n) => (
                           <label key={n} className="flex items-center gap-2 text-xs">
                             <input type="checkbox" checked={!names[field].includes(n)} onChange={() => toggleHidden(field, n)} /> {n}
                           </label>
@@ -709,7 +715,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
             </div>
           )}
         </div>
-        <button onClick={() => exportXlsx(r.label, cc, sales, modes, ccSoldOf, consSoldOf, ccTypeOf, consTypeOf)} className="ml-2 rounded border bg-white px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">
+        <button onClick={() => exportXlsx(r.label, cc, sales, modes, ccSoldOf, consSoldOf, ccTypeOf, consTypeOf, selfOf)} className="ml-2 rounded border bg-white px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">
           Export xlsx
         </button>
         {!demoData && data.viewer.recorder && (
@@ -778,7 +784,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
                     <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
                     <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
                     <td className={TDN}>{m.consultant}</td>
-                    <td className={TDN} title={m.bookerFrom ? `Booker from ${m.bookerFrom === 'ghl' ? 'GHL (created the appointment)' : m.bookerFrom === 'invite' ? 'the Google invite attendees' : 'the calendar schedule sheet'}` : m.createdByEmail ? `No Call Centre booker; GHL creator ${m.createdByEmail}` : undefined}>{m.booker || ''}</td>
+                    <td className={TDN} title={m.bookerFrom ? `Booker from ${m.bookerFrom === 'ghl' ? 'GHL (created the appointment)' : m.bookerFrom === 'invite' ? 'the Google invite attendees' : m.bookerFrom === 'self' ? 'GHL: the consultant created it (self-booked)' : 'the calendar schedule sheet'}` : m.createdByEmail ? `No Call Centre booker; GHL creator ${m.createdByEmail}` : undefined}>{m.booker || ''}</td>
                     <td className={TDN}>{m.mode}</td>
                     <td className={TDN}>{m.ghlStatus}</td>
                     <td className={TDN}>{m.outcome || 'No outcome'}{m.invalidReason ? ` - ${m.invalidReason}` : ''}</td>
@@ -828,7 +834,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         <div className={view.compare === 'box' && prevMaps ? 'grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_300px]' : ''}>
           <div className="min-w-0 overflow-x-auto rounded border bg-white">
             <Title>Sales Stats</Title>
-            <SalesTable data={sales} pick={(n, f) => pickFrom('sales', n, f)} prevOf={prevOf('sales')} soldOf={consSoldOf} typeOf={consTypeOf} pickT={(n, f, t) => pickFrom('sales', n, f, t)} />
+            <SalesTable data={sales} pick={(n, f) => pickFrom('sales', n, f)} prevOf={prevOf('sales')} soldOf={consSoldOf} typeOf={consTypeOf} pickT={(n, f, t) => pickFrom('sales', n, f, t)} selfOf={selfOf} pickSelf={pickSelf} />
           </div>
           {view.compare === 'box' && prevMaps && <CompareBox title="Sales" rows={sales.rows} total={sales.total} prev={prevMaps.sales} prevLabel={prevMaps.label} />}
         </div>

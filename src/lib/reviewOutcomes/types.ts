@@ -195,7 +195,8 @@ export interface ReviewMeeting {
    *  else (NL) the schedule sheet's Agent; null when none is found. */
   booker: string | null;
   bookerEmail: string | null;
-  bookerFrom: 'ghl' | 'invite' | 'sheet' | null;
+  /** 'self' = created in GHL by the consultant, with no Call Centre person on the invite. */
+  bookerFrom: 'ghl' | 'invite' | 'self' | 'sheet' | null;
   /** Who created the appointment in GHL (email), whether or not they are Call Centre. */
   createdByEmail: string | null;
   /** From the matched Google event's location: Meet link = Google, street address = F2F. */

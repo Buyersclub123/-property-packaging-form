@@ -121,12 +121,14 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
       const ev = m ? eventById.get(m.eventId) : undefined;
       const consEmail = userEmail.get(String(r.assigned_user_id || ''));
       // Booker (JT 3/11). GHL appointments carry no guests, so on the GHL side it is the user who created the appointment,
-      // when they are Call Centre staff. Else a Call Centre attendee on the Google invite; NL then falls back to the sheet's Agent.
+      // when they are Call Centre staff. Else a Call Centre attendee on the Google invite. Created by the consultant themselves =
+      // self-booked (the sheet's Agent is then the consultant, so it is not used). Else NL falls back to the sheet's Agent.
       const createdEmail = (userEmail.get(String(r.created_by || '')) || '').toLowerCase();
       const ghlBooker = cc.has(createdEmail) && createdEmail !== consEmail ? createdEmail : null;
       const inviteBooker = ev?.attendees.map((a) => a.email).find((e) => cc.has(e) && e !== consEmail) || null;
       const bookerEmail = ghlBooker || inviteBooker;
-      const sheetBooker = nl && !bookerEmail && sr?.agent ? agentOf(sr.agent) : null;
+      const selfBooked = !!r.created_by && r.created_by === r.assigned_user_id;
+      const sheetBooker = nl && !bookerEmail && !selfBooked && sr?.agent ? agentOf(sr.agent) : null;
       const leadType: LeadType = !nl ? 'PR'
         : ymd < LEAD_SPLIT_FROM || !sr ? 'Unknown'
         : /^referr?al/i.test(sr.lead) ? 'Referral'
@@ -145,7 +147,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
         // * = GHL wouldn't return the contact, so the name is the appointment title (explained in Settings).
         contactName: r.contact_name ? name : `${name || '(no name)'}*`,
         contactEmail: String(r.contact_email || ''),
-        selfBooked: !!r.created_by && r.created_by === r.assigned_user_id,
+        selfBooked,
         contactLink: r.contact_id && loc ? `https://app.gohighlevel.com/v2/location/${loc}/contacts/detail/${r.contact_id}` : '',
         consultantId: String(r.assigned_user_id || ''),
         consultant: userName.get(String(r.assigned_user_id || '')) || '(unassigned)',
@@ -161,7 +163,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
         gcal: m && ev ? { event: toEvent(ev), basis: m.basis, minutesApart: m.minutesApart } : null,
         booker: bookerEmail ? staffByEmail.get(bookerEmail) || emailName(bookerEmail) : sheetBooker,
         bookerEmail,
-        bookerFrom: ghlBooker ? 'ghl' : inviteBooker ? 'invite' : sheetBooker ? 'sheet' : null,
+        bookerFrom: ghlBooker ? 'ghl' : inviteBooker ? 'invite' : selfBooked ? 'self' : sheetBooker ? 'sheet' : null,
         createdByEmail: createdEmail || null,
         mode: nl ? scheduleMode(sr?.location || '') : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
       };

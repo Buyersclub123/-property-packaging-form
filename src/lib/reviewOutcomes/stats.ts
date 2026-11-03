@@ -7,6 +7,12 @@ export interface Period { kind: Kind; anchor: string }
 
 export const KINDS: [Kind, string][] = [['day', 'Day'], ['week', 'Week (Fri–Thu)'], ['month', 'Month'], ['quarter', 'Quarter'], ['ytd', 'YTD'], ['year', 'Year'], ['all', 'All']];
 export const NO_BOOKER = 'No booker found';
+export const SELF_BOOKED = 'Self-booked';
+/** Booker rows sort by name, with Self-booked then No booker found last. */
+export const bookerOrder = (a: string, b: string) => {
+  const w = (n: string) => (n === SELF_BOOKED ? 1 : n === NO_BOOKER ? 2 : 0);
+  return w(a) - w(b) || a.localeCompare(b);
+};
 export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export const pad = (n: number) => String(n).padStart(2, '0');
@@ -102,7 +108,7 @@ export function tally(list: ReviewMeeting[], key: (m: ReviewMeeting) => string, 
     }
     by.set(k, r);
   }
-  const rows = [...by.values()].sort((a, b) => (a.name === NO_BOOKER ? 1 : b.name === NO_BOOKER ? -1 : a.name.localeCompare(b.name)));
+  const rows = [...by.values()].sort((a, b) => bookerOrder(a.name, b.name));
   return { rows, total };
 }
 
@@ -152,7 +158,7 @@ export function sumTypes(rows: TypeRow[]): TypeRow {
   return t;
 }
 
-export const bookerKey = (m: ReviewMeeting) => m.booker || NO_BOOKER;
+export const bookerKey = (m: ReviewMeeting) => m.booker || (m.bookerFrom === 'self' ? SELF_BOOKED : NO_BOOKER);
 export const consultantKey = (m: ReviewMeeting) => m.consultant;
 export const inRange = (list: ReviewMeeting[], from: string, to: string) => list.filter((m) => m.ymd >= from && m.ymd <= to);
 export const pct = (n: number, d: number) => (d ? `${((n / d) * 100).toFixed(2)}%` : '0.00%');
