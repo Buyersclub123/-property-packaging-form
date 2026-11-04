@@ -334,7 +334,9 @@ swap('["Consultant",x=>x.consultant],["Sat by",x=>x.satBy]]', '["Meeting type",x
 // GHL contact Lead Source on the Sales meeting / outcome / new-opportunity lists (New contacts keeps GHL's own Source).
 // A column's 3rd item names a row field: the column only shows when the list's rows carry that field.
 const LEAD_SOURCE_COL = '["Lead source",x=>x.leadSource||\'<span class="more">Not recorded</span>\',"leadSource"]';
-swap('const cols=COLS[s.kind], isOpp=', 'const cols=COLS[s.kind].filter(c=>!c[2]||all.some(x=>x[c[2]]!==undefined)), isOpp=');
+// The sign-up tile's list: its date is Date signed up, so no "Days in stage".
+const COLS_FILTER = 'COLS[s.kind].filter(c=>!c[2]||all.some(x=>x[c[2]]!==undefined)).filter(c=>!(s.id==="newopps"&&c[0]==="Days in stage")).map(c=>s.id==="newopps"&&c[0]==="Entered stage"?["Date signed up",...c.slice(1)]:c)';
+swap('const cols=COLS[s.kind], isOpp=', `const cols=${COLS_FILTER}, isOpp=`);
 swap('meeting:[["Client",x=>x.client],', `meeting:[["Client",x=>x.client],${LEAD_SOURCE_COL},`);
 swap('outcome:[["Client",x=>x.client],', `outcome:[["Client",x=>x.client],${LEAD_SOURCE_COL},`);
 // New contacts have no assigned consultant yet (GHL's assignee there is the source), so no Consultant column (JT).

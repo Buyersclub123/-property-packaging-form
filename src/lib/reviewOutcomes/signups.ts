@@ -8,12 +8,12 @@ import { MIN_YMD, type ReviewViewer } from './types';
 // Read-only: client sign-ups from GHL. GHL keeps one opportunity per client and moves it across pipelines, so a
 // sign-up = an opportunity in a post-sale pipeline with "Date signed up" set. Lead source = the contact's Lead Source.
 
-export interface Signup { oppId: string; contactId: string; client: string; signed: string; assignedTo: string; leadSource: string | null; referrer: string | null }
+export interface Signup { oppId: string; name: string; contactId: string; client: string; signed: string; assignedTo: string; leadSource: string | null; referrer: string | null }
 export interface SignupsData { at: string; signups: Signup[] }
 
 const POST_SALE = /SALE ADMIN|PROPERTY TEAM|FINANCE|CONSTRUCTION|SMSF SETUP|PORTFOLIO REVIEW|ACTIVE CLIENTS/i;
-const CACHE_KEY = 'review:signups:v1';
-const CACHE_SEC = 60 * 60;
+const CACHE_KEY = 'review:signups:v2';
+const CACHE_SEC = 15 * 60;
 const MAX_CONTACT_FETCH = 400;
 
 function env() {
@@ -62,7 +62,7 @@ async function build(): Promise<SignupsData> {
         if (!signed || signed < MIN_YMD) continue;
         // One client signing several opps (IP1 / IP2) on the same day is one sign-up.
         const key = `${contactId || o.id}|${signed}`;
-        if (!byKey.has(key)) byKey.set(key, { oppId: o.id, contactId, client: o.contact?.name || o.name || '', signed, assignedTo: o.assignedTo || '', leadSource: null, referrer: null });
+        if (!byKey.has(key)) byKey.set(key, { oppId: o.id, name: o.name || '', contactId, client: o.contact?.name || o.name || '', signed, assignedTo: o.assignedTo || '', leadSource: null, referrer: null });
       }
       if (list.length < 100 || !j?.meta?.startAfterId) break;
       afterId = j.meta.startAfterId;
@@ -113,7 +113,8 @@ async function build(): Promise<SignupsData> {
   return { at: new Date().toISOString(), signups };
 }
 
-export async function loadSignups(viewer: ReviewViewer, force = false): Promise<SignupsData> {
+/** All sign-ups since MIN_YMD (no viewer filter): Stats via loadSignups, and the Journey sign-up tile. */
+export async function loadAllSignups(force = false): Promise<SignupsData> {
   let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
   try { redis = await getRedisClient(); } catch { redis = null; }
   let data: SignupsData | null = null;
@@ -125,5 +126,10 @@ export async function loadSignups(viewer: ReviewViewer, force = false): Promise<
     data = await build();
     if (redis) await redis.set(CACHE_KEY, JSON.stringify(data), { EX: CACHE_SEC });
   }
+  return data;
+}
+
+export async function loadSignups(viewer: ReviewViewer, force = false): Promise<SignupsData> {
+  const data = await loadAllSignups(force);
   return viewer.recorder ? data : { ...data, signups: data.signups.filter((s) => viewer.consultantIds.includes(s.assignedTo)) };
 }

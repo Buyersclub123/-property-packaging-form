@@ -5,21 +5,22 @@ import { getRedisClient } from '@/lib/redis';
 import { customValue, ghlUsers } from '@/lib/reviewOutcomes/sync';
 import { loadMeetings } from '@/lib/reviewOutcomes/load';
 import { loadSettings } from '@/lib/reviewOutcomes/store';
+import { loadAllSignups } from '@/lib/reviewOutcomes/signups';
 import { addDays, sydYmd } from '@/lib/reviewOutcomes/types';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 const GHL_BASE_URL = process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com';
 const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
-// "New opportunities" = opps created in these pipelines.
-const SALES_PIPELINES = ['9TzDdGVTuDbyLCOQgoVY', 'YxZ4JWUVQoR3UtQMbBJb']; // 02. SALES TEAM Pipeline, *Active Clients
-const CACHE_KEY = 'journey:sales:v5';
+// Client sign-ups = GHL opportunities with "Date signed up" in the last 7 days (same source as the Stats Sold columns).
+const CACHE_KEY = 'journey:sales:v6';
 const CACHE_SEC = 15 * 60;
 // Last good copy for ?snapshot=1: the page opens from it instantly and refreshes in the background when stale.
-const LAST_KEY = 'journey:sales:last:v5';
+const LAST_KEY = 'journey:sales:last:v6';
 const LAST_SEC = 24 * 60 * 60;
 const DAY_MS = 86400000;
 
@@ -74,32 +75,11 @@ async function mapLimit<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): 
   return out;
 }
 
-/** Sales opps created since `since` (GHL returns newest first, so stop at the first older page). */
-async function salesOpps(since: Date, users: Map<string, string>) {
-  const out: { id: string; created: string; name: string; client: string; consultant: string; contactId: string }[] = [];
-  for (const pipelineId of SALES_PIPELINES) {
-    let startAfter: string | undefined, startAfterId: string | undefined;
-    for (let page = 1; page <= 50; page++) {
-      const url = new URL(`${GHL_BASE_URL}/opportunities/search`);
-      url.searchParams.set('location_id', GHL_LOCATION_ID);
-      url.searchParams.set('pipeline_id', pipelineId);
-      url.searchParams.set('status', 'all');
-      url.searchParams.set('limit', '100');
-      if (startAfter && startAfterId) { url.searchParams.set('startAfter', startAfter); url.searchParams.set('startAfterId', startAfterId); }
-      const res = await ghlFetch(url.toString(), { headers: headers(), cache: 'no-store' }, 'journey-sales-opps');
-      if (!res.ok) throw new Error(`GHL opportunities ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      const j = await res.json();
-      const opps = (j.opportunities || []) as { id: string; name?: string; createdAt?: string; assignedTo?: string; contactId?: string; contact?: { id?: string; name?: string } }[];
-      let older = false;
-      for (const o of opps) {
-        if (!o.createdAt || new Date(o.createdAt) < since) { older = true; continue; }
-        out.push({ id: o.id, created: sydDay(new Date(o.createdAt)), name: o.name || '', client: o.contact?.name || '', consultant: users.get(o.assignedTo || '') || '', contactId: o.contactId || o.contact?.id || '' });
-      }
-      if (older || opps.length < 100 || !j.meta?.startAfterId) break;
-      startAfter = String(j.meta.startAfter); startAfterId = j.meta.startAfterId;
-    }
-  }
-  return out;
+/** Client sign-ups dated from `from` (Sydney YYYY-MM-DD), newest first. */
+async function signupsSince(from: string, users: Map<string, string>) {
+  const { signups } = await loadAllSignups();
+  return signups.filter((s) => s.signed >= from).reverse()
+    .map((s) => ({ id: s.oppId, created: s.signed, name: s.name, client: s.client, consultant: users.get(s.assignedTo) || '', contactId: s.contactId }));
 }
 
 /** GHL contact Lead Source per contact: the Review Outcomes cache first, then GHL (GET) for contacts not cached yet. */
@@ -148,7 +128,7 @@ async function build() {
     const settings = await loadSettings();
     return loadMeetings({ email: 'journey', recorder: true, consultantIds: [] }, addDays(today, -7), today, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom);
   };
-  const [created, loaded, oppList] = await Promise.all([contactsSince(since7), loadAll(), salesOpps(since7, users)]);
+  const [created, loaded, oppList] = await Promise.all([contactsSince(since7), loadAll(), signupsSince(addDays(today, -7), users)]);
   const oppSources = await leadSources(oppList.map((o) => o.contactId));
   const opps = oppList.map(({ contactId, ...o }) => ({ ...o, leadSource: oppSources.get(contactId) || '' }));
   const matches = await mapLimit(created, 8, existingMatch);
