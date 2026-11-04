@@ -334,6 +334,8 @@ swap('["Consultant",x=>x.consultant],["Sat by",x=>x.satBy]]', '["Meeting type",x
 // GHL contact Lead Source on the Sales meeting / outcome / new-opportunity lists (New contacts keeps GHL's own Source).
 // A column's 3rd item names a row field: the column only shows when the list's rows carry that field.
 const LEAD_SOURCE_COL = '["Lead source",x=>x.leadSource||\'<span class="more">Not recorded</span>\',"leadSource"]';
+// Sign-up list: when the client's Presentation Meeting One was sat (last one on or before the sign-up).
+const SAT_COL = '["Meeting sat",x=>x.sat?new Date(x.sat+"T00:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"}):\'<span class="more">No meeting found</span>\',"sat"]';
 // The sign-up tile's list: its date is Date signed up, so no "Days in stage".
 const COLS_FILTER = 'COLS[s.kind].filter(c=>!c[2]||all.some(x=>x[c[2]]!==undefined)).filter(c=>!(s.id==="newopps"&&c[0]==="Days in stage")).map(c=>s.id==="newopps"&&c[0]==="Entered stage"?["Date signed up",...c.slice(1)]:c)';
 swap('const cols=COLS[s.kind], isOpp=', `const cols=${COLS_FILTER}, isOpp=`);
@@ -343,7 +345,7 @@ swap('outcome:[["Client",x=>x.client],', `outcome:[["Client",x=>x.client],${LEAD
 swap('No match</span>\'],\n           ["Consultant",x=>x.consultant]],\n  meeting:[', 'No match</span>\']],\n  meeting:[');
 swap('<label class="d-filter"><span>Consultant</span><select id="d-cons"><option value="">All</option>${opts(DETAIL_CONSULTANTS,dCons)}</select></label>', '${s.kind!=="contact"?`<label class="d-filter"><span>Consultant</span><select id="d-cons"><option value="">All</option>${opts(DETAIL_CONSULTANTS,dCons)}</select></label>`:""}');
 // Duplicate contacts group (visibility only; merging is a later build).
-swap('const OPP_KINDS=["opp","fin","property"];', `COLS.opp=[...COLS.opp.slice(0,2),["Stage",x=>x.stage,"stage"],${LEAD_SOURCE_COL},...COLS.opp.slice(2)];\n` + 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
+swap('const OPP_KINDS=["opp","fin","property"];', `COLS.opp=[...COLS.opp.slice(0,2),["Stage",x=>x.stage,"stage"],${LEAD_SOURCE_COL},${SAT_COL},...COLS.opp.slice(2)];\n` + 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
 
 if (/OPP-2\d{4}|Sample Estate|seed\(o\.ref\)/.test(html)) throw new Error('Sample data still present in the template');
 

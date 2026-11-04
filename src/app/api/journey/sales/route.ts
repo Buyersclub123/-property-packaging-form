@@ -17,10 +17,10 @@ const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 // Client sign-ups = GHL opportunities with "Date signed up" in the last 7 days (same source as the Stats Sold columns).
-const CACHE_KEY = 'journey:sales:v6';
+const CACHE_KEY = 'journey:sales:v7';
 const CACHE_SEC = 15 * 60;
 // Last good copy for ?snapshot=1: the page opens from it instantly and refreshes in the background when stale.
-const LAST_KEY = 'journey:sales:last:v6';
+const LAST_KEY = 'journey:sales:last:v7';
 const LAST_SEC = 24 * 60 * 60;
 const DAY_MS = 86400000;
 
@@ -75,11 +75,23 @@ async function mapLimit<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): 
   return out;
 }
 
-/** Client sign-ups dated from `from` (Sydney YYYY-MM-DD), newest first. */
+const PMO_CALENDAR = 'OfHMBFJUzIEMAx7UGZrR'; // Presentation Meeting One
+
+/** Client sign-ups dated from `from` (Sydney YYYY-MM-DD), newest first, with the date of the client's last
+ *  Presentation Meeting One on or before the sign-up (not cancelled / no-show / invalid). */
 async function signupsSince(from: string, users: Map<string, string>) {
   const { signups } = await loadAllSignups();
-  return signups.filter((s) => s.signed >= from).reverse()
-    .map((s) => ({ id: s.oppId, created: s.signed, name: s.name, client: s.client, consultant: users.get(s.assignedTo) || '', contactId: s.contactId }));
+  const list = signups.filter((s) => s.signed >= from).reverse();
+  const ids = [...new Set(list.map((s) => s.contactId).filter(Boolean))];
+  const rows = ids.length ? await getDb()`SELECT m.contact_id, to_char(m.start_at AT TIME ZONE 'Australia/Sydney', 'YYYY-MM-DD') AS ymd
+      FROM review_meetings m LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id
+      WHERE m.calendar_id = ${PMO_CALENDAR} AND NOT m.deleted
+        AND m.contact_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))
+        AND COALESCE(lower(m.ghl_status), '') NOT IN ('cancelled', 'noshow', 'invalid')
+        AND COALESCE(lower(o.outcome), '') !~ '(no.?show|not.?sat|cancel|invalid)'`.catch(() => []) : [];
+  const satOn = (contactId: string, signed: string) =>
+    rows.filter((r) => r.contact_id === contactId && String(r.ymd) <= signed).map((r) => String(r.ymd)).sort().pop() || '';
+  return list.map((s) => ({ id: s.oppId, created: s.signed, name: s.name, client: s.client, consultant: users.get(s.assignedTo) || '', contactId: s.contactId, sat: satOn(s.contactId, s.signed) }));
 }
 
 /** GHL contact Lead Source per contact: the Review Outcomes cache first, then GHL (GET) for contacts not cached yet. */

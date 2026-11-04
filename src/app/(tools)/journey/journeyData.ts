@@ -6,7 +6,7 @@ export type Sales = {
   asAt: string;
   contacts: { id: string; date: string; name: string; source: string; createdBy: string }[];
   meetings: { id: string; date: string; at: string; client: string; calendar: string; consultant: string; outcome: string; leadSource?: string }[];
-  opps: { id: string; created: string; name: string; client: string; consultant: string; leadSource?: string }[];
+  opps: { id: string; created: string; name: string; client: string; consultant: string; leadSource?: string; sat?: string }[];
   duplicates: { id: string; date: string; newContact: string; existing: string; existingCreated: string; createdBy: string; why: string }[];
 };
 export type Recon = { pipelines: { id: string; name: string; stages: { id: string; name: string; total: number }[] }[] };
@@ -249,7 +249,7 @@ function salesTile(id: string, sales: Sales | null, salesLoading: boolean) {
   if (id === 'contacts') return { rows: sales.contacts.map((c) => ({ id: c.id, date: c.date, client: c.name, source: c.source || c.createdBy, consultant: c.createdBy })) };
   if (id === 'booked') return { rows: sales.meetings.map((m) => ({ id: m.id, date: m.date, at: m.at, client: m.client, leadSource: m.leadSource || '', consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
   if (id === 'outcomes') return { rows: sales.meetings.filter((m) => m.outcome).map((m) => ({ id: m.id, date: m.date, client: m.client, leadSource: m.leadSource || '', outcome: m.outcome, consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
-  return { rows: sales.opps.map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, leadSource: o.leadSource || '', consultant: o.consultant, ba: '' })) };
+  return { rows: sales.opps.map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, leadSource: o.leadSource || '', sat: o.sat || '', consultant: o.consultant, ba: '' })) };
 }
 
 export function buildJourneyData(records: Rec[], recon: Recon, historical: boolean, sales: Sales | null = null, salesLoading = false) {
