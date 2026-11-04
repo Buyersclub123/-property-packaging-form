@@ -42,10 +42,10 @@ const BUILD = CONSTRUCTION_VALUES.map((c) => c[1]);
 const PROP_LANE: Record<string, number> = { '01_available': 0, '02_eoi': 1, '03_contr_exchanged': 2, '04_settled': 3, '08_resold': 4 };
 // Sales tiles from the mock-up: no data source yet (show 0, "not wired").
 const SALES_TILES = [
-  { id: 'contacts', name: 'New contacts', kind: 'contact' },
-  { id: 'booked', name: 'Sales meetings booked', kind: 'meeting', head: 'weekAll', periods: ['today', 'tomorrow', 'weekAll'] },
-  { id: 'outcomes', name: 'Sales meeting outcomes', kind: 'outcome', head: 'lastWeek', periods: ['today', 'lastDay', 'lastWeek', 'lastMonth'] },
-  { id: 'newopps', name: 'New opportunities (client sign-up)', kind: 'opp' },
+  { id: 'contacts', name: 'New contacts', short: 'New contacts', kind: 'contact' },
+  { id: 'booked', name: 'Sales meetings booked', short: 'Meetings booked', kind: 'meeting', head: 'weekAll', periods: ['today', 'tomorrow', 'weekAll'] },
+  { id: 'outcomes', name: 'Sales meeting outcomes', short: 'Outcomes', kind: 'outcome', head: 'lastWeek', periods: ['today', 'lastDay', 'lastWeek', 'lastMonth'] },
+  { id: 'newopps', name: 'New opportunities (client sign-up)', short: 'New opps', kind: 'opp' },
 ];
 
 const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
