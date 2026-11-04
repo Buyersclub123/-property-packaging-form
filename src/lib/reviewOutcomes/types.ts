@@ -159,6 +159,20 @@ export function dataSourceText(s: Pick<ReviewSettings, 'ghlOnlyFrom' | 'schedule
     : `Source of data: GHL calendar, enhanced with ${copy}.`;
 }
 
+/** Where each figure on Stats comes from (Settings and the Stats banner). */
+export function dataSourceLines(s: Pick<ReviewSettings, 'ghlOnlyFrom' | 'scheduleCopy'>): string[] {
+  const copy = s.scheduleCopy?.frozen ? 'the sheet copy' : 'the CALENDAR SCHEDULE sheet';
+  const until = s.ghlOnlyFrom ? ` (before ${dmyOf(s.ghlOnlyFrom)} only)` : '';
+  return [
+    dataSourceText(s),
+    'Meetings, date, consultant and GHL status: GHL Portfolio Review Meeting and Presentation Meeting One calendars (follow-up meetings excluded).',
+    `Booker: the Call Centre user who created the GHL appointment, else a Call Centre person on the Google invite, else the Agent on ${copy}${until}. Self-booked = the consultant created it in GHL.`,
+    `Sat / DNQ: the outcome recorded in this tool, else ${copy}'s Sat? column for Presentation Meeting One${until}, else the GHL status. Some Portfolio Review outcomes${until} come from a one-off import of the sheet.`,
+    `New Lead vs Referral and Google Meet vs face-to-face: ${copy}${until}, from March 2026; GHL has no appointment field for them yet, so otherwise Unknown.`,
+    'Sold, Cancelled and Revenue: Buyers Club Tracking sheet (read-only, by date signed). Targets: Settings. Sheet check: the team\'s STATS sheet, for comparison only.',
+  ];
+}
+
 export type OutcomeSource = 'tool' | 'sheet' | 'ghl' | 'schedule';
 
 export interface GcalEvent {

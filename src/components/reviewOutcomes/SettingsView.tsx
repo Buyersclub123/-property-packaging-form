@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { dataSourceText, type ReviewSettings, type StatTarget } from '@/lib/reviewOutcomes/types';
+import { dataSourceLines, type ReviewSettings, type StatTarget } from '@/lib/reviewOutcomes/types';
 import StatsEmailSettingsCard from './StatsEmailSettings';
 
 function TargetsEditor({ names, targets, onChange, disabled }: {
@@ -149,7 +149,9 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       {!recorder && <div className="rounded border bg-gray-50 p-2 text-sm text-gray-600">Only Review recorders can change settings.</div>}
       <div className="rounded border bg-white p-3">
         <div className="mb-1 text-sm font-semibold text-brand-charcoal">Source of data (Stats)</div>
-        <div className="mb-2 text-sm text-gray-800">{dataSourceText({ ghlOnlyFrom: ghlOnlyFrom || null, scheduleCopy: settings.scheduleCopy })}</div>
+        <ul className="mb-2 list-disc pl-5 text-sm text-gray-800">
+          {dataSourceLines({ ghlOnlyFrom: ghlOnlyFrom || null, scheduleCopy: settings.scheduleCopy }).map((l) => <li key={l}>{l}</li>)}
+        </ul>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <label className="inline-flex items-center gap-2">
             GHL only from
@@ -165,7 +167,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
           )}
         </div>
         <div className="mt-1 text-xs text-gray-500">
-          The sheet adds New Lead vs Referral, Sat / DNQ, Agent and Location to Presentation Meeting One. Leave GHL only from blank until GHL has been brought up to date.
+          Leave GHL only from blank until GHL has been brought up to date.
         </div>
       </div>
       <ListEditor title="Outcomes" items={outcomes} onChange={setOutcomes} disabled={!recorder} />
