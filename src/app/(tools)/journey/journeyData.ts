@@ -45,7 +45,7 @@ const SALES_TILES = [
   { id: 'contacts', name: 'New contacts', short: 'New contacts', kind: 'contact' },
   { id: 'booked', name: 'Sales meetings booked', short: 'Meetings booked', kind: 'meeting', head: 'weekAll', periods: ['today', 'tomorrow', 'weekAll'] },
   { id: 'outcomes', name: 'Sales meeting outcomes', short: 'Outcomes', kind: 'outcome', head: 'lastWeek', periods: ['today', 'lastDay', 'lastWeek', 'lastMonth'] },
-  { id: 'newopps', name: 'New opportunities (client sign-up)', short: 'New opps', kind: 'opp' },
+  { id: 'newopps', name: 'New opportunities (client sign-up)', short: 'Sales', kind: 'opp' },
 ];
 
 const norm = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
