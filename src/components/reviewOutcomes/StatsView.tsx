@@ -826,6 +826,19 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
           <div className="mt-3 flex flex-wrap items-start gap-4">
             <BookingsTable data={modes} />
             <MarketingTable />
+            {p.kind !== 'all' && (
+              <div className="ml-auto max-w-sm rounded border border-gray-200 bg-white p-2 text-xs text-gray-700">
+                <div className="mb-1 font-semibold text-brand-charcoal">Comparing with another period</div>
+                <ol className="mb-1 list-decimal pl-4">
+                  <li>Choose the period in &quot;Compare with&quot; (above the tables).</li>
+                  <li>Pick &quot;In each cell&quot; to see the change next to each count, or &quot;Box on the right&quot; for a side table. &quot;Off&quot; hides it.</li>
+                </ol>
+                <div>
+                  <span className="text-green-700">{'\u25b2'}3</span> up 3 · <span className="text-red-700">{'\u25bc'}3</span> down 3 · <span className="text-gray-400">=</span> same
+                  {prevMaps ? ` as ${prevMaps.label}` : ''}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className={view.compare === 'box' && prevMaps ? 'grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_300px]' : ''}>
