@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDays, DISCREPANCY_MINUTES, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting } from '@/lib/reviewOutcomes/types';
+import { addDays, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting } from '@/lib/reviewOutcomes/types';
 import { dateTime, dmy, outcomeStyle, periodKey, periodLabel, Stat, type Period } from './ui';
 
-type Section = 'noOutcome' | 'repeats' | 'completed' | 'discrepancies';
+type Section = 'noOutcome' | 'repeats' | 'completed';
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 
@@ -50,11 +50,10 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
   const [from, setFrom] = useState(MIN_YMD);
   const [to, setTo] = useState(today);
   const [period, setPeriod] = useState<Period>('month');
-  const [open, setOpen] = useState<Record<Section, boolean>>({ noOutcome: true, repeats: false, completed: true, discrepancies: false });
+  const [open, setOpen] = useState<Record<Section, boolean>>({ noOutcome: true, repeats: false, completed: true });
   const [repeatDays, setRepeatDays] = useState(90);
   const [sameConsultant, setSameConsultant] = useState(true);
   const [openCons, setOpenCons] = useState<string | null>(null);
-  const [hideCancelled, setHideCancelled] = useState(true);
 
   const load = useCallback(async () => {
     setError(null);
@@ -128,24 +127,19 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
       row[m.outcome!] = (row[m.outcome!] || 0) + 1;
       g.set(k, row);
     }
+    for (const m of noOutcome) {
+      const k = periodKey(m.ymd, period);
+      const row = g.get(k) || {};
+      row['No outcome'] = (row['No outcome'] || 0) + 1;
+      g.set(k, row);
+    }
     return [...g.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  }, [completed, period]);
+  }, [completed, noOutcome, period]);
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const m of completed) c[m.outcome!] = (c[m.outcome!] || 0) + 1;
     return c;
   }, [completed]);
-
-  const pastInRange = useMemo(() => inRange.filter((m) => m.ymd <= today), [inRange, today]);
-  const ghlNoGcal = useMemo(
-    () => pastInRange.filter((m) => m.kind === 'PR' && !m.gcal && !(hideCancelled && (m.ghlStatus === 'Cancelled' || m.outcome === 'Cancelled'))),
-    [pastInRange, hideCancelled],
-  );
-  const gcalNoGhl = useMemo(() => (data?.gcalUnmatched || []).filter((e) => e.ymd >= from && e.ymd <= to && e.ymd <= today), [data, from, to, today]);
-  const timeDiff = useMemo(
-    () => inRange.filter((m) => m.gcal && m.gcal.minutesApart !== null && m.gcal.minutesApart > DISCREPANCY_MINUTES),
-    [inRange],
-  );
 
   if (error) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>;
   if (!data) return <div className="rounded border bg-white p-4 text-sm text-gray-600">Loading lists…</div>;
@@ -181,27 +175,34 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
         {outcomeCols.map((o) => <Stat key={o} label={o} value={counts[o] || 0} />)}
       </div>
 
-      <Section title="No outcome recorded, by consultant" count={noOutcome.length} open={open.noOutcome} onToggle={() => setOpen({ ...open, noOutcome: !open.noOutcome })}>
-        {noOutcomeByCons.length === 0 && <div className="text-sm text-gray-500">None.</div>}
-        {noOutcomeByCons.length > 0 && (
-          <div className="grid grid-cols-[minmax(0,1fr)_80px_80px_80px_100px_60px] gap-2 pb-1 text-right text-xs text-gray-500">
-            <span className="text-left">Consultant</span><span>Up to 7 days</span><span>8-30 days</span><span>Over 30 days</span><span>Oldest</span><span>Total</span>
-          </div>
-        )}
-        {noOutcomeByCons.map(([cons, list]) => (
-          <div key={cons} className="border-t first:border-t-0">
-            <button onClick={() => setOpenCons(openCons === cons ? null : cons)}
-              className="grid w-full grid-cols-[minmax(0,1fr)_80px_80px_80px_100px_60px] gap-2 py-1.5 text-right text-sm">
-              <span className="text-left font-medium text-brand-charcoal">{cons}</span>
-              <span>{list.filter((m) => daysBetween(m.ymd, today) <= 7).length || ''}</span>
-              <span className="text-amber-700">{list.filter((m) => { const d = daysBetween(m.ymd, today); return d > 7 && d <= 30; }).length || ''}</span>
-              <span className="font-semibold text-red-700">{list.filter((m) => daysBetween(m.ymd, today) > 30).length || ''}</span>
-              <span className="text-gray-600">{dmy(list.reduce((mn, m) => (m.ymd < mn ? m.ymd : mn), list[0].ymd))}</span>
-              <span className="text-gray-500">{list.length}</span>
-            </button>
-            {openCons === cons && <div className="pb-2"><MeetingTable rows={list} onOpenDay={onOpenDay} /></div>}
-          </div>
-        ))}
+      <Section title={`Outcomes, by ${period}`} count={completed.length + noOutcome.length} open={open.completed} onToggle={() => setOpen({ ...open, completed: !open.completed })}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-gray-500">
+              <tr>
+                <th className="p-1">{period === 'week' ? 'Week' : period === 'month' ? 'Month' : 'Day'}</th>
+                {['No outcome', ...outcomeCols].map((o) => <th key={o} className="p-1 text-right">{o}</th>)}
+                <th className="p-1 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {completedRows.map(([k, row]) => (
+                <tr key={k} className="border-t">
+                  <td className="p-1">
+                    {period === 'day' ? <button onClick={() => onOpenDay(k)} className="text-blue-700 hover:underline">{periodLabel(k, period)}</button> : periodLabel(k, period)}
+                  </td>
+                  {['No outcome', ...outcomeCols].map((o) => <td key={o} className={`p-1 text-right ${o === 'No outcome' ? 'text-red-700' : ''}`}>{row[o] || ''}</td>)}
+                  <td className="p-1 text-right font-semibold">{Object.values(row).reduce((a, b) => a + b, 0)}</td>
+                </tr>
+              ))}
+              <tr className="border-t bg-gray-50 font-semibold">
+                <td className="p-1">Total</td>
+                {['No outcome', ...outcomeCols].map((o) => <td key={o} className="p-1 text-right">{(o === 'No outcome' ? noOutcome.length : counts[o]) || ''}</td>)}
+                <td className="p-1 text-right">{completed.length + noOutcome.length}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </Section>
 
       <Section title="Same client booked again (possible 2nd meetings booked as 1st)" count={repeats.length} open={open.repeats} onToggle={() => setOpen({ ...open, repeats: !open.repeats })}>
@@ -237,63 +238,27 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
         )}
       </Section>
 
-      <Section title={`Completed, by ${period}`} count={completed.length} open={open.completed} onToggle={() => setOpen({ ...open, completed: !open.completed })}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-gray-500">
-              <tr>
-                <th className="p-1">{period === 'week' ? 'Week' : period === 'month' ? 'Month' : 'Day'}</th>
-                {outcomeCols.map((o) => <th key={o} className="p-1 text-right">{o}</th>)}
-                <th className="p-1 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {completedRows.map(([k, row]) => (
-                <tr key={k} className="border-t">
-                  <td className="p-1">
-                    {period === 'day' ? <button onClick={() => onOpenDay(k)} className="text-blue-700 hover:underline">{periodLabel(k, period)}</button> : periodLabel(k, period)}
-                  </td>
-                  {outcomeCols.map((o) => <td key={o} className="p-1 text-right">{row[o] || ''}</td>)}
-                  <td className="p-1 text-right font-semibold">{Object.values(row).reduce((a, b) => a + b, 0)}</td>
-                </tr>
-              ))}
-              <tr className="border-t bg-gray-50 font-semibold">
-                <td className="p-1">Total</td>
-                {outcomeCols.map((o) => <td key={o} className="p-1 text-right">{counts[o] || ''}</td>)}
-                <td className="p-1 text-right">{completed.length}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </Section>
-
-      <Section title="Discrepancies (GHL vs consultant calendars)" count={ghlNoGcal.length + gcalNoGhl.length + timeDiff.length}
-        open={open.discrepancies} onToggle={() => setOpen({ ...open, discrepancies: !open.discrepancies })}>
-        <div className="mb-2 flex items-center justify-between">
-          <div className="text-sm font-semibold text-brand-charcoal">GHL appointments with no consultant calendar event ({ghlNoGcal.length})</div>
-          <label className="inline-flex items-center gap-1 text-xs text-gray-600">
-            <input type="checkbox" checked={hideCancelled} onChange={(e) => setHideCancelled(e.target.checked)} /> Hide cancelled
-          </label>
-        </div>
-        <div className="mb-4"><MeetingTable rows={ghlNoGcal} onOpenDay={onOpenDay} /></div>
-
-        <div className="mb-2 text-sm font-semibold text-brand-charcoal">Consultant calendar events with no GHL appointment ({gcalNoGhl.length})</div>
-        <table className="mb-4 w-full text-sm">
-          <thead className="text-left text-xs text-gray-500"><tr><th className="p-1">Date</th><th className="p-1">Event</th><th className="p-1">Consultant</th></tr></thead>
-          <tbody>
-            {gcalNoGhl.map((e) => (
-              <tr key={e.id} className="border-t">
-                <td className="p-1"><button onClick={() => onOpenDay(e.ymd)} className="text-blue-700 hover:underline">{e.allDay ? `${dmy(e.ymd)} (all day)` : dateTime(e.start)}</button></td>
-                <td className="p-1">{e.title}</td>
-                <td className="p-1">{e.staff || e.calendars.join(', ')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="mb-2 text-sm font-semibold text-brand-charcoal">Matched, but times differ by more than {DISCREPANCY_MINUTES} minutes ({timeDiff.length})</div>
-        <MeetingTable rows={timeDiff} onOpenDay={onOpenDay}
-          extra={(m) => `Google ${dateTime(m.gcal!.event.start)} · ${m.gcal!.minutesApart! >= 1440 ? `${Math.round(m.gcal!.minutesApart! / 1440)} day(s)` : `${m.gcal!.minutesApart} min`} apart`} />
+      <Section title="No outcome recorded, by consultant" count={noOutcome.length} open={open.noOutcome} onToggle={() => setOpen({ ...open, noOutcome: !open.noOutcome })}>
+        {noOutcomeByCons.length === 0 && <div className="text-sm text-gray-500">None.</div>}
+        {noOutcomeByCons.length > 0 && (
+          <div className="grid grid-cols-[minmax(0,1fr)_80px_80px_80px_100px_60px] gap-2 pb-1 text-right text-xs text-gray-500">
+            <span className="text-left">Consultant</span><span>Up to 7 days</span><span>8-30 days</span><span>Over 30 days</span><span>Oldest</span><span>Total</span>
+          </div>
+        )}
+        {noOutcomeByCons.map(([cons, list]) => (
+          <div key={cons} className="border-t first:border-t-0">
+            <button onClick={() => setOpenCons(openCons === cons ? null : cons)}
+              className="grid w-full grid-cols-[minmax(0,1fr)_80px_80px_80px_100px_60px] gap-2 py-1.5 text-right text-sm">
+              <span className="text-left font-medium text-brand-charcoal">{cons}</span>
+              <span>{list.filter((m) => daysBetween(m.ymd, today) <= 7).length || ''}</span>
+              <span className="text-amber-700">{list.filter((m) => { const d = daysBetween(m.ymd, today); return d > 7 && d <= 30; }).length || ''}</span>
+              <span className="font-semibold text-red-700">{list.filter((m) => daysBetween(m.ymd, today) > 30).length || ''}</span>
+              <span className="text-gray-600">{dmy(list.reduce((mn, m) => (m.ymd < mn ? m.ymd : mn), list[0].ymd))}</span>
+              <span className="text-gray-500">{list.length}</span>
+            </button>
+            {openCons === cons && <div className="pb-2"><MeetingTable rows={list} onOpenDay={onOpenDay} /></div>}
+          </div>
+        ))}
       </Section>
       <div className="text-xs text-gray-500">
         Outcome colours: {outcomeCols.map((o) => <span key={o} className={`mr-1 rounded border px-1 ${outcomeStyle(o).on}`}>{o}</span>)}
