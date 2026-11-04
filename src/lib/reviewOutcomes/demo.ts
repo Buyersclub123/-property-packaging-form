@@ -48,7 +48,7 @@ export function demoData(): ReviewData {
       bookerFrom: hasG && i % 5 ? ('invite' as const) : null,
       createdByEmail: null,
       mode: hasG ? gcal.mode : 'Unknown',
-      kind: 'PR' as const, leadType: 'PR' as const, schedule: null, selfBooked: false,
+      kind: 'PR' as const, leadType: 'PR' as const, schedule: null, selfBooked: false, leadSource: null, referrer: null,
     };
   }).sort((a, b) => a.start.localeCompare(b.start));
   const gcalUnmatched: GcalEvent[] = [

@@ -51,7 +51,9 @@ export async function ghlSetStatus(appointmentId: string, status: string): Promi
     {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, Version: '2021-04-15', Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ appointmentStatus: status }),
+      // toNotify: false — do not run GHL's appointment automations on this status write (2/11: a status PUT re-fired the
+      // "You're booked in" confirmation on a cancelled Portfolio Review). Manual UI changes never did this.
+      body: JSON.stringify({ appointmentStatus: status, toNotify: false }),
       signal: AbortSignal.timeout(30_000),
     },
     'review-outcomes',
@@ -62,6 +64,13 @@ export async function ghlSetStatus(appointmentId: string, status: string): Promi
 
 export function ghlLocationId(): string {
   return process.env.GHL_LOCATION_ID || '';
+}
+
+export function customValue(fields: { id: string; value?: unknown }[] | undefined, id: string | undefined): string | null {
+  if (!id) return null;
+  const v = fields?.find((f) => f.id === id)?.value;
+  const s = Array.isArray(v) ? v.join(', ') : v == null ? '' : String(v);
+  return s.trim() || null;
 }
 
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>): Promise<void> {
@@ -156,13 +165,21 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
 
   const ids = [...new Set(rows.map((r) => r.contact_id as string | null).filter((x): x is string => !!x))];
   const have = ids.length
-    ? await sql`SELECT contact_id FROM review_contacts WHERE contact_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))`
+    ? await sql`SELECT contact_id FROM review_contacts WHERE source_fetched_at > NOW() - INTERVAL '7 days'
+        AND contact_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))`
     : [];
   const known = new Set(have.map((r) => String(r.contact_id)));
-  const missing = ids.filter((id) => !known.has(id));
-  const contacts: { id: string; name: string; email: string; phones: string[] }[] = [];
+  // New contacts, plus Lead Source re-read weekly; capped so one refresh stays short.
+  const missing = ids.filter((id) => !known.has(id)).slice(0, 400);
+  const fields = missing.length
+    ? await ghlGet<{ customFields?: { id: string; fieldKey?: string }[] }>(`/locations/${locationId}/customFields?model=contact`, '2021-07-28')
+        .then((r) => r.body?.customFields || [], () => [])
+    : [];
+  const leadId = fields.find((f) => f.fieldKey === 'contact.lead_source')?.id;
+  const refId = fields.find((f) => f.fieldKey === 'contact.referrer')?.id;
+  const contacts: { id: string; name: string; email: string; phones: string[]; lead_source: string | null; referrer: string | null; src_ok: boolean }[] = [];
   await pool(missing, 5, async (id) => {
-    type C = { contactName?: string; firstName?: string; lastName?: string; email?: string; phone?: string; additionalPhones?: (string | { phone?: string })[] };
+    type C = { contactName?: string; firstName?: string; lastName?: string; email?: string; phone?: string; additionalPhones?: (string | { phone?: string })[]; customFields?: { id: string; value?: unknown }[] };
     // One unreadable contact (GHL answers 400 for some merged / deleted ids) must not stop the rest.
     const k = await ghlGet<{ contact?: C }>(`/contacts/${id}`, '2021-07-28').then((r) => r.body?.contact, () => undefined);
     contacts.push(
@@ -172,15 +189,20 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
             name: [k.firstName, k.lastName].filter(Boolean).join(' ') || k.contactName || k.email || '',
             email: String(k.email || '').toLowerCase(),
             phones: [k.phone, ...(k.additionalPhones || []).map((p) => (typeof p === 'string' ? p : p.phone))].map(phoneKey).filter(Boolean),
+            lead_source: customValue(k.customFields, leadId),
+            referrer: customValue(k.customFields, refId),
+            src_ok: !!leadId,
           }
-        : { id, name: '(contact not found)', email: '', phones: [] },
+        : { id, name: '(contact not found)', email: '', phones: [], lead_source: null, referrer: null, src_ok: true },
     );
   });
   for (let i = 0; i < contacts.length; i += 500) {
-    await sql`INSERT INTO review_contacts (contact_id, name, email, phones)
-      SELECT r.id, r.name, r.email, r.phones FROM jsonb_to_recordset(${JSON.stringify(contacts.slice(i, i + 500))}::jsonb)
-        AS r(id text, name text, email text, phones jsonb)
-      ON CONFLICT (contact_id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, phones = EXCLUDED.phones, fetched_at = NOW()`;
+    await sql`INSERT INTO review_contacts (contact_id, name, email, phones, lead_source, referrer, source_fetched_at)
+      SELECT r.id, r.name, r.email, r.phones, r.lead_source, r.referrer, CASE WHEN r.src_ok THEN NOW() END
+      FROM jsonb_to_recordset(${JSON.stringify(contacts.slice(i, i + 500))}::jsonb)
+        AS r(id text, name text, email text, phones jsonb, lead_source text, referrer text, src_ok boolean)
+      ON CONFLICT (contact_id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, phones = EXCLUDED.phones,
+        lead_source = EXCLUDED.lead_source, referrer = EXCLUDED.referrer, source_fetched_at = EXCLUDED.source_fetched_at, fetched_at = NOW()`;
   }
   return rows.length;
 }

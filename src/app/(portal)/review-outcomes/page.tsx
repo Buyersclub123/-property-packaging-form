@@ -260,7 +260,7 @@ export default function ReviewOutcomesPage() {
         </p>
 
         <div className="mb-4 inline-flex overflow-hidden rounded border border-gray-200 text-sm" role="tablist">
-          {([['day', 'Meetings'], ['lists', 'Lists'], ['stats', 'Stats'], ['sales', 'Sales'], ['settings', 'Settings']] as const)
+          {([['day', 'Meetings'], ['lists', 'Lists'], ['stats', 'Stats'], ['sales', 'Sales (Work in Progress)'], ['settings', 'Settings']] as const)
             .filter(([k]) => k !== 'settings' || demo || data?.viewer.recorder)
             .map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}

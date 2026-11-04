@@ -120,6 +120,7 @@ async function create(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS review_meeting_moves_appt ON review_meeting_moves (appointment_id)`;
   // GHL createdBy.userId: equal to the assigned consultant = self-booked (no outcome needed).
   await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS created_by TEXT`;
+  await sql`ALTER TABLE review_contacts ADD COLUMN IF NOT EXISTS lead_source TEXT, ADD COLUMN IF NOT EXISTS referrer TEXT, ADD COLUMN IF NOT EXISTS source_fetched_at TIMESTAMPTZ`;
   await sql`CREATE TABLE IF NOT EXISTS review_outcome_log (
     id SERIAL PRIMARY KEY,
     at TIMESTAMPTZ DEFAULT NOW(),

@@ -46,7 +46,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
 
   const { start, end } = utcCover(addDays(from, -3), addDays(to, 3));
   const rows = await sql`SELECT m.appointment_id, m.calendar_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.start_at, m.ghl_status, m.title,
-      m.created_by, c.name AS contact_name, c.email AS contact_email, c.phones,
+      m.created_by, c.name AS contact_name, c.email AS contact_email, c.phones, c.lead_source, c.referrer,
       o.outcome, o.invalid_reason, o.note, o.source, o.source_ref, o.recorded_by, o.recorded_at
     FROM review_meetings m
     LEFT JOIN review_contacts c ON c.contact_id = m.contact_id
@@ -149,6 +149,8 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
         // * = GHL wouldn't return the contact, so the name is the appointment title (explained in Settings).
         contactName: r.contact_name ? name : `${name || '(no name)'}*`,
         contactEmail: String(r.contact_email || ''),
+        leadSource: (r.lead_source as string | null) || null,
+        referrer: (r.referrer as string | null) || null,
         selfBooked,
         contactLink: r.contact_id && loc ? `https://app.gohighlevel.com/v2/location/${loc}/contacts/detail/${r.contact_id}` : '',
         consultantId: String(r.assigned_user_id || ''),

@@ -169,6 +169,7 @@ export function dataSourceLines(s: Pick<ReviewSettings, 'ghlOnlyFrom' | 'schedul
     `Booker: the Call Centre user who created the GHL appointment, else a Call Centre person on the Google invite, else the Agent on ${copy}${until}. Self-booked = the consultant created it in GHL.`,
     `Sat / DNQ: the outcome recorded in this tool, else ${copy}'s Sat? column for Presentation Meeting One${until}, else the GHL status. Some Portfolio Review outcomes${until} come from a one-off import of the sheet.`,
     `New Lead vs Referral and Google Meet vs face-to-face: ${copy}${until}, from March 2026; GHL has no appointment field for them yet, so otherwise Unknown.`,
+    'Lead Source Stats (Presentation Meeting One): the GHL contact\'s Lead Source field, re-read from GHL weekly. "Referrer only" = Lead Source blank but Referrer filled in; "Not recorded in GHL" = both blank.',
     'Sold, Cancelled and Revenue: Buyers Club Tracking sheet (read-only, by date signed). Targets: Settings. Sheet check: the team\'s STATS sheet, for comparison only.',
   ];
 }
@@ -210,6 +211,10 @@ export interface ReviewMeeting {
   contactId: string;
   contactName: string;
   contactEmail: string;
+  /** GHL contact's Lead Source field; null = blank. */
+  leadSource: string | null;
+  /** GHL contact's Referrer field (free text); null = blank. */
+  referrer: string | null;
   contactLink: string;
   consultantId: string;
   consultant: string;

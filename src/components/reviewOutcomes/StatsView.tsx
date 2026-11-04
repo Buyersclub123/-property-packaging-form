@@ -24,6 +24,51 @@ function V({ children }: { children: React.ReactNode }) {
   return <span className="inline-block leading-tight">{children}</span>;
 }
 
+const NOT_RECORDED = 'Not recorded in GHL';
+const REFERRER_ONLY = 'Referrer only (no Lead Source)';
+const leadSourceKey = (m: ReviewMeeting) => m.leadSource || (m.referrer ? REFERRER_ONLY : NOT_RECORDED);
+
+function LeadSourceTable({ list, pick }: { list: ReviewMeeting[]; pick: (title: string, meetings: ReviewMeeting[]) => void }) {
+  const nl = list.filter((m) => m.kind === 'NL');
+  const groups = new Map<string, ReviewMeeting[]>();
+  for (const m of nl) {
+    const k = leadSourceKey(m);
+    groups.set(k, [...(groups.get(k) || []), m]);
+  }
+  const last = (k: string) => (k === NOT_RECORDED ? 2 : k === REFERRER_ONLY ? 1 : 0);
+  const rows = [...groups.entries()].sort((a, b) => last(a[0]) - last(b[0]) || b[1].length - a[1].length);
+  const missing = groups.get(NOT_RECORDED)?.length || 0;
+  const line = (name: string, ms: ReviewMeeting[], cls = '') => {
+    const sat = ms.filter(isSat).length;
+    return (
+      <tr key={name} className={cls}>
+        <td className={TDN}>{name}</td>
+        <td className={TD}><button className="text-blue-700 hover:underline" onClick={() => pick(`Lead source: ${name}`, ms)}>{ms.length}</button></td>
+        <td className={TD}>{pct(ms.length, nl.length)}</td>
+        <td className={TD}>{sat}</td>
+        <td className={TD}>{pct(sat, ms.length)}</td>
+        <td className={TD}>{ms.filter(isDnq).length}</td>
+      </tr>
+    );
+  };
+  return (
+    <div className="min-w-0 overflow-x-auto rounded border bg-white">
+      <Title>Lead Source Stats</Title>
+      <div className="px-2 py-1 text-xs text-gray-700">
+        Presentation Meeting One only, from the GHL contact&apos;s Lead Source.{' '}
+        <span className={missing ? 'font-semibold text-red-700' : ''}>No lead source in GHL: {missing} of {nl.length} ({pct(missing, nl.length)}).</span>
+      </div>
+      <table className="w-full border-collapse">
+        <thead><tr>{['Lead source', 'Booked', '% of Booked', 'Sat', 'Sat %', 'DNQ'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+        <tbody>
+          {rows.map(([k, ms]) => line(k, ms, k === NOT_RECORDED ? 'font-semibold text-red-700' : ''))}
+          {line('TOTAL', nl, `font-semibold ${SHADE}`)}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Title({ children }: { children: React.ReactNode }) {
   return <div className="bg-brand-charcoal py-1 text-center text-sm font-bold text-white">{children}</div>;
 }
@@ -855,6 +900,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
           <ChartCard title="Consultants - Booked vs Sat"><BarChart rows={sales.rows} /></ChartCard>
           <ChartCard title="Call Centre - Booked vs Sat"><BarChart rows={cc.rows} /></ChartCard>
         </div>
+        <LeadSourceTable list={list} pick={(title, meetings) => setDrill({ title, meetings })} />
       </div>
     </div>
   );
