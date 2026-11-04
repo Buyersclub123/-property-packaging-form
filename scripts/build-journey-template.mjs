@@ -333,6 +333,9 @@ const LEAD_SOURCE_COL = '["Lead source",x=>x.leadSource||\'<span class="more">No
 swap('const cols=COLS[s.kind], isOpp=', 'const cols=COLS[s.kind].filter(c=>!c[2]||all.some(x=>x[c[2]]!==undefined)), isOpp=');
 swap('meeting:[["Client",x=>x.client],', `meeting:[["Client",x=>x.client],${LEAD_SOURCE_COL},`);
 swap('outcome:[["Client",x=>x.client],', `outcome:[["Client",x=>x.client],${LEAD_SOURCE_COL},`);
+// New contacts have no assigned consultant yet (GHL's assignee there is the source), so no Consultant column (JT).
+swap('No match</span>\'],\n           ["Consultant",x=>x.consultant]],\n  meeting:[', 'No match</span>\']],\n  meeting:[');
+swap('<label class="d-filter"><span>Consultant</span><select id="d-cons"><option value="">All</option>${opts(DETAIL_CONSULTANTS,dCons)}</select></label>', '${s.kind!=="contact"?`<label class="d-filter"><span>Consultant</span><select id="d-cons"><option value="">All</option>${opts(DETAIL_CONSULTANTS,dCons)}</select></label>`:""}');
 // Duplicate contacts group (visibility only; merging is a later build).
 swap('const OPP_KINDS=["opp","fin","property"];', `COLS.opp=[...COLS.opp.slice(0,2),["Stage",x=>x.stage,"stage"],${LEAD_SOURCE_COL},...COLS.opp.slice(2)];\n` + 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
 
