@@ -179,6 +179,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
           Leave GHL only from blank until GHL has been brought up to date.
         </div>
       </div>}
+      {tab === 'sources' && <GhlMonitor demo={demo} />}
       {tab === 'general' && <>
       <ListEditor title="Outcomes" items={outcomes} onChange={setOutcomes} disabled={!recorder} />
       <ListEditor title="Invalid reasons" items={reasons} onChange={setReasons} disabled={!recorder} />
@@ -186,7 +187,6 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       <TargetsEditor names={names} targets={targets} onChange={setTargets} disabled={!recorder} />
       <AliasEditor aliases={salesAliases} onChange={setSalesAliases} disabled={!recorder} />
       {!demo && <StatsEmailSettingsCard recorder={recorder} />}
-      <GhlMonitor demo={demo} />
       <div className="rounded border bg-white p-3">
         <div className="mb-2 text-sm font-semibold text-brand-charcoal">Write outcomes to</div>
         <div className="flex flex-wrap gap-4 text-sm">
