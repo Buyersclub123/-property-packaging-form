@@ -649,18 +649,14 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
 
   return (
     <div>
-      <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-brand-charcoal">
+      <details className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-brand-charcoal">
+        <summary className="cursor-pointer text-xs text-gray-700">Source of data (also in Settings → Data sources)</summary>
         {data.settings && (
-          <ul className="mb-1 list-disc pl-5">{dataSourceLines(data.settings).map((l) => <li key={l}>{l}</li>)}</ul>
+          <ul className="mb-1 mt-1 list-disc pl-5">{dataSourceLines(data.settings).map((l) => <li key={l}>{l}</li>)}</ul>
         )}
-        Unknown lead types count only in TOTAL / Total (Excl PR&apos;s). Comparisons, targets and the sheet check are PR only.
-        {!demoData && (
-          <div className="mt-1 text-xs text-gray-600">
-            Sold, Cancelled and Revenue come from the Buyers Club Tracking sheet (all lead sources, by date signed; see the Sales tab).
-            Sold % = PR Sold / PR Sat.{salesErr && <span className="text-red-700"> Sales not loaded: {salesErr}</span>}
-          </div>
-        )}
-      </div>
+        Unknown lead types count only in TOTAL / Total (Excl PR&apos;s). Comparisons, targets and the sheet check are PR only. Sold % = PR Sold / PR Sat.
+      </details>
+      {!demoData && salesErr && <div className="mb-3 text-sm text-red-700">Sales not loaded: {salesErr}</div>}
       {noOutcome > 0 && (
         <div className="mb-3 rounded border border-l-4 border-gray-200 border-l-orange-500 bg-white px-3 py-2 text-sm text-gray-800">
           {noOutcome} past meeting{noOutcome === 1 ? '' : 's'} in this period {noOutcome === 1 ? 'has' : 'have'} no outcome yet, so Sat and DNQ may be understated.

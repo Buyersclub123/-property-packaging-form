@@ -118,6 +118,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
   const [ghlOnlyFrom, setGhlOnlyFrom] = useState(settings.ghlOnlyFrom || '');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<'general' | 'sources'>('general');
 
   const save = async (freezeSchedule = false) => {
     if (demo) {
@@ -147,7 +148,15 @@ export default function SettingsView({ settings, recorder, demo = false, names =
   return (
     <div className="grid max-w-[760px] gap-3">
       {!recorder && <div className="rounded border bg-gray-50 p-2 text-sm text-gray-600">Only Review recorders can change settings.</div>}
-      <div className="rounded border bg-white p-3">
+      <div className="flex gap-1 border-b text-sm">
+        {([['general', 'General'], ['sources', 'Data sources']] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`-mb-px rounded-t border px-3 py-1 ${tab === k ? 'border-b-white bg-white font-semibold text-brand-charcoal' : 'border-transparent text-gray-600 hover:text-brand-charcoal'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'sources' && <div className="rounded border bg-white p-3">
         <div className="mb-1 text-sm font-semibold text-brand-charcoal">Source of data (Stats)</div>
         <ul className="mb-2 list-disc pl-5 text-sm text-gray-800">
           {dataSourceLines({ ghlOnlyFrom: ghlOnlyFrom || null, scheduleCopy: settings.scheduleCopy }).map((l) => <li key={l}>{l}</li>)}
@@ -169,7 +178,8 @@ export default function SettingsView({ settings, recorder, demo = false, names =
         <div className="mt-1 text-xs text-gray-500">
           Leave GHL only from blank until GHL has been brought up to date.
         </div>
-      </div>
+      </div>}
+      {tab === 'general' && <>
       <ListEditor title="Outcomes" items={outcomes} onChange={setOutcomes} disabled={!recorder} />
       <ListEditor title="Invalid reasons" items={reasons} onChange={setReasons} disabled={!recorder} />
       <ListEditor title="Call Centre (booker emails on the invite)" items={callCentre} onChange={setCallCentre} disabled={!recorder} />
@@ -193,6 +203,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
           Values filled from the calendar schedule sheet are never written. Demo never writes. Click Save settings to apply.
         </div>
       </div>
+      </>}
       {recorder && (
         <div className="flex items-center gap-3">
           <button onClick={() => save()} disabled={saving} className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
