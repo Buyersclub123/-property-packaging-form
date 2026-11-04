@@ -327,8 +327,14 @@ swap('<span>Sat by</span><select id="d-sat"><option value="">All</option>${opts(
 swap('if(isMeet && dSat && x.satBy!==dSat) return false;', 'if(isMeet && dSat && x.calendar!==dSat) return false;');
 swap('["Consultant",x=>x.consultant],["Sat by",x=>x.satBy]]', '["Meeting type",x=>x.calendar||""],["Consultant",x=>x.consultant]]');
 
+// GHL contact Lead Source on the Sales meeting / outcome / new-opportunity lists (New contacts keeps GHL's own Source).
+// A column's 3rd item names a row field: the column only shows when the list's rows carry that field.
+const LEAD_SOURCE_COL = '["Lead source",x=>x.leadSource||\'<span class="more">Not recorded</span>\',"leadSource"]';
+swap('const cols=COLS[s.kind], isOpp=', 'const cols=COLS[s.kind].filter(c=>!c[2]||all.some(x=>x[c[2]]!==undefined)), isOpp=');
+swap('meeting:[["Client",x=>x.client],', `meeting:[["Client",x=>x.client],${LEAD_SOURCE_COL},`);
+swap('outcome:[["Client",x=>x.client],', `outcome:[["Client",x=>x.client],${LEAD_SOURCE_COL},`);
 // Duplicate contacts group (visibility only; merging is a later build).
-swap('const OPP_KINDS=["opp","fin","property"];', 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
+swap('const OPP_KINDS=["opp","fin","property"];', `COLS.opp=[...COLS.opp.slice(0,2),["Stage",x=>x.stage,"stage"],${LEAD_SOURCE_COL},...COLS.opp.slice(2)];\n` + 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
 
 if (/OPP-2\d{4}|Sample Estate|seed\(o\.ref\)/.test(html)) throw new Error('Sample data still present in the template');
 

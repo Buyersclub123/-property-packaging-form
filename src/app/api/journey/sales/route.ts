@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
+import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { getRedisClient } from '@/lib/redis';
-import { ghlUsers } from '@/lib/reviewOutcomes/sync';
+import { customValue, ghlUsers } from '@/lib/reviewOutcomes/sync';
 import { loadMeetings } from '@/lib/reviewOutcomes/load';
 import { loadSettings } from '@/lib/reviewOutcomes/store';
 import { addDays, sydYmd } from '@/lib/reviewOutcomes/types';
@@ -15,10 +16,10 @@ const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 // "New opportunities" = opps created in these pipelines.
 const SALES_PIPELINES = ['9TzDdGVTuDbyLCOQgoVY', 'YxZ4JWUVQoR3UtQMbBJb']; // 02. SALES TEAM Pipeline, *Active Clients
-const CACHE_KEY = 'journey:sales:v4';
+const CACHE_KEY = 'journey:sales:v5';
 const CACHE_SEC = 15 * 60;
 // Last good copy for ?snapshot=1: the page opens from it instantly and refreshes in the background when stale.
-const LAST_KEY = 'journey:sales:last';
+const LAST_KEY = 'journey:sales:last:v5';
 const LAST_SEC = 24 * 60 * 60;
 const DAY_MS = 86400000;
 
@@ -75,7 +76,7 @@ async function mapLimit<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): 
 
 /** Sales opps created since `since` (GHL returns newest first, so stop at the first older page). */
 async function salesOpps(since: Date, users: Map<string, string>) {
-  const out: { id: string; created: string; name: string; client: string; consultant: string }[] = [];
+  const out: { id: string; created: string; name: string; client: string; consultant: string; contactId: string }[] = [];
   for (const pipelineId of SALES_PIPELINES) {
     let startAfter: string | undefined, startAfterId: string | undefined;
     for (let page = 1; page <= 50; page++) {
@@ -88,16 +89,43 @@ async function salesOpps(since: Date, users: Map<string, string>) {
       const res = await ghlFetch(url.toString(), { headers: headers(), cache: 'no-store' }, 'journey-sales-opps');
       if (!res.ok) throw new Error(`GHL opportunities ${res.status}: ${(await res.text()).slice(0, 200)}`);
       const j = await res.json();
-      const opps = (j.opportunities || []) as { id: string; name?: string; createdAt?: string; assignedTo?: string; contact?: { name?: string } }[];
+      const opps = (j.opportunities || []) as { id: string; name?: string; createdAt?: string; assignedTo?: string; contactId?: string; contact?: { id?: string; name?: string } }[];
       let older = false;
       for (const o of opps) {
         if (!o.createdAt || new Date(o.createdAt) < since) { older = true; continue; }
-        out.push({ id: o.id, created: sydDay(new Date(o.createdAt)), name: o.name || '', client: o.contact?.name || '', consultant: users.get(o.assignedTo || '') || '' });
+        out.push({ id: o.id, created: sydDay(new Date(o.createdAt)), name: o.name || '', client: o.contact?.name || '', consultant: users.get(o.assignedTo || '') || '', contactId: o.contactId || o.contact?.id || '' });
       }
       if (older || opps.length < 100 || !j.meta?.startAfterId) break;
       startAfter = String(j.meta.startAfter); startAfterId = j.meta.startAfterId;
     }
   }
+  return out;
+}
+
+/** GHL contact Lead Source per contact: the Review Outcomes cache first, then GHL (GET) for contacts not cached yet. */
+async function leadSources(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (!uniq.length) return out;
+  const rows = await getDb()`SELECT contact_id, lead_source FROM review_contacts WHERE source_fetched_at IS NOT NULL
+    AND contact_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(uniq)}::jsonb))`.catch(() => []);
+  const known = new Set<string>();
+  for (const r of rows) {
+    known.add(String(r.contact_id));
+    if (r.lead_source) out.set(String(r.contact_id), String(r.lead_source));
+  }
+  const todo = uniq.filter((id) => !known.has(id));
+  if (!todo.length) return out;
+  const fr = await ghlFetch(`${GHL_BASE_URL}/locations/${GHL_LOCATION_ID}/customFields?model=contact`, { headers: headers(), cache: 'no-store' }, 'journey-contact-fields');
+  const fields = fr.ok ? ((await fr.json()).customFields || []) as { id: string; fieldKey?: string }[] : [];
+  const leadId = fields.find((f) => f.fieldKey === 'contact.lead_source')?.id;
+  if (!leadId) return out;
+  await mapLimit(todo, 8, async (id) => {
+    const r = await ghlFetch(`${GHL_BASE_URL}/contacts/${id}`, { headers: headers(), cache: 'no-store' }, 'journey-contact');
+    if (!r.ok) return;
+    const v = customValue((await r.json()).contact?.customFields, leadId);
+    if (v) out.set(id, v);
+  });
   return out;
 }
 
@@ -120,7 +148,9 @@ async function build() {
     const settings = await loadSettings();
     return loadMeetings({ email: 'journey', recorder: true, consultantIds: [] }, addDays(today, -7), today, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom);
   };
-  const [created, loaded, opps] = await Promise.all([contactsSince(since7), loadAll(), salesOpps(since7, users)]);
+  const [created, loaded, oppList] = await Promise.all([contactsSince(since7), loadAll(), salesOpps(since7, users)]);
+  const oppSources = await leadSources(oppList.map((o) => o.contactId));
+  const opps = oppList.map(({ contactId, ...o }) => ({ ...o, leadSource: oppSources.get(contactId) || '' }));
   const matches = await mapLimit(created, 8, existingMatch);
   const who = (c: Contact) => users.get(c.createdBy?.sourceId || '') || users.get(c.assignedTo || '') || c.createdBy?.source || c.source || '';
   const duplicates = created.map((c, i) => ({ c, m: matches[i] })).filter((x) => x.m).map(({ c, m }) => ({
@@ -132,10 +162,10 @@ async function build() {
   const meetings = [
     ...loaded.meetings.filter((m) => inWindow(m.start)).map((m) => ({
       id: m.id, at: m.start, date: m.ymd, client: m.contactName, calendar: m.calendar, consultant: m.consultant,
-      outcome: outcomeOf(m.outcome, null),
+      outcome: outcomeOf(m.outcome, null), leadSource: m.leadSource || '',
     })),
     ...loaded.gcalUnmatched.filter((e) => !e.allDay && inWindow(e.start)).map((e) => ({
-      id: e.id, at: e.start, date: e.ymd, client: e.title, calendar: 'Portfolio Review (Google Calendar only)', consultant: e.staff, outcome: '',
+      id: e.id, at: e.start, date: e.ymd, client: e.title, calendar: 'Portfolio Review (Google Calendar only)', consultant: e.staff, outcome: '', leadSource: '',
     })),
   ];
   return {

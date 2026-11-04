@@ -5,8 +5,8 @@ type Rec = Record<string, string | undefined>;
 export type Sales = {
   asAt: string;
   contacts: { id: string; date: string; name: string; source: string; createdBy: string }[];
-  meetings: { id: string; date: string; at: string; client: string; calendar: string; consultant: string; outcome: string }[];
-  opps: { id: string; created: string; name: string; client: string; consultant: string }[];
+  meetings: { id: string; date: string; at: string; client: string; calendar: string; consultant: string; outcome: string; leadSource?: string }[];
+  opps: { id: string; created: string; name: string; client: string; consultant: string; leadSource?: string }[];
   duplicates: { id: string; date: string; newContact: string; existing: string; existingCreated: string; createdBy: string; why: string }[];
 };
 export type Recon = { pipelines: { id: string; name: string; stages: { id: string; name: string; total: number }[] }[] };
@@ -193,7 +193,19 @@ function noRecordTile(records: Rec[]) {
   const rows = records.filter((r) => r.pipelineId === PT_ID && r.status === 'open' && CONTRACT_STAGES.includes(norm(r.pipelineStage)) && !r.propertyRecordIds);
   return {
     id: 'pt-no-record', name: 'No Property Record', kind: 'opp', phase: 'contract', detached: true, hold: true, alert: rows.length > 0,
-    rows: rows.map((r) => stageRow(r, r.lastStageChangeAt)), mismatch: false, recon: '',
+    rows: rows.map((r) => ({ ...stageRow(r, r.lastStageChangeAt), stage: r.pipelineStage || '' })), mismatch: false, recon: '',
+  };
+}
+
+/** Exception tile (JT): open Property Team opps from Buying Brief to Deal Closed with the Assigned BA field blank. */
+function noBaTile(records: Rec[], pt: { id: string; name: string }[]) {
+  const from = pt.findIndex((s) => norm(s.name) === 'buyingbrief');
+  const to = pt.findIndex((s) => norm(s.name) === 'dealclosed');
+  const ids = new Set(from >= 0 && to >= from ? pt.slice(from, to + 1).map((s) => s.id) : []);
+  const rows = records.filter((r) => r.pipelineId === PT_ID && r.status === 'open' && ids.has(r.pipelineStageId || '') && !(r.assignedBA || '').trim());
+  return {
+    id: 'pt-no-ba', name: 'No Assigned BA', kind: 'opp', phase: 'property', detached: true, hold: true, alert: rows.length > 0,
+    rows: rows.map((r) => ({ ...stageRow(r, r.lastStageChangeAt), stage: r.pipelineStage || '' })), mismatch: false, recon: '',
   };
 }
 
@@ -235,9 +247,9 @@ function reconcile(tileRecs: Rec[], cmp: Compare, whyExtra: (r: Rec) => string) 
 function salesTile(id: string, sales: Sales | null) {
   if (!sales) return { notWired: true, rows: [] };
   if (id === 'contacts') return { rows: sales.contacts.map((c) => ({ id: c.id, date: c.date, client: c.name, source: c.source || c.createdBy, consultant: c.createdBy })) };
-  if (id === 'booked') return { rows: sales.meetings.map((m) => ({ id: m.id, date: m.date, at: m.at, client: m.client, consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
-  if (id === 'outcomes') return { rows: sales.meetings.filter((m) => m.outcome).map((m) => ({ id: m.id, date: m.date, client: m.client, outcome: m.outcome, consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
-  return { rows: sales.opps.map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, consultant: o.consultant, ba: '' })) };
+  if (id === 'booked') return { rows: sales.meetings.map((m) => ({ id: m.id, date: m.date, at: m.at, client: m.client, leadSource: m.leadSource || '', consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
+  if (id === 'outcomes') return { rows: sales.meetings.filter((m) => m.outcome).map((m) => ({ id: m.id, date: m.date, client: m.client, leadSource: m.leadSource || '', outcome: m.outcome, consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
+  return { rows: sales.opps.map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, leadSource: o.leadSource || '', consultant: o.consultant, ba: '' })) };
 }
 
 export function buildJourneyData(records: Rec[], recon: Recon, historical: boolean, sales: Sales | null = null) {
@@ -277,6 +289,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
         mismatch: rc.mismatch, recon: panel('Reconciliation', [rc.html]),
       };
     }).sort((a, b) => Number(!!b.hold) - Number(!!a.hold)),
+    noBaTile(records, pt),
     noRecordTile(records),
   ];
 
