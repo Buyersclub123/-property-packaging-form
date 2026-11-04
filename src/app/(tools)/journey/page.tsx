@@ -45,9 +45,9 @@ export default function JourneyPage() {
   const load = useCallback((force = false) => {
     setLoading(!force);
     setError('');
-    let records: Record<string, string>[] | null = null, recon: Recon | null = null, sales: Sales = null, asAt = 0;
+    let records: Record<string, string>[] | null = null, recon: Recon | null = null, sales: Sales = null, asAt = 0, salesPending = true;
     let rendered = false;
-    const build = () => JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${JSON.stringify({ ...buildJourneyData(records!, recon!, false, sales), asAt: new Date(asAt || Date.now()).toISOString(), restore: pos.current }).replace(/</g, '\\u003c')};</script>\n<script>`);
+    const build = () => JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${JSON.stringify({ ...buildJourneyData(records!, recon!, false, sales, salesPending), asAt: new Date(asAt || Date.now()).toISOString(), restore: pos.current }).replace(/</g, '\\u003c')};</script>\n<script>`);
     // Render the iframe once; later (background) data is held in pendingHtml and applied only when the user asks
     // (Refresh button) or comes back to the tab, so the page never jumps back to the first tab mid-use (JT 2/11).
     const render = () => {
@@ -56,12 +56,12 @@ export default function JourneyPage() {
       if ((!rendered && !force) || force) { rendered = true; setHtml(build()); setPendingHtml(''); } else setPendingHtml(build());
     };
     const refresh: Promise<unknown>[] = [];
-    // Sales tiles load separately (slow: GHL contacts + meetings); they show "not wired" until they arrive or if they fail.
+    // Sales tiles load separately (slow: GHL contacts + meetings); they show "Loading" until they arrive, "not wired" if they fail.
     if (force) setRefreshing(true);
     const salesP = getJson<Sales>(force ? '/api/journey/sales' : '/api/journey/sales?snapshot=1').then((s) => {
-      sales = s.data; render();
+      sales = s.data; salesPending = false; render();
       if (s.stale) refresh.push(getJson<Sales>('/api/journey/sales').then((f) => { sales = f.data; render(); }));
-    }).catch((e) => console.error('Journey sales tiles:', e));
+    }).catch((e) => { salesPending = false; render(); console.error('Journey sales tiles:', e); });
     Promise.all([getJson<Record<string, string>[]>(force ? '/api/contract-team-reporting' : '/api/contract-team-reporting?snapshot=1'), getJson<Recon>(force ? '/api/journey/reconcile' : '/api/journey/reconcile?snapshot=1')])
       .then(([r, c]) => {
         records = r.data; recon = c.data; asAt = r.at; render();

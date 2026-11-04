@@ -244,15 +244,15 @@ function reconcile(tileRecs: Rec[], cmp: Compare, whyExtra: (r: Rec) => string) 
   };
 }
 
-function salesTile(id: string, sales: Sales | null) {
-  if (!sales) return { notWired: true, rows: [] };
+function salesTile(id: string, sales: Sales | null, salesLoading: boolean) {
+  if (!sales) return salesLoading ? { salesLoading: true, rows: [] } : { notWired: true, rows: [] };
   if (id === 'contacts') return { rows: sales.contacts.map((c) => ({ id: c.id, date: c.date, client: c.name, source: c.source || c.createdBy, consultant: c.createdBy })) };
   if (id === 'booked') return { rows: sales.meetings.map((m) => ({ id: m.id, date: m.date, at: m.at, client: m.client, leadSource: m.leadSource || '', consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
   if (id === 'outcomes') return { rows: sales.meetings.filter((m) => m.outcome).map((m) => ({ id: m.id, date: m.date, client: m.client, leadSource: m.leadSource || '', outcome: m.outcome, consultant: m.consultant, satBy: m.consultant, calendar: m.calendar })) };
   return { rows: sales.opps.map((o) => ({ id: o.id, date: o.created, ref: o.name, client: o.client, leadSource: o.leadSource || '', consultant: o.consultant, ba: '' })) };
 }
 
-export function buildJourneyData(records: Rec[], recon: Recon, historical: boolean, sales: Sales | null = null) {
+export function buildJourneyData(records: Rec[], recon: Recon, historical: boolean, sales: Sales | null = null, salesLoading = false) {
   const today = sydney(new Date());
   const pop = historical ? records : records.filter((r) => r.inFlight === 'Yes' && !isFallen(r));
   const popIds = new Set(pop.map((r) => r.id));
@@ -275,7 +275,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
   const dealClosedAt = pt.findIndex((s) => norm(s.name) === 'dealclosed');
   const stages = [
     // Sales: movement only (last 24 hours / last 7 days), no all-time totals.
-    ...SALES_TILES.map((s) => ({ ...s, head: 'd7', periods: ['d1', 'd7'], tileKey: 'd7', phase: 'sales', ...salesTile(s.id, sales) })),
+    ...SALES_TILES.map((s) => ({ ...s, head: 'd7', periods: ['d1', 'd7'], tileKey: 'd7', phase: 'sales', ...salesTile(s.id, sales, salesLoading) })),
     ...pt.map((s, i) => {
       const all = records.filter((r) => r.pipelineStageId === s.id);
       // Sales & Property tiles: every OPEN opp at the stage, as GHL counts it (no in-flight filter; JT 1/11).
@@ -361,7 +361,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
   // Duplicate contacts created in the last 7 days (same name + same email or mobile as an older contact). Visibility only.
   const dups = [{
     id: 'dups', phase: 'dups', name: 'Duplicate contacts', kind: 'dup', head: 'd7', periods: ['d1', 'd7'], tileKey: 'd7',
-    ...(sales ? {} : { notWired: true }),
+    ...(sales ? {} : salesLoading ? { salesLoading: true } : { notWired: true }),
     rows: (sales?.duplicates || []).map((d) => ({ id: d.id, date: d.date, client: d.newContact, existing: d.existing, existingCreated: d.existingCreated, why: d.why, createdBy: d.createdBy })),
   }];
   stages.splice(SALES_TILES.length, 0, ...(dups as unknown as typeof stages));

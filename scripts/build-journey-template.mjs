@@ -236,6 +236,8 @@ swap('    <div class="cards">${cards}</div>\n', '    <div class="cards">${cards}
 swap('const list0=JOURNEYS[tab], sel=selBy[tab], groups={};', 'const list0=JOURNEYS[tab].filter(s=>!s.chip), sel=selBy[tab], groups={};');
 swap('  fixWrap();\n}\nfunction fixWrap(){', `  const nw=JOURNEYS[tab].filter(s=>s.notWired);
   if(nw.length){ const ph=track.querySelector('.node[data-id="'+nw[0].id+'"]')?.closest(".phase"); if(ph) ph.insertAdjacentHTML("beforeend", '<div class="nw-overlay">Sales figures coming — these tiles will read from the Review Outcomes tool and GHL contacts. Nothing to do here yet.</div>'); }
+  const ld=JOURNEYS[tab].filter(s=>s.salesLoading);
+  if(ld.length){ const ph=track.querySelector('.node[data-id="'+ld[0].id+'"]')?.closest(".phase"); if(ph) ph.insertAdjacentHTML("beforeend", '<div class="nw-overlay">Loading sales figures…</div>'); }
   if(tab==="sales" && J.salesAsAt){ const h=track.querySelector('.node[data-id="contacts"]')?.closest(".phase")?.querySelector(".phase-head"); if(h) h.insertAdjacentHTML("beforeend", '<span class="asat">as at '+new Date(J.salesAsAt).toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",timeZone:"Australia/Sydney"})+' (refreshes every 15 min)</span>'); }
   const chips=JOURNEYS[tab].filter(s=>s.chip);
   if(chips.length) track.insertAdjacentHTML("beforeend", \`<div class="chipbar"><span class="chipbar-lbl">Derived filters (not stages)</span>\${chips.map(c=>\`<button class="node chip" data-id="\${c.id}" aria-pressed="\${c.id===sel}">\${esc(c.name)} <b>\${n(c.counts.ever)}</b>\${c.mismatch?'<i class="neq">≠ GHL</i>':""}</button>\`).join("")}</div>\`);
