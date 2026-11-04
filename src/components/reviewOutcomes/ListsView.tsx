@@ -97,11 +97,11 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
     for (const m of noOutcome) g.set(m.consultant, [...(g.get(m.consultant) || []), m]);
     return [...g.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [noOutcome]);
-  // Same client booked again within N days: 2nd / follow-up meetings disguised as 1st meetings (cancelled ones ignored).
+  // Same client booked again within N days: 2nd meetings booked as Presentation Meeting One (cancelled ones ignored).
   const repeats = useMemo(() => {
     const by = new Map<string, ReviewMeeting[]>();
     for (const m of inRange) {
-      if (m.outcome === 'Cancelled' || m.ghlStatus === 'Cancelled') continue;
+      if (m.kind === 'PR' || m.outcome === 'Cancelled' || m.ghlStatus === 'Cancelled') continue;
       const k = (m.contactId || m.contactName.replace(/\*$/, '').trim().toLowerCase()) + (sameConsultant ? `|${m.consultantId}` : '');
       if (k) by.set(k, [...(by.get(k) || []), m]);
     }
@@ -212,7 +212,7 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
           <label className="inline-flex items-center gap-1">
             <input type="checkbox" checked={sameConsultant} onChange={(e) => setSameConsultant(e.target.checked)} /> Same consultant only
           </label>
-          <span>Cancelled meetings are ignored.</span>
+          <span>Presentation Meeting One only; cancelled meetings are ignored.</span>
         </div>
         {repeats.length === 0 ? <div className="text-sm text-gray-500">None.</div> : (
           <table className="w-full text-sm">
