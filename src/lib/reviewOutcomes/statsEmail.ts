@@ -82,7 +82,7 @@ export async function sendStatsEmail(args: { by: string; sender: string; to: str
   if (!args.periods.length) return { ok: false, error: 'No periods chosen.' };
   const today = sydYmd(Date.now());
   const settings = await loadSettings();
-  const loaded = await loadMeetings({ email: args.by, recorder: true, consultantIds: [] }, MIN_YMD, today, settings.callCentre, settings.salesAliases);
+  const loaded = await loadMeetings({ email: args.by, recorder: true, consultantIds: [] }, MIN_YMD, today, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom);
   const { subject, html } = buildStatsEmail(loaded.meetings, args.periods, today);
   const res = await sendGmailAsUser({ sentBy: args.sender, to: args.to, subject, html });
   await logReview(args.by, null, 'stats_email_sent', { to: args.to, sender: args.sender, periods: args.periods, status: res.status });

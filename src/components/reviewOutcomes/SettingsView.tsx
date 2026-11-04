@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { ReviewSettings, StatTarget } from '@/lib/reviewOutcomes/types';
+import { dataSourceText, type ReviewSettings, type StatTarget } from '@/lib/reviewOutcomes/types';
 import StatsEmailSettingsCard from './StatsEmailSettings';
 
 function TargetsEditor({ names, targets, onChange, disabled }: {
@@ -115,12 +115,13 @@ export default function SettingsView({ settings, recorder, demo = false, names =
   const [targets, setTargets] = useState(settings.targets || {});
   const [salesAliases, setSalesAliases] = useState(settings.salesAliases || {});
   const [writeTarget, setWriteTarget] = useState(settings.writeTarget);
+  const [ghlOnlyFrom, setGhlOnlyFrom] = useState(settings.ghlOnlyFrom || '');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const save = async () => {
+  const save = async (freezeSchedule = false) => {
     if (demo) {
-      onSaved({ ...settings, outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget });
+      onSaved({ ...settings, outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget, ghlOnlyFrom: ghlOnlyFrom || null });
       setMsg({ ok: true, text: 'Saved (demo only)' });
       return;
     }
@@ -130,7 +131,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       const res = await fetch('/api/review-outcomes/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget }),
+        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget, ghlOnlyFrom: ghlOnlyFrom || null, freezeSchedule }),
       });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
@@ -146,6 +147,27 @@ export default function SettingsView({ settings, recorder, demo = false, names =
   return (
     <div className="grid max-w-[760px] gap-3">
       {!recorder && <div className="rounded border bg-gray-50 p-2 text-sm text-gray-600">Only Review recorders can change settings.</div>}
+      <div className="rounded border bg-white p-3">
+        <div className="mb-1 text-sm font-semibold text-brand-charcoal">Source of data (Stats)</div>
+        <div className="mb-2 text-sm text-gray-800">{dataSourceText({ ghlOnlyFrom: ghlOnlyFrom || null, scheduleCopy: settings.scheduleCopy })}</div>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <label className="inline-flex items-center gap-2">
+            GHL only from
+            <input type="date" value={ghlOnlyFrom} disabled={!recorder} onChange={(e) => setGhlOnlyFrom(e.target.value)} className="rounded border px-2 py-0.5" />
+          </label>
+          {settings.scheduleCopy?.frozen ? (
+            <span className="text-xs text-gray-500">Sheet copy frozen: {settings.scheduleCopy.rows} rows.</span>
+          ) : recorder && !demo && (
+            <button disabled={saving} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => confirm('Take a last copy of the CALENDAR SCHEDULE sheet and stop re-reading it? Later edits to the sheet will not change Stats.') && save(true)}>
+              Take final copy of the sheet
+            </button>
+          )}
+        </div>
+        <div className="mt-1 text-xs text-gray-500">
+          The sheet adds New Lead vs Referral, Sat / DNQ, Agent and Location to Presentation Meeting One. Leave GHL only from blank until GHL has been brought up to date.
+        </div>
+      </div>
       <ListEditor title="Outcomes" items={outcomes} onChange={setOutcomes} disabled={!recorder} />
       <ListEditor title="Invalid reasons" items={reasons} onChange={setReasons} disabled={!recorder} />
       <ListEditor title="Call Centre (booker emails on the invite)" items={callCentre} onChange={setCallCentre} disabled={!recorder} />
@@ -171,7 +193,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       </div>
       {recorder && (
         <div className="flex items-center gap-3">
-          <button onClick={save} disabled={saving} className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+          <button onClick={() => save()} disabled={saving} className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
             {saving ? 'Saving…' : 'Save settings'}
           </button>
           {msg && <span className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-700'}`}>{msg.text}</span>}

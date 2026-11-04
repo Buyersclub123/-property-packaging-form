@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDays, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type SalesData, type StatTarget } from '@/lib/reviewOutcomes/types';
+import { addDays, dataSourceText, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type SalesData, type StatTarget } from '@/lib/reviewOutcomes/types';
 import { aud, emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sumSold } from '@/lib/reviewOutcomes/salesStats';
 import { dmy, weekday } from './ui';
 import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
@@ -650,6 +650,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   return (
     <div>
       <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-brand-charcoal">
+        {data.settings && <div className="mb-1 font-medium">{dataSourceText(data.settings)}</div>}
         PR (Portfolio Review) and New Lead (Presentation Meeting One) meetings. New Lead vs Referral comes from the calendar schedule sheet&apos;s Lead column
         (from March 2026); earlier or unlabelled ones are Unknown and count only in TOTAL / Total (Excl PR&apos;s). New Lead Sat / DNQ come from the sheet&apos;s Sat? column.
         Comparisons, targets and the sheet check are PR only.

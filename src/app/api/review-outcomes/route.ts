@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const sheetWarning = mode === 'force' ? await ensureSchedule(true) : null;
     if (sheetWarning) syncWarnings.push(sheetWarning);
     const settings = await loadSettings();
-    const [loaded, sync] = await Promise.all([loadMeetings(access.viewer, from, to, settings.callCentre, settings.salesAliases), lastSync()]);
+    const [loaded, sync] = await Promise.all([loadMeetings(access.viewer, from, to, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom), lastSync()]);
     const body: ReviewData = {
       viewer: access.viewer,
       settings,

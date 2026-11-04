@@ -118,7 +118,7 @@ async function build() {
   const today = sydYmd(now);
   const loadAll = async () => {
     const settings = await loadSettings();
-    return loadMeetings({ email: 'journey', recorder: true, consultantIds: [] }, addDays(today, -7), today, settings.callCentre, settings.salesAliases);
+    return loadMeetings({ email: 'journey', recorder: true, consultantIds: [] }, addDays(today, -7), today, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom);
   };
   const [created, loaded, opps] = await Promise.all([contactsSince(since7), loadAll(), salesOpps(since7, users)]);
   const matches = await mapLimit(created, 8, existingMatch);

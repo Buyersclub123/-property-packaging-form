@@ -69,6 +69,10 @@ export interface ReviewSettings {
   writeTarget: WriteTarget;
   /** Phase 2 (write-back to GHL) is not approved; the switch stays greyed out while false. */
   phase2Approved: boolean;
+  /** Meetings on or after this day use GHL only (no calendar schedule sheet, no imported sheet outcomes). Null = not yet. */
+  ghlOnlyFrom: string | null;
+  /** The tool's copy of the calendar schedule sheet. Once frozen it is never re-read, so later sheet edits don't change Stats. */
+  scheduleCopy: { at: string; rows: number; frozen: boolean } | null;
 }
 
 /** Lead source of a sale in the Buyers Club Tracking sheet, grouped as the STATS sheet columns. */
@@ -139,7 +143,21 @@ export const DEFAULT_SETTINGS: ReviewSettings = {
   salesAliases: { Aadi: 'Adi Manek', Josh: 'Joshua.O', Jess: 'Jessica.K', 'Caro Surace': 'Carlo Surace' },
   writeTarget: 'db',
   phase2Approved: false,
+  ghlOnlyFrom: null,
+  scheduleCopy: null,
 };
+
+const dmyOf = (ymd: string) => ymd.slice(0, 10).split('-').reverse().join('/');
+
+/** "Source of data" text for Settings and Stats. */
+export function dataSourceText(s: Pick<ReviewSettings, 'ghlOnlyFrom' | 'scheduleCopy'>): string {
+  const copy = s.scheduleCopy?.frozen
+    ? `a copy of the CALENDAR SCHEDULE sheet taken on ${dmyOf(s.scheduleCopy.at)} (later edits to the sheet are not reflected)`
+    : 'the CALENDAR SCHEDULE sheet (live copy, re-read hourly)';
+  return s.ghlOnlyFrom
+    ? `Source of data: before ${dmyOf(s.ghlOnlyFrom)}, GHL calendar enhanced with ${copy}. From ${dmyOf(s.ghlOnlyFrom)}, GHL calendar only.`
+    : `Source of data: GHL calendar, enhanced with ${copy}.`;
+}
 
 export type OutcomeSource = 'tool' | 'sheet' | 'ghl' | 'schedule';
 

@@ -30,7 +30,7 @@ export function meetingMode(location: string): MeetingMode {
 /** 'ethan.l@buyersclub.com.au' -> 'Ethan.L' (the sheet's style) when GHL has no name for the email. */
 const emailName = (e: string) => e.split('@')[0].split('.').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('.');
 
-export async function loadMeetings(viewer: ReviewViewer, from: string, to: string, callCentre: string[], aliases: Record<string, string> = {}): Promise<LoadedMeetings> {
+export async function loadMeetings(viewer: ReviewViewer, from: string, to: string, callCentre: string[], aliases: Record<string, string> = {}, ghlOnlyFrom: string | null = null): Promise<LoadedMeetings> {
   await ensureReviewTables();
   const sql = getDb();
   const warnings: string[] = [];
@@ -95,7 +95,9 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
   );
 
   // New Lead / Referral meetings: Lead type, Sat? / Outcome, Agent and Location from the calendar schedule sheet.
-  const nlBase = base.filter((b) => isNl(b.r) && b.ymd >= from && b.ymd <= to);
+  // From Settings' "GHL only from" day, no sheet data is used (JT 4/11: GHL is the single source of truth).
+  const sheetOk = (ymd: string) => !ghlOnlyFrom || ymd < ghlOnlyFrom;
+  const nlBase = base.filter((b) => isNl(b.r) && b.ymd >= from && b.ymd <= to && sheetOk(b.ymd));
   let schedByAppt = new Map<string, ScheduleRow>();
   if (nlBase.length) {
     const w = await ensureSchedule(false);
@@ -111,7 +113,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
     .filter((b) => b.ymd >= from && b.ymd <= to && mine(b.r.assigned_user_id))
     .map(({ r, startIso, t, ymd, name }) => {
       const status = String(r.ghl_status || '');
-      const dbOutcome = r.outcome ? String(r.outcome) : null;
+      const dbOutcome = r.outcome && (r.source !== 'sheet' || sheetOk(ymd)) ? String(r.outcome) : null;
       const ghlOutcome = GHL_OUTCOME[status] || null;
       const nl = isNl(r);
       const sr = nl ? schedByAppt.get(String(r.appointment_id)) : undefined;

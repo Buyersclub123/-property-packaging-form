@@ -75,9 +75,9 @@ export async function readSchedule(): Promise<ScheduleRow[]> {
   return out;
 }
 
-async function status(): Promise<{ at: string } | null> {
+async function status(): Promise<{ at: string; rows: number; frozen?: boolean } | null> {
   const rows = await getDb()`SELECT value FROM review_settings WHERE key = 'schedule_sync'`;
-  return (rows[0]?.value as { at: string } | undefined) ?? null;
+  return (rows[0]?.value as { at: string; rows: number; frozen?: boolean } | undefined) ?? null;
 }
 
 export async function syncSchedule(): Promise<number> {
@@ -105,6 +105,7 @@ let inFlight: Promise<number> | null = null;
 /** Re-reads the sheet when the copy is over an hour old (or forced). Returns a warning instead of throwing. */
 export async function ensureSchedule(force = false): Promise<string | null> {
   const s = await status();
+  if (s?.frozen) return null;
   if (!force && s && Date.now() - Date.parse(s.at) < STALE_MS) return null;
   try {
     inFlight = inFlight || syncSchedule().finally(() => { inFlight = null; });
@@ -113,6 +114,16 @@ export async function ensureSchedule(force = false): Promise<string | null> {
   } catch (e) {
     return `Calendar schedule sheet not refreshed${s ? ' (showing the last copy)' : ''}: ${(e as Error).message}`;
   }
+}
+
+/** Takes a last copy of the sheet and stops re-reading it (JT 4/11: the team may close the sheet). */
+export async function freezeSchedule(by: string): Promise<void> {
+  const s = await status();
+  if (s?.frozen) return;
+  const rows = await syncSchedule();
+  const at = new Date().toISOString();
+  await getDb()`UPDATE review_settings SET value = ${JSON.stringify({ at, rows, frozen: true })}::jsonb, updated_by = ${by}, updated_at = NOW()
+    WHERE key = 'schedule_sync'`;
 }
 
 export async function loadScheduleRows(from: string, to: string): Promise<ScheduleRow[]> {

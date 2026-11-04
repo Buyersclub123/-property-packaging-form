@@ -158,7 +158,7 @@ export function ensureReviewTables(): Promise<void> {
 
 export async function loadSettings(): Promise<ReviewSettings> {
   await ensureReviewTables();
-  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets', 'sales_aliases', 'write_target')`;
+  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets', 'sales_aliases', 'write_target', 'ghl_only_from', 'schedule_sync')`;
   const get = (k: string) => rows.find((r) => r.key === k)?.value as string[] | undefined;
   return {
     outcomes: get('outcomes') ?? DEFAULT_SETTINGS.outcomes,
@@ -169,13 +169,22 @@ export async function loadSettings(): Promise<ReviewSettings> {
     writeTarget: rows.find((r) => r.key === 'write_target')?.value === 'db+ghl' ? 'db+ghl' : 'db',
     // JT approved GHL status write-back (2026-10-28); it stays off until switched on in Settings.
     phase2Approved: true,
+    ghlOnlyFrom: (rows.find((r) => r.key === 'ghl_only_from')?.value as string | null | undefined) ?? null,
+    scheduleCopy: (() => {
+      const v = rows.find((r) => r.key === 'schedule_sync')?.value as { at: string; rows: number; frozen?: boolean } | undefined;
+      return v ? { at: v.at, rows: v.rows, frozen: !!v.frozen } : null;
+    })(),
   };
 }
 
-export async function saveSettings(by: string, s: { outcomes: string[]; invalidReasons: string[]; callCentre: string[]; targets: Record<string, StatTarget>; salesAliases: Record<string, string>; writeTarget?: 'db' | 'db+ghl' }): Promise<void> {
+export async function saveSettings(by: string, s: { outcomes: string[]; invalidReasons: string[]; callCentre: string[]; targets: Record<string, StatTarget>; salesAliases: Record<string, string>; writeTarget?: 'db' | 'db+ghl'; ghlOnlyFrom?: string | null }): Promise<void> {
   await ensureReviewTables();
   const sql = getDb();
   const before = await loadSettings();
+  if (s.ghlOnlyFrom !== undefined) {
+    await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('ghl_only_from', ${JSON.stringify(s.ghlOnlyFrom)}::jsonb, ${by})
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
+  }
   if (s.writeTarget) {
     await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('write_target', ${JSON.stringify(s.writeTarget)}::jsonb, ${by})
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
@@ -191,7 +200,7 @@ export async function saveSettings(by: string, s: { outcomes: string[]; invalidR
   await sql`INSERT INTO review_settings (key, value, updated_by) VALUES ('sales_aliases', ${JSON.stringify(s.salesAliases)}::jsonb, ${by})
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
   await logReview(by, null, 'settings', {
-    before: { outcomes: before.outcomes, invalidReasons: before.invalidReasons, callCentre: before.callCentre, targets: before.targets, salesAliases: before.salesAliases, writeTarget: before.writeTarget },
+    before: { outcomes: before.outcomes, invalidReasons: before.invalidReasons, callCentre: before.callCentre, targets: before.targets, salesAliases: before.salesAliases, writeTarget: before.writeTarget, ghlOnlyFrom: before.ghlOnlyFrom },
     after: s,
   });
 }

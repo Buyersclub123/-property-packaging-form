@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { reviewAccess } from '@/lib/reviewOutcomes/access';
+import { freezeSchedule } from '@/lib/reviewOutcomes/schedule';
 import { loadSettings, saveSettings } from '@/lib/reviewOutcomes/store';
-import type { StatTarget } from '@/lib/reviewOutcomes/types';
+import { isYmd, type StatTarget } from '@/lib/reviewOutcomes/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -22,7 +23,9 @@ export async function POST(request: NextRequest) {
   const access = await reviewAccess(request.headers);
   if (!access.ok) return json({ error: access.error }, access.status);
   if (!access.viewer.recorder) return json({ error: 'Only Review recorders can change settings.' }, 403);
-  const b = (await request.json().catch(() => null)) as { outcomes?: unknown; invalidReasons?: unknown; callCentre?: unknown; targets?: unknown; salesAliases?: unknown; writeTarget?: string } | null;
+  const b = (await request.json().catch(() => null)) as { outcomes?: unknown; invalidReasons?: unknown; callCentre?: unknown; targets?: unknown; salesAliases?: unknown; writeTarget?: string; ghlOnlyFrom?: string | null; freezeSchedule?: boolean } | null;
+  if (b?.ghlOnlyFrom && !isYmd(b.ghlOnlyFrom)) return json({ error: `GHL only from must be a date ("${b.ghlOnlyFrom}").` }, 400);
+  const ghlOnlyFrom = b && 'ghlOnlyFrom' in b ? b.ghlOnlyFrom || null : undefined;
   if (b?.writeTarget && b.writeTarget !== 'db' && b.writeTarget !== 'db+ghl') return json({ error: `Unknown write target "${b.writeTarget}".` }, 400);
   const writeTarget = b?.writeTarget === 'db+ghl' ? 'db+ghl' : b?.writeTarget === 'db' ? 'db' : undefined;
   const outcomes = clean(b?.outcomes);
@@ -45,7 +48,8 @@ export async function POST(request: NextRequest) {
   const bad = callCentre.find((e) => !/^[^@\s]+@buyersclub\.com\.au$/.test(e));
   if (bad) return json({ error: `Call Centre entries must be Buyers Club emails ("${bad}").` }, 400);
   try {
-    await saveSettings(access.viewer.email, { outcomes, invalidReasons, callCentre, targets, salesAliases, writeTarget });
+    await saveSettings(access.viewer.email, { outcomes, invalidReasons, callCentre, targets, salesAliases, writeTarget, ghlOnlyFrom });
+    if (b?.freezeSchedule) await freezeSchedule(access.viewer.email);
     return json(await loadSettings());
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
