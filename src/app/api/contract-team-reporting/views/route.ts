@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
+import { emailFromHeaders } from '@/lib/tileAccess';
+import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -33,6 +35,7 @@ interface SavedView {
   sorts?: { column: string; dir: 'asc' | 'desc' }[];
   updatedAt: string;
   updatedBy?: string;
+  createdBy?: string;
 }
 
 async function loadViews(): Promise<SavedView[]> {
@@ -72,6 +75,9 @@ export async function POST(request: NextRequest) {
     const views = await loadViews();
     const idx = views.findIndex((v) => v.id === view.id);
     view.updatedAt = new Date().toISOString();
+    // Keep the original creator; views saved before createdBy existed fall back to their last saver.
+    const prev = idx >= 0 ? views[idx] : null;
+    view.createdBy = prev ? prev.createdBy || prev.updatedBy : emailFromHeaders(request.headers) || view.updatedBy;
     if (idx >= 0) {
       views[idx] = view;
     } else {
@@ -93,6 +99,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
     let views = await loadViews();
+    const email = emailFromHeaders(request.headers);
+    const target = views.find((v) => v.id === id);
+    const owner = (target?.createdBy || target?.updatedBy || '').toLowerCase();
+    if (target && !canDeleteAnyView(email) && (!email || owner !== email)) {
+      return NextResponse.json({ error: 'Only the person who created this view, John or Julie can delete it.' }, { status: 403 });
+    }
     views = views.filter((v) => v.id !== id);
     await saveViews(views);
     return NextResponse.json({ success: true, views });

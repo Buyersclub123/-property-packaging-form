@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { emailFromHeaders, isAdmin, loadAccess } from '@/lib/tileAccess';
+import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export async function GET() {
   }
 }
 
-// { id, name, hidden: true } hides a built-in view (anyone signed in, from the View Builder);
+// { id, name, hidden: true } hides a built-in view (John or Julie only, from the View Builder);
 // { id, hidden: false } restores it (admins only, from Admin > Views).
 export async function POST(request: NextRequest) {
   const email = emailFromHeaders(request.headers);
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
       if (!isAdmin(email, await loadAccess())) return NextResponse.json({ error: 'Admins only.' }, { status: 403 });
       await sql`DELETE FROM ctr_hidden_views WHERE view_id = ${id}`;
     } else {
+      if (!canDeleteAnyView(email)) return NextResponse.json({ error: 'Only John or Julie can delete built-in views.' }, { status: 403 });
       await sql`INSERT INTO ctr_hidden_views (view_id, view_name, hidden_by) VALUES (${id}, ${String(name || id)}, ${email})
         ON CONFLICT (view_id) DO UPDATE SET view_name = EXCLUDED.view_name, hidden_by = EXCLUDED.hidden_by, hidden_at = NOW()`;
     }

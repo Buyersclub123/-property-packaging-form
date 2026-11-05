@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
+import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
 import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, getColumnBadge, OPP_DYNAMIC_PREFIX } from '@/app/api/contract-team-reporting/fields';
 
@@ -441,6 +442,8 @@ interface ViewDef {
   // Full layered sort, level 1 first. When present this wins over sortBy/sortDir.
   sorts?: SortLevel[];
   builtin?: boolean;
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 // Read a view's sort as levels, falling back to the legacy single-column pair.
@@ -1606,7 +1609,16 @@ export default function ContractTeamReportingPage() {
       || JSON.stringify(sortLevels) !== JSON.stringify(viewSortLevels(activeView));
   }, [columns, sortLevels, activeView]);
 
+  // John and Julie can delete any view; everyone else only views they created.
+  function canDeleteView(view: ViewDef): boolean {
+    if (canDeleteAnyView(userEmail)) return true;
+    if (view.id.startsWith('personal-')) return true;
+    const owner = (view.createdBy || view.updatedBy || '').toLowerCase();
+    return view.id.startsWith('public-') && !!userEmail && owner === userEmail.toLowerCase();
+  }
+
   async function deleteSavedView(view: ViewDef) {
+    if (!canDeleteView(view)) return;
     // A saved override of a built-in keeps the built-in's id, so it is hidden too (Restore brings back the override).
     if (view.builtin || PRESET_VIEWS.some((p) => p.id === view.id)) {
       if (!confirm(`Delete "${view.name}"?\n\nThis is a built-in view, so it will be hidden for everyone. An admin can restore it from Admin → Views.`)) return;
@@ -2670,7 +2682,7 @@ export default function ContractTeamReportingPage() {
                             {view.name}
                             {view.id.startsWith('personal-') && <span className="ml-1 text-[8px] opacity-50">(personal)</span>}
                           </button>
-                          {showColumnBuilder && (
+                          {showColumnBuilder && canDeleteView(view) && (
                             <button
                               onClick={(e) => { e.stopPropagation(); deleteSavedView(view); }}
                               className="px-2 text-[10px] text-red-400 opacity-0 group-hover:opacity-100 hover:underline"
@@ -2975,7 +2987,7 @@ export default function ContractTeamReportingPage() {
                     >
                       {builderSaving ? 'Saving…' : '+ Save as NEW view'}
                     </button>
-                    {!builderDraft && (
+                    {!builderDraft && canDeleteView(activeView) && (
                       <button
                         onClick={() => deleteSavedView(activeView)}
                         disabled={builderSaving}
