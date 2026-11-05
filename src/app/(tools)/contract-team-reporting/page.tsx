@@ -3331,13 +3331,25 @@ export default function ContractTeamReportingPage() {
                         </div>
 
                         {/* Search */}
-                        <input
-                          type="text"
-                          placeholder="Search values..."
-                          value={filterSearch[col.key] || ''}
-                          onChange={(e) => setFilterSearch((prev) => ({ ...prev, [col.key]: e.target.value }))}
-                          className={`w-full px-1.5 py-0.5 mb-1 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
-                        />
+                        <div className="relative mb-1">
+                          <input
+                            type="text"
+                            placeholder="Search values..."
+                            value={filterSearch[col.key] || ''}
+                            onChange={(e) => setFilterSearch((prev) => ({ ...prev, [col.key]: e.target.value }))}
+                            className={`w-full px-1.5 py-0.5 pr-5 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
+                          />
+                          {filterSearch[col.key] && (
+                            <button
+                              type="button"
+                              title="Clear search"
+                              onClick={() => setFilterSearch((prev) => { const next = { ...prev }; delete next[col.key]; return next; })}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 text-[11px] leading-none text-gray-400 hover:text-red-500"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
                         {/* Select All / Only (search match) / Clear */}
                         <div className="flex gap-1 mb-1 px-1">
                           <button onClick={() => selectAllFilter(col.key)} className="text-[9px] text-blue-400 hover:underline">Select All</button>
