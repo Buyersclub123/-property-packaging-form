@@ -843,6 +843,7 @@ function minedSourceMessageId(record: object, key: string): string {
 // NEW / MINED views never show a blank cell; this is the muted placeholder text.
 function emptyCellLabel(record: object, key: string): string {
   const r = record as Record<string, string | undefined>;
+  if (key.startsWith(CO_PREFIX) && !r.propertyRecordIds) return 'No record';
   if (key === 'co_construction_stage' || key === 'daysInConstructionStage') {
     if (!r.propertyRecordIds) return 'No record';
     if (r.co_property_type === 'established') return 'Not applicable';
@@ -3430,7 +3431,9 @@ export default function ContractTeamReportingPage() {
                   {columns.map((col, colIdx) => {
                     const rawValue = record[col.key] || '';
                     const displayValue = getDisplayValue(record, col.key);
-                    const isEditable = editMode && isSelected && !READ_ONLY_FIELDS.has(col.key) && !col.key.startsWith(OPP_DYNAMIC_PREFIX) && !(col.key.startsWith(CO_PREFIX) && !isCoFieldEditable(col.key));
+                    // Property Record fields are per row: an opp with no linked Property Record has nothing to edit.
+                    const noPropertyRecord = col.key.startsWith(CO_PREFIX) && !record.propertyRecordIds;
+                    const isEditable = editMode && isSelected && !noPropertyRecord && !READ_ONLY_FIELDS.has(col.key) && !col.key.startsWith(OPP_DYNAMIC_PREFIX) && !(col.key.startsWith(CO_PREFIX) && !isCoFieldEditable(col.key));
                     const currentValue = isEditable ? getEditValue(record.id, col.key) : rawValue;
                     let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;
 
@@ -3520,6 +3523,8 @@ export default function ContractTeamReportingPage() {
                           />
                         );
                       }
+                    } else if (noPropertyRecord) {
+                      cellContent = <span className="italic text-gray-400 text-[0.9em]">No record</span>;
                     } else if (col.key === 'ghlLink' && rawValue) {
                       cellContent = (
                         <a

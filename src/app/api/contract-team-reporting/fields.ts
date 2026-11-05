@@ -2992,7 +2992,8 @@ export const CO_PREFIX = 'co_';
 // Y = human editable in CTRT. T = tool-proposed, human-accepted (read-only until that flow exists). Everything else N.
 export const CO_EDITABLE_KEYS = new Set<string>([
   'agent_email', 'agent_mobile', 'agent_name', 'completion_date', 'construction_stage',
-  'status', 'street_name', 'street_number', 'unit__lot',
+  // Address fields (street_name, street_number, unit__lot) are read-only per the workbook (1/11).
+  'status',
   // JT 3/11: edited only through the Registered / TBC / Expected month control, never free text.
   'land_registration',
   // Picked from Deal Sheet → Admin → Projects only (the update API rejects any other value).
