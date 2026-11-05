@@ -197,6 +197,17 @@ function noRecordTile(records: Rec[]) {
   };
 }
 
+/** Exception tile (JT): open Property Team opps in any Property Team row stage (up to Deal Closed) with Purchasing entity type blank. */
+function noEntityTile(records: Rec[], pt: { id: string; name: string }[]) {
+  const to = pt.findIndex((s) => norm(s.name) === 'dealclosed');
+  const ids = new Set(pt.slice(0, to >= 0 ? to + 1 : pt.length).map((s) => s.id));
+  const rows = records.filter((r) => r.pipelineId === PT_ID && r.status === 'open' && ids.has(r.pipelineStageId || '') && !(r.purchasingEntityType || '').trim());
+  return {
+    id: 'pt-no-entity', name: 'No Entity Type', kind: 'opp', phase: 'property', detached: true, hold: true, alert: rows.length > 0,
+    rows: rows.map((r) => ({ ...stageRow(r, r.lastStageChangeAt), stage: r.pipelineStage || '' })), mismatch: false, recon: '',
+  };
+}
+
 /** Exception tile (JT): open Property Team opps from Buying Brief to Deal Closed with the Assigned BA field blank. */
 function noBaTile(records: Rec[], pt: { id: string; name: string }[]) {
   const from = pt.findIndex((s) => norm(s.name) === 'buyingbrief');
@@ -289,6 +300,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
         mismatch: rc.mismatch, recon: panel('Reconciliation', [rc.html]),
       };
     }).sort((a, b) => Number(!!b.hold) - Number(!!a.hold)),
+    noEntityTile(records, pt),
     noBaTile(records, pt),
     noRecordTile(records),
   ];
