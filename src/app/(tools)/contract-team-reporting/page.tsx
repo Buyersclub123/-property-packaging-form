@@ -947,6 +947,29 @@ PRESET_VIEWS.push(
     sortDir: 'asc',
   },
   {
+    // Val tracking (JT 3/11): B&P-style tracking of valuation access. Population = every in-flight purchase that still needs
+    // a valuation (new single, new split, established). "No val access" = land not yet Registered, so Land registration leads,
+    // then the scheduled access, then each valuation step in order.
+    id: 'builtin-val-tracking',
+    name: 'Val tracking',
+    section: 'Standard',
+    builtin: true,
+    columns: [
+      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('co_property_address', 220), col('assignedBA'),
+      col('co_property_type', 100), col('co_contract_type', 90), col('co_construction_stage', 150), col('co_land_registration', 150), col('valuationAccessEstimate', 130),
+      col('valuationAccessAvailable', 90), col('valuationExpectedAccessDate', 120), col('valuationRequested', 90), col('valuationRequestedDate', 110),
+      col('valuationBookedDate', 110), col('valuationAttended', 90), col('valuationAttendedDate', 110), col('valuationOutcome', 110),
+      col('valuationAmountResidential', 120), col('valuationShortfall', 90), col('financeStatus'), col('valuationNotes', 250),
+    ],
+    // Every in-flight purchase that still needs a valuation: new single / new split / established, finance not yet approved or not tracked.
+    filters: [
+      { field: 'financeStatus', operator: 'not equals', value: 'Formally approved' },
+      { field: 'financeStatus', operator: 'not equals', value: 'Not Tracked' },
+    ],
+    sortBy: 'co_land_registration',
+    sortDir: 'asc',
+  },
+  {
     id: 'builtin-fallen-deals',
     name: 'Fallen deals',
     section: 'Exception',
@@ -1338,11 +1361,13 @@ export default function ContractTeamReportingPage() {
     }
     return [];
   });
+  // Built-in views deleted in the View Builder: hidden for everyone (DB), restored from Admin > Views.
+  const [hiddenViewIds, setHiddenViewIds] = useState<Set<string>>(new Set());
   const allViews = useMemo(() => {
     // A saved public view with the same id as a preset replaces it.
     const overridden = new Set(publicViews.map((v) => v.id));
-    return [...PRESET_VIEWS.filter((p) => !overridden.has(p.id)), ...publicViews, ...personalViews];
-  }, [publicViews, personalViews]);
+    return [...PRESET_VIEWS.filter((p) => !overridden.has(p.id) && !hiddenViewIds.has(p.id)), ...publicViews.filter((v) => !hiddenViewIds.has(v.id)), ...personalViews];
+  }, [publicViews, personalViews, hiddenViewIds]);
 
   const [activeViewId, setActiveViewId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -1351,7 +1376,7 @@ export default function ContractTeamReportingPage() {
     }
     return 'builtin-bp';
   });
-  const activeView = allViews.find((v) => v.id === activeViewId) ?? PRESET_VIEWS[0];
+  const activeView = allViews.find((v) => v.id === activeViewId) ?? allViews[0] ?? PRESET_VIEWS[0];
   activeViewRef.current = activeView;
   const [showViewMenu, setShowViewMenu] = useState(false);
   const [viewBarCollapsed, setViewBarCollapsed] = useState(false);
@@ -1582,21 +1607,35 @@ export default function ContractTeamReportingPage() {
   }, [columns, sortLevels, activeView]);
 
   async function deleteSavedView(view: ViewDef) {
-    if (view.builtin) return;
-    if (!confirm(`Delete view "${view.name}"?`)) return;
-    if (view.id.startsWith('public-')) {
-      const res = await fetch('/api/contract-team-reporting/views', {
-        method: 'DELETE',
+    // A saved override of a built-in keeps the built-in's id, so it is hidden too (Restore brings back the override).
+    if (view.builtin || PRESET_VIEWS.some((p) => p.id === view.id)) {
+      if (!confirm(`Delete "${view.name}"?\n\nThis is a built-in view, so it will be hidden for everyone. An admin can restore it from Admin → Views.`)) return;
+      const res = await fetch('/api/contract-team-reporting/hidden-views', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: view.id }),
+        body: JSON.stringify({ id: view.id, name: view.name, hidden: true }),
       });
-      if (res.ok) await fetchPublicViews();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { alert(`Delete failed: ${data.error || res.status}`); return; }
+      setHiddenViewIds(new Set((data.hidden || []).map((h: { view_id: string }) => h.view_id)));
     } else {
-      setPersonalViews((prev) => prev.filter((v) => v.id !== view.id));
+      if (!confirm(`Delete view "${view.name}"? This cannot be undone.`)) return;
+      if (view.id.startsWith('public-')) {
+        const res = await fetch('/api/contract-team-reporting/views', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: view.id }),
+        });
+        if (!res.ok) { alert(`Delete failed: ${res.status}`); return; }
+        await fetchPublicViews();
+      } else {
+        setPersonalViews((prev) => prev.filter((v) => v.id !== view.id));
+      }
     }
     if (activeViewId === view.id) {
-      setActiveViewId('builtin-bp');
-      localStorage.setItem('ctr-view-id', 'builtin-bp');
+      const next = allViews.find((v) => v.id !== view.id) ?? PRESET_VIEWS[0];
+      selectView(next);
+      setShowViewBuilder(false);
     }
   }
 
@@ -1619,6 +1658,12 @@ export default function ContractTeamReportingPage() {
     } catch { /* server views unavailable — personal + builtin still work */ }
   }, []);
   useEffect(() => { fetchPublicViews(); }, [fetchPublicViews]);
+  useEffect(() => {
+    fetch('/api/contract-team-reporting/hidden-views', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.hidden) setHiddenViewIds(new Set(d.hidden.map((h: { view_id: string }) => h.view_id))); })
+      .catch(() => { /* hidden list unavailable — every built-in shows */ });
+  }, []);
 
   // View menu drag-sort order (per browser)
   const [viewOrder, setViewOrder] = useState<Record<string, number>>(() => {
@@ -2625,7 +2670,7 @@ export default function ContractTeamReportingPage() {
                             {view.name}
                             {view.id.startsWith('personal-') && <span className="ml-1 text-[8px] opacity-50">(personal)</span>}
                           </button>
-                          {!view.builtin && showColumnBuilder && (
+                          {showColumnBuilder && (
                             <button
                               onClick={(e) => { e.stopPropagation(); deleteSavedView(view); }}
                               className="px-2 text-[10px] text-red-400 opacity-0 group-hover:opacity-100 hover:underline"
@@ -2930,6 +2975,16 @@ export default function ContractTeamReportingPage() {
                     >
                       {builderSaving ? 'Saving…' : '+ Save as NEW view'}
                     </button>
+                    {!builderDraft && (
+                      <button
+                        onClick={() => deleteSavedView(activeView)}
+                        disabled={builderSaving}
+                        title={activeView.builtin ? `Hide "${activeView.name}" for everyone (restore from Admin → Views)` : `Delete "${activeView.name}"`}
+                        className="px-2 py-1.5 text-[10px] bg-red-700 text-white rounded hover:bg-red-600 disabled:opacity-40 font-medium"
+                      >
+                        Delete
+                      </button>
+                    )}
                     <button
                       onClick={updateActiveView}
                       disabled={builderSaving || isViewProtected(activeView) || builderDraft}

@@ -299,6 +299,12 @@ export const teams: TeamTile[] = [
         newTab: true,
       },
       {
+        name: 'Views',
+        description: 'Built-in Contract Team Reporting views deleted in the View Builder, with Restore',
+        href: '/admin/views',
+        newTab: true,
+      },
+      {
         name: 'Access Policies (Cloudflare)',
         description: 'Who can access which section of this portal',
         href: 'https://dash.cloudflare.com/e042ae740af8318d0a2ed0fe46c8eefc/one/access-controls/apps',
