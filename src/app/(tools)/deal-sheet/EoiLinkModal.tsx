@@ -1292,7 +1292,7 @@ export default function EoiLinkModal({
                 <span className={cls.label}>Pipeline / Stage</span>
                 <span className={cls.sub}>
                   {selected?.pipelineName || selected?.stageName
-                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' — ')
+                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' · ')
                     : '-'}
                 </span>
 
@@ -1426,7 +1426,7 @@ export default function EoiLinkModal({
                 <span className={cls.label}>Pipeline / Stage</span>
                 <span className={cls.sub}>
                   {selected?.pipelineName || selected?.stageName
-                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' — ')
+                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' · ')
                     : '-'}
                 </span>
 
@@ -2052,6 +2052,13 @@ export default function EoiLinkModal({
                 <span className={cls.label}>Opportunity</span>
                 <span className="font-medium">{selected?.name || record.clientClosed || '-'}</span>
 
+                <span className={cls.label}>Pipeline / stage</span>
+                <span className={cls.sub}>
+                  {selected?.pipelineName || selected?.stageName
+                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' · ')
+                    : '-'}
+                </span>
+
                 {linkLoad === 'missing' && (
                   <div className="col-span-2 rounded border border-red-500 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">
                     <strong>This link is broken.</strong> GHL has no opportunity with ID{' '}
@@ -2098,13 +2105,6 @@ export default function EoiLinkModal({
                     will <strong>not</strong> be written back to the opportunity until it loads.
                   </div>
                 )}
-
-                <span className={cls.label}>Pipeline / stage</span>
-                <span className={cls.sub}>
-                  {selected?.pipelineName || selected?.stageName
-                    ? [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' — ')
-                    : '-'}
-                </span>
 
                 <span className={cls.label}>Assigned BA *</span>
                 <div>

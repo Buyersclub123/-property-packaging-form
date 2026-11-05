@@ -282,6 +282,8 @@ export async function GET(request: NextRequest) {
       if (!opp || !opp.id) {
         return NextResponse.json({ opportunities: [], total: 0 });
       }
+      // Pipeline / stage names come from the cached pipeline list, which this path must load too.
+      await loadPipelineNames();
       const mapped: OpportunityResult = {
         ...mapOpportunity(opp),
         contactName: opp.contact?.name || '',
