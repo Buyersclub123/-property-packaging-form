@@ -145,13 +145,13 @@ export const teams: TeamTile[] = [
       {
         name: 'Purchase Analytics',
         description: 'Client property purchases 2019–2026',
-        href: '/team/research/purchase-analytics',
+        href: '/team/resources/new-initiatives/purchase-analytics',
       },
       {
         name: 'Sales Meeting Outcomes',
         accessKey: 'review-outcomes',
         description: 'Record Portfolio Review and Presentation Meeting 1 outcomes, with stats, sales and lists',
-        href: '/review-outcomes',
+        href: '/team/resources/new-initiatives/review-outcomes',
       },
     ],
   },
@@ -194,7 +194,7 @@ export const teams: TeamTile[] = [
       {
         name: 'New Initiatives',
         description: 'Sandpit of read-only demos: Portfolio View and Inbox Mining',
-        href: '/new-initiatives',
+        href: '/team/resources/new-initiatives',
       },
       { name: 'Reference Documents', description: 'Reference documentation', comingSoon: true },
       { name: 'Company Calendar', description: 'Company event calendar', comingSoon: true },
@@ -324,35 +324,35 @@ export const newInitiatives: TeamTile = {
     {
       name: 'Pipeline Journey',
       description: 'Where every deal is across Contract, Finance, Construction and Property Record (read-only).',
-      href: '/journey',
+      href: '/team/resources/new-initiatives/journey',
       newTab: true,
     },
     {
       name: 'Sales Meeting Outcomes',
       accessKey: 'review-outcomes',
       description: 'Record Portfolio Review and Presentation Meeting 1 outcomes, with stats, sales and lists.',
-      href: '/review-outcomes',
+      href: '/team/resources/new-initiatives/review-outcomes',
     },
     {
       name: 'Portfolio View',
       description:
         'Client picture: contact, opportunities and properties with purchase cost, valuation and growth, from the unloaded purchase files and GHL snapshots.',
-      href: '/portfolio',
+      href: '/team/resources/new-initiatives/portfolio',
     },
     {
       name: 'Inbox Mining',
       description: 'Team mailbox emails matched to GHL opportunities and classified by activity.',
-      href: '/inbox-mining',
+      href: '/team/resources/new-initiatives/inbox-mining',
     },
     {
       name: 'Purchase Analytics',
       description: 'Client property purchases 2019–2026.',
-      href: '/team/research/purchase-analytics',
+      href: '/team/resources/new-initiatives/purchase-analytics',
     },
     {
       name: "What's changed in GHL",
       description: 'Staff guide to the GHL changes: fields, stages, statuses, what updates automatically.',
-      href: '/guide',
+      href: '/team/resources/new-initiatives/guide',
       newTab: true,
     },
   ],

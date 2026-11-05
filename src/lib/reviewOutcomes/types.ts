@@ -1,7 +1,7 @@
 // Portfolio Review outcomes tool (portfolio backlog item 14) - shared types. Phase 1 stores outcomes in the app DB only.
 
 export const MIN_YMD = '2024-07-01';
-export const TOOL_HREF = '/review-outcomes';
+export const TOOL_HREF = '/team/resources/new-initiatives/review-outcomes';
 export const RECORDERS_GROUP = 'Review recorders';
 export const DISCREPANCY_MINUTES = 15;
 

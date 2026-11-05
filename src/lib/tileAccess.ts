@@ -136,8 +136,8 @@ async function createAndSeed(): Promise<void> {
   }
   const niKey = teamKey(newInitiatives);
   // Same people for the New Initiatives tool in Resources (JT 28/10).
-  const niTeam = teams.find((t) => t.subTiles.some((s) => s.href === '/new-initiatives'));
-  const niTool = niTeam?.subTiles.find((s) => s.href === '/new-initiatives');
+  const niTeam = teams.find((t) => t.subTiles.some((s) => s.href === '/team/resources/new-initiatives'));
+  const niTool = niTeam?.subTiles.find((s) => s.href === '/team/resources/new-initiatives');
   const niKeys = [niKey, ...(niTeam && niTool ? [toolKey(niTeam, niTool)] : [])];
   for (const k of niKeys) {
     for (const e of SEED_NEW_INITIATIVES) {

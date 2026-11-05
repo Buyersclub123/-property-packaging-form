@@ -5,15 +5,9 @@ import { useRouter } from 'next/navigation';
 /** "‹ Back" to the menu the user came from (same-origin referrer), else the given fallback. */
 export default function BackLink({ fallback = '/', label = 'Back' }: { fallback?: string; label?: string }) {
   const router = useRouter();
-  const go = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const ref = typeof document !== 'undefined' ? document.referrer : '';
-    if (ref && typeof window !== 'undefined' && ref.startsWith(window.location.origin) && ref !== window.location.href) {
-      router.back();
-    } else {
-      router.push(fallback);
-    }
-  };
+  // Always navigate to an explicit route (never router.back()): the URL must match the page shown, so links and
+  // per-URL permissions behave (JT 5/11 - /journey stayed in the address bar after Back).
+  const go = (e: React.MouseEvent) => { e.preventDefault(); router.push(fallback); };
   return (
     <a
       href={fallback}

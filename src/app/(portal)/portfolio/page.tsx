@@ -585,7 +585,7 @@ export default function PortfolioPage() {
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1400px] px-4 py-6">
         <div className="mb-1 flex items-baseline gap-4">
-          <BackLink fallback="/new-initiatives" />
+          <BackLink fallback="/team/resources/new-initiatives" />
           <h1 className="text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Portfolio View</h1>
           <div className="ml-auto"><AsAtRefresh asAt={lr.asAt} refreshing={lr.refreshing} onRefresh={lr.refreshNow} /></div>
         </div>

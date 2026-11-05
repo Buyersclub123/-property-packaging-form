@@ -33,7 +33,7 @@ function Evidence() {
     <div className="mx-auto max-w-[1000px] px-4 py-5">
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Evidence{field ? `: ${field}` : ''}</h1>
-        <a href="/inbox-mining" className="text-xs font-semibold text-blue-700 hover:underline">Inbox</a>
+        <a href="/team/resources/new-initiatives/inbox-mining" className="text-xs font-semibold text-blue-700 hover:underline">Inbox</a>
       </div>
       <div className="mt-1 text-xs text-gray-500">The email (and attachment page) this value was read from. Read-only.</div>
       {error && <div className="mt-3 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>}

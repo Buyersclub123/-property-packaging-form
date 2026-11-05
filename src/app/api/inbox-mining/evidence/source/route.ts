@@ -39,7 +39,7 @@ export async function GET(request: Request) {
           fieldKey: s.fieldKey,
           proposed: s.proposed,
           decision: r.feedback?.[`${s.target}:${s.fieldKey}`]?.outcome || null,
-          evidenceUrl: `/inbox-mining/evidence?message=${encodeURIComponent(r.message_id)}&field=${encodeURIComponent(s.fieldKey)}`,
+          evidenceUrl: `/team/resources/new-initiatives/inbox-mining/evidence?message=${encodeURIComponent(r.message_id)}&field=${encodeURIComponent(s.fieldKey)}`,
         }))
     );
     // Prefer the latest accepted suggestion, then the latest one not rejected.

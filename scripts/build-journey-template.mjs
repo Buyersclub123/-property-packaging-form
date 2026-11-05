@@ -26,7 +26,7 @@ swap('<span class="asof">As at Sat 31 Oct 2026</span>', '<span class="asof" id="
 // discreet chevron top-right. Sections (Sales, Duplicate contacts, Property Team, Contract to Settlement) collapsible via a chevron
 // on the section label. Standard: collapsible, DEFAULT EXPANDED, remembered per browser (localStorage).
 swapBetween('<header>', '</header>', `<header id="hdr" class="hdr">
-    <div class="hdr-left"><a href="/new-initiatives" class="backlink">&#8249; Back</a><span class="brand">Buyers Club · CRM</span></div>
+    <div class="hdr-left"><a href="/team/resources/new-initiatives" class="backlink">&#8249; Back</a><span class="brand">Buyers Club · CRM</span></div>
     <h1><span>Pipeline journey</span></h1>
     <div class="hdr-right"><span class="sample">Live from GHL · read-only</span><span class="asof"><span id="asof"></span> · <button type="button" class="rfr" id="rfr" title="Refresh from GHL" aria-label="Refresh from GHL">&#10227;</button><span id="rfr-note"></span> · <button type="button" class="allbtn" id="all-btn" title="Expand or collapse every section">Collapse all</button></span></div>
     <button type="button" class="chev hdr-chev" id="hdr-chev" aria-label="Hide header" aria-expanded="true" title="Hide header"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m3 5 4 4 4-4"/></svg></button>

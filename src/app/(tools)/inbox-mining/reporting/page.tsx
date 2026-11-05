@@ -156,7 +156,7 @@ export default function InboxMiningReportingPage() {
         <div className="mx-auto max-w-[1600px] px-4 py-6">
           <div className="flex items-baseline justify-between gap-4">
             <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Inbox Mining — reporting</h1>
-            <a href="/inbox-mining" className="text-xs font-semibold text-blue-700 hover:underline">Inbox queue</a>
+            <a href="/team/resources/new-initiatives/inbox-mining" className="text-xs font-semibold text-blue-700 hover:underline">Inbox queue</a>
           </div>
           <div className="mt-2 rounded border border-blue-200 bg-blue-50/40 px-3 py-2 text-xs text-brand-charcoal">
             Management view. Read-only on GHL: no GHL writes, no email sent.
@@ -250,7 +250,7 @@ export default function InboxMiningReportingPage() {
                     </thead>
                     <tbody>
                       {openForDay.map((o, n) => (
-                        <tr key={n} onClick={() => { window.location.href = `/inbox-mining?item=${o.itemId}`; }} className="cursor-pointer border-t align-top hover:bg-blue-50">
+                        <tr key={n} onClick={() => { window.location.href = `/team/resources/new-initiatives/inbox-mining?item=${o.itemId}`; }} className="cursor-pointer border-t align-top hover:bg-blue-50">
                           <td className="p-1">{o.subject}</td>
                           <td className="p-1">{o.field}</td>
                           <td className="p-1">{o.proposed}</td>

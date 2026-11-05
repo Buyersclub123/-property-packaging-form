@@ -158,8 +158,8 @@ export default function InboxMiningPage() {
       <div className="flex items-baseline justify-between gap-4">
         <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Inbox Mining — demo (phase a)</h1>
         <div className="flex gap-4 text-xs font-semibold">
-          <a href="/inbox-mining" className="text-blue-700 hover:underline">Inbox</a>
-          <a href="/inbox-mining/reporting" className="text-blue-700 hover:underline">Reporting</a>
+          <a href="/team/resources/new-initiatives/inbox-mining" className="text-blue-700 hover:underline">Inbox</a>
+          <a href="/team/resources/new-initiatives/inbox-mining/reporting" className="text-blue-700 hover:underline">Reporting</a>
         </div>
       </div>
       <div className="mt-2 rounded border border-blue-200 bg-blue-50/40 px-3 py-2 text-xs text-brand-charcoal">

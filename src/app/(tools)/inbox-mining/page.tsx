@@ -211,14 +211,14 @@ export default function InboxDecisionPage() {
         <div className="mx-auto max-w-[1600px] px-4 py-5">
           <div className="flex items-baseline justify-between gap-4">
             <div className="flex items-baseline gap-4">
-              <BackLink fallback="/new-initiatives" />
+              <BackLink fallback="/team/resources/new-initiatives" />
               <h1 className="text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">Inbox</h1>
             </div>
             <div className="flex items-center gap-4 text-xs font-semibold">
               <span className="font-normal text-gray-500">Read-only demo: nothing is written to GHL and no email is sent.</span>
               <AsAtRefresh asAt={lr.asAt} refreshing={lr.refreshing} onRefresh={lr.refreshNow} />
-              <a href="/inbox-mining/reporting" className="text-blue-700 hover:underline">Reporting</a>
-              <a href="/inbox-mining/console" className="text-blue-700 hover:underline">Console</a>
+              <a href="/team/resources/new-initiatives/inbox-mining/reporting" className="text-blue-700 hover:underline">Reporting</a>
+              <a href="/team/resources/new-initiatives/inbox-mining/console" className="text-blue-700 hover:underline">Console</a>
             </div>
           </div>
           {error && <div className="mt-2 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>}

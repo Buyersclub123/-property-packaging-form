@@ -7,7 +7,7 @@ export default function PurchaseAnalyticsPage() {
   return (
     <main className="min-h-screen bg-[#FAFAFA]">
       <div className="mx-auto flex max-w-[1280px] items-baseline gap-4 px-4 pt-3 pb-1">
-        <BackLink fallback="/new-initiatives" />
+        <BackLink fallback="/team/resources/new-initiatives" />
         <span className="text-[13px] font-semibold text-brand-charcoal">Purchase Analytics</span>
       </div>
       <iframe
