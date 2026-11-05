@@ -1089,6 +1089,14 @@ function isViewProtected(view: ViewDef): boolean {
   return !!view.builtin && view.section !== 'Custom';
 }
 
+// Older header filters saved "Only <search>" as NOT IN every non-matching value (thousands of values).
+// Those generated lists are dropped; a real unticked list is never this long.
+const MAX_SAVED_EXCLUSIONS = 25;
+function stripGeneratedExclusions(view: ViewDef): ViewDef {
+  const filters = (view.filters || []).filter((f) => !(f.operator === 'not in' && f.value.split(',').length > MAX_SAVED_EXCLUSIONS));
+  return filters.length === (view.filters || []).length ? view : { ...view, filters };
+}
+
 function applyViewFilters(records: OpportunityRecord[], filters: ViewFilter[]): OpportunityRecord[] {
   return records.filter((record) =>
     filters.every((f) => {
@@ -1358,7 +1366,7 @@ export default function ContractTeamReportingPage() {
         const saved = localStorage.getItem('ctr-personal-views');
         if (saved) {
           const parsed = JSON.parse(saved) as ViewDef[];
-          if (Array.isArray(parsed)) return parsed;
+          if (Array.isArray(parsed)) return parsed.map(stripGeneratedExclusions);
         }
       } catch { /* ignore */ }
     }
@@ -1451,11 +1459,25 @@ export default function ContractTeamReportingPage() {
       }
     }
     for (const [key, set] of Object.entries(excludedFilters)) {
-      const values = Array.from((set as Set<string>) || []).filter((v) => v && v !== '(blank)');
-      if (values.length > 0) out.push({ field: key as RecordKey, operator: 'not in', value: values.join(', ') });
+      const field = key as RecordKey;
+      const excluded = new Set((set as Set<string>) || []);
+      if (excluded.size === 0) continue;
+      // Clear + tick a few saves as IN the ticked values; NOT IN is only for values the user unticked.
+      const all = new Set(records.map((r) => getDisplayValue(r, field) || '(blank)'));
+      const kept = Array.from(all).filter((v) => !excluded.has(v));
+      if (kept.length > 0 && kept.length < excluded.size && !kept.includes('(blank)') && !kept.some((v) => v.includes(','))) {
+        out.push({ field, operator: 'in', value: kept.join(', ') });
+        continue;
+      }
+      const values = Array.from(excluded).filter((v) => v && v !== '(blank)');
+      // Values with commas (addresses) would be split by the comma-separated list, so each gets its own filter.
+      for (const v of values.filter((x) => x.includes(','))) out.push({ field, operator: 'not equals', value: v });
+      const plain = values.filter((x) => !x.includes(','));
+      if (plain.length > 0) out.push({ field, operator: 'not in', value: plain.join(', ') });
     }
     return out;
-  }, [textIncludeFilters, textExcludeFilters, excludedFilters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textIncludeFilters, textExcludeFilters, excludedFilters, records]);
 
   // Initialise builder selections from the active view when opened
   // (skipped in draft mode — "+ New Report" already set a clean slate)
@@ -1666,7 +1688,7 @@ export default function ContractTeamReportingPage() {
       const res = await fetch('/api/contract-team-reporting/views');
       if (!res.ok) return;
       const data = await res.json();
-      if (Array.isArray(data.views)) setPublicViews(data.views);
+      if (Array.isArray(data.views)) setPublicViews(data.views.map(stripGeneratedExclusions));
     } catch { /* server views unavailable — personal + builtin still work */ }
   }, []);
   useEffect(() => { fetchPublicViews(); }, [fetchPublicViews]);
@@ -3321,11 +3343,11 @@ export default function ContractTeamReportingPage() {
                           {filterSearch[col.key] && (
                             <button
                               onClick={() => {
-                                const search = (filterSearch[col.key] || '').toLowerCase();
-                                const toExclude = new Set(
-                                  getUniqueValues(col.key).filter((val) => !val.toLowerCase().includes(search))
-                                );
-                                setExcludedFilters((prev) => ({ ...prev, [col.key]: toExclude }));
+                                // "Only" = a contains filter on the search text, so it saves as contains "<text>", not a huge NOT IN list.
+                                const search = (filterSearch[col.key] || '').trim();
+                                setTextIncludeFilters((prev) => ({ ...prev, [col.key]: search }));
+                                setExcludedFilters((prev) => { const next = { ...prev }; delete next[col.key]; return next; });
+                                setFilterSearch((prev) => { const next = { ...prev }; delete next[col.key]; return next; });
                               }}
                               className="text-[9px] text-green-400 hover:underline font-medium"
                             >
@@ -3514,7 +3536,7 @@ export default function ContractTeamReportingPage() {
                       const field = col.key.slice(CO_PREFIX.length);
                       cellContent = (
                         <a
-                          href={`/inbox-mining/workflow?message=${encodeURIComponent(minedSourceMessageId(record, col.key))}&field=${encodeURIComponent(field)}`}
+                          href={`/team/resources/new-initiatives/inbox-mining/workflow?message=${encodeURIComponent(minedSourceMessageId(record, col.key))}&field=${encodeURIComponent(field)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-400 hover:underline"
