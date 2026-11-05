@@ -1206,6 +1206,12 @@ export default function EoiLinkModal({
               <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
                 <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
                 <div><span className="font-medium">Opportunity:</span> {record.clientClosed || '-'}</div>
+                <div>
+                  <span className="font-medium">Pipeline / stage:</span>{' '}
+                  {linkLoad === 'loading'
+                    ? 'Loading…'
+                    : [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' · ') || '-'}
+                </div>
                 <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
               </div>
 
@@ -1763,6 +1769,12 @@ export default function EoiLinkModal({
               <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
                 <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
                 <div><span className="font-medium">Opportunity:</span> {record.clientClosed || '-'}</div>
+                <div>
+                  <span className="font-medium">Pipeline / stage:</span>{' '}
+                  {linkLoad === 'loading'
+                    ? 'Loading…'
+                    : [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' · ') || '-'}
+                </div>
                 <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
               </div>
 
@@ -1869,6 +1881,12 @@ export default function EoiLinkModal({
               <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
                 <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
                 <div><span className="font-medium">Opportunity:</span> {record.clientClosed || '-'}</div>
+                <div>
+                  <span className="font-medium">Pipeline / stage:</span>{' '}
+                  {linkLoad === 'loading'
+                    ? 'Loading…'
+                    : [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' · ') || '-'}
+                </div>
                 <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
               </div>
 
@@ -1975,6 +1993,12 @@ export default function EoiLinkModal({
               <div className={`text-xs mb-4 space-y-1 ${cls.sub}`}>
                 <div><span className="font-medium">Property:</span> {record.propertyAddress}</div>
                 <div><span className="font-medium">Opportunity:</span> {record.clientClosed || '-'}</div>
+                <div>
+                  <span className="font-medium">Pipeline / stage:</span>{' '}
+                  {linkLoad === 'loading'
+                    ? 'Loading…'
+                    : [selected?.pipelineName, selected?.stageName].filter(Boolean).join(' · ') || '-'}
+                </div>
                 <div><span className="font-medium">Current Offer:</span> <span style={{ whiteSpace: 'pre-line' }}>{record.offerPrice || '-'}</span></div>
               </div>
 
