@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
@@ -1873,6 +1873,29 @@ export default function ContractTeamReportingPage() {
   const isPausedRef = useRef(isPaused);
   isPausedRef.current = isPaused;
 
+  // Header stays on one row: 0 = full, 1 = title "CTRT", 2 = icon-only toolbar,
+  // 3 = quick-filter buttons become a dropdown, 4 = tighter gaps, record count in the title tooltip.
+  // Steps up before paint whenever the row would overflow; resets on resize / zoom.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const headerLeftRef = useRef<HTMLDivElement>(null);
+  const headerRightRef = useRef<HTMLDivElement>(null);
+  const [headerCompact, setHeaderCompact] = useState(0);
+  useEffect(() => {
+    const reset = () => setHeaderCompact(0);
+    window.addEventListener('resize', reset);
+    return () => window.removeEventListener('resize', reset);
+  }, []);
+  useEffect(() => { setHeaderCompact(0); }, [activeViewId, showEditButton, showColumnBuilder, editMode, multiSelectMode]);
+  // No deps on purpose: re-measure after every render; bounded by the 0..4 cap.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = headerRef.current, l = headerLeftRef.current, r = headerRightRef.current;
+    if (!el || !l || !r || headerCompact >= 4) return;
+    const cs = getComputedStyle(el);
+    const avail = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - parseFloat(cs.columnGap || '0');
+    if (l.scrollWidth + r.offsetWidth > avail) setHeaderCompact(headerCompact + 1);
+  });
+
   useEffect(() => {
     fetchData();
     // Full refresh every 60s (skipped while paused)
@@ -2528,16 +2551,18 @@ export default function ContractTeamReportingPage() {
   return (
     <div className={`h-screen flex flex-col ${t.bg} ${t.text}`}>
       {/* Header */}
-      <div className={`flex items-center justify-between px-4 py-2 ${t.headerBg} border-b ${t.cellBorder}`}>
-        <div className="flex items-center gap-4">
+      <div ref={headerRef} className={`flex flex-nowrap items-center justify-between gap-2 whitespace-nowrap px-4 py-2 ${t.headerBg} border-b ${t.cellBorder}`}>
+        <div ref={headerLeftRef} className={`flex flex-nowrap items-center ${headerCompact >= 4 ? 'gap-2' : 'gap-4'} min-w-0 overflow-x-auto [scrollbar-width:none] [&>*]:shrink-0`}>
           <img
             src="/logo.jpg"
             alt="Buyers Club"
             className="h-7 w-auto cursor-default select-none"
             onDoubleClick={(e) => { if (e.shiftKey) setShowEditButton((prev) => { const next = !prev; localStorage.setItem('ctr-edit-visible', String(next)); return next; }); }}
           />
-          <h1 className="text-lg font-bold">Contract Team Reporting Tool</h1>
-          <span className="text-xs opacity-60">{sortedRecords.length} records</span>
+          <h1 className="text-lg font-bold whitespace-nowrap" title={`Contract Team Reporting Tool (${sortedRecords.length} records)`}>
+            {headerCompact >= 1 ? 'CTRT' : 'Contract Team Reporting Tool'}
+          </h1>
+          {headerCompact < 4 && <span className="text-xs opacity-60">{sortedRecords.length} records</span>}
 
           {/* Edit Mode toggle (hidden — Shift+double-click logo to reveal) */}
           {showEditButton && (
@@ -2573,8 +2598,11 @@ export default function ContractTeamReportingPage() {
                 className={`px-2 py-1 rounded text-xs font-medium ${
                   editMode ? 'bg-yellow-500 text-black' : `${t.inputBg} ${t.headerText} hover:opacity-80`
                 }`}
+                title={editMode ? (multiSelectMode ? 'Multi-Edit' : 'Exit Edit Mode') : 'Edit Mode'}
               >
-                {editMode ? (multiSelectMode ? '⚡ Multi-Edit' : 'Exit Edit Mode') : 'Edit Mode'}
+                {headerCompact >= 2
+                  ? (editMode ? (multiSelectMode ? '⚡' : '✎ ✕') : '✎')
+                  : editMode ? (multiSelectMode ? '⚡ Multi-Edit' : 'Exit Edit Mode') : 'Edit Mode'}
               </button>
 
               {/* Save (visible when selected row(s) have edits) */}
@@ -2599,58 +2627,60 @@ export default function ContractTeamReportingPage() {
               )}
             </>
           )}
-          {/* Preset filter buttons — only relevant to the B&P & Finance view */}
-          {activeView.name === 'Valuation access' && (['none', 'valNoAccessDate', 'valNotRequested', 'valRequestedNoBooking', 'valAttendedNoOutcome', 'valShortfall'] as PresetFilter[]).map((preset) => {
-            const labels: Partial<Record<PresetFilter, string>> = {
-              none: 'All *',
-              valNoAccessDate: 'No access date',
-              valNotRequested: 'Not requested',
-              valRequestedNoBooking: 'Req > 7d no booking',
-              valAttendedNoOutcome: 'Attended no outcome',
-              valShortfall: 'Shortfall',
-            };
-            const isActive = activePreset === preset;
-            return (
+          {/* Preset filter buttons — only relevant to the B&P and Valuation access views.
+              Collapse to one dropdown when the header is short of room. */}
+          {(() => {
+            const labels: Partial<Record<PresetFilter, string>> | null =
+              activeView.name === 'Valuation access'
+                ? {
+                    none: 'All *',
+                    valNoAccessDate: 'No access date',
+                    valNotRequested: 'Not requested',
+                    valRequestedNoBooking: 'Req > 7d no booking',
+                    valAttendedNoOutcome: 'Attended no outcome',
+                    valShortfall: 'Shortfall',
+                  }
+                : activeView.name === 'B&P' || activeView.name === 'B&P NEW' || activeView.name === 'B&P MINED'
+                  ? {
+                      none: 'All *',
+                      blankPropertyType: 'Blank P-type',
+                      blankBpDueDate: 'No B&P Date',
+                      blankBpRequested: 'No B&P Req',
+                      bpDueNext5: 'B&P Due 5d',
+                      settlementNext5: 'Settle 5d',
+                    }
+                  : null;
+            if (!labels) return null;
+            const presets = Object.keys(labels) as PresetFilter[];
+            if (headerCompact >= 3) {
+              return (
+                <select
+                  value={activePreset}
+                  onChange={(e) => setActivePreset(e.target.value as PresetFilter)}
+                  title="Quick filter"
+                  className={`px-2 py-1 rounded text-xs ${activePreset !== 'none' ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText}`}`}
+                >
+                  {presets.map((p) => <option key={p} value={p}>{p === 'none' ? 'Quick filter: all' : labels[p]}</option>)}
+                </select>
+              );
+            }
+            return presets.map((preset) => (
               <button
                 key={preset}
                 onClick={() => setActivePreset(preset)}
                 className={`px-2 py-1 rounded text-xs ${
-                  isActive ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`
+                  activePreset === preset ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`
                 }`}
               >
                 {labels[preset]}
               </button>
-            );
-          })}
-          {(activeView.name === 'B&P' || activeView.name === 'B&P NEW' || activeView.name === 'B&P MINED') && (['none', 'blankPropertyType', 'blankBpDueDate', 'blankBpRequested', 'bpDueNext5', 'settlementNext5'] as PresetFilter[]).map((preset) => {
-            const labels: Partial<Record<PresetFilter, string>> = {
-              none: 'All *',
-              blankPropertyType: 'Blank P-type',
-              blankBpDueDate: 'No B&P Date',
-              blankBpRequested: 'No B&P Req',
-              bpDueNext5: 'B&P Due 5d',
-              settlementNext5: 'Settle 5d',
-            };
-            const isActive = activePreset === preset;
-            return (
-              <button
-                key={preset}
-                onClick={() => {
-                  setActivePreset(preset);
-                }}
-                className={`px-2 py-1 rounded text-xs ${
-                  isActive ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`
-                }`}
-              >
-                {labels[preset]}
-              </button>
-            );
-          })}
+            ));
+          })()}
           {projectList.length > 0 && (
             <select
               value={projectFilter}
               onChange={(e) => setProjectFilter(e.target.value)}
-              className={`px-2 py-1 rounded text-xs ${projectFilter ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText}`}`}
+              className={`px-2 py-1 rounded text-xs ${headerCompact >= 2 ? 'max-w-[130px]' : ''} ${projectFilter ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText}`}`}
               title="Project quick filter (Deal Sheet → Admin → Projects)"
             >
               <option value="">Project: all</option>
@@ -2659,13 +2689,14 @@ export default function ContractTeamReportingPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div ref={headerRightRef} className="flex flex-nowrap items-center gap-2 shrink-0">
 
           {/* Preset Views (from Contract Team Reports Tool) */}
           <div className="relative dropdown-container">
             <button
               onClick={() => setShowViewMenu(!showViewMenu)}
-              className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
+              className={`px-2 py-1 rounded text-xs ${headerCompact >= 2 ? 'max-w-[180px] truncate' : ''} ${t.inputBg} ${t.headerText} hover:opacity-80`}
+              title={`View: ${activeView.name}`}
             >
               View: {activeView.name}
               {showColumnBuilder && hasUnsavedViewChanges && (
@@ -2738,7 +2769,7 @@ export default function ContractTeamReportingPage() {
               className={`px-2 py-1 rounded text-xs ${builderDraft ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-500'}`}
               title="Start a brand-new report from scratch — no columns, filters or pipelines inherited from the current view"
             >
-              + New Report
+              {headerCompact >= 2 ? '+' : '+ New Report'}
             </button>
           )}
 
@@ -2749,8 +2780,9 @@ export default function ContractTeamReportingPage() {
             <button
               onClick={() => setShowViewBuilder(!showViewBuilder)}
               className={`px-2 py-1 rounded text-xs ${showViewBuilder ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText} hover:opacity-80`}`}
+              title="View Builder"
             >
-              View Builder{hasUnsavedViewChanges ? ' ●' : ''} ▼
+              {headerCompact >= 2 ? '▦' : 'View Builder'}{hasUnsavedViewChanges ? ' ●' : ''} ▼
             </button>
             {showViewBuilder && (
               <div className={`absolute top-full left-0 mt-1 w-[420px] max-h-[80vh] overflow-y-auto ${t.headerBg} border ${t.inputBorder} rounded shadow-lg z-50 p-3`}>
@@ -3066,7 +3098,7 @@ export default function ContractTeamReportingPage() {
             }`}
             title="Sort by one or more columns"
           >
-            Sort{sortLevels.length > 1 ? ` (${sortLevels.length})` : ''} ▼
+            {headerCompact >= 2 ? '⇅' : 'Sort'}{sortLevels.length > 1 ? ` (${sortLevels.length})` : ''} ▼
           </button>
 
           {/* Clear Filters */}
@@ -3077,8 +3109,9 @@ export default function ContractTeamReportingPage() {
                 ? 'bg-amber-600 text-white border-amber-700'
                 : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
             }`}
+            title="Clear Filters"
           >
-            Clear Filters
+            {headerCompact >= 2 ? '⊘' : 'Clear Filters'}
           </button>
 
           {/* Export */}
@@ -3086,8 +3119,9 @@ export default function ContractTeamReportingPage() {
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="px-2 py-1 bg-green-700 text-white rounded text-xs hover:bg-green-600"
+              title="Export"
             >
-              Export ▼
+              {headerCompact >= 2 ? '⤓' : 'Export'} ▼
             </button>
             {showExportMenu && (
               <div className={`absolute top-full right-0 mt-1 w-40 ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
@@ -3104,21 +3138,26 @@ export default function ContractTeamReportingPage() {
 
           {pausedByIdle && (
             <span className="px-2 py-1 rounded text-xs bg-amber-600 text-white" title="No activity for 30 minutes. Move the mouse or press a key to resume.">
-              Auto-refresh paused — click to resume
+              {headerCompact >= 2 ? '⏸' : 'Auto-refresh paused — click to resume'}
             </span>
           )}
-          {lastRefresh && <span className="text-xs opacity-50">{lastRefresh.toLocaleTimeString()}</span>}
+          {lastRefresh && headerCompact < 2 && <span className="text-xs opacity-50">{lastRefresh.toLocaleTimeString()}</span>}
 
-          <button onClick={() => fetchData(false, true)} className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}>
-            {refreshing ? '...' : 'Refresh'}
+          <button
+            onClick={() => fetchData(false, true)}
+            className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
+            title={lastRefresh ? `Refresh (last refreshed ${lastRefresh.toLocaleTimeString()})` : 'Refresh'}
+          >
+            {refreshing ? '...' : headerCompact >= 2 ? '↻' : 'Refresh'}
           </button>
 
           {/* Theme toggle */}
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
+            title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
           >
-            {theme === 'dark' ? 'Light' : 'Dark'}
+            {headerCompact >= 2 ? (theme === 'dark' ? '☀' : '☾') : theme === 'dark' ? 'Light' : 'Dark'}
           </button>
 
           {/* Settings */}
@@ -3198,10 +3237,10 @@ export default function ContractTeamReportingPage() {
 
       {/* View description — computed 100% from the view config + API rules (never hardcoded per view).
           Shows the LIVE builder preview while building. */}
-      <div className={`px-4 py-0.5 text-[10px] ${t.headerText} opacity-70 border-b ${t.cellBorder} flex items-start gap-1`}>
+      <div className={`px-4 py-0.5 text-[10px] ${t.headerText} opacity-70 border-b ${t.cellBorder} flex items-center gap-1 whitespace-nowrap`}>
         <button
           onClick={() => setViewBarCollapsed(!viewBarCollapsed)}
-          className="shrink-0 mt-0.5 opacity-60 hover:opacity-100"
+          className="shrink-0 opacity-60 hover:opacity-100"
           title={viewBarCollapsed ? 'Expand view details' : 'Collapse view details'}
         >
           {viewBarCollapsed ? '▶' : '▼'}
@@ -3213,40 +3252,49 @@ export default function ContractTeamReportingPage() {
           </label>
         )}
         {viewBarCollapsed ? (
-          <span className="font-medium truncate">
+          <span className="font-medium truncate min-w-0">
             View: {effectiveView.name}
             {(showViewBuilder || builderDraft) && <span className="text-amber-400"> (live preview)</span>}
           </span>
-        ) : (
-          <span>
-            <span className="font-medium">
-              View: {effectiveView.name}
-              {(showViewBuilder || builderDraft) && <span className="text-amber-400"> (live preview)</span>}
-            </span>
-            {' | '}{describeView(effectiveView)}
-            {oppFilter && (
-              <span className="text-amber-400">
-                {' | One opportunity (from Pipeline Journey) '}
-                <button className="underline" onClick={() => { setOppFilter(''); window.history.replaceState(null, '', window.location.pathname); }}>Show all</button>
+        ) : (() => {
+          const preview = showViewBuilder || builderDraft;
+          const quick = activePreset === 'none' ? ''
+            : activePreset === 'blankPropertyType' ? 'Type of Property blank (≠ Settled)'
+            : activePreset === 'blankBpDueDate' ? 'B&P Due Date blank'
+            : activePreset === 'blankBpRequested' ? 'B&P Requested blank'
+            : activePreset === 'bpDueNext5' ? 'B&P Due Date within 5 days'
+            : activePreset === 'valNoAccessDate' ? 'Valuation access date blank'
+            : activePreset === 'valNotRequested' ? 'Valuation not requested'
+            : activePreset === 'valRequestedNoBooking' ? 'Valuation requested over 7 days ago, not booked'
+            : activePreset === 'valAttendedNoOutcome' ? 'Valuation attended, no outcome'
+            : activePreset === 'valShortfall' ? 'Valuation shortfall'
+            : 'Settlement Date within 5 days';
+          const description = describeView(effectiveView);
+          const full = `View: ${effectiveView.name}${preview ? ' (live preview)' : ''} | ${description}`
+            + (oppFilter ? ' | One opportunity (from Pipeline Journey)' : '')
+            + (quick ? ` | Quick filter: ${quick}` : '');
+          return (
+            <>
+              <span className="truncate min-w-0" title={full}>
+                <span className="font-medium">
+                  View: {effectiveView.name}
+                  {preview && <span className="text-amber-400"> (live preview)</span>}
+                </span>
+                {' | '}{description}
+                {oppFilter && <span className="text-amber-400">{' | One opportunity (from Pipeline Journey)'}</span>}
+                {quick && <span>{` | Quick filter: ${quick}`}</span>}
               </span>
-            )}
-            {activePreset !== 'none' && (
-              <span>
-                {' | Quick filter: '}
-                {activePreset === 'blankPropertyType' ? 'Type of Property blank (≠ Settled)'
-                  : activePreset === 'blankBpDueDate' ? 'B&P Due Date blank'
-                  : activePreset === 'blankBpRequested' ? 'B&P Requested blank'
-                  : activePreset === 'bpDueNext5' ? 'B&P Due Date within 5 days'
-                  : activePreset === 'valNoAccessDate' ? 'Valuation access date blank'
-                  : activePreset === 'valNotRequested' ? 'Valuation not requested'
-                  : activePreset === 'valRequestedNoBooking' ? 'Valuation requested over 7 days ago, not booked'
-                  : activePreset === 'valAttendedNoOutcome' ? 'Valuation attended, no outcome'
-                  : activePreset === 'valShortfall' ? 'Valuation shortfall'
-                  : 'Settlement Date within 5 days'}
-              </span>
-            )}
-          </span>
-        )}
+              {oppFilter && (
+                <button
+                  className="shrink-0 underline text-amber-400"
+                  onClick={() => { setOppFilter(''); window.history.replaceState(null, '', window.location.pathname); }}
+                >
+                  Show all
+                </button>
+              )}
+            </>
+          );
+        })()}
       </div>
 
       {/* Table */}
