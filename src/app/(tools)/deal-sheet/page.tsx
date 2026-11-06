@@ -1982,13 +1982,25 @@ export default function DealSheetPage() {
                           );
                         })()}
                         {/* Text search within dropdown */}
-                        <input
-                          type="text"
-                          placeholder="Search..."
-                          value={filters[col.key] || ''}
-                          onChange={(e) => handleFilterChange(col.key, e.target.value)}
-                          className={`w-full px-1.5 py-0.5 mb-1 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
-                        />
+                        <div className="relative mb-1">
+                          <input
+                            type="text"
+                            placeholder="Search..."
+                            value={filters[col.key] || ''}
+                            onChange={(e) => handleFilterChange(col.key, e.target.value)}
+                            className={`w-full px-1.5 py-0.5 pr-5 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
+                          />
+                          {filters[col.key] && (
+                            <button
+                              type="button"
+                              title="Clear search"
+                              onClick={() => handleFilterChange(col.key, '')}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 text-[11px] leading-none text-gray-400 hover:text-red-500"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
                         {/* Select All / Only / Clear */}
                         <div className="flex gap-1 mb-1 px-1">
                           <button
