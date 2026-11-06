@@ -166,7 +166,10 @@ export default function InboxDecisionPage() {
     const el = paneRef.current;
     if (el && el.getBoundingClientRect().top < 0) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 8 });
   }, [openId]);
-  const openGone = openId !== null && !loading && !ordered.some((i) => i.id === openId);
+  const openItem = items.find((i) => i.id === openId);
+  const movedTo = openItem && !loading && !ordered.some((i) => i.id === openId)
+    ? { list: listOf(openItem), tab: (isDone(openItem) ? 'processed' : 'open') as 'open' | 'processed' }
+    : null;
 
   const nextAfter = (id: number) => {
     const idx = ordered.findIndex((i) => i.id === id);
@@ -268,8 +271,15 @@ export default function InboxDecisionPage() {
             <section ref={paneRef} className="pane self-start [overflow-wrap:anywhere]">
               {openId ? (
                 <>
-                  {openGone && <div className="m-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">This item is no longer in this list.</div>}
-                  <DecisionPanel key={openId} id={openId} processed={tab === 'processed'}
+                  {movedTo && (
+                    <div className="m-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      This item has moved to{' '}
+                      <button className="font-semibold text-blue-700 hover:underline" onClick={() => { setList(movedTo.list); setTab(movedTo.tab); }}>
+                        {LISTS.find((l) => l.key === movedTo.list)!.label}{movedTo.tab === 'processed' ? ' (Processed)' : ''}
+                      </button>
+                    </div>
+                  )}
+                  <DecisionPanel key={openId} id={openId} processed={openItem ? isDone(openItem) : tab === 'processed'}
                     onDone={() => onDone(openId)} onSkip={() => onSkip(openId)} onReopen={() => reopen(openId)} onChanged={() => refreshItem(openId)} />
                 </>
               ) : (
