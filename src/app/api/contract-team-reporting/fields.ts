@@ -3004,14 +3004,24 @@ export const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-const LAND_REG_MONTH_RE = new RegExp(`^(${MONTH_NAMES.join('|')}) (\\d{4}) approx\\.$`);
-/** Allowed land_registration values: "Registered", "TBC" or "Month YYYY approx." */
+export const LAND_REG_PARTS = ['Early', 'Mid', 'Late'] as const;
+export type LandRegPart = '' | (typeof LAND_REG_PARTS)[number];
+const LAND_REG_MONTH_RE = new RegExp(`^(?:(${LAND_REG_PARTS.join('|')}) )?(${MONTH_NAMES.join('|')}) (\\d{4}) approx\\.$`);
+/** Allowed land_registration values: "Registered", "TBC" or "[Early|Mid|Late ]Month YYYY approx." */
 export function isValidLandRegistration(v: string): boolean {
   return v === 'Registered' || v === 'TBC' || LAND_REG_MONTH_RE.test(v);
 }
-export function parseLandRegistrationMonth(v: string): { month: string; year: number } | null {
+export function parseLandRegistrationMonth(v: string): { part: LandRegPart; month: string; year: number } | null {
   const m = LAND_REG_MONTH_RE.exec(v);
-  return m ? { month: m[1], year: Number(m[2]) } : null;
+  return m ? { part: (m[1] || '') as LandRegPart, month: m[2], year: Number(m[3]) } : null;
+}
+export function formatLandRegistrationMonth(part: LandRegPart, month: string, year: number): string {
+  return `${part ? `${part} ` : ''}${month} ${year} approx.`;
+}
+/** Sort key for an expected month: year, month, then no prefix < Early < Mid < Late. Null for Registered / TBC / anything else. */
+export function landRegistrationSortKey(v: string): number | null {
+  const p = parseLandRegistrationMonth(v);
+  return p ? p.year * 100 + MONTH_NAMES.indexOf(p.month) * 4 + (p.part ? LAND_REG_PARTS.indexOf(p.part) + 1 : 0) : null;
 }
 export const CO_TOOL_PROPOSED_KEYS = new Set<string>(['closing_price']);
 export function isCoFieldEditable(key: string): boolean {

@@ -260,7 +260,7 @@ function monthYearComplete(value: string, f: FieldDef): boolean {
   if (!value) return false;
   const kws = (f.monthYearKeywords || []).map((o) => o.value.toUpperCase());
   if (kws.includes(value.toUpperCase())) return true;
-  const trimmed = value.replace(/\s+approx\.?$/i, '').trim();
+  const trimmed = value.replace(/\s+approx\.?$/i, '').replace(/^(Early|Mid|Late)\s+/, '').trim();
   const parts = trimmed.split(/\s+/);
   return parts.length === 2 && !!parts[0] && !!parts[1];
 }

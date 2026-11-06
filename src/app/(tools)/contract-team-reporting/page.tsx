@@ -6,7 +6,7 @@ import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } fro
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
-import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, getColumnBadge, OPP_DYNAMIC_PREFIX } from '@/app/api/contract-team-reporting/fields';
+import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, formatLandRegistrationMonth, landRegistrationSortKey, LAND_REG_PARTS, LandRegPart, getColumnBadge, OPP_DYNAMIC_PREFIX } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
 // USER MAP
@@ -164,7 +164,7 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
     if (pos) { setPos(null); return; }
     const r = triggerRef.current?.getBoundingClientRect();
     if (!r) return;
-    const width = 240;
+    const width = 290;
     setPos({ left: Math.max(4, Math.min(r.left, window.innerWidth - width - 4)), top: r.bottom + 2 });
   };
   const parsed = parseLandRegistrationMonth(value);
@@ -172,9 +172,10 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
   const now = new Date();
   const month = parsed?.month ?? MONTH_NAMES[now.getMonth()];
   const year = parsed?.year ?? now.getFullYear();
+  const part: LandRegPart = parsed?.part ?? '';
   const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 1 + i);
   if (!years.includes(year)) years.unshift(year);
-  const setMonth = (m: string, y: number) => onChange(`${m} ${y} approx.`);
+  const setMonth = (m: string, y: number, p: LandRegPart = part) => onChange(formatLandRegistrationMonth(p, m, y));
   const btn = (on: boolean) =>
     `flex-1 px-1 py-0.5 rounded border text-[10px] ${on ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-400'}`;
   const changed = value !== original;
@@ -193,7 +194,7 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
       {pos && createPortal(
         <div
           ref={panelRef}
-          style={{ position: 'fixed', left: pos.left, top: pos.top, width: 240, zIndex: 1000 }}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, width: 290, zIndex: 1000 }}
           className={`flex flex-col gap-1 p-1.5 rounded shadow-lg text-[11px] ${panelClass}`}
           onClick={(e) => e.stopPropagation()}
         >
@@ -204,6 +205,10 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
           </div>
           {mode === 'month' && (
             <div className="flex gap-1">
+              <select value={part} title="Early / Mid / Late (optional)" onChange={(e) => setMonth(month, year, e.target.value as LandRegPart)} className={`w-14 flex-none ${inputClass}`}>
+                <option value="">-</option>
+                {LAND_REG_PARTS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
               <select value={month} onChange={(e) => setMonth(e.target.value, year)} className={`flex-1 ${inputClass}`}>
                 {MONTH_NAMES.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -2394,7 +2399,10 @@ export default function ContractTeamReportingPage() {
       if (!bVal) return -1;
 
       let compare: number;
-      if (isDateField(sortColumn)) {
+      if (sortColumn === 'co_land_registration') {
+        const ka = landRegistrationSortKey(aVal), kb = landRegistrationSortKey(bVal);
+        compare = ka !== null && kb !== null ? ka - kb : ka !== null ? -1 : kb !== null ? 1 : aVal.localeCompare(bVal);
+      } else if (isDateField(sortColumn)) {
         // Parse DD/MM/YYYY or YYYY-MM-DD
         const parseDate = (v: string) => {
           if (v.includes('/')) {

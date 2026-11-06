@@ -73,7 +73,7 @@ export async function PUT(request: NextRequest) {
         if (!dataType) continue;
         if (coKey === 'land_registration' && !isValidLandRegistration(value)) {
           return NextResponse.json(
-            { error: `Land registration must be Registered, TBC or "Month YYYY approx." (got "${value}")` },
+            { error: `Land registration must be Registered, TBC or "[Early|Mid|Late ]Month YYYY approx." (got "${value}")` },
             { status: 400 }
           );
         }

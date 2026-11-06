@@ -612,7 +612,8 @@ export function Step2PropertyDetails() {
                   const landRegValue = propertyDescription?.landRegistration || '';
                   const isRegistered = landRegValue.toUpperCase() === 'REGISTERED';
                   const isTBC = landRegValue.toUpperCase() === 'TBC';
-                  const registrationData = parseExpiry(landRegValue);
+                  const regPart = (/^(Early|Mid|Late) /.exec(landRegValue) || [''])[0];
+                  const registrationData = parseExpiry(landRegValue.slice(regPart.length));
                   const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                                   'July', 'August', 'September', 'October', 'November', 'December'];
                   const years = getYearOptions();
@@ -641,13 +642,27 @@ export function Step2PropertyDetails() {
                         </div>
                         {/* Month/Year Dropdowns - Show if Expected is selected */}
                         {!isRegistered && !isTBC && (
-                          <div className="ml-6 grid grid-cols-2 gap-2">
+                          <div className="ml-6 grid grid-cols-3 gap-2">
+                            <select
+                              value={regPart.trim()}
+                              onChange={(e) => {
+                                const p = e.target.value ? `${e.target.value} ` : '';
+                                const formatted = formatExpiry(registrationData.month, registrationData.year, false, false);
+                                updatePropertyDescription({ landRegistration: formatted ? `${p}${formatted} approx.` : p });
+                              }}
+                              className="input-field"
+                            >
+                              <option value="">Early / Mid / Late (optional)</option>
+                              {['Early', 'Mid', 'Late'].map(p => (
+                                <option key={p} value={p}>{p}</option>
+                              ))}
+                            </select>
                             <select
                               value={registrationData.month}
                               onChange={(e) => {
                                 const month = e.target.value;
                                 const formatted = formatExpiry(month, registrationData.year, false, false);
-                                updatePropertyDescription({ landRegistration: formatted ? `${formatted} approx.` : '' });
+                                updatePropertyDescription({ landRegistration: formatted ? `${regPart}${formatted} approx.` : '' });
                               }}
                               className="input-field"
                               required={!isRegistered && !isTBC}
@@ -662,7 +677,7 @@ export function Step2PropertyDetails() {
                               onChange={(e) => {
                                 const year = e.target.value;
                                 const formatted = formatExpiry(registrationData.month, year, false, false);
-                                updatePropertyDescription({ landRegistration: formatted ? `${formatted} approx.` : '' });
+                                updatePropertyDescription({ landRegistration: formatted ? `${regPart}${formatted} approx.` : '' });
                               }}
                               className="input-field"
                               required={!isRegistered && !isTBC}
@@ -3415,7 +3430,8 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
           const landRegValue = propertyDescription?.landRegistration || '';
           const isRegistered = landRegValue.toUpperCase() === 'REGISTERED';
           const isTBC = landRegValue.toUpperCase() === 'TBC';
-          const registrationData = parseExpiry(landRegValue);
+          const regPart = (/^(Early|Mid|Late) /.exec(landRegValue) || [''])[0];
+          const registrationData = parseExpiry(landRegValue.slice(regPart.length));
           const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                           'July', 'August', 'September', 'October', 'November', 'December'];
           const years = getYearOptions();
@@ -3441,13 +3457,27 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
                   </label>
                 </div>
                 {!isRegistered && !isTBC && (
-                  <div className="ml-6 grid grid-cols-2 gap-2">
+                  <div className="ml-6 grid grid-cols-3 gap-2">
+                    <select
+                      value={regPart.trim()}
+                      onChange={(e) => {
+                        const p = e.target.value ? `${e.target.value} ` : '';
+                        const formatted = formatExpiry(registrationData.month, registrationData.year, false, false);
+                        updateLotPropertyDescription(lotIndex, { landRegistration: formatted ? `${p}${formatted} approx.` : p });
+                      }}
+                      className="input-field"
+                    >
+                      <option value="">Early / Mid / Late (optional)</option>
+                      {['Early', 'Mid', 'Late'].map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
                     <select
                       value={registrationData.month}
                       onChange={(e) => {
                         const month = e.target.value;
                         const formatted = formatExpiry(month, registrationData.year, false, false);
-                        updateLotPropertyDescription(lotIndex, { landRegistration: formatted ? `${formatted} approx.` : '' });
+                        updateLotPropertyDescription(lotIndex, { landRegistration: formatted ? `${regPart}${formatted} approx.` : '' });
                       }}
                       className="input-field"
                       required={!isRegistered && !isTBC}
@@ -3462,7 +3492,7 @@ function LotPropertyDescriptionFields({ lotIndex, propertyDescription, isDualOcc
                       onChange={(e) => {
                         const year = e.target.value;
                         const formatted = formatExpiry(registrationData.month, year, false, false);
-                        updateLotPropertyDescription(lotIndex, { landRegistration: formatted ? `${formatted} approx.` : '' });
+                        updateLotPropertyDescription(lotIndex, { landRegistration: formatted ? `${regPart}${formatted} approx.` : '' });
                       }}
                       className="input-field"
                       required={!isRegistered && !isTBC}

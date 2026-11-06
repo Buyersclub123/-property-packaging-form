@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ihCharsOver, ihLimitError, normaliseIh } from '@/lib/investmentHighlightsLimit';
+import { isValidLandRegistration } from '@/app/api/contract-team-reporting/fields';
 
 /**
  * GHL API Configuration
@@ -852,6 +853,14 @@ export async function PUT(
     if (!formData) {
       return NextResponse.json(
         { success: false, error: 'Form data is required' },
+        { status: 400 }
+      );
+    }
+
+    const landReg = formData.propertyDescription?.landRegistration;
+    if (landReg && !isValidLandRegistration(landReg)) {
+      return NextResponse.json(
+        { success: false, error: `Land registration must be Registered, TBC or "[Early|Mid|Late ]Month YYYY approx." (got "${landReg}")` },
         { status: 400 }
       );
     }
