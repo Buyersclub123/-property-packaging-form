@@ -124,6 +124,8 @@ async function create(): Promise<void> {
   // GHL attribution (last / first touch) and the Meeting source captured from it at sync.
   await sql`ALTER TABLE review_contacts ADD COLUMN IF NOT EXISTS last_attr JSONB, ADD COLUMN IF NOT EXISTS first_attr JSONB, ADD COLUMN IF NOT EXISTS attr_fetched_at TIMESTAMPTZ`;
   await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS meeting_source TEXT, ADD COLUMN IF NOT EXISTS meeting_source_level TEXT, ADD COLUMN IF NOT EXISTS meeting_source_detail TEXT, ADD COLUMN IF NOT EXISTS meeting_source_at TIMESTAMPTZ`;
+  // Cancelled Google invites are kept (still the meeting's calendar event, JT 9/11) and flagged.
+  await sql`ALTER TABLE review_gcal_events ADD COLUMN IF NOT EXISTS cancelled BOOLEAN NOT NULL DEFAULT FALSE`;
   // Google calendars the sync tried (info@ calendarList + GHL assignees' emails) and whether each was readable.
   await sql`CREATE TABLE IF NOT EXISTS review_gcal_calendars (
     calendar_id TEXT PRIMARY KEY,

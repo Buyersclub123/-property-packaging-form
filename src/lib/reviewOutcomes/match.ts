@@ -41,6 +41,8 @@ export interface RawGcal {
   description: string;
   organizer: string;
   attendees: { email: string; name: string }[];
+  /** Cancelled in Google: still matchable, but a live invite for the same meeting wins. */
+  cancelled?: boolean;
 }
 
 export interface PreparedGcal extends RawGcal { clientEmails: string[]; phones: string[]; name: string; staffEmails: string[] }
@@ -86,7 +88,7 @@ export function matchMeetings(meetings: MatchMeeting[], events: PreparedGcal[]):
         pairs.push({
           m, e, minutes,
           basis: [em && 'Email', ph && 'Phone', ns && 'Name'].filter(Boolean).join(' + '),
-          score: (em ? 20 : 0) + (ph ? 10 : 0) + ns * 2 - Math.abs(d) - (minutes === null ? 0.5 : Math.min(minutes, 1440) / 2880),
+          score: (e.cancelled ? -5 : 0) + (em ? 20 : 0) + (ph ? 10 : 0) + ns * 2 - Math.abs(d) - (minutes === null ? 0.5 : Math.min(minutes, 1440) / 2880),
         });
       }
     }

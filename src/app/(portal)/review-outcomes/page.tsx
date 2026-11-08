@@ -51,7 +51,8 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
       </div>
       <div className="col-start-2 min-w-0 text-xs md:col-start-auto">
         {g ? (
-          <div className={off ? 'text-red-700' : 'text-gray-600'} title={`Matched on ${g.basis}`}>
+          <div className={off ? 'text-red-700' : 'text-gray-600'} title={`Matched on ${g.basis}${g.event.cancelled ? ' · cancelled in Google' : ''}`}>
+            {g.event.cancelled && <div className="text-amber-700">Calendar event cancelled</div>}
             Google: {g.event.allDay ? `${dmy(g.event.ymd)} all day` : `${g.event.ymd !== m.ymd ? `${dmy(g.event.ymd)} ` : ''}${time(g.event.start)}`} · {g.event.staff || g.event.calendars.join(', ')}
             {off && ` · ${g.minutesApart! >= 1440 ? `${Math.round(g.minutesApart! / 1440)}d` : `${g.minutesApart} min`} apart`}
             <div className="truncate text-gray-400">{g.event.title}</div>

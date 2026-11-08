@@ -194,6 +194,8 @@ export interface GcalEvent {
   calendars: string[];
   location: string;
   mode: MeetingMode;
+  /** Invite cancelled in Google; still counts as the meeting's calendar event (booker / attendees). */
+  cancelled?: boolean;
 }
 
 export interface GcalMatch {

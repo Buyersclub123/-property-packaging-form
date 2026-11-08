@@ -53,7 +53,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
     LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id
     WHERE NOT m.deleted AND m.calendar_id IS DISTINCT FROM ${SECOND_MEETING_CALENDAR_ID} AND m.start_at >= ${start.toISOString()}::timestamptz AND m.start_at < ${end.toISOString()}::timestamptz
     ORDER BY m.start_at`;
-  const gRows = await sql`SELECT event_id, start_at, all_day, start_raw, summary, description, location, organizer, attendees, calendars
+  const gRows = await sql`SELECT event_id, start_at, all_day, start_raw, summary, description, location, organizer, attendees, calendars, cancelled
     FROM review_gcal_events WHERE start_at >= ${start.toISOString()}::timestamptz AND start_at < ${end.toISOString()}::timestamptz
       AND COALESCE(summary, '') !~* '(follow[ -]?up|2nd meeting|second meeting)'`;
 
@@ -66,6 +66,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
     description: String(g.description || ''),
     organizer: String(g.organizer || ''),
     attendees: (g.attendees as { email: string; name: string }[]) || [],
+    cancelled: !!g.cancelled,
   }));
   const calendarsOf = new Map(gRows.map((g) => [String(g.event_id), (g.calendars as string[]) || []]));
   const locationOf = new Map(gRows.map((g) => [String(g.event_id), String(g.location || '')]));
@@ -81,6 +82,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
     calendars: calendarsOf.get(e.id) || [],
     location: locationOf.get(e.id) || '',
     mode: meetingMode(locationOf.get(e.id) || ''),
+    cancelled: !!e.cancelled,
   });
   const eventById = new Map(prepared.map((e) => [e.id, e]));
 
@@ -179,7 +181,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
   const matchedIds = new Set([...matches.values()].map((m) => m.eventId));
   const lo = from < MIN_YMD ? MIN_YMD : from;
   const gcalUnmatched = prepared
-    .filter((e) => e.ymd >= lo && e.ymd <= to && !matchedIds.has(e.id) && (viewer.recorder || e.staffEmails.includes(viewer.email)))
+    .filter((e) => e.ymd >= lo && e.ymd <= to && !matchedIds.has(e.id) && !e.cancelled && (viewer.recorder || e.staffEmails.includes(viewer.email)))
     .sort((a, b) => a.t - b.t)
     .map(toEvent);
 

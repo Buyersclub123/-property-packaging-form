@@ -278,12 +278,12 @@ async function syncGcal(start: Date, end: Date, syncStart: string, ghlDone: Prom
     try {
     do {
       const r = await cal.events.list({
-        calendarId: calId, q: 'Portfolio Review', singleEvents: true, maxResults: 2500, pageToken,
+        calendarId: calId, q: 'Portfolio Review', singleEvents: true, showDeleted: true, maxResults: 2500, pageToken,
         timeMin: start.toISOString(), timeMax: end.toISOString(),
       });
       n += (r.data.items || []).length;
       for (const e of r.data.items || []) {
-        if (!e.id || e.status === 'cancelled') continue;
+        if (!e.id) continue;
         const prev = byId.get(e.id);
         if (prev) {
           if (!prev.calendars.includes(calName)) prev.calendars.push(calName);
@@ -298,7 +298,7 @@ async function syncGcal(start: Date, end: Date, syncStart: string, ghlDone: Prom
           id: e.id, start_at: startAt, all_day: allDay, start_raw: raw, summary: e.summary || '', description: (e.description || '').slice(0, 2000),
           location: e.location || '', organizer: String(e.organizer?.email || '').toLowerCase(),
           attendees: (e.attendees || []).map((a) => ({ email: String(a.email || '').toLowerCase(), name: a.displayName || '' })),
-          calendars: [calName],
+          calendars: [calName], cancelled: e.status === 'cancelled',
         });
       }
       pageToken = r.data.nextPageToken || undefined;
@@ -318,13 +318,13 @@ async function syncGcal(start: Date, end: Date, syncStart: string, ghlDone: Prom
     ON CONFLICT (calendar_id) DO UPDATE SET name = EXCLUDED.name, via = EXCLUDED.via, status = EXCLUDED.status, error = EXCLUDED.error,
       events = EXCLUDED.events, checked_at = EXCLUDED.checked_at`;
   for (let i = 0; i < rows.length; i += 300) {
-    await sql`INSERT INTO review_gcal_events (event_id, start_at, all_day, start_raw, summary, description, location, organizer, attendees, calendars, synced_at)
-      SELECT r.id, r.start_at::timestamptz, r.all_day, r.start_raw, r.summary, r.description, r.location, r.organizer, r.attendees, r.calendars, ${syncStart}::timestamptz
+    await sql`INSERT INTO review_gcal_events (event_id, start_at, all_day, start_raw, summary, description, location, organizer, attendees, calendars, cancelled, synced_at)
+      SELECT r.id, r.start_at::timestamptz, r.all_day, r.start_raw, r.summary, r.description, r.location, r.organizer, r.attendees, r.calendars, COALESCE(r.cancelled, FALSE), ${syncStart}::timestamptz
       FROM jsonb_to_recordset(${JSON.stringify(rows.slice(i, i + 300))}::jsonb)
-        AS r(id text, start_at text, all_day boolean, start_raw text, summary text, description text, location text, organizer text, attendees jsonb, calendars jsonb)
+        AS r(id text, start_at text, all_day boolean, start_raw text, summary text, description text, location text, organizer text, attendees jsonb, calendars jsonb, cancelled boolean)
       ON CONFLICT (event_id) DO UPDATE SET start_at = EXCLUDED.start_at, all_day = EXCLUDED.all_day, start_raw = EXCLUDED.start_raw,
         summary = EXCLUDED.summary, description = EXCLUDED.description, location = EXCLUDED.location, organizer = EXCLUDED.organizer,
-        attendees = EXCLUDED.attendees, calendars = EXCLUDED.calendars, synced_at = EXCLUDED.synced_at`;
+        attendees = EXCLUDED.attendees, calendars = EXCLUDED.calendars, cancelled = EXCLUDED.cancelled, synced_at = EXCLUDED.synced_at`;
   }
   await sql`DELETE FROM review_gcal_events
     WHERE start_at >= ${start.toISOString()}::timestamptz AND start_at < ${end.toISOString()}::timestamptz AND synced_at < ${syncStart}::timestamptz`;
