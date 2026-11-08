@@ -10,7 +10,7 @@ import StatsView from '@/components/reviewOutcomes/StatsView';
 import SalesView from '@/components/reviewOutcomes/SalesView';
 import { dmy, outcomeStyle, Stat, time, weekday } from '@/components/reviewOutcomes/ui';
 import BackLink from '@/components/BackLink';
-import AsAtRefresh from '@/components/AsAtRefresh';
+import AsAtRefresh, { asAtLabel } from '@/components/AsAtRefresh';
 import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
@@ -329,11 +329,14 @@ export default function ReviewOutcomesPage() {
                 <Stat label="No outcome (past)" value={meetings.filter((m) => m.past && !m.outcome && !m.selfBooked).length} tone="text-red-700" />
                 <Stat label="No calendar event (PR)" value={meetings.filter((m) => m.kind === 'PR' && !m.gcal).length} />
                 {!demo && (
-                  <button onClick={() => load('force')} disabled={loading} title="Re-read GHL appointments and Google invites for the dates shown, plus the calendar schedule sheet, now"
-                    className="ml-auto rounded border bg-white px-3 py-2 text-left hover:bg-gray-50 disabled:opacity-50">
-                    <div className="text-xs text-gray-500">GHL + calendar sheet</div>
-                    <div className="font-semibold text-blue-700">{loading ? 'Refreshing…' : 'Refresh from GHL'}</div>
-                  </button>
+                  <>
+                    <span className="ml-auto self-center whitespace-nowrap text-xs text-gray-500">{lr.asAt ? asAtLabel(lr.asAt) : 'Loading…'}</span>
+                    <button onClick={() => load('force')} disabled={loading} title="Re-read GHL appointments and Google invites for the dates shown, plus the calendar schedule sheet, now"
+                      className="rounded border bg-white px-3 py-2 text-left hover:bg-gray-50 disabled:opacity-50">
+                      <div className="text-xs text-gray-500">GHL + calendar sheet</div>
+                      <div className="font-semibold text-blue-700">{loading ? 'Refreshing…' : 'Refresh from GHL'}</div>
+                    </button>
+                  </>
                 )}
               </div>
             )}
