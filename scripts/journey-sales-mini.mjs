@@ -1,17 +1,17 @@
-// Journey Sales: mini activity table under the Sales tiles (JT). Counts per Lead source (default) or Consultant for the chosen period.
+// Journey Sales: mini activity table under the Sales tiles (JT). Counts per Meeting source (default) or Consultant for the chosen period.
 // Collapsible, collapsed by default; the open/closed choice is remembered in localStorage.
 // Applied as exact-text swaps by build-journey-template.mjs; salesMini runs in the template page, so its globals live there.
 /* global JOURNEYS, records, PERIODS, n, esc, miniBy, miniP, miniOpen */
 
 function salesMini() {
   const opt = (v, label, cur) => `<option value="${v}"${v === cur ? ' selected' : ''}>${label}</option>`;
-  const head = `<div class="mini-head"><button type="button" id="mini-tog" class="mini-tog" aria-expanded="${miniOpen}">${miniOpen ? '▾' : '▸'} Activity by</button><select id="mini-by">${opt('lead', 'Lead source', miniBy)}${opt('cons', 'Consultant', miniBy)}</select><select id="mini-p">${['d1', 'd7'].map((p) => opt(p, PERIODS[p].label, miniP)).join('')}</select></div>`;
+  const head = `<div class="mini-head"><button type="button" id="mini-tog" class="mini-tog" aria-expanded="${miniOpen}">${miniOpen ? '▾' : '▸'} Activity by</button><select id="mini-by">${opt('lead', 'Meeting source', miniBy)}${opt('cons', 'Consultant', miniBy)}</select><select id="mini-p">${['d1', 'd7'].map((p) => opt(p, PERIODS[p].label, miniP)).join('')}</select></div>`;
   if (!miniOpen) return `<div class="mini">${head}</div>`;
   const NR = 'Not recorded';
   const T = JOURNEYS.sales.filter((s) => s.phase === 'sales' && !s.chip && !s.detached);
   const lead = miniBy === 'lead';
   const skip = T.map((s) => !lead && s.kind === 'contact');
-  const key = (s, x) => (lead ? (s.kind === 'contact' ? x.source : x.leadSource) || NR : s.kind === 'contact' ? null : x.consultant || 'Not assigned');
+  const key = (s, x) => (lead ? x.meetingSource || NR : s.kind === 'contact' ? null : x.consultant || 'Not assigned');
   const m = new Map();
   const tot = T.map(() => 0);
   T.forEach((s, i) => records(s, miniP).forEach((x) => {
@@ -25,7 +25,7 @@ function salesMini() {
   const rows = [...m.entries()].sort((a, b) => Number(a[0] === NR) - Number(b[0] === NR) || sum(b[1]) - sum(a[1]));
   const cell = (v, i) => `<td>${skip[i] ? '—' : n(v)}</td>`;
   return `<div class="mini">${head}`
-    + `<table><thead><tr><th>${lead ? 'Lead source' : 'Consultant'}</th>${T.map((s) => `<th>${esc(s.short || s.name)}</th>`).join('')}</tr></thead><tbody>`
+    + `<table><thead><tr><th>${lead ? 'Meeting source' : 'Consultant'}</th>${T.map((s) => `<th>${esc(s.short || s.name)}</th>`).join('')}</tr></thead><tbody>`
     + rows.map(([k, v]) => `<tr${k === NR ? ' class="nr"' : ''}><td>${esc(k)}</td>${v.map(cell).join('')}</tr>`).join('')
     + `<tr class="tot"><td>Total</td>${tot.map(cell).join('')}</tr></tbody></table></div>`;
 }

@@ -13,6 +13,8 @@ export interface SaleItem {
   consultant: string;
   cc: string;
   source: SaleSource;
+  meetingSource: string;
+  meetingSourceTip: string;
   broker: string;
   smsf: string;
   fee: number;
@@ -27,13 +29,13 @@ export interface SaleItem {
 export function saleItems(d: SalesData): SaleItem[] {
   const cancelBySale = new Map(d.cancels.filter((c) => c.saleId).map((c) => [c.saleId!, c]));
   const items: SaleItem[] = d.sales.map((s) => ({
-    id: s.id, signed: s.signed, client: s.client, office: s.office, consultant: s.consultant, cc: s.cc, source: s.source,
+    id: s.id, signed: s.signed, client: s.client, office: s.office, consultant: s.consultant, cc: s.cc, source: s.source, meetingSource: s.meetingSource, meetingSourceTip: s.meetingSourceTip,
     broker: s.broker, smsf: s.smsf, fee: s.fee, paid: s.paid, cancelled: s.cancelled, removed: false, sale: s, cancel: cancelBySale.get(s.id) || null,
   }));
   for (const c of d.cancels) {
     if (c.saleId) continue;
     items.push({
-      id: c.id, signed: c.signed, client: c.client, office: c.office, consultant: c.consultant, cc: c.cc, source: c.source,
+      id: c.id, signed: c.signed, client: c.client, office: c.office, consultant: c.consultant, cc: c.cc, source: c.source, meetingSource: c.meetingSource, meetingSourceTip: c.meetingSourceTip,
       broker: '', smsf: '', fee: 0, paid: 0, cancelled: true, removed: true, sale: null, cancel: c,
     });
   }

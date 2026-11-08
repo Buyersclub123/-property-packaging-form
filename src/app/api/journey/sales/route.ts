@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { getRedisClient } from '@/lib/redis';
-import { customValue, ghlUsers } from '@/lib/reviewOutcomes/sync';
+import { ghlUsers } from '@/lib/reviewOutcomes/sync';
 import { loadMeetings } from '@/lib/reviewOutcomes/load';
 import { loadSettings } from '@/lib/reviewOutcomes/store';
 import { loadAllSignups } from '@/lib/reviewOutcomes/signups';
 import { addDays, sydYmd } from '@/lib/reviewOutcomes/types';
+import { meetingSourceOf, meetingSourceTitle, type Attribution } from '@/lib/reviewOutcomes/meetingSource';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -17,10 +18,10 @@ const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 // Client sign-ups = GHL opportunities with "Date signed up" in the last 7 days (same source as the Stats Sold columns).
-const CACHE_KEY = 'journey:sales:v7';
+const CACHE_KEY = 'journey:sales:v8';
 const CACHE_SEC = 15 * 60;
 // Last good copy for ?snapshot=1: the page opens from it instantly and refreshes in the background when stale.
-const LAST_KEY = 'journey:sales:last:v7';
+const LAST_KEY = 'journey:sales:last:v8';
 const LAST_SEC = 24 * 60 * 60;
 const DAY_MS = 86400000;
 
@@ -29,7 +30,7 @@ const sydDay = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Austra
 const normName = (s?: string | null) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
 const normPhone = (s?: string | null) => (s || '').replace(/\D/g, '').replace(/^61/, '0');
 
-type Contact = { id: string; firstName?: string; lastName?: string; firstNameLowerCase?: string; lastNameLowerCase?: string; contactName?: string; email?: string | null; phone?: string | null; dateAdded?: string; source?: string | null; assignedTo?: string | null; createdBy?: { source?: string; sourceId?: string } };
+type Contact = { id: string; firstName?: string; lastName?: string; firstNameLowerCase?: string; lastNameLowerCase?: string; contactName?: string; email?: string | null; phone?: string | null; dateAdded?: string; source?: string | null; assignedTo?: string | null; createdBy?: { source?: string; sourceId?: string }; attributionSource?: Attribution; lastAttributionSource?: Attribution };
 const nameOf = (c: Contact) => normName(`${c.firstNameLowerCase || c.firstName || ''}${c.lastNameLowerCase || c.lastName || ''}`) || normName(c.contactName);
 const label = (c: Contact) => [c.firstName, c.lastName].filter(Boolean).join(' ') || c.contactName || c.email || c.phone || c.id;
 
@@ -91,34 +92,7 @@ async function signupsSince(from: string, users: Map<string, string>) {
         AND COALESCE(lower(o.outcome), '') !~ '(no.?show|not.?sat|cancel|invalid)'`.catch(() => []) : [];
   const satOn = (contactId: string, signed: string) =>
     rows.filter((r) => r.contact_id === contactId && String(r.ymd) <= signed).map((r) => String(r.ymd)).sort().pop() || '';
-  return list.map((s) => ({ id: s.oppId, created: s.signed, name: s.name, client: s.client, consultant: users.get(s.assignedTo) || '', contactId: s.contactId, sat: satOn(s.contactId, s.signed) }));
-}
-
-/** GHL contact Lead Source per contact: the Review Outcomes cache first, then GHL (GET) for contacts not cached yet. */
-async function leadSources(ids: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  const uniq = [...new Set(ids.filter(Boolean))];
-  if (!uniq.length) return out;
-  const rows = await getDb()`SELECT contact_id, lead_source FROM review_contacts WHERE source_fetched_at IS NOT NULL
-    AND contact_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(uniq)}::jsonb))`.catch(() => []);
-  const known = new Set<string>();
-  for (const r of rows) {
-    known.add(String(r.contact_id));
-    if (r.lead_source) out.set(String(r.contact_id), String(r.lead_source));
-  }
-  const todo = uniq.filter((id) => !known.has(id));
-  if (!todo.length) return out;
-  const fr = await ghlFetch(`${GHL_BASE_URL}/locations/${GHL_LOCATION_ID}/customFields?model=contact`, { headers: headers(), cache: 'no-store' }, 'journey-contact-fields');
-  const fields = fr.ok ? ((await fr.json()).customFields || []) as { id: string; fieldKey?: string }[] : [];
-  const leadId = fields.find((f) => f.fieldKey === 'contact.lead_source')?.id;
-  if (!leadId) return out;
-  await mapLimit(todo, 8, async (id) => {
-    const r = await ghlFetch(`${GHL_BASE_URL}/contacts/${id}`, { headers: headers(), cache: 'no-store' }, 'journey-contact');
-    if (!r.ok) return;
-    const v = customValue((await r.json()).contact?.customFields, leadId);
-    if (v) out.set(id, v);
-  });
-  return out;
+  return list.map((s) => ({ id: s.oppId, created: s.signed, name: s.name, client: s.client, consultant: users.get(s.assignedTo) || '', contactId: s.contactId, sat: satOn(s.contactId, s.signed), meetingSource: s.meetingSource || '' }));
 }
 
 function outcomeOf(tool: string | null, ghl: string | null): string {
@@ -141,8 +115,7 @@ async function build() {
     return loadMeetings({ email: 'journey', recorder: true, consultantIds: [] }, addDays(today, -7), today, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom);
   };
   const [created, loaded, oppList] = await Promise.all([contactsSince(since7), loadAll(), signupsSince(addDays(today, -7), users)]);
-  const oppSources = await leadSources(oppList.map((o) => o.contactId));
-  const opps = oppList.map(({ contactId, ...o }) => ({ ...o, leadSource: oppSources.get(contactId) || '' }));
+  const opps = oppList;
   const matches = await mapLimit(created, 8, existingMatch);
   const who = (c: Contact) => users.get(c.createdBy?.sourceId || '') || users.get(c.assignedTo || '') || c.createdBy?.source || c.source || '';
   const duplicates = created.map((c, i) => ({ c, m: matches[i] })).filter((x) => x.m).map(({ c, m }) => ({
@@ -154,15 +127,19 @@ async function build() {
   const meetings = [
     ...loaded.meetings.filter((m) => inWindow(m.start)).map((m) => ({
       id: m.id, at: m.start, date: m.ymd, client: m.contactName, calendar: m.calendar, consultant: m.consultant,
-      outcome: outcomeOf(m.outcome, null), leadSource: m.leadSource || '',
+      outcome: outcomeOf(m.outcome, null), meetingSource: m.meetingSource || '', meetingSourceTip: meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail),
     })),
     ...loaded.gcalUnmatched.filter((e) => !e.allDay && inWindow(e.start)).map((e) => ({
-      id: e.id, at: e.start, date: e.ymd, client: e.title, calendar: 'Portfolio Review (Google Calendar only)', consultant: e.staff, outcome: '', leadSource: '',
+      id: e.id, at: e.start, date: e.ymd, client: e.title, calendar: 'Portfolio Review (Google Calendar only)', consultant: e.staff, outcome: '', meetingSource: '',
     })),
   ];
   return {
     asAt: now.toISOString(),
-    contacts: created.map((c) => ({ id: c.id, created: c.dateAdded || '', date: sydDay(new Date(c.dateAdded || now)), name: label(c), source: c.source || '', createdBy: who(c) })),
+    contacts: created.map((c) => {
+      const ms = meetingSourceOf(c.lastAttributionSource, c.attributionSource, c.source || null);
+      return { id: c.id, created: c.dateAdded || '', date: sydDay(new Date(c.dateAdded || now)), name: label(c), source: c.source || '', createdBy: who(c),
+        meetingSource: ms?.label || '', meetingSourceTip: ms ? meetingSourceTitle(ms.level, ms.detail) : '' };
+    }),
     meetings, opps, duplicates,
   };
 }

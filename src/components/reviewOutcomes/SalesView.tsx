@@ -7,7 +7,7 @@ import { aud, itemsIn, saleItems, soldBy, type SaleItem, type SoldRow } from '@/
 import { dmy } from './ui';
 
 // Sales from the Buyers Club Tracking sheet (read-only copy): one row per signed client, sliceable by period, office,
-// consultant, CC member, lead source, broker and SMSF. Revenue = paid + balance.
+// consultant, CC member, Meeting source, broker and SMSF. Revenue = paid + balance.
 
 const FIRST = '2018-01-01';
 const PREF_KEY = 'review-outcomes-sales-view';
@@ -15,8 +15,9 @@ const TH = 'border border-gray-300 bg-gray-100 px-1 py-0.5 text-center text-[11p
 const TD = 'border border-gray-200 px-1 py-0.5 text-center text-[12px]';
 const TDN = 'border border-gray-200 px-1 py-0.5 text-left text-[12px] whitespace-nowrap';
 
-type FilterKey = 'office' | 'consultant' | 'cc' | 'source' | 'broker' | 'smsf';
-const FILTERS: [FilterKey, string][] = [['office', 'Office'], ['consultant', 'Consultant'], ['cc', 'CC member'], ['source', 'Lead source'], ['broker', 'Broker'], ['smsf', 'SMSF']];
+type FilterKey = 'office' | 'consultant' | 'cc' | 'meetingSource' | 'broker' | 'smsf';
+const FILTERS: [FilterKey, string][] = [['office', 'Office'], ['consultant', 'Consultant'], ['cc', 'CC member'], ['meetingSource', 'Meeting source'], ['broker', 'Broker'], ['smsf', 'SMSF']];
+const NO_FILTERS: Record<FilterKey, string> = { office: '', consultant: '', cc: '', meetingSource: '', broker: '', smsf: '' };
 const BLANK = '(blank)';
 const val = (it: SaleItem, k: FilterKey) => String(it[k] || '') || BLANK;
 
@@ -115,8 +116,8 @@ async function exportXlsx(label: string, list: SaleItem[]) {
     [`Sales - ${label}`],
     ['Source: Buyers Club Tracking sheet (read-only). Revenue = paid + balance.'],
     [],
-    ['Signed', 'Client', 'Office', 'Consultant', 'CC member', 'Lead source', 'Broker', 'SMSF', 'Revenue $', 'Paid $', 'Status', 'Cancel reason'],
-    ...list.map((it) => [dmy(it.signed), it.client, it.office, it.consultant, it.cc, it.source, it.broker, it.smsf, it.removed ? null : it.fee, it.removed ? null : it.paid,
+    ['Signed', 'Client', 'Office', 'Consultant', 'CC member', 'Meeting source', 'Broker', 'SMSF', 'Revenue $', 'Paid $', 'Status', 'Cancel reason'],
+    ...list.map((it) => [dmy(it.signed), it.client, it.office, it.consultant, it.cc, it.meetingSource, it.broker, it.smsf, it.removed ? null : it.fee, it.removed ? null : it.paid,
       it.removed ? 'Cancelled (not in sales tab)' : it.cancelled ? 'Cancelled' : 'Active', it.cancel?.reason || '']),
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -132,7 +133,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [p, setP] = useState<Period>({ kind: 'month', anchor: today });
-  const [filters, setFilters] = useState<Record<FilterKey, string>>({ office: '', consultant: '', cc: '', source: '', broker: '', smsf: '' });
+  const [filters, setFilters] = useState<Record<FilterKey, string>>(NO_FILTERS);
   const [net, setNet] = useState(true);
   const [showAll, setShowAll] = useState(false);
 
@@ -221,7 +222,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
     <div>
       <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-brand-charcoal">
         Source: Buyers Club Tracking sheet (office sales tabs and CANCELLATIONS), read-only. Revenue = paid + balance.
-        Lead source is only recorded on some sales (mostly 2026), so many show as Unknown.
+        Meeting source = the GHL source of the client&apos;s last Presentation Meeting One on or before signing (client matched by phone, else name).
         {data.syncedAt && <span className="text-gray-600"> Copied {new Date(data.syncedAt).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}.</span>}
         <button onClick={() => load(true)} disabled={busy} className="ml-2 rounded border bg-white px-2 py-0.5 text-xs hover:bg-gray-50 disabled:opacity-50">
           {busy ? 'Refreshing…' : 'Refresh now'}
@@ -257,7 +258,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
           </select>
         ))}
         {anyFilter && (
-          <button onClick={() => setFilters({ office: '', consultant: '', cc: '', source: '', broker: '', smsf: '' })} className="text-blue-700 hover:underline">Clear filters</button>
+          <button onClick={() => setFilters(NO_FILTERS)} className="text-blue-700 hover:underline">Clear filters</button>
         )}
       </div>
 
@@ -284,7 +285,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
 
       <div className="mb-3 grid gap-3 xl:grid-cols-2">
         <Breakdown title="By office" {...breakdown('office')} />
-        <Breakdown title="By lead source" {...breakdown('source')} />
+        <Breakdown title="By meeting source" {...breakdown('meetingSource')} />
         <Breakdown title="By consultant" {...breakdown('consultant')} />
         <Breakdown title="By CC member" {...breakdown('cc')} />
       </div>
@@ -293,7 +294,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
         <div className="bg-brand-charcoal py-1 text-center text-sm font-bold text-white">Sales ({list.length})</div>
         <table className="w-full border-collapse">
           <thead>
-            <tr>{['Signed', 'Client', 'Office', 'Consultant', 'CC member', 'Lead source', 'Broker', 'SMSF', 'Revenue $', 'Paid $', 'Status'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>
+            <tr>{['Signed', 'Client', 'Office', 'Consultant', 'CC member', 'Meeting source', 'Broker', 'SMSF', 'Revenue $', 'Paid $', 'Status'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {shown.map((it) => (
@@ -303,7 +304,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
                 <td className={TDN}>{it.office}</td>
                 <td className={TDN} title={it.sale?.consultantRaw}>{it.consultant}</td>
                 <td className={TDN} title={it.sale?.ccRaw}>{it.cc}</td>
-                <td className={TDN} title={it.sale?.sourceRaw}>{it.source}</td>
+                <td className={TDN} title={it.meetingSourceTip}>{it.meetingSource}</td>
                 <td className={TDN}>{it.broker}</td>
                 <td className={TDN}>{it.smsf}</td>
                 <td className={TD}>{it.removed ? '' : aud(it.fee)}</td>

@@ -101,6 +101,9 @@ export interface Sale {
   adType: string;
   leadDate: string;
   cancelled: boolean;
+  /** Source of the client's last Presentation Meeting One on or before signing (GHL contact matched by phone, else name). */
+  meetingSource: string;
+  meetingSourceTip: string;
 }
 
 export interface SaleCancel {
@@ -118,6 +121,8 @@ export interface SaleCancel {
   fee: number;
   source: SaleSource;
   cc: string;
+  meetingSource: string;
+  meetingSourceTip: string;
 }
 
 export interface SalesData {

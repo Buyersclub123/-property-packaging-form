@@ -1,8 +1,9 @@
 import { getDb } from '@/lib/db';
 import { googleErrorMessage, sheetsFor } from '@/lib/inboxMining/google';
 import { ensureReviewTables, loadSettings } from './store';
-import { ghlUsers } from './sync';
-import type { ReviewViewer, Sale, SaleCancel, SaleSource, SalesData } from './types';
+import { ghlUsers, phoneKey } from './sync';
+import { NEW_LEAD_CALENDAR_ID, type ReviewViewer, type Sale, type SaleCancel, type SaleSource, type SalesData } from './types';
+import { meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from './meetingSource';
 
 // Read-only import of the Buyers Club Tracking sheet: one tab per office (sales signed) plus CANCELLATIONS.
 // Copied into review_sales at most hourly (or on demand); nothing is written to the sheet.
@@ -179,6 +180,42 @@ const nameKey = (n: string) =>
   n.toLowerCase().replace(/\b(mr|mrs|ms|miss|dr|and)\b/g, ' ').replace(/[^a-z ]/g, ' ').split(' ').filter(Boolean).sort().join(' ');
 const daysApart = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 864e5;
 
+/** Each person in a couple ("Mr A Smith & Mrs B Jones"), first and last name at least. */
+const people = (n: string) => n.split(/&|\band\b|\+|\//i).map(nameKey).filter((k) => k.includes(' '));
+
+export const SALE_CLIENT_NOT_IN_GHL = 'Client not matched in GHL';
+const NOT_RECORDED = 'Not recorded in GHL';
+
+/** Meeting source of a Tracking-sheet sale: GHL contact by phone, else by name (one contact only), then the source of
+ *  their last Presentation Meeting One on or before signing. */
+async function saleMeetingSources() {
+  const rows = await getDb()`SELECT c.contact_id, c.name, c.phones, to_char(m.start_at AT TIME ZONE 'Australia/Sydney', 'YYYY-MM-DD') AS ymd,
+      m.meeting_source, m.meeting_source_level, m.meeting_source_detail
+    FROM review_meetings m JOIN review_contacts c ON c.contact_id = m.contact_id
+    WHERE NOT m.deleted AND m.calendar_id = ${NEW_LEAD_CALENDAR_ID} ORDER BY m.start_at`.catch(() => []);
+  const byPhone = new Map<string, Set<string>>();
+  const byName = new Map<string, Set<string>>();
+  const meetings = new Map<string, { ymd: string; label: string; tip: string }[]>();
+  const put = (m: Map<string, Set<string>>, k: string, id: string) => { if (k) m.set(k, (m.get(k) || new Set()).add(id)); };
+  for (const r of rows) {
+    const id = String(r.contact_id);
+    for (const p of (Array.isArray(r.phones) ? r.phones : []) as string[]) put(byPhone, p, id);
+    for (const k of new Set([nameKey(String(r.name || '')), ...people(String(r.name || ''))])) put(byName, k, id);
+    const label = r.meeting_source ? String(r.meeting_source) : NOT_RECORDED;
+    const tip = meetingSourceTitle((r.meeting_source_level as MeetingSourceLevel | null) || null, (r.meeting_source_detail as string | null) || null);
+    meetings.set(id, [...(meetings.get(id) || []), { ymd: String(r.ymd), label, tip }]);
+  }
+  const one = (s: Set<string> | undefined) => (s && s.size === 1 ? [...s][0] : null);
+  return (client: string, phone: string, signed: string): { meetingSource: string; meetingSourceTip: string } => {
+    const byPerson = [...new Set(people(client).map((k) => one(byName.get(k))).filter(Boolean))];
+    const id = one(byPhone.get(phoneKey(phone))) || one(byName.get(nameKey(client))) || (byPerson.length === 1 ? byPerson[0] : null);
+    if (!id) return { meetingSource: SALE_CLIENT_NOT_IN_GHL, meetingSourceTip: 'No GHL contact with a Presentation Meeting One matches this client by phone or name' };
+    const before = (meetings.get(id) || []).filter((m) => m.ymd <= signed);
+    const last = before[before.length - 1];
+    return last ? { meetingSource: last.label, meetingSourceTip: last.tip } : { meetingSource: NO_MEETING_SOURCE, meetingSourceTip: '' };
+  };
+}
+
 export async function loadSales(viewer: ReviewViewer, force = false): Promise<SalesData> {
   await ensureReviewTables();
   const warnings: string[] = [];
@@ -191,10 +228,11 @@ export async function loadSales(viewer: ReviewViewer, force = false): Promise<Sa
       warnings.push(`Tracking sheet not refreshed${syncedAt ? ' (showing the last copy)' : ''}: ${(e as Error).message}`);
     }
   }
-  const [rows, users, settings] = await Promise.all([
+  const [rows, users, settings, msOf] = await Promise.all([
     getDb()`SELECT * FROM review_sales ORDER BY signed_on, id`,
     ghlUsers().catch(() => []),
     loadSettings(),
+    saleMeetingSources(),
   ]);
   const nameByEmail = new Map(users.map((u) => [u.email, u.name]));
   const consultantOf = nameMatcher(users.map((u) => u.name), settings.salesAliases);
@@ -227,6 +265,7 @@ export async function loadSales(viewer: ReviewViewer, force = false): Promise<Sa
       adType: String(r.ad_type || ''),
       leadDate: String(r.lead_date || ''),
       cancelled: false,
+      ...msOf(String(r.client || ''), String(r.phone || ''), String(r.signed_on || '')),
     });
   }
   const byKey = new Map<string, Sale[]>();
@@ -251,6 +290,7 @@ export async function loadSales(viewer: ReviewViewer, force = false): Promise<Sa
       fee: sale?.fee ?? 0,
       source: sale?.source ?? sourceOf(String(r.lead_source || '')) ?? 'Unknown',
       cc: sale?.cc ?? '',
+      ...(sale ? { meetingSource: sale.meetingSource, meetingSourceTip: sale.meetingSourceTip } : msOf(String(r.client || ''), String(r.phone || ''), signed)),
     };
   });
 
