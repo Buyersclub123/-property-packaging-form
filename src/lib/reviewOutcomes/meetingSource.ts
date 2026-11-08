@@ -46,7 +46,7 @@ function fromAttribution(a: Attribution, level: MeetingSourceLevel): MeetingSour
   // A campaign that is only a numeric ID (e.g. Meta "120248402092590177") isn't shown; it goes in the tooltip (JT).
   const ids = [clean(a.campaign), clean(a.utmCampaign)].filter((c): c is string => !!c && /^\d+$/.test(c));
   const named = (c: unknown) => { const v = clean(c); return v && !/^\d+$/.test(v) ? v : null; };
-  const campaign = named(a.campaign) || named(a.utmCampaign) || pageName(a.url);
+  const campaign = named(a.campaign) || named(a.utmCampaign) || (ids.length ? null : pageName(a.url));
   const utm = [clean(a.utmSource), clean(a.utmMedium)].filter(Boolean).join(' / ');
   const page = clean(a.url)?.replace(/^https?:\/\//, '').split('?')[0] || '';
   return {
