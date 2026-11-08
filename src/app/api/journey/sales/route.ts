@@ -18,10 +18,10 @@ const GHL_API_TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID || '';
 const GHL_API_VERSION = process.env.GHL_API_VERSION || '2021-07-28';
 // Client sign-ups = GHL opportunities with "Date signed up" in the last 7 days (same source as the Stats Sold columns).
-const CACHE_KEY = 'journey:sales:v8';
+const CACHE_KEY = 'journey:sales:v9';
 const CACHE_SEC = 15 * 60;
 // Last good copy for ?snapshot=1: the page opens from it instantly and refreshes in the background when stale.
-const LAST_KEY = 'journey:sales:last:v8';
+const LAST_KEY = 'journey:sales:last:v9';
 const LAST_SEC = 24 * 60 * 60;
 const DAY_MS = 86400000;
 
