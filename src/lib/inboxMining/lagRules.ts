@@ -141,8 +141,10 @@ export function mineFacts(subject: string, fresh: string, ref: Date, fromBuilder
 
   const text = `${subject}\n${fresh}`;
   const facts = extractFacts(text, 'email');
-  if (fromBuilder && facts.constructionStage)
-    add({ type: 'Construction stage (builder progress claim)', target: 'property_record', field: 'construction_stage', value: facts.constructionStage.value, quote: facts.constructionStage.quote });
+  // A progress claim names its stage in the subject or opening lines; later mentions are history or payment terms.
+  const stage = fromBuilder ? extractFacts(`${subject}\n${fresh.slice(0, 400)}`, 'email').constructionStage : undefined;
+  if (stage)
+    add({ type: 'Construction stage (builder progress claim)', target: 'property_record', field: 'construction_stage', value: stage.value, quote: stage.quote });
   if (facts.registration)
     add({ type: 'Land registration', target: 'property_record', field: 'land_registration', value: 'Registered', quote: facts.registration.quote });
   if (contractEvent || facts.registration) {
