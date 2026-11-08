@@ -47,7 +47,7 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
       <div className="col-start-2 min-w-0 truncate text-sm text-gray-700 md:col-start-auto" title="GHL assigned consultant">{m.consultant}</div>
       <div className="col-start-2 min-w-0 text-xs md:col-start-auto" title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>
         <div className="text-[11px] text-gray-400">Meeting source{m.meetingSourceLevel && m.meetingSourceLevel !== 'last' ? ` (${m.meetingSourceLevel === 'first' ? 'first touch' : 'Lead Source'})` : ''}</div>
-        <div className={`truncate ${m.meetingSource ? 'text-gray-700' : 'text-gray-400'}`}>{m.meetingSource || 'Not recorded'}</div>
+        <div className={`line-clamp-2 break-words ${m.meetingSource ? 'text-gray-700' : 'text-gray-400'}`}>{m.meetingSource || 'Not recorded'}</div>
       </div>
       <div className="col-start-2 min-w-0 text-xs md:col-start-auto">
         {g ? (
