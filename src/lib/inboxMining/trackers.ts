@@ -20,7 +20,7 @@ export interface Trackers {
   builderSenders: Map<string, string>;
 }
 
-const FREE_MAIL = /^(gmail|outlook|hotmail|yahoo|bigpond|icloud|live)\./i;
+export const FREE_MAIL = /^(gmail|googlemail|outlook|hotmail|live|msn|yahoo|ymail|icloud|me|mac|bigpond|optusnet|iinet|tpg|internode|westnet|dodo|aol|protonmail|proton)\./i;
 
 async function readSheet(name: string, envVar: string): Promise<Tracker> {
   const id = process.env[envVar];
@@ -51,6 +51,8 @@ export async function loadTrackers(): Promise<Trackers> {
     readSheet("Kata's construction-update tracker", 'INBOX_CONSTRUCTION_SHEET_ID'),
   ]);
   const builderSenders = new Map<string, string>();
+  // A domain or address listed under several builders is a broker/lender/client, not a builder.
+  const seen = new Map<string, Set<string>>();
   for (const row of construction.rows) {
     if (/update tracker/i.test(row.tab)) continue;
     const emails = row.text.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g) || [];
@@ -61,10 +63,18 @@ export async function loadTrackers(): Promise<Trackers> {
       if (email.endsWith('@buyersclub.com.au')) continue;
       // Per-builder tabs also list the clients' own (gmail etc.) addresses: only the Key builders tab may name a free-mail builder.
       if (!keyTab && FREE_MAIL.test(email.split('@')[1])) continue;
-      builderSenders.set(email, builder);
       const domain = email.split('@')[1];
-      if (!FREE_MAIL.test(domain)) builderSenders.set(domain, builder);
+      for (const k of FREE_MAIL.test(domain) ? [email] : [email, domain]) {
+        seen.set(k, (seen.get(k) || new Set()).add(keyTab ? `key:${builder}` : builder));
+        builderSenders.set(k, builder);
+      }
     }
+  }
+  for (const [k, b] of seen) {
+    const names = Array.from(b);
+    const key = names.find((n) => n.startsWith('key:'));
+    if (key) builderSenders.set(k, key.slice(4));
+    else if (names.length > 1) builderSenders.delete(k);
   }
   return { uncon, construction, builderSenders };
 }

@@ -22,7 +22,8 @@ const CONTRACT_FILE =
   /\b(COS|VS|contract|vendor\s+statement|section\s+32|form\s+1|disclosure|HIA|MBA|offer\s+(?:and|&)\s+acceptance|deed\s+of\s+nomination)\b/i;
 const EXECUTED_FILE = /\b(exchanged|executed|fully\s+signed|signed)\b/i;
 const INTERNAL = /@buyersclub\.com\.au$/i;
-const PERSONAL_DOMAIN = /^(gmail|hotmail|outlook|live|yahoo|icloud|me|bigpond|optusnet|iinet|tpg)\./i;
+// Same list as FREE_MAIL in trackers.ts.
+const PERSONAL_DOMAIN = /^(gmail|googlemail|outlook|hotmail|live|msn|yahoo|ymail|icloud|me|mac|bigpond|optusnet|iinet|tpg|internode|westnet|dodo|aol|protonmail|proton)\./i;
 const QUESTION =
   /\?|\b(?:can|could|would)\s+you\b|\bplease\s+(?:advise|confirm|let\s+(?:me|us)\s+know|update)\b|\bwhen\s+(?:will|is|can|do|are)\b|\bany\s+update\b|\bapproximate\s+date\b|\bwhat\s+is\s+the\s+(?:status|date)\b/i;
 const PROGRESS =
