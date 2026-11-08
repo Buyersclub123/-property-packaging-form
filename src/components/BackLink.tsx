@@ -1,17 +1,12 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-
 /** "‹ Back" to the menu the user came from (same-origin referrer), else the given fallback. */
 export default function BackLink({ fallback = '/', label = 'Back' }: { fallback?: string; label?: string }) {
-  const router = useRouter();
-  // Always navigate to an explicit route (never router.back()): the URL must match the page shown, so links and
-  // per-URL permissions behave (JT 5/11 - /journey stayed in the address bar after Back).
-  const go = (e: React.MouseEvent) => { e.preventDefault(); router.push(fallback); };
+  // Plain full navigation (no client router): the browser sets the address bar itself, so the URL always matches
+  // the page shown. Soft navigation left /journey in the bar after Back -> New Initiatives -> Outcomes (JT 5/11, 9/11).
   return (
     <a
       href={fallback}
-      onClick={go}
       className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-gray-500 no-underline hover:text-brand-charcoal"
     >
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">

@@ -89,7 +89,8 @@ export default function JourneyPage() {
           {error || 'Loading live data from GHL…'}
         </div>
       )}
-      {html && <iframe ref={frame} title="Pipeline Journey" srcDoc={html} className="block w-full flex-1 border-0" />}
+      {/* key: a changed srcDoc otherwise pushes a history entry under /journey and leaves the address bar stuck there after navigating away (Next #8107). Remount instead. */}
+      {html && <iframe key={html.length + ":" + html.slice(-64)} ref={frame} title="Pipeline Journey" srcDoc={html} className="block w-full flex-1 border-0" />}
     </div>
   );
 }

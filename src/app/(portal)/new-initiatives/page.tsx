@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { newInitiatives } from '@/lib/portalConfig';
 import { teamVisible, viewerAccess, visibleTools } from '@/lib/tileAccess';
 
@@ -29,7 +28,7 @@ export default async function NewInitiativesPage() {
   return (
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[1080px] px-4 py-6">
-        <Link
+        <a
           href="/"
           className="mb-4 inline-flex items-center gap-2 text-[12.5px] font-semibold text-gray-500 no-underline hover:text-brand-charcoal"
         >
@@ -37,13 +36,13 @@ export default async function NewInitiativesPage() {
             <path d="M8.5 3L4.5 7l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Home
-        </Link>
+        </a>
         <h1 className="mb-1 text-[24px] font-bold tracking-[-0.5px] text-brand-charcoal">New Initiatives</h1>
         <p className="mb-5 text-[13px] text-gray-500">Sandpit for work in progress. Demos are read-only: nothing here writes to GHL.</p>
         <ul className="grid list-none grid-cols-1 gap-[18px] p-0 sm:grid-cols-2 lg:grid-cols-3">
           {demos.map((d) => (
             <li key={d.name}>
-              <Link
+              <a
                 href={d.href ?? '#'}
                 className="flex h-full flex-col rounded-lg border border-gray-200 bg-white p-5 no-underline transition-[border-color,box-shadow] hover:border-blue-600 hover:shadow-sm"
               >
@@ -55,7 +54,7 @@ export default async function NewInitiativesPage() {
                 </div>
                 <p className="m-0 flex-1 text-[13px] leading-relaxed text-gray-500">{d.description}</p>
                 <div className="mt-4 border-t border-gray-200 pt-3 text-[11.5px] font-semibold text-blue-600">Open {d.href} →</div>
-              </Link>
+              </a>
             </li>
           ))}
         </ul>
