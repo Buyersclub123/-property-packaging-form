@@ -65,6 +65,7 @@ export function demoData(): ReviewData {
     gcalUnmatched,
     lastSync: null,
     warnings: [],
+    gcalCalendars: [],
   };
 }
 

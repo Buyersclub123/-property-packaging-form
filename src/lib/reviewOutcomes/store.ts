@@ -124,6 +124,16 @@ async function create(): Promise<void> {
   // GHL attribution (last / first touch) and the Meeting source captured from it at sync.
   await sql`ALTER TABLE review_contacts ADD COLUMN IF NOT EXISTS last_attr JSONB, ADD COLUMN IF NOT EXISTS first_attr JSONB, ADD COLUMN IF NOT EXISTS attr_fetched_at TIMESTAMPTZ`;
   await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS meeting_source TEXT, ADD COLUMN IF NOT EXISTS meeting_source_level TEXT, ADD COLUMN IF NOT EXISTS meeting_source_detail TEXT, ADD COLUMN IF NOT EXISTS meeting_source_at TIMESTAMPTZ`;
+  // Google calendars the sync tried (info@ calendarList + GHL assignees' emails) and whether each was readable.
+  await sql`CREATE TABLE IF NOT EXISTS review_gcal_calendars (
+    calendar_id TEXT PRIMARY KEY,
+    name TEXT,
+    via TEXT,
+    status TEXT,
+    error TEXT,
+    events INTEGER,
+    checked_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
   await sql`CREATE TABLE IF NOT EXISTS review_outcome_log (
     id SERIAL PRIMARY KEY,
     at TIMESTAMPTZ DEFAULT NOW(),

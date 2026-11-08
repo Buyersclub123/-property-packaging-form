@@ -2,11 +2,12 @@ import { google } from 'googleapis';
 import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { ensureReviewTables } from './store';
-import { MIN_YMD, utcCover } from './types';
+import { MIN_YMD, utcCover, type GcalCalendarCheck } from './types';
 import { meetingSourceOf, type Attribution } from './meetingSource';
 
 // Read-only refresh of the review-outcomes cache: GHL calendar events + contacts (GET only) and Google Calendar
-// 'Portfolio Review' events seen by info@ (calendar.readonly). Nothing is written to GHL or Google.
+// 'Portfolio Review' events read as info@ (calendar.readonly) from info@'s calendar list plus the calendars of the GHL users
+// assigned to the appointments in range. Nothing is written to GHL or Google.
 
 export const REVIEW_CALENDARS = [
   { id: 'ziiNfM0fl5q8iWL5MDtF', name: 'Portfolio Review Meeting' },
@@ -243,19 +244,44 @@ function calendarAuth() {
   return new google.auth.JWT({ email: key.client_email, key: key.private_key.replace(/\\n/g, '\n'), scopes: [CALENDAR_READONLY], subject: GCAL_MAILBOX });
 }
 
-async function syncGcal(start: Date, end: Date, syncStart: string): Promise<number> {
+/** Calendars checked by recent syncs (last 7 days), unreadable first. */
+export async function gcalCalendars(): Promise<GcalCalendarCheck[]> {
+  const rows = await getDb()`SELECT calendar_id, name, via, status, error, events, checked_at FROM review_gcal_calendars
+    WHERE checked_at > NOW() - INTERVAL '7 days' ORDER BY (status = 'ok'), name`.catch(() => []);
+  return rows.map((r) => ({ id: String(r.calendar_id), name: String(r.name || r.calendar_id), via: String(r.via || ''), status: String(r.status || ''),
+    error: (r.error as string | null) || null, events: Number(r.events || 0), checkedAt: new Date(r.checked_at as string).toISOString() }));
+}
+
+async function syncGcal(start: Date, end: Date, syncStart: string, ghlDone: Promise<unknown>): Promise<number> {
   const cal = google.calendar({ version: 'v3', auth: calendarAuth() });
   const list = (await cal.calendarList.list({ maxResults: 250 })).data.items || [];
+  const targets = new Map<string, { name: string; via: string }>();
+  for (const c of list) if (c.id) targets.set(c.id.toLowerCase(), { name: c.summaryOverride || c.summary || c.id, via: 'info@ calendar list' });
+  // Consultants' calendars aren't all in info@'s list (john.t@ wasn't, JT 9/11): also try each GHL assignee's email directly.
+  await ghlDone.catch(() => null);
+  const [assigned, users] = await Promise.all([
+    getDb()`SELECT DISTINCT assigned_user_id FROM review_meetings WHERE NOT deleted AND assigned_user_id IS NOT NULL
+      AND start_at >= ${start.toISOString()}::timestamptz AND start_at < ${end.toISOString()}::timestamptz`.catch(() => []),
+    ghlUsers().catch(() => [] as GhlUser[]),
+  ]);
+  const userById = new Map(users.map((u) => [u.id, u]));
+  for (const r of assigned) {
+    const u = userById.get(String(r.assigned_user_id));
+    if (u?.email && !targets.has(u.email)) targets.set(u.email, { name: u.name || u.email, via: 'GHL assignee' });
+  }
+  const checked: { id: string; name: string; via: string; status: string; error: string | null; events: number }[] = [];
   const byId = new Map<string, Record<string, unknown> & { calendars: string[] }>();
-  await pool(list, 6, async (c) => {
-    if (!c.id) return;
-    const calName = c.summaryOverride || c.summary || c.id;
+  await pool([...targets], 6, async ([calId, t]) => {
+    const calName = t.name;
     let pageToken: string | undefined;
+    let n = 0;
+    try {
     do {
       const r = await cal.events.list({
-        calendarId: c.id, q: 'Portfolio Review', singleEvents: true, maxResults: 2500, pageToken,
+        calendarId: calId, q: 'Portfolio Review', singleEvents: true, maxResults: 2500, pageToken,
         timeMin: start.toISOString(), timeMax: end.toISOString(),
       });
+      n += (r.data.items || []).length;
       for (const e of r.data.items || []) {
         if (!e.id || e.status === 'cancelled') continue;
         const prev = byId.get(e.id);
@@ -277,9 +303,20 @@ async function syncGcal(start: Date, end: Date, syncStart: string): Promise<numb
       }
       pageToken = r.data.nextPageToken || undefined;
     } while (pageToken);
+    } catch (e) {
+      const code = (e as { code?: number | string; status?: number }).code ?? (e as { status?: number }).status;
+      checked.push({ id: calId, name: t.name, via: t.via, status: String(code || 'error'), error: ((e as Error).message || '').slice(0, 300), events: 0 });
+      return;
+    }
+    checked.push({ id: calId, name: t.name, via: t.via, status: 'ok', error: null, events: n });
   });
   const rows = [...byId.values()];
   const sql = getDb();
+  await sql`INSERT INTO review_gcal_calendars (calendar_id, name, via, status, error, events, checked_at)
+    SELECT r.id, r.name, r.via, r.status, r.error, r.events, NOW()
+    FROM jsonb_to_recordset(${JSON.stringify(checked)}::jsonb) AS r(id text, name text, via text, status text, error text, events int)
+    ON CONFLICT (calendar_id) DO UPDATE SET name = EXCLUDED.name, via = EXCLUDED.via, status = EXCLUDED.status, error = EXCLUDED.error,
+      events = EXCLUDED.events, checked_at = EXCLUDED.checked_at`;
   for (let i = 0; i < rows.length; i += 300) {
     await sql`INSERT INTO review_gcal_events (event_id, start_at, all_day, start_raw, summary, description, location, organizer, attendees, calendars, synced_at)
       SELECT r.id, r.start_at::timestamptz, r.all_day, r.start_raw, r.summary, r.description, r.location, r.organizer, r.attendees, r.calendars, ${syncStart}::timestamptz
@@ -309,7 +346,8 @@ export async function syncRange(from: string, to: string, force = false, timings
     const t0 = Date.now();
     try { return await run; } finally { if (timings) timings[k] = Date.now() - t0; }
   };
-  const [g, c] = await Promise.allSettled([timed('ghlMs', syncGhl(start, end, syncStart)), timed('googleMs', syncGcal(start, end, syncStart))]);
+  const ghl = timed('ghlMs', syncGhl(start, end, syncStart));
+  const [g, c] = await Promise.allSettled([ghl, timed('googleMs', syncGcal(start, end, syncStart, ghl))]);
   const warnings: string[] = [];
   const msg = (r: PromiseRejectedResult) => (r.reason instanceof Error ? r.reason.message : String(r.reason));
   if (g.status === 'rejected') warnings.push(`GHL calendar not refreshed (showing saved data): ${msg(g)}`);

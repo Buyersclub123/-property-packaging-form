@@ -268,6 +268,18 @@ export interface ReviewData {
   gcalUnmatched: GcalEvent[];
   lastSync: { at: string; from: string; to: string } | null;
   warnings: string[];
+  /** Google calendars the sync tried, with readable / 403 / 404 status. */
+  gcalCalendars: GcalCalendarCheck[];
+}
+
+export interface GcalCalendarCheck {
+  id: string;
+  name: string;
+  via: string;
+  status: string;
+  error: string | null;
+  events: number;
+  checkedAt: string;
 }
 
 export interface ClientProperty {

@@ -5,7 +5,7 @@ import { meetingOwner, saveOutcome } from '@/lib/reviewOutcomes/record';
 import { lastSync, loadSettings, logReview } from '@/lib/reviewOutcomes/store';
 import { GHL_STATUS_FOR, ghlSetStatus } from '@/lib/reviewOutcomes/sync';
 import { ensureSchedule } from '@/lib/reviewOutcomes/schedule';
-import { syncRange } from '@/lib/reviewOutcomes/sync';
+import { gcalCalendars, syncRange } from '@/lib/reviewOutcomes/sync';
 import { isYmd, sydYmd, type ReviewData } from '@/lib/reviewOutcomes/types';
 
 export const dynamic = 'force-dynamic';
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const sheetWarning = mode === 'force' ? await ensureSchedule(true) : null;
     if (sheetWarning) syncWarnings.push(sheetWarning);
     const settings = await loadSettings();
-    const [loaded, sync] = await Promise.all([loadMeetings(access.viewer, from, to, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom), lastSync()]);
+    const [loaded, sync, calendars] = await Promise.all([loadMeetings(access.viewer, from, to, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom), lastSync(), gcalCalendars()]);
     const body: ReviewData = {
       viewer: access.viewer,
       settings,
@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
       gcalUnmatched: loaded.gcalUnmatched,
       lastSync: sync,
       warnings: [...syncWarnings, ...loaded.warnings],
+      gcalCalendars: calendars,
     };
     return json(body);
   } catch (e) {
