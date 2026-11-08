@@ -86,7 +86,7 @@ export const RULES: Rule[] = [
     re: /(titles?\s+(?:have|has)?\s*(?:now\s+)?(?:been\s+)?(?:issued|registered)|plan\s+(?:has\s+)?(?:now\s+)?(?:been\s+)?registered|registration\s+of\s+(?:the\s+)?(?:plan|titles?)|titles?\s+issued)/i,
     value: (m) => m[1],
   },
-  { key: 'titleReference', re: /(?:title\s+reference|folio\s+identifier|title\s+ref\.?|volume\s*\/\s*folio)\s*[:\-]?\s*([A-Z0-9/]{4,20})/i, value: (m) => m[1] },
+  { key: 'titleReference', re: /(?:title\s+reference|folio\s+identifier|title\s+ref\.?|volume\s*\/\s*folio)\s*[:\-]?\s*(?=[A-Z/]*\d)([A-Z0-9/]{4,20})\b/i, value: (m) => m[1] },
   { key: 'deposit', re: /deposit[^$\n]{0,40}\$\s?([\d,]{3,}(?:\.\d{2})?)/i, value: (m) => money(m[1]) },
   {
     key: 'finance',
