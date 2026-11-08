@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import EoiLinkModal, { EoiLinkPayload, EoiUpdatePayload } from './EoiLinkModal';
@@ -1155,6 +1155,25 @@ export default function DealSheetPage() {
   const sortBtnRef = useRef<HTMLButtonElement | null>(null);
   const sortDragOffset = useRef<{ dx: number; dy: number } | null>(null);
 
+  // Header stays on one row: 0 = full, 1 = group labels + record count move to tooltips,
+  // 2 = short / icon-only buttons, 3 = quick filters become a dropdown, 4 = page links become a dropdown, tighter gaps.
+  // Steps up before paint whenever the row would overflow; resets on resize / zoom.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerCompact, setHeaderCompact] = useState(0);
+  // No deps on purpose: re-measure after every render; bounded by the 0..4 cap.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (el && headerCompact < 4 && el.scrollWidth > el.clientWidth + 1) setHeaderCompact(headerCompact + 1);
+  });
+  // Declared after the measure so its reset wins; the measure then steps back up before paint.
+  useLayoutEffect(() => { setHeaderCompact(0); }, [quickFilter, sortLevels, pausedByIdle]);
+  useEffect(() => {
+    const reset = () => setHeaderCompact(0);
+    window.addEventListener('resize', reset);
+    return () => window.removeEventListener('resize', reset);
+  }, []);
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem('ds-sort-dialog-pos');
@@ -1345,24 +1364,40 @@ export default function DealSheetPage() {
   return (
     <div className={`h-screen flex flex-col ${t.bg} ${t.text}`}>
       {/* Header */}
-      <div className={`flex items-center justify-between px-4 py-2 ${t.headerBg} border-b ${t.cellBorder}`}>
-        <div className="flex items-center gap-4">
+      <div ref={headerRef} className={`flex flex-nowrap items-center justify-between ${headerCompact >= 4 ? 'gap-1' : 'gap-2'} px-4 py-2 ${t.headerBg} border-b ${t.cellBorder} [&>*]:shrink-0`}>
+        <div className={`flex items-center ${headerCompact >= 4 ? 'gap-2' : 'gap-4'}`}>
           <img
             src="/logo.jpg"
             alt="Buyers Club"
             className="h-7 w-auto"
           />
-          <h1 className="text-lg font-bold">Deal Sheet</h1>
-          <span className="text-xs opacity-60 select-none">
-            {sortedRecords.length} records
-          </span>
+          <h1 className="text-lg font-bold whitespace-nowrap" title={`Deal Sheet (${sortedRecords.length} records)`}>Deal Sheet</h1>
+          {headerCompact < 1 && (
+            <span className="text-xs opacity-60 select-none whitespace-nowrap">
+              {sortedRecords.length} records
+            </span>
+          )}
           <button
             onClick={() => setQuickCopyMode((v) => !v)}
             className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${quickCopyMode ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
             title="Create a quick property record — copy a row or start blank"
           >
-            Quick record
+            {headerCompact >= 2 ? 'Quick' : 'Quick record'}
           </button>
+          {headerCompact >= 4 ? (
+            <select
+              value=""
+              onChange={(e) => { if (e.target.value) window.open(e.target.value, '_blank', 'noopener,noreferrer'); }}
+              title="Open a Deal Sheet page"
+              className={`w-20 px-2 py-1 text-[10px] font-medium rounded ${duplicateLinkCount > 0 ? 'bg-amber-700 text-amber-100' : 'bg-gray-700 text-gray-300'}`}
+            >
+              <option value="">Pages</option>
+              <option value="/deal-sheet/reports">Reports</option>
+              <option value="/deal-sheet/unlinked-eoi">{`Unlinked EOI${unlinkedEoiCount > 0 ? ` (${unlinkedEoiCount})` : ''}`}</option>
+              <option value="/deal-sheet/duplicate-links">{`Duplicate Links${duplicateLinkCount > 0 ? ` (${duplicateLinkCount})` : ''}`}</option>
+              <option value="/deal-sheet/project-names">Admin · Projects</option>
+            </select>
+          ) : (<>
           <a
             href="/deal-sheet/reports"
             target="_blank"
@@ -1378,7 +1413,7 @@ export default function DealSheetPage() {
             className="px-2 py-1 text-[10px] font-medium rounded bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
             title="EOI/Exchanged records with no linked opportunity"
           >
-            Unlinked EOI{unlinkedEoiCount > 0 && ` (${unlinkedEoiCount})`}
+            {headerCompact >= 2 ? 'EOI' : 'Unlinked EOI'}{unlinkedEoiCount > 0 && ` (${unlinkedEoiCount})`}
           </a>
           <a
             href="/deal-sheet/duplicate-links"
@@ -1387,7 +1422,7 @@ export default function DealSheetPage() {
             className={`px-2 py-1 text-[10px] font-medium rounded transition-colors ${duplicateLinkCount > 0 ? 'bg-amber-700 text-amber-100 hover:bg-amber-600' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
             title="Properties where the same opportunity is linked to more than one property"
           >
-            Duplicate Links{duplicateLinkCount > 0 && ` (${duplicateLinkCount})`}
+            {headerCompact >= 2 ? 'Dups' : 'Duplicate Links'}{duplicateLinkCount > 0 && ` (${duplicateLinkCount})`}
           </a>
           <a
             href="/deal-sheet/project-names"
@@ -1396,13 +1431,33 @@ export default function DealSheetPage() {
             className="px-2 py-1 text-[10px] font-medium rounded transition-colors bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white"
             title="Admin: the Projects list that Property Records pick their project name from"
           >
-            Admin · Projects
+            {headerCompact >= 2 ? 'Projects' : 'Admin · Projects'}
           </a>
+          </>)}
         </div>
 
+        {headerCompact >= 3 ? (
+          <select
+            value={activeStatuses === '01,02' && ['all', 'available', 'eoi', 'awaiting_packager', 'awaiting_qa'].includes(quickFilter) ? quickFilter : ''}
+            onChange={(e) => { const k = e.target.value; if (!k) return; if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter(k); setSortLevels(QUICK_FILTER_SORT[k] || DEFAULT_SORT); }}
+            title="Quick filter (Live Records / Housekeeping)"
+            className={`w-32 px-2 py-1 rounded text-xs ${quickFilter !== 'all' ? 'bg-blue-600 text-white' : `${t.inputBg} ${t.headerText}`}`}
+          >
+            <option value="" disabled>Quick filter</option>
+            <optgroup label="Live Records">
+              <option value="all">All*</option>
+              <option value="available">Available</option>
+              <option value="eoi">EOI</option>
+            </optgroup>
+            <optgroup label="Housekeeping">
+              <option value="awaiting_packager">Awaiting Packager</option>
+              <option value="awaiting_qa">Awaiting QA</option>
+            </optgroup>
+          </select>
+        ) : (<>
         {/* Live Records */}
         <div className="flex items-center gap-1">
-          <span className="text-[10px] opacity-50 mr-1">Live Records</span>
+          {headerCompact < 1 && <span className="text-[10px] opacity-50 mr-1 whitespace-nowrap">Live Records</span>}
           <button
             onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('all'); setSortLevels(QUICK_FILTER_SORT.all); }}
             className={`px-2 py-1 rounded text-xs ${
@@ -1437,7 +1492,7 @@ export default function DealSheetPage() {
 
         {/* Housekeeping */}
         <div className="flex items-center gap-1">
-          <span className="text-[10px] opacity-50 mr-1">Housekeeping</span>
+          {headerCompact < 1 && <span className="text-[10px] opacity-50 mr-1">Housekeeping</span>}
           <button
             onClick={() => { if (activeStatuses !== '01,02') { setActiveStatuses('01,02'); fetchData('01,02'); } setQuickFilter('awaiting_packager'); setSortLevels(QUICK_FILTER_SORT.awaiting_packager); }}
             className={`px-2 py-1 rounded text-xs ${
@@ -1459,6 +1514,7 @@ export default function DealSheetPage() {
             Awaiting QA
           </button>
         </div>
+        </>)}
 
         {/* Clear Filters */}
         <button
@@ -1476,8 +1532,9 @@ export default function DealSheetPage() {
               ? 'bg-amber-600 text-white border-amber-700'
               : `${t.inputBg} ${t.headerText} ${t.inputBorder}`
           }`}
+          title="Clear Filters"
         >
-          Clear Filters
+          {headerCompact >= 2 ? '⊘' : 'Clear Filters'}
         </button>
 
         {/* Sort dialog trigger */}
@@ -1491,7 +1548,7 @@ export default function DealSheetPage() {
           }`}
           title="Sort by one or more columns"
         >
-          Sort{sortLevels.length > 1 ? ` (${sortLevels.length})` : ''} ▼
+          {headerCompact >= 2 ? '⇅' : 'Sort'}{sortLevels.length > 1 ? ` (${sortLevels.length})` : ''} ▼
         </button>
         {/* Clear Sort — resets to active filter's default sort */}
         {JSON.stringify(sortLevels) !== JSON.stringify(QUICK_FILTER_SORT[quickFilter] || DEFAULT_SORT) && (
@@ -1500,7 +1557,7 @@ export default function DealSheetPage() {
             className="px-2 py-1 rounded text-xs hover:opacity-80 border bg-amber-600 text-white border-amber-700"
             title="Reset sort to this view's default"
           >
-            Clear Sort
+            {headerCompact >= 2 ? '⇅✕' : 'Clear Sort'}
           </button>
         )}
 
@@ -1509,8 +1566,9 @@ export default function DealSheetPage() {
           <button
             onClick={() => setShowOtherRecords(!showOtherRecords)}
             className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80 border ${t.inputBorder}`}
+            title="Other Records"
           >
-            Other Records ▼
+            {headerCompact >= 2 ? 'Other' : 'Other Records'} ▼
           </button>
           {showOtherRecords && (
             <div className={`absolute top-full right-0 mt-1 w-48 ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
@@ -1555,8 +1613,9 @@ export default function DealSheetPage() {
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="px-2 py-1 bg-green-700 text-white rounded text-xs hover:bg-green-600"
+              title="Export"
             >
-              Export ▼
+              {headerCompact >= 2 ? '⤓' : 'Export'} ▼
             </button>
             {showExportMenu && (
               <div className={`absolute top-full right-0 mt-1 w-40 ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
@@ -1654,8 +1713,9 @@ export default function DealSheetPage() {
             <button
               onClick={() => setShowColumnMenu(!showColumnMenu)}
               className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600"
+              title="Columns"
             >
-              Columns
+              {headerCompact >= 2 ? '▦' : 'Columns'}
             </button>
             {showColumnMenu && (
               <div className="absolute top-full right-0 mt-1 w-52 bg-gray-800 border border-gray-600 rounded shadow-lg z-50 p-2 max-h-80 overflow-y-auto">
@@ -1711,8 +1771,9 @@ export default function DealSheetPage() {
                   ? 'bg-green-600 text-white'
                   : `${t.inputBg} ${t.headerText} hover:opacity-80`
               }`}
+              title="New records"
             >
-              New ({newHoursWindow}h) ▼
+              {headerCompact >= 2 ? `+${newHoursWindow}h` : `New (${newHoursWindow}h)`} ▼
             </button>
             {showNewMenu && (
               <div className={`absolute top-full right-0 mt-1 w-32 ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
@@ -1744,10 +1805,10 @@ export default function DealSheetPage() {
           )}
           {pausedByIdle && (
             <span className="px-2 py-1 rounded text-xs bg-amber-600 text-white" title="No activity for 30 minutes. Move the mouse or press a key to resume.">
-              Auto-refresh paused — click to resume
+              {headerCompact >= 2 ? 'Paused' : 'Auto-refresh paused — click to resume'}
             </span>
           )}
-          {(lastRefresh || fetchedAt) && (
+          {headerCompact < 2 && (lastRefresh || fetchedAt) && (
             <span
               className="text-xs opacity-50"
               title="Last successful sync with GHL (polls every 15s)"
@@ -1760,15 +1821,16 @@ export default function DealSheetPage() {
             className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
             title="Force a fresh fetch from GHL (bypasses cache)"
           >
-            {refreshing ? '...' : 'Refresh'}
+            {refreshing ? '...' : headerCompact >= 2 ? '↻' : 'Refresh'}
           </button>
 
           {/* Theme toggle */}
           <button
             onClick={() => { const v = theme === 'dark' ? 'light' : 'dark'; setTheme(v); localStorage.setItem('dealsheet-theme', v); }}
             className={`px-2 py-1 rounded text-xs ${t.inputBg} ${t.headerText} hover:opacity-80`}
+            title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
           >
-            {theme === 'dark' ? 'Light' : 'Dark'}
+            {headerCompact >= 2 ? (theme === 'dark' ? '☀' : '☾') : theme === 'dark' ? 'Light' : 'Dark'}
           </button>
 
           {/* Settings */}
