@@ -4,6 +4,7 @@ import { getMessage } from '@/lib/inboxMining/gmail';
 import { googleErrorMessage } from '@/lib/inboxMining/google';
 import { fetchOpp, fetchRecord, fetchStageNames, recordText, type Opp, type PropRecord } from '@/lib/inboxMining/ghl';
 import type { MatchResult, Suggestion } from '@/lib/inboxMining/types';
+import { norm } from '@/lib/inboxMining/lag';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       }
     }
 
-    const current = suggestions.map((s) => {
+    const currentAll = suggestions.map((s) => {
       if (s.target === 'action') return { value: null, note: 'expected action, no field write' };
       if (s.notInGhl) return { value: null, note: 'field not in GHL yet' };
       if (s.target === 'opportunity') {
@@ -53,6 +54,13 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       if (!rec) return { value: null, note: 'no linked Property Record' };
       return { value: recordText(rec, s.fieldKey) };
     });
+    // JT 9/11: a suggestion whose value already equals GHL changes nothing, so it is hidden.
+    const keep = suggestions.map((s, i) => {
+      const v = currentAll[i].value;
+      return v === null || s.target === 'action' || norm(String(v)) !== norm(String(s.proposed ?? ''));
+    });
+    item.suggestions = suggestions.filter((_, i) => keep[i]);
+    const current = currentAll.filter((_, i) => keep[i]);
 
     const memory = await getThreadMemory(item.mailbox, item.thread_id);
     return NextResponse.json({
