@@ -121,6 +121,9 @@ async function create(): Promise<void> {
   // GHL createdBy.userId: equal to the assigned consultant = self-booked (no outcome needed).
   await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS created_by TEXT`;
   await sql`ALTER TABLE review_contacts ADD COLUMN IF NOT EXISTS lead_source TEXT, ADD COLUMN IF NOT EXISTS referrer TEXT, ADD COLUMN IF NOT EXISTS source_fetched_at TIMESTAMPTZ`;
+  // GHL attribution (last / first touch) and the Meeting source captured from it at sync.
+  await sql`ALTER TABLE review_contacts ADD COLUMN IF NOT EXISTS last_attr JSONB, ADD COLUMN IF NOT EXISTS first_attr JSONB, ADD COLUMN IF NOT EXISTS attr_fetched_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS meeting_source TEXT, ADD COLUMN IF NOT EXISTS meeting_source_level TEXT, ADD COLUMN IF NOT EXISTS meeting_source_detail TEXT, ADD COLUMN IF NOT EXISTS meeting_source_at TIMESTAMPTZ`;
   await sql`CREATE TABLE IF NOT EXISTS review_outcome_log (
     id SERIAL PRIMARY KEY,
     at TIMESTAMPTZ DEFAULT NOW(),

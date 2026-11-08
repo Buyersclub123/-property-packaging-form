@@ -3,16 +3,17 @@ import { ghlFetch } from '@/lib/ghlFetch';
 import { getRedisClient } from '@/lib/redis';
 import { ensureReviewTables } from './store';
 import { customValue } from './sync';
-import { MIN_YMD, type ReviewViewer } from './types';
+import { MIN_YMD, NEW_LEAD_CALENDAR_ID, sydYmd, type ReviewViewer } from './types';
+import { NO_MEETING_SOURCE } from './meetingSource';
 
 // Read-only: client sign-ups from GHL. GHL keeps one opportunity per client and moves it across pipelines, so a
 // sign-up = an opportunity in a post-sale pipeline with "Date signed up" set. Lead source = the contact's Lead Source.
 
-export interface Signup { oppId: string; name: string; contactId: string; client: string; signed: string; assignedTo: string; leadSource: string | null; referrer: string | null }
+export interface Signup { oppId: string; name: string; contactId: string; client: string; signed: string; assignedTo: string; leadSource: string | null; referrer: string | null; meetingSource: string | null }
 export interface SignupsData { at: string; signups: Signup[] }
 
 const POST_SALE = /SALE ADMIN|PROPERTY TEAM|FINANCE|CONSTRUCTION|SMSF SETUP|PORTFOLIO REVIEW|ACTIVE CLIENTS/i;
-const CACHE_KEY = 'review:signups:v2';
+const CACHE_KEY = 'review:signups:v3';
 const CACHE_SEC = 15 * 60;
 const MAX_CONTACT_FETCH = 400;
 
@@ -62,7 +63,7 @@ async function build(): Promise<SignupsData> {
         if (!signed || signed < MIN_YMD) continue;
         // One client signing several opps (IP1 / IP2) on the same day is one sign-up.
         const key = `${contactId || o.id}|${signed}`;
-        if (!byKey.has(key)) byKey.set(key, { oppId: o.id, name: o.name || '', contactId, client: o.contact?.name || o.name || '', signed, assignedTo: o.assignedTo || '', leadSource: null, referrer: null });
+        if (!byKey.has(key)) byKey.set(key, { oppId: o.id, name: o.name || '', contactId, client: o.contact?.name || o.name || '', signed, assignedTo: o.assignedTo || '', leadSource: null, referrer: null, meetingSource: null });
       }
       if (list.length < 100 || !j?.meta?.startAfterId) break;
       afterId = j.meta.startAfterId;
@@ -105,10 +106,23 @@ async function build(): Promise<SignupsData> {
         ON CONFLICT (contact_id) DO UPDATE SET lead_source = EXCLUDED.lead_source, referrer = EXCLUDED.referrer, source_fetched_at = NOW()`;
     }
   }
+  // Meeting source = that of the client's last Presentation Meeting One on or before signing.
+  const met = ids.length
+    ? await sql`SELECT contact_id, start_at, meeting_source FROM review_meetings
+        WHERE NOT deleted AND calendar_id = ${NEW_LEAD_CALENDAR_ID}
+          AND contact_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)) ORDER BY start_at`
+    : [];
+  const meetings = new Map<string, { ymd: string; src: string | null }[]>();
+  for (const r of met) {
+    const k = String(r.contact_id);
+    meetings.set(k, [...(meetings.get(k) || []), { ymd: sydYmd(r.start_at as string), src: (r.meeting_source as string | null) || null }]);
+  }
   for (const s of signups) {
     const x = src.get(s.contactId);
     s.leadSource = x?.lead ?? null;
     s.referrer = x?.ref ?? null;
+    const before = (meetings.get(s.contactId) || []).filter((m) => m.ymd <= s.signed);
+    s.meetingSource = before.length ? before[before.length - 1].src : NO_MEETING_SOURCE;
   }
   return { at: new Date().toISOString(), signups };
 }

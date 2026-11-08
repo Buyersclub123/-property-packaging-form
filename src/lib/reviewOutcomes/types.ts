@@ -1,4 +1,5 @@
 // Portfolio Review outcomes tool (portfolio backlog item 14) - shared types. Phase 1 stores outcomes in the app DB only.
+import type { MeetingSourceLevel } from './meetingSource';
 
 export const MIN_YMD = '2024-07-01';
 export const TOOL_HREF = '/team/resources/new-initiatives/review-outcomes';
@@ -169,7 +170,7 @@ export function dataSourceLines(s: Pick<ReviewSettings, 'ghlOnlyFrom' | 'schedul
     `Booker: the Call Centre user who created the GHL appointment, else a Call Centre person on the Google invite, else the Agent on ${copy}${until}. Self-booked = the consultant created it in GHL.`,
     `Sat / DNQ: the outcome recorded in this tool, else ${copy}'s Sat? column for Presentation Meeting One${until}, else the GHL status. Some Portfolio Review outcomes${until} come from a one-off import of the sheet.`,
     `New Lead vs Referral and Google Meet vs face-to-face: ${copy}${until}, from March 2026; GHL has no appointment field for them yet, so otherwise Unknown.`,
-    'Lead Source Stats (Presentation Meeting One): the GHL contact\'s Lead Source field, re-read from GHL weekly. "Referrer only" = Lead Source blank but Referrer filled in; "Not recorded in GHL" = both blank. Its Sold columns come from GHL, not the Tracking sheet: a sign-up = an opportunity in a post-sale pipeline (Sale Administration onwards) with "Date signed up" set. "Sold" = sign-ups dated in the period; "Sold from these meetings" = clients met in the period who have signed up since.',
+    'Meeting Source Stats (Presentation Meeting One): the GHL contact\'s latest attribution (session source · campaign), else its first attribution, else its Lead Source field; the tooltip shows which. Captured on the meeting at the first sync after it is booked; meetings already cached when this was added use the attribution as read then. "Not recorded in GHL" = none of these. Its Sold columns come from GHL, not the Tracking sheet: a sign-up = an opportunity in a post-sale pipeline (Sale Administration onwards) with "Date signed up" set. "Sold" = sign-ups dated in the period, by the Meeting source of the client\'s last Presentation Meeting One on or before signing; "Sold from these meetings" = clients met in the period who have signed up since.',
     'Sold, Cancelled and Revenue: Buyers Club Tracking sheet (read-only, by date signed). Targets: Settings. Sheet check: the team\'s STATS sheet, for comparison only.',
   ];
 }
@@ -215,6 +216,10 @@ export interface ReviewMeeting {
   leadSource: string | null;
   /** GHL contact's Referrer field (free text); null = blank. */
   referrer: string | null;
+  /** Captured at sync from the contact's attribution (see meetingSource.ts); null = nothing recorded. */
+  meetingSource: string | null;
+  meetingSourceLevel: MeetingSourceLevel | null;
+  meetingSourceDetail: string | null;
   contactLink: string;
   consultantId: string;
   consultant: string;

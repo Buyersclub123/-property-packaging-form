@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, DISCREPANCY_MINUTES, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
 import { demoData } from '@/lib/reviewOutcomes/demo';
+import { meetingSourceTitle } from '@/lib/reviewOutcomes/meetingSource';
 import MorePanel from '@/components/reviewOutcomes/MorePanel';
 import ListsView from '@/components/reviewOutcomes/ListsView';
 import SettingsView from '@/components/reviewOutcomes/SettingsView';
@@ -28,7 +29,7 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
   const responded = !!m.outcome;
   const srcLabel = m.outcomeSource === 'tool' ? 'recorded in this tool' : m.outcomeSource === 'schedule' ? 'from calendar sheet' : m.outcomeSource === 'ghl' ? 'from GHL' : 'from sheet';
   return (
-    <div className={`grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 border-t px-3 py-2 first:border-t-0 md:grid-cols-[72px_minmax(0,1.1fr)_150px_minmax(0,1fr)_680px] ${responded ? 'bg-green-50' : ''}`}>
+    <div className={`grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 border-t px-3 py-2 first:border-t-0 md:grid-cols-[72px_minmax(0,1.1fr)_150px_minmax(0,0.9fr)_minmax(0,1fr)_680px] ${responded ? 'bg-green-50' : ''}`}>
       <div className="text-sm font-semibold text-brand-charcoal">
         {time(m.start)}
         {responded && <div className="text-2xl leading-none text-green-600" title={`Outcome ${srcLabel}`}>✔</div>}
@@ -44,6 +45,10 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
         </div>
       </div>
       <div className="col-start-2 min-w-0 truncate text-sm text-gray-700 md:col-start-auto" title="GHL assigned consultant">{m.consultant}</div>
+      <div className="col-start-2 min-w-0 text-xs md:col-start-auto" title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>
+        <div className="text-[11px] text-gray-400">Meeting source{m.meetingSourceLevel && m.meetingSourceLevel !== 'last' ? ` (${m.meetingSourceLevel === 'first' ? 'first touch' : 'Lead Source'})` : ''}</div>
+        <div className={`truncate ${m.meetingSource ? 'text-gray-700' : 'text-gray-400'}`}>{m.meetingSource || 'Not recorded'}</div>
+      </div>
       <div className="col-start-2 min-w-0 text-xs md:col-start-auto">
         {g ? (
           <div className={off ? 'text-red-700' : 'text-gray-600'} title={`Matched on ${g.basis}`}>

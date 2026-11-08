@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { ensureReviewTables } from './store';
 import { MIN_YMD, utcCover } from './types';
+import { meetingSourceOf, type Attribution } from './meetingSource';
 
 // Read-only refresh of the review-outcomes cache: GHL calendar events + contacts (GET only) and Google Calendar
 // 'Portfolio Review' events seen by info@ (calendar.readonly). Nothing is written to GHL or Google.
@@ -118,6 +119,12 @@ interface GhlEvent {
   createdBy?: { userId?: string; source?: string };
 }
 
+function attr(a: Attribution): Attribution {
+  if (!a || typeof a !== 'object') return null;
+  const { sessionSource = null, campaign = null, utmCampaign = null, utmSource = null, utmMedium = null, url = null } = a;
+  return { sessionSource, campaign, utmCampaign, utmSource, utmMedium, url };
+}
+
 async function syncGhl(start: Date, end: Date, syncStart: string): Promise<number> {
   const { locationId } = ghlEnv();
   const chunks: { cal: (typeof REVIEW_CALENDARS)[number]; s: number; e: number }[] = [];
@@ -165,11 +172,11 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
 
   const ids = [...new Set(rows.map((r) => r.contact_id as string | null).filter((x): x is string => !!x))];
   const have = ids.length
-    ? await sql`SELECT contact_id FROM review_contacts WHERE source_fetched_at > NOW() - INTERVAL '7 days'
+    ? await sql`SELECT contact_id FROM review_contacts WHERE source_fetched_at > NOW() - INTERVAL '7 days' AND attr_fetched_at IS NOT NULL
         AND contact_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))`
     : [];
   const known = new Set(have.map((r) => String(r.contact_id)));
-  // New contacts, plus Lead Source re-read weekly; capped so one refresh stays short.
+  // New contacts and contacts without attribution yet, plus Lead Source re-read weekly; capped so one refresh stays short.
   const missing = ids.filter((id) => !known.has(id)).slice(0, 400);
   const fields = missing.length
     ? await ghlGet<{ customFields?: { id: string; fieldKey?: string }[] }>(`/locations/${locationId}/customFields?model=contact`, '2021-07-28')
@@ -177,9 +184,10 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
     : [];
   const leadId = fields.find((f) => f.fieldKey === 'contact.lead_source')?.id;
   const refId = fields.find((f) => f.fieldKey === 'contact.referrer')?.id;
-  const contacts: { id: string; name: string; email: string; phones: string[]; lead_source: string | null; referrer: string | null; src_ok: boolean }[] = [];
+  const contacts: { id: string; name: string; email: string; phones: string[]; lead_source: string | null; referrer: string | null; src_ok: boolean; last_attr: Attribution; first_attr: Attribution }[] = [];
+  // Only the fields Meeting source needs (GHL attribution also carries IP / user agent, not kept).
   await pool(missing, 5, async (id) => {
-    type C = { contactName?: string; firstName?: string; lastName?: string; email?: string; phone?: string; additionalPhones?: (string | { phone?: string })[]; customFields?: { id: string; value?: unknown }[] };
+    type C = { contactName?: string; firstName?: string; lastName?: string; email?: string; phone?: string; additionalPhones?: (string | { phone?: string })[]; customFields?: { id: string; value?: unknown }[]; attributionSource?: Attribution; lastAttributionSource?: Attribution };
     // One unreadable contact (GHL answers 400 for some merged / deleted ids) must not stop the rest.
     const k = await ghlGet<{ contact?: C }>(`/contacts/${id}`, '2021-07-28').then((r) => r.body?.contact, () => undefined);
     contacts.push(
@@ -192,17 +200,37 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
             lead_source: customValue(k.customFields, leadId),
             referrer: customValue(k.customFields, refId),
             src_ok: !!leadId,
+            last_attr: attr(k.lastAttributionSource),
+            first_attr: attr(k.attributionSource),
           }
-        : { id, name: '(contact not found)', email: '', phones: [], lead_source: null, referrer: null, src_ok: true },
+        : { id, name: '(contact not found)', email: '', phones: [], lead_source: null, referrer: null, src_ok: true, last_attr: null, first_attr: null },
     );
   });
   for (let i = 0; i < contacts.length; i += 500) {
-    await sql`INSERT INTO review_contacts (contact_id, name, email, phones, lead_source, referrer, source_fetched_at)
-      SELECT r.id, r.name, r.email, r.phones, r.lead_source, r.referrer, CASE WHEN r.src_ok THEN NOW() END
+    await sql`INSERT INTO review_contacts (contact_id, name, email, phones, lead_source, referrer, source_fetched_at, last_attr, first_attr, attr_fetched_at)
+      SELECT r.id, r.name, r.email, r.phones, r.lead_source, r.referrer, CASE WHEN r.src_ok THEN NOW() END, r.last_attr, r.first_attr, NOW()
       FROM jsonb_to_recordset(${JSON.stringify(contacts.slice(i, i + 500))}::jsonb)
-        AS r(id text, name text, email text, phones jsonb, lead_source text, referrer text, src_ok boolean)
+        AS r(id text, name text, email text, phones jsonb, lead_source text, referrer text, src_ok boolean, last_attr jsonb, first_attr jsonb)
       ON CONFLICT (contact_id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, phones = EXCLUDED.phones,
-        lead_source = EXCLUDED.lead_source, referrer = EXCLUDED.referrer, source_fetched_at = EXCLUDED.source_fetched_at, fetched_at = NOW()`;
+        lead_source = EXCLUDED.lead_source, referrer = EXCLUDED.referrer, source_fetched_at = EXCLUDED.source_fetched_at,
+        last_attr = EXCLUDED.last_attr, first_attr = EXCLUDED.first_attr, attr_fetched_at = EXCLUDED.attr_fetched_at, fetched_at = NOW()`;
+  }
+
+  // Meeting source: captured once per meeting, from the contact as read at the first sync after booking.
+  const pending = ids.length
+    ? await sql`SELECT m.appointment_id, c.last_attr, c.first_attr, c.lead_source FROM review_meetings m
+        JOIN review_contacts c ON c.contact_id = m.contact_id
+        WHERE m.meeting_source_at IS NULL AND c.attr_fetched_at IS NOT NULL
+          AND m.contact_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))`
+    : [];
+  const captured = pending.map((r) => {
+    const s = meetingSourceOf(r.last_attr as Attribution, r.first_attr as Attribution, (r.lead_source as string | null) || null);
+    return { id: String(r.appointment_id), label: s?.label ?? null, level: s?.level ?? null, detail: s?.detail || null };
+  });
+  for (let i = 0; i < captured.length; i += 500) {
+    await sql`UPDATE review_meetings m SET meeting_source = r.label, meeting_source_level = r.level, meeting_source_detail = r.detail, meeting_source_at = NOW()
+      FROM jsonb_to_recordset(${JSON.stringify(captured.slice(i, i + 500))}::jsonb) AS r(id text, label text, level text, detail text)
+      WHERE m.appointment_id = r.id`;
   }
   return rows.length;
 }

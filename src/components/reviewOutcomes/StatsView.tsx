@@ -6,6 +6,7 @@ import { aud, emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow
 import { dmy, weekday } from './ui';
 import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
 import type { Signup, SignupsData } from '@/lib/reviewOutcomes/signups';
+import { MEETING_SOURCE_LEVEL_LABEL, meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from '@/lib/reviewOutcomes/meetingSource';
 import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
 import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
 
@@ -26,14 +27,14 @@ function V({ children }: { children: React.ReactNode }) {
 }
 
 const NOT_RECORDED = 'Not recorded in GHL';
-const REFERRER_ONLY = 'Referrer only (no Lead Source)';
-const leadSourceKey = (m: ReviewMeeting) => m.leadSource || (m.referrer ? REFERRER_ONLY : NOT_RECORDED);
+const sourceKey = (m: ReviewMeeting) => m.meetingSource || NOT_RECORDED;
+const LEVELS: MeetingSourceLevel[] = ['last', 'first', 'lead'];
 
-function LeadSourceTable({ list, signups, signupsErr, from, to, pick }: { list: ReviewMeeting[]; signups: Signup[] | null; signupsErr: string | null; from: string; to: string; pick: (title: string, meetings: ReviewMeeting[]) => void }) {
+function MeetingSourceTable({ list, signups, signupsErr, from, to, pick }: { list: ReviewMeeting[]; signups: Signup[] | null; signupsErr: string | null; from: string; to: string; pick: (title: string, meetings: ReviewMeeting[]) => void }) {
   const nl = list.filter((m) => m.kind === 'NL');
   const groups = new Map<string, ReviewMeeting[]>();
   for (const m of nl) {
-    const k = leadSourceKey(m);
+    const k = sourceKey(m);
     groups.set(k, [...(groups.get(k) || []), m]);
   }
   // Sold = GHL sign-ups dated in the period (any meeting date); Sold from these meetings = clients met in the period who
@@ -43,22 +44,24 @@ function LeadSourceTable({ list, signups, signupsErr, from, to, pick }: { list: 
   for (const s of signups || []) {
     if (s.contactId) signedBy.set(s.contactId, [...(signedBy.get(s.contactId) || []), s.signed]);
     if (s.signed < from || s.signed > to) continue;
-    const k = s.leadSource || (s.referrer ? REFERRER_ONLY : NOT_RECORDED);
+    const k = s.meetingSource || NOT_RECORDED;
     sold.set(k, (sold.get(k) || 0) + 1);
     if (!groups.has(k)) groups.set(k, []);
   }
   const soldTotal = [...sold.values()].reduce((a, b) => a + b, 0);
   const soldFrom = (ms: ReviewMeeting[]) => new Set(ms.filter((m) => (signedBy.get(m.contactId) || []).some((d) => d >= m.ymd)).map((m) => m.contactId)).size;
   const soldCell = (v: number) => <td className={TD}>{signups ? v : signupsErr ? '!' : '\u2026'}</td>;
-  const last = (k: string) => (k === NOT_RECORDED ? 2 : k === REFERRER_ONLY ? 1 : 0);
+  const last = (k: string) => (k === NO_MEETING_SOURCE ? 2 : k === NOT_RECORDED ? 1 : 0);
+  const levelSplit = (ms: ReviewMeeting[]) => LEVELS.map((l) => [l, ms.filter((m) => m.meetingSourceLevel === l).length] as const)
+    .filter(([, n]) => n).map(([l, n]) => `${MEETING_SOURCE_LEVEL_LABEL[l].split(' - ')[0]}: ${n}`).join('\n');
   const rows = [...groups.entries()].sort((a, b) => last(a[0]) - last(b[0]) || b[1].length - a[1].length);
   const missing = groups.get(NOT_RECORDED)?.length || 0;
   const line = (name: string, ms: ReviewMeeting[], s: number, cls = '') => {
     const sat = ms.filter(isSat).length;
     return (
       <tr key={name} className={cls}>
-        <td className={TDN}>{name}</td>
-        <td className={TD}><button className="text-blue-700 hover:underline" onClick={() => pick(`Lead source: ${name}`, ms)}>{ms.length}</button></td>
+        <td className={TDN} title={levelSplit(ms) || undefined}>{name}</td>
+        <td className={TD}><button className="text-blue-700 hover:underline" onClick={() => pick(`Meeting source: ${name}`, ms)}>{ms.length}</button></td>
         <td className={TD}>{pct(ms.length, nl.length)}</td>
         <td className={TD}>{sat}</td>
         <td className={TD}>{pct(sat, ms.length)}</td>
@@ -70,15 +73,15 @@ function LeadSourceTable({ list, signups, signupsErr, from, to, pick }: { list: 
   };
   return (
     <div className="min-w-0 overflow-x-auto rounded border bg-white">
-      <Title>Lead Source Stats</Title>
+      <Title>Meeting Source Stats</Title>
       <div className="px-2 py-1 text-xs text-gray-700">
-        Presentation Meeting One only, from the GHL contact&apos;s Lead Source.{' '}
-        <span className={missing ? 'font-semibold text-red-700' : ''}>No lead source in GHL: {missing} of {nl.length} ({pct(missing, nl.length)}).</span>{' '}
-        Sold = GHL sign-ups (Date signed up) in the period; Sold from these meetings = clients met in the period who have signed up since.
+        Presentation Meeting One only, by Meeting source: the GHL contact&apos;s latest attribution, else first attribution, else Lead Source (hover a source for the split).{' '}
+        <span className={missing ? 'font-semibold text-red-700' : ''}>No meeting source in GHL: {missing} of {nl.length} ({pct(missing, nl.length)}).</span>{' '}
+        Sold = GHL sign-ups (Date signed up) in the period, by the source of the client&apos;s last Presentation Meeting One before signing; Sold from these meetings = clients met in the period who have signed up since.
         {signupsErr && <span className="text-red-700"> Sign-ups not loaded: {signupsErr}</span>}
       </div>
       <table className="w-full border-collapse">
-        <thead><tr>{['Lead source', 'Booked', '% of Booked', 'Sat', 'Sat %', 'DNQ', 'Sold', 'Sold from these meetings'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Meeting source', 'Booked', '% of Booked', 'Sat', 'Sat %', 'DNQ', 'Sold', 'Sold from these meetings'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
         <tbody>
           {rows.map(([k, ms]) => line(k, ms, sold.get(k) || 0, k === NOT_RECORDED ? 'font-semibold text-red-700' : ''))}
           {line('TOTAL', nl, soldTotal, `font-semibold ${SHADE}`)}
@@ -847,12 +850,13 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
               <button onClick={() => setDrill(null)} className="rounded border px-2 py-0.5 text-sm hover:bg-gray-50">Close</button>
             </div>
             <table className="w-full border-collapse text-sm">
-              <thead><tr>{['Date', 'Client', 'Consultant', 'Booker', 'Booked as', 'GHL', 'Outcome'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+              <thead><tr>{['Date', 'Client', 'Meeting source', 'Consultant', 'Booker', 'Booked as', 'GHL', 'Outcome'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
               <tbody>
                 {drill.meetings.map((m) => (
                   <tr key={m.id}>
                     <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
                     <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
+                    <td className={TDN} title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>{m.meetingSource || NOT_RECORDED}</td>
                     <td className={TDN}>{m.consultant}</td>
                     <td className={TDN} title={m.bookerFrom ? `Booker from ${m.bookerFrom === 'ghl' ? 'GHL (created the appointment)' : m.bookerFrom === 'invite' ? 'the Google invite attendees' : m.bookerFrom === 'self' ? 'GHL: the consultant created it (self-booked)' : 'the calendar schedule sheet'}` : m.createdByEmail ? `No Call Centre booker; GHL creator ${m.createdByEmail}` : undefined}>{m.booker || ''}</td>
                     <td className={TDN}>{m.mode}</td>
@@ -928,7 +932,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
           <ChartCard title="Consultants - Booked vs Sat"><BarChart rows={sales.rows} /></ChartCard>
           <ChartCard title="Call Centre - Booked vs Sat"><BarChart rows={cc.rows} /></ChartCard>
         </div>
-        <LeadSourceTable list={list} signups={demoData ? [] : signups} signupsErr={signupsErr} from={r.from} to={r.to} pick={(title, meetings) => setDrill({ title, meetings })} />
+        <MeetingSourceTable list={list} signups={demoData ? [] : signups} signupsErr={signupsErr} from={r.from} to={r.to} pick={(title, meetings) => setDrill({ title, meetings })} />
       </div>
     </div>
   );
