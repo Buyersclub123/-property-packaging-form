@@ -1,6 +1,7 @@
 // Lag-sheet demonstration (JT 9/11): reads N days of mail (default 90) in all four mailboxes, runs the Geoscape
 // lot + plan pass, then rewrites the sheet on G:. Reads Gmail/GHL only; writes only our DB and the .xlsx.
 // Usage: node scripts/lag-sheet-run.mjs [days=90] [--sheet-only]
+import fs from 'fs';
 import ExcelJS from 'exceljs';
 
 const days = parseInt(process.argv[2] || '90', 10);
@@ -99,11 +100,13 @@ let written = OUT;
 try {
   await wb.xlsx.writeFile(OUT);
 } catch (e) {
-  // Open in Excel: write a dated copy beside it rather than lose the run.
+  // Open in Excel: save the next free version (v2, v3...) beside it rather than lose the run.
   if (e.code !== 'EBUSY') throw e;
-  written = OUT.replace(/\.xlsx$/, ` (refreshed ${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}).xlsx`);
+  let v = 2;
+  while (fs.existsSync(OUT.replace(/\.xlsx$/, ` v${v}.xlsx`))) v++;
+  written = OUT.replace(/\.xlsx$/, ` v${v}.xlsx`);
   await wb.xlsx.writeFile(written);
-  console.log('sheet is open in Excel; wrote a copy instead');
+  console.log(`sheet is open in Excel; saved as v${v}`);
 }
 const byType = {};
 for (const r of rows) byType[r.type] = (byType[r.type] || 0) + 1;
