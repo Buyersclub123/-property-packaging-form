@@ -197,6 +197,9 @@ export async function buildLagRows(): Promise<LagRow[]> {
     } else if (f.target === 'property_record') {
       human = r ? recordText(r, field) : '';
     }
+    // JT 9/11: a person may record the build stage as the opportunity's pipeline stage instead of the PR dropdown.
+    const viaPipeline = field === 'construction_stage' && !!o && !same(mined, human) && same(mined, o.stageName);
+    if (viaPipeline) human = o!.stageName;
 
     // When a person entered it: CTRT edit log first, then the change-date field, then the stage-change time.
     let updated: Date | null = null, src = '', atReceipt = '';
@@ -206,6 +209,8 @@ export async function buildLagRows(): Promise<LagRow[]> {
     const lastBefore = [...log].reverse().find((e) => new Date(e.at as string) < received);
     if (after) {
       updated = new Date(after.at as string); src = 'CTRT edit log'; atReceipt = show(after.old_value);
+    } else if (viaPipeline && o?.lastStageChangeAt) {
+      updated = new Date(o.lastStageChangeAt); src = 'GHL last stage change (opportunity pipeline stage)';
     } else if (CHANGE_DATE[field]) {
       const c = CHANGE_DATE[field];
       const d = c.target === 'opportunity' ? (o ? show(o.fields[c.key]) : '') : r ? recordText(r, c.key) : '';
