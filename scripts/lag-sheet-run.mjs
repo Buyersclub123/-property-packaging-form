@@ -62,6 +62,32 @@ for (const r of rows)
 ws.getRow(1).font = { bold: true };
 ws.views = [{ state: 'frozen', ySplit: 1 }];
 ws.autoFilter = { from: 'A1', to: 'P1' };
+// Work done by the tool, per week (by email received) and for the last 7 days.
+const sydDay = (iso) => new Date(new Date(iso).toLocaleString('en-US', { timeZone: 'Australia/Sydney' }));
+const weekOf = (iso) => { const d = sydDay(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }); };
+const mail = rows.filter((r) => r.received);
+const tally = (list) => ({
+  facts: list.length,
+  opps: new Set(list.map((r) => r.opportunity)).size,
+  inGhl: list.filter((r) => r.match === 'Y').length,
+  before: list.filter((r) => r.match === 'Y' && r.lagDays !== null && r.lagDays <= 0).length,
+  after: list.filter((r) => r.match === 'Y' && r.lagDays !== null && r.lagDays > 0),
+  notInGhl: list.filter((r) => r.match === 'N').length,
+});
+const summary = wb.addWorksheet('Summary');
+summary.columns = [['Week starting (Mon)', 20], ['Facts found in mail', 14], ['Opportunities', 14], ['Already the same in GHL now', 16],
+  ['Entered by a person after the email', 18], ['Average days the person took', 16], ['Not in GHL yet (tool would fill or correct)', 22]].map(([header, width]) => ({ header, width }));
+const line = (label, list) => { const t = tally(list); const avg = t.after.length ? Math.round((t.after.reduce((s, r) => s + r.lagDays, 0) / t.after.length) * 10) / 10 : null;
+  return [label, t.facts, t.opps, t.inGhl, t.after.length, avg, t.notInGhl]; };
+const weeks = [...new Set(mail.map((r) => weekOf(r.received)))];
+for (const w of weeks) summary.addRow(line(w, mail.filter((r) => weekOf(r.received) === w)));
+summary.addRow([]);
+summary.addRow(line('Last 7 days', mail.filter((r) => Date.now() - new Date(r.received).getTime() < 7 * 86400000)));
+summary.addRow(line(`All ${days} days`, mail));
+const geo = rows.filter((r) => !r.received);
+summary.addRow([]);
+summary.addRow(['Street addresses found by Geoscape (lot + plan)', geo.length, '', geo.filter((r) => r.human).length]);
+summary.getRow(1).font = { bold: true };
 const about = wb.addWorksheet('About');
 about.addRows([
   ['Mining demonstration - lag sheet (mining agent)'], [`Refreshed ${syd(new Date().toISOString())}; mail read: last ${days} days, four mailboxes, new part of each email only, one row per mined fact.`],
@@ -69,8 +95,17 @@ about.addRows([
   ['Human updated comes from the CTRT edit log (from 31 Oct 2026), the change-date fields (finance status, construction stage, Deal Fallen Over; date only) or GHL last stage change. GHL keeps no per-field history, so most older rows have no timestamp.'],
   ['Read-only: nothing was written to GHL.'],
 ]);
-await wb.xlsx.writeFile(OUT);
+let written = OUT;
+try {
+  await wb.xlsx.writeFile(OUT);
+} catch (e) {
+  // Open in Excel: write a dated copy beside it rather than lose the run.
+  if (e.code !== 'EBUSY') throw e;
+  written = OUT.replace(/\.xlsx$/, ` (refreshed ${new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-')}).xlsx`);
+  await wb.xlsx.writeFile(written);
+  console.log('sheet is open in Excel; wrote a copy instead');
+}
 const byType = {};
 for (const r of rows) byType[r.type] = (byType[r.type] || 0) + 1;
 console.log('rows', rows.length, JSON.stringify(byType));
-console.log('wrote', OUT);
+console.log('wrote', written);

@@ -9,7 +9,7 @@ import { fetchOpps, fetchRecords, fetchStageNames, recordText, type Opp, type Pr
 import { matchMessage } from './match';
 import { loadTrackers, type Trackers } from './trackers';
 import { extractFacts } from './extract';
-import { mineFacts, signatureContacts, type MinedFact } from './lagRules';
+import { isReplySubject, mineFacts, signatureContacts, type MinedFact } from './lagRules';
 import { norm } from './lag';
 
 export async function ensureLagSheetTables(): Promise<void> {
@@ -161,8 +161,19 @@ export async function buildLagRows(): Promise<LagRow[]> {
   const recById = new Map(records.map((r) => [r.id, r]));
   const edits = await sql`SELECT at, opportunity_id, record_id, field, old_value, new_value FROM ctr_edit_log ORDER BY at`.catch(() => []);
   const rows: LagRow[] = [];
+  // JT 9/11: only the first email that told us a fact; later emails that repeat it are not the notification.
+  const firstSeen = new Set<string>();
 
   for (const f of facts) {
+    const factKey = f.type === 'Contact detail change'
+      ? `${f.opportunity_id}|contact|${(JSON.parse(f.value as string) as { email: string; phones: string[] }).email}|${(JSON.parse(f.value as string) as { phones: string[] }).phones.join(',')}`
+      : `${f.opportunity_id}|${f.field}|${norm(f.value as string)}`;
+    // JT 9/11: a reply/forward subject repeats the original; facts taken only from it are not a notification.
+    const subj = String(f.subject || '');
+    const q = String(f.quote || '').trim();
+    if (isReplySubject(subj) && q && (subj.includes(q) || q.includes(subj.replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, '').trim()))) continue;
+    if (firstSeen.has(factKey)) continue;
+    firstSeen.add(factKey);
     const received = new Date(f.received_at as string);
     const o = oppById.get(f.opportunity_id as string);
     const r = f.property_record_id ? recById.get(f.property_record_id as string) : undefined;

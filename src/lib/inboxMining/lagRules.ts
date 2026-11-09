@@ -111,6 +111,10 @@ export function signatureContacts(fresh: string): { phones: string[]; emails: st
   return { phones, emails };
 }
 
+export function isReplySubject(subject: string): boolean {
+  return /^\s*(re|fw|fwd)\s*:/i.test(subject);
+}
+
 export function mineFacts(subject: string, fresh: string, ref: Date, fromBuilder: boolean, contractEvent: boolean): MinedFact[] {
   const out: MinedFact[] = [];
   const seen = new Set<string>();
@@ -122,7 +126,9 @@ export function mineFacts(subject: string, fresh: string, ref: Date, fromBuilder
     out.push(f);
   };
   const c: Ctx = { ref, fromBuilder };
-  const sents = [subject.replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, ''), ...splitSentences(fresh)];
+  // A reply or forward carries the original subject; it is not news, so only the new text counts.
+  const subj = isReplySubject(subject) ? '' : subject;
+  const sents = [subj, ...splitSentences(fresh)].filter(Boolean);
   for (const s of sents) {
     for (const r of RULES) {
       const m = s.match(r.re);
@@ -139,10 +145,10 @@ export function mineFacts(subject: string, fresh: string, ref: Date, fromBuilder
     }
   }
 
-  const text = `${subject}\n${fresh}`;
+  const text = `${subj}\n${fresh}`;
   const facts = extractFacts(text, 'email');
   // A progress claim names its stage in the subject or opening lines; later mentions are history or payment terms.
-  const stage = fromBuilder ? extractFacts(`${subject}\n${fresh.slice(0, 400)}`, 'email').constructionStage : undefined;
+  const stage = fromBuilder ? extractFacts(`${subj}\n${fresh.slice(0, 400)}`, 'email').constructionStage : undefined;
   if (stage)
     add({ type: 'Construction stage (builder progress claim)', target: 'property_record', field: 'construction_stage', value: stage.value, quote: stage.quote });
   if (facts.registration)
