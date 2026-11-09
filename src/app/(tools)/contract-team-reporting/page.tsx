@@ -2438,7 +2438,16 @@ export default function ContractTeamReportingPage() {
       if (!bVal) return -1;
 
       let compare: number;
-      if (sortColumn === 'co_land_registration') {
+      // Dropdowns (e.g. Construction stage: Pre-BA, BA Issued, Slab ... Handover) sort in their GHL option order, not A-Z.
+      const opts = sortColumn === 'co_land_registration' ? null : dropdownOptions(sortColumn);
+      const optIndex = (r: Record<string, unknown>, shown: string) => {
+        const raw = String(r[sortColumn] ?? '');
+        return opts ? opts.findIndex((o) => o.key && (o.key === raw || o.label === raw || o.label === shown)) : -1;
+      };
+      const ia = optIndex(a, aVal), ib = optIndex(b, bVal);
+      if (opts && (ia >= 0 || ib >= 0)) {
+        compare = ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : 1;
+      } else if (sortColumn === 'co_land_registration') {
         const ka = landRegistrationSortKey(aVal), kb = landRegistrationSortKey(bVal);
         compare = ka !== null && kb !== null ? ka - kb : ka !== null ? -1 : kb !== null ? 1 : aVal.localeCompare(bVal);
       } else if (isDateField(sortColumn)) {
@@ -2463,7 +2472,9 @@ export default function ContractTeamReportingPage() {
       }
       return level.dir === 'asc' ? compare : -compare;
     }
-  }, [filteredRecords, sortLevels]);
+    // schemaInfo: re-sort once the live dropdown options (option order) have loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredRecords, sortLevels, schemaInfo]);
 
   // ============================================================================
   // EXPORT
