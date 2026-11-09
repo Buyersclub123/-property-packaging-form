@@ -1,6 +1,6 @@
 // Lag-sheet demonstration (JT 9/11): reads N days of mail (default 90) in all four mailboxes, runs the Geoscape
 // lot + plan pass, then rewrites the sheet on G:. Reads Gmail/GHL only; writes only our DB and the .xlsx.
-// Usage: node scripts/lag-sheet-run.mjs [days=90] [--sheet-only]
+// Usage: node scripts/lag-sheet-run.mjs [days=90] [--sheet-only] [--reset]   (--reset re-reads all mail after a rule change)
 import fs from 'fs';
 import ExcelJS from 'exceljs';
 
@@ -28,6 +28,7 @@ async function call(body) {
   }
 }
 
+if (!sheetOnly && process.argv.includes('--reset')) console.log('reset', JSON.stringify(await call({ action: 'reset' })));
 if (!sheetOnly) {
   const results = await Promise.all(MAILBOXES.map(async (mailbox) => {
     const skip = [];
@@ -57,16 +58,16 @@ const recent = (r) => !r.received || Date.now() - new Date(r.received).getTime()
 const factSheet = (name, list) => {
   const ws = wb.addWorksheet(name);
   ws.columns = [
-    ['Opportunity', 34], ['Property Record ID', 26], ['Update type', 30], ['Field', 26], ['Mined value', 26], ['Email received', 20], ['From', 34],
+    ['Opportunity', 34], ['Property Record ID', 26], ['Email type', 26], ['Confidence', 30], ['Update type', 30], ['Field', 26], ['Mined value', 26], ['Email received', 20], ['From', 34],
     ['GHL value when the email was received', 30], ["Human's value (in GHL now)", 26], ['Human updated', 20], ['Human updated from', 30],
-    ['Match (Y/N)', 8], ['Lag (days) = human updated - email received', 16], ['Subject', 50], ['Evidence (new part of the email)', 80], ['Note', 30],
+    ['Match (Y/N)', 8], ['Lag (days) = human updated - email received', 16], ['Subject', 50], ['Evidence (new part of the email)', 80], ['Note', 30], ['How the email type was decided', 50],
   ].map(([header, width]) => ({ header, width }));
   for (const r of list)
-    ws.addRow([r.opportunity, r.propertyRecordId, r.type, r.field, r.mined, syd(r.received), r.from, r.valueAtReceipt, r.human, syd(r.humanUpdated),
-      r.humanSource, r.match, r.lagDays, r.subject, r.quote, r.note]);
+    ws.addRow([r.opportunity, r.propertyRecordId, r.emailType, r.confidence, r.type, r.field, r.mined, syd(r.received), r.from, r.valueAtReceipt, r.human, syd(r.humanUpdated),
+      r.humanSource, r.match, r.lagDays, r.subject, r.quote, r.note, r.typeSource]);
   ws.getRow(1).font = { bold: true };
   ws.views = [{ state: 'frozen', ySplit: 1 }];
-  ws.autoFilter = { from: 'A1', to: 'P1' };
+  ws.autoFilter = { from: 'A1', to: 'S1' };
 };
 factSheet(`Lag sheet (last ${LAG_DAYS} days)`, rows.filter(recent));
 factSheet(`Tool vs GHL (${days} days)`, rows.filter((r) => r.received));

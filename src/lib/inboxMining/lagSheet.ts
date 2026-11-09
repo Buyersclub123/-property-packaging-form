@@ -9,7 +9,9 @@ import { fetchOpps, fetchRecords, fetchStageNames, recordText, type Opp, type Pr
 import { matchMessage } from './match';
 import { loadTrackers, type Trackers } from './trackers';
 import { extractFacts } from './extract';
-import { isReplySubject, mineFacts, signatureContacts, type MinedFact } from './lagRules';
+import { EMAIL_TYPE_LABEL, EXPECTED, isReplySubject, mineFacts, signatureContacts, type MinedFact } from './lagRules';
+import { buildProfile, preClassify, subjectSegments, type Profile } from './profile';
+import type { InboxClass } from './types';
 import { norm } from './lag';
 
 export async function ensureLagSheetTables(): Promise<void> {
@@ -19,20 +21,38 @@ export async function ensureLagSheetTables(): Promise<void> {
     received_at timestamptz NOT NULL, from_addr text, subject text, grade text, opportunity_id text, opportunity_name text, property_record_id text,
     type text NOT NULL, target text NOT NULL, field text NOT NULL, field_id text, value text NOT NULL, quote text, note text, mined_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (rfc_id, type, field, value))`;
+  await sql`ALTER TABLE inbox_lag_facts ADD COLUMN IF NOT EXISTS email_type text, ADD COLUMN IF NOT EXISTS type_source text, ADD COLUMN IF NOT EXISTS confidence text`;
   await sql`CREATE TABLE IF NOT EXISTS inbox_lag_geoscape (record_id text PRIMARY KEY, parcel_id text, status text NOT NULL, address text, reason text, checked_at timestamptz NOT NULL DEFAULT now())`;
 }
 
-type Pool = { opps: Opp[]; records: PropRecord[]; trackers: Trackers };
+type Pool = { opps: Opp[]; records: PropRecord[]; trackers: Trackers; profile: Profile };
 let pool: { at: number; p: Pool } | null = null;
 async function getPool(): Promise<Pool> {
   if (pool && Date.now() - pool.at < 30 * 60_000) return pool.p;
   const names = await fetchStageNames();
-  const [opps, records, trackers] = await Promise.all([fetchOpps(names), fetchRecords(), loadTrackers()]);
-  pool = { at: Date.now(), p: { opps, records, trackers } };
+  const [opps, records, trackers, profile] = await Promise.all([fetchOpps(names), fetchRecords(), loadTrackers(), buildProfile()]);
+  pool = { at: Date.now(), p: { opps, records, trackers, profile } };
   return pool.p;
 }
 
-const CONTRACT_CLASSES = new Set(['contract_executed_exchanged', 'registration_titles_issued', 'contract_received_unsigned']);
+/** Rule changes need a fresh read: clears only our own lag-sheet tables (Geoscape results are kept). */
+export async function resetLagSheet() {
+  await ensureLagSheetTables();
+  const sql = getDb();
+  await sql`DELETE FROM inbox_lag_facts`;
+  await sql`DELETE FROM inbox_lag_seen`;
+  return { reset: true };
+}
+
+/** Email type: the rules first, then the existing sender / subject-template history (profile.ts) when the rules say 'other'. */
+function emailTypeOf(cls: InboxClass, rule: string, fromEmail: string, subject: string, profile: Profile) {
+  if (cls !== 'other') return { type: cls, source: `rule: ${rule}`, fromHistory: false };
+  const sp = profile.senders.find((s) => s.email === fromEmail.toLowerCase());
+  const segs = subjectSegments(subject);
+  const tp = profile.templates.filter((t) => segs.includes(t.template)).sort((a, b) => b.count - a.count)[0];
+  const pre = preClassify(sp, tp);
+  return pre ? { type: pre.cls, source: `history: ${pre.reason}`, fromHistory: true } : { type: 'other' as InboxClass, source: rule, fromHistory: false };
+}
 
 async function mineOne(mailbox: string, id: string, p: Pool): Promise<number> {
   const sql = getDb();
@@ -44,11 +64,12 @@ async function mineOne(mailbox: string, id: string, p: Pool): Promise<number> {
   if (dup.length || msg.direction === 'outbound') return 0;
 
   const fresh = newPart(msg.text);
-  const { cls, question } = classify({ subject: msg.subject, body: fresh, filenames: msg.attachments.map((a) => a.filename), docText: '',
+  const { cls, rule, question } = classify({ subject: msg.subject, body: fresh, filenames: msg.attachments.map((a) => a.filename), docText: '',
     fromEmail: msg.fromEmail, builderSenders: p.trackers.builderSenders });
   if (question) return 0;
   const fromBuilder = !!builderFor(msg.fromEmail, p.trackers.builderSenders);
-  const facts: (MinedFact & { contacts?: string })[] = mineFacts(msg.subject, fresh, msg.date, fromBuilder, CONTRACT_CLASSES.has(cls));
+  const et = emailTypeOf(cls, rule, msg.fromEmail, msg.subject, p.profile);
+  const facts: (MinedFact & { contacts?: string })[] = mineFacts(msg.subject, fresh, msg.date, fromBuilder, et.type);
   const sig = signatureContacts(fresh);
   if (sig.phones.length)
     facts.push({ type: 'Contact detail change', target: 'opportunity', field: 'signature', value: JSON.stringify({ from: msg.from, email: msg.fromEmail, phones: sig.phones }), quote: sig.phones.join(', ') });
@@ -58,10 +79,14 @@ async function mineOne(mailbox: string, id: string, p: Pool): Promise<number> {
   const match = await matchMessage({ facts: extractFacts(`${msg.subject}\n${fresh}`, 'email'), haystack, memory: null, opps: p.opps, records: p.records, trackers: p.trackers });
   if (!['A', 'B', 'C'].includes(match.grade) || !match.opportunityId) return 0;
   for (const f of facts) {
+    // JT 9/11 confidence: the email type and the fact agree, and the value is in the text (dates are never defaulted).
+    const confidence = et.type === 'other' ? 'Low: email has no type'
+      : (EXPECTED[et.type] || []).includes(f.type) ? (et.fromHistory ? 'Medium: expected fact, type from history' : 'High: expected fact for this email type')
+      : 'Medium: fact not typical for this email type';
     await sql`INSERT INTO inbox_lag_facts (rfc_id, mailbox, message_id, received_at, from_addr, subject, grade, opportunity_id, opportunity_name, property_record_id,
-        type, target, field, field_id, value, quote, note)
+        type, target, field, field_id, value, quote, note, email_type, type_source, confidence)
       VALUES (${rfc}, ${mailbox}, ${id}, ${msg.date.toISOString()}, ${msg.from}, ${msg.subject}, ${match.grade}, ${match.opportunityId}, ${match.opportunityName || ''},
-        ${match.propertyRecordId || null}, ${f.type}, ${f.target}, ${f.field}, ${f.fieldId || null}, ${f.value}, ${f.quote}, ${f.note || null})
+        ${match.propertyRecordId || null}, ${f.type}, ${f.target}, ${f.field}, ${f.fieldId || null}, ${f.value}, ${f.quote}, ${f.note || null}, ${et.type}, ${et.source}, ${confidence})
       ON CONFLICT (rfc_id, type, field, value) DO NOTHING`;
   }
   return facts.length;
@@ -130,8 +155,8 @@ export async function geoscapePass(limit = 200) {
 
 export interface LagRow {
   opportunity: string; propertyRecordId: string; type: string; field: string; mined: string; received: string; from: string;
-  valueAtReceipt: string; human: string; humanUpdated: string; humanSource: string; match: 'Y' | 'N'; lagDays: number | null;
-  subject: string; quote: string; note: string;
+  valueAtReceipt: string; human: string; humanUpdated: string; humanSource: string; match: 'Y' | 'N'; status: string; lagDays: number | null;
+  subject: string; quote: string; note: string; emailType: string; typeSource: string; confidence: string;
 }
 
 const CHANGE_DATE: Record<string, { target: 'opportunity' | 'property_record'; key: string }> = {
@@ -163,6 +188,12 @@ export async function buildLagRows(): Promise<LagRow[]> {
   const rows: LagRow[] = [];
   // JT 9/11: only the first email that told us a fact; later emails that repeat it are not the notification.
   const firstSeen = new Set<string>();
+  // JT 9/11: a sentence repeated word for word on several deals' emails is standard wording, not news.
+  const dealsPerQuote = new Map<string, Set<string>>();
+  for (const f of facts) {
+    const q = norm(String(f.quote || ''));
+    if (q.length >= 30) dealsPerQuote.set(q, (dealsPerQuote.get(q) || new Set<string>()).add(String(f.opportunity_id)));
+  }
 
   for (const f of facts) {
     const factKey = f.type === 'Contact detail change'
@@ -172,6 +203,7 @@ export async function buildLagRows(): Promise<LagRow[]> {
     const subj = String(f.subject || '');
     const q = String(f.quote || '').trim();
     if (isReplySubject(subj) && q && (subj.includes(q) || q.includes(subj.replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, '').trim()))) continue;
+    if ((dealsPerQuote.get(norm(q))?.size || 0) >= 2) continue;
     if (firstSeen.has(factKey)) continue;
     firstSeen.add(factKey);
     const received = new Date(f.received_at as string);
@@ -226,12 +258,18 @@ export async function buildLagRows(): Promise<LagRow[]> {
       else atReceipt = '(not recorded; GHL keeps no field history)';
     }
     const isMatch = same(mined, human);
+    // JT 9/11: an empty GHL field means nobody has acted yet, not a mismatch.
+    const comparable = f.type === 'Contact detail change' || (f.target === 'property_record' ? !!r || viaPipeline : !!o);
+    const status = !comparable ? "Can't compare (no Property Record / field)"
+      : isMatch ? (updated && updated < received ? 'Already in GHL before the email' : updated ? 'Done - matches' : 'Matches (entry time not recorded)')
+      : !norm(human) ? 'Not actioned yet' : 'Different value in GHL';
     rows.push({
       opportunity: o?.name || (f.opportunity_name as string), propertyRecordId: recId, type: f.type as string, field, mined,
       received: received.toISOString(), from: f.from_addr as string, valueAtReceipt: atReceipt, human,
-      humanUpdated: updated ? updated.toISOString() : '', humanSource: src, match: isMatch ? 'Y' : 'N',
+      humanUpdated: updated ? updated.toISOString() : '', humanSource: src, match: isMatch ? 'Y' : 'N', status,
       lagDays: updated && isMatch ? Math.round(((updated.getTime() - received.getTime()) / 86400000) * 10) / 10 : null,
       subject: f.subject as string, quote: (f.quote as string) || '', note: (f.note as string) || '',
+      emailType: EMAIL_TYPE_LABEL[(f.email_type as string) || ''] || '', typeSource: (f.type_source as string) || '', confidence: (f.confidence as string) || '',
     });
   }
 
@@ -242,7 +280,9 @@ export async function buildLagRows(): Promise<LagRow[]> {
     rows.push({
       opportunity: oppById.get(oppId)?.name || '', propertyRecordId: r.id, type: 'Street address (Geoscape lot + plan)', field: 'street_number / street_name',
       mined: g.address as string, received: '', from: `Geoscape parcel ${g.parcel_id}`, valueAtReceipt: '', human: `${recordText(r, 'street_number')} ${recordText(r, 'street_name')}`.trim(),
-      humanUpdated: '', humanSource: '', match: 'N', lagDays: null, subject: '', quote: `checked ${new Date(g.checked_at as string).toISOString()}`, note: '',
+      humanUpdated: '', humanSource: '', match: 'N',
+      status: recordText(r, 'street_number') ? 'Different value in GHL' : 'Not actioned yet', lagDays: null, subject: '', quote: `checked ${new Date(g.checked_at as string).toISOString()}`, note: '',
+      emailType: 'Geoscape lookup', typeSource: '', confidence: g.parcel_id ? 'Medium: address from lot + plan' : '',
     });
   }
   return rows;

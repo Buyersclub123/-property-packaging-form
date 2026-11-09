@@ -33,6 +33,7 @@ export interface TemplateProfile {
   classified: number;
   topClass: string | null;
   topShare: number;
+  classifiedThreads: number;
 }
 
 export interface ItemProfile {
@@ -109,6 +110,15 @@ interface Row {
   grade: string | null;
 }
 
+/** Class from the sender's or subject template's history, for an email the rules left as 'other'. */
+export function preClassify(sp: SenderProfile | undefined, tp: TemplateProfile | undefined): { cls: InboxClass; reason: string } | undefined {
+  if (sp && !sp.internal && sp.topClass && sp.classified >= MIN_CLASSIFIED && sp.topShare >= MIN_SHARE && sp.classified * 2 >= sp.count)
+    return { cls: sp.topClass as InboxClass, reason: `sender ${sp.email}: ${fmtShare(sp)}` };
+  if (tp?.topClass && tp.classifiedThreads >= MIN_CLASSIFIED && tp.topShare >= MIN_SHARE && tp.classified * 2 >= tp.count)
+    return { cls: tp.topClass as InboxClass, reason: `subject template "${tp.template}": ${fmtShare(tp)}` };
+  return undefined;
+}
+
 export async function buildProfile(): Promise<Profile> {
   const sql = getDb();
   const rows = (await sql`
@@ -154,7 +164,7 @@ export async function buildProfile(): Promise<Profile> {
     senders.set(sender, sp);
 
     if (template) {
-      const tp = templates.get(template) || { template, count: 0, classes: {}, classified: 0, topClass: null, topShare: 0 };
+      const tp = templates.get(template) || { template, count: 0, classes: {}, classified: 0, topClass: null, topShare: 0, classifiedThreads: 0 };
       tp.count++;
       tp.classes[r.cls] = (tp.classes[r.cls] || 0) + 1;
       templates.set(template, tp);
@@ -165,7 +175,7 @@ export async function buildProfile(): Promise<Profile> {
     threads.set(tk, [...(threads.get(tk) || []), r.id]);
   }
   senders.forEach((sp) => Object.assign(sp, dominant(sp.classes)));
-  templates.forEach((tp) => Object.assign(tp, dominant(tp.classes)));
+  templates.forEach((tp) => Object.assign(tp, dominant(tp.classes), { classifiedThreads: classifiedThreads.get(tp.template)?.size || 0 }));
 
   const isUnknown = (sp: SenderProfile) => !sp.internal && sp.classified === 0 && sp.matched === 0;
   const items = new Map<number, ItemProfile>();
@@ -175,17 +185,9 @@ export async function buildProfile(): Promise<Profile> {
     const sp = senders.get(m.sender)!;
     const tp = m.template ? templates.get(m.template) : undefined;
 
-    let preClass: InboxClass | undefined;
-    let preReason: string | undefined;
-    if (r.cls === 'other') {
-      if (!sp.internal && sp.topClass && sp.classified >= MIN_CLASSIFIED && sp.topShare >= MIN_SHARE && sp.classified * 2 >= sp.count) {
-        preClass = sp.topClass as InboxClass;
-        preReason = `sender ${sp.email}: ${fmtShare(sp)}`;
-      } else if (tp?.topClass && (classifiedThreads.get(tp.template)?.size || 0) >= MIN_CLASSIFIED && tp.topShare >= MIN_SHARE && tp.classified * 2 >= tp.count) {
-        preClass = tp.topClass as InboxClass;
-        preReason = `subject template "${tp.template}": ${fmtShare(tp)}`;
-      }
-    }
+    const pre = r.cls === 'other' ? preClassify(sp, tp) : undefined;
+    const preClass = pre?.cls;
+    const preReason = pre?.reason;
 
     const cls = r.cls === 'other' ? preClass || 'other' : r.cls;
     const via = r.cls === 'other' && preClass ? ' (pre-class)' : '';

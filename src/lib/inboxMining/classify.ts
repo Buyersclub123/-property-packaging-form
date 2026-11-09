@@ -111,7 +111,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
     const m = contractFile.match(CONTRACT_FILE)![0];
     return { cls: 'contract_received_unsigned', rule: `contract file: "${contractFile}"`, basis: { where: 'file', text: contractFile, match: m } };
   }
-  b = find(/contracts?\s+(?:for\s+(?:review|signing)|attached|issued|for\s+lot)/i, subject, [], head);
+  b = find(/contracts?\s+(?:for\s+(?:review|signing)|to\s+be\s+reviewed|attached|issued|for\s+lot)/i, subject, [], head);
   if (b) return { cls: 'contract_received_unsigned', rule: `contract wording: ${said(b)}`, basis: b };
 
   return { cls: 'other', rule: builder ? `builder "${builder}" but no progress wording` : 'no rule matched' };

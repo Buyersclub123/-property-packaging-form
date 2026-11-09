@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { buildLagRows, geoscapePass, mineChunk } from '@/lib/inboxMining/lagSheet';
+import { buildLagRows, geoscapePass, mineChunk, resetLagSheet } from '@/lib/inboxMining/lagSheet';
 import { INBOX_MAILBOXES } from '@/lib/inboxMining/gmail';
 
 // Lag-sheet demonstration (JT 9/11). POST {action:'mine', mailbox, days, skip} reads one ~60 s chunk of mail;
@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     }
     if (body.action === 'geoscape') return NextResponse.json(await geoscapePass());
     if (body.action === 'rows') return NextResponse.json({ rows: await buildLagRows() });
+    if (body.action === 'reset') return NextResponse.json(await resetLagSheet());
     return NextResponse.json({ error: 'action must be mine, geoscape or rows' }, { status: 400 });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });

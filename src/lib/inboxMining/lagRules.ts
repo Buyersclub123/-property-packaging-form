@@ -3,6 +3,7 @@
 import { FRIENDLY_TO_FIELD_ID } from '@/app/api/contract-team-reporting/fields';
 import { extractFacts } from './extract';
 import { findDate, valuationHits, VALUATION_FIELDS } from './valuationScan';
+import type { InboxClass } from './types';
 
 export interface MinedFact {
   type: string;
@@ -15,8 +16,6 @@ export interface MinedFact {
   note?: string;
 }
 
-const sydneyYmd = (d: Date) =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 
 const QUESTION = /\?\s*$|^(?:can|could|would|will|when|what|is|are|do|does|has|have|please\s+(?:advise|confirm|let))\b/i;
 const NEGATED = /\b(?:not|yet\s+to|still\s+waiting|awaiting|once|if|until|before|when\s+the)\b/i;
@@ -38,12 +37,28 @@ type Rule = {
   value: (s: string, m: RegExpMatchArray, c: Ctx) => { value: string; note?: string } | null;
   /** Statements only: skip questions and conditional/negated wording. */
   plain?: boolean;
+  /** Only from this email type (JT 9/11: decide what the email is before looking for facts). */
+  need?: InboxClass;
 };
 
-const dateOr = (s: string, c: Ctx) => {
-  const d = findDate(s, c.ref);
-  return d ? { value: d.iso } : { value: sydneyYmd(c.ref), note: 'no date in the text: email received date' };
+export const EMAIL_TYPE_LABEL: Record<string, string> = {
+  registration_titles_issued: 'Registration / titles issued', contract_received_unsigned: 'Contract issued for review',
+  contract_executed_exchanged: 'Contract executed / exchanged', deposit_receipt: 'Deposit receipt', bp_report: 'B&P report',
+  build_update_progress_claim: 'Builder progress claim', finance_update: 'Finance update', other: 'General email (no type)',
 };
+
+/** The facts each email type is expected to carry: a fact of the expected type scores high confidence. */
+export const EXPECTED: Record<string, string[]> = {
+  registration_titles_issued: ['Land registration', 'Lot / plan / title reference', 'Settlement Date (booked / extended)'],
+  contract_received_unsigned: ['Contract issued for review', 'Lot / plan / title reference', 'Price change', 'Builder / developer'],
+  contract_executed_exchanged: ['Exchange Date', 'Unconditional Date', 'Lot / plan / title reference', 'Builder / developer', 'Build / land contract dates', 'Stage move implied by email'],
+  deposit_receipt: ['Deposit paid (land / build)', 'Holding deposit / EOI accepted'],
+  bp_report: ['B&P report received'],
+  build_update_progress_claim: ['Construction stage (builder progress claim)', 'Handover / keys', 'BA issued', 'PCI booked / report'],
+  finance_update: ['Finance approval received', 'Finance Status step', 'Valuation booked / attended / outcome', 'Settlement Date (booked / extended)'],
+};
+
+// JT 9/11: a date is only mined when the email text states it, never defaulted to the send date.
 const dateOnly = (s: string, c: Ctx) => {
   const d = findDate(s, c.ref);
   return d ? { value: d.iso } : null;
@@ -52,10 +67,13 @@ const fixed = (v: string) => () => ({ value: v });
 const money = (raw: string) => raw.replace(/,/g, '');
 
 const RULES: Rule[] = [
-  { type: 'Exchange Date', target: 'opportunity', field: 'exchangeDate', plain: true,
-    re: /\b(?:contracts?\s+(?:have|has)\s+(?:now\s+)?(?:been\s+)?exchanged|exchanged\s+contracts?|exchange\s+of\s+contracts\s+(?:has|have|took|occurred)|exchange\s+date\s*(?:is|was|:))/i, value: (s, _m, c) => dateOr(s, c) },
-  { type: 'Unconditional Date', target: 'opportunity', field: 'unconditionalDate', plain: true,
-    re: /\b(?:contract|sale|purchase)\b[^.\n]{0,40}\b(?:is|now|has\s+gone|gone|become|became|went)\s+unconditional\b|\bunconditional\s+date\s*(?:is|was|:)/i, value: (s, _m, c) => dateOr(s, c) },
+  { type: 'Contract issued for review', target: 'opportunity', field: 'pipeline stage', need: 'contract_received_unsigned',
+    re: /\bcontracts?\s+(?:to\s+be\s+reviewed|for\s+review)\b/i,
+    value: (s) => ({ value: 'Contract Review', note: /land\s+(?:and|&)\s+build/i.test(s) ? 'Land and Build' : /land\s+only/i.test(s) ? 'Land only' : undefined }) },
+  { type: 'Exchange Date', target: 'opportunity', field: 'exchangeDate', plain: true, need: 'contract_executed_exchanged',
+    re: /\b(?:contracts?\s+(?:have|has)\s+(?:now\s+)?(?:been\s+)?exchanged|exchanged\s+contracts?|exchange\s+of\s+contracts\s+(?:has|have|took|occurred)|exchange\s+date\s*(?:is|was|:))/i, value: (s, _m, c) => dateOnly(s, c) },
+  { type: 'Unconditional Date', target: 'opportunity', field: 'unconditionalDate', plain: true, need: 'contract_executed_exchanged',
+    re: /\b(?:contract|sale|purchase)\b[^.\n]{0,40}\b(?:is|now|has\s+gone|gone|become|became|went)\s+unconditional\b|\bunconditional\s+date\s*(?:is|was|:)/i, value: (s, _m, c) => dateOnly(s, c) },
   { type: 'Settlement Date (booked / extended)', target: 'opportunity', field: 'settlementDate', plain: true,
     re: /\bsettlement\b[^.\n]{0,60}\b(booked|scheduled|confirmed|extended|set\s+for|moved\s+to|date\s+(?:is|has\s+been|of|:)|will\s+(?:take\s+place|occur))/i,
     value: (s, m, c) => { const d = dateOnly(s, c); return d ? { value: d.value, note: m[1].toLowerCase() } : null; } },
@@ -63,7 +81,7 @@ const RULES: Rule[] = [
     re: /\b(?:settlement\s+(?:has\s+)?(?:now\s+)?(?:been\s+)?(?:completed|effected)|has\s+(?:now\s+)?settled|congratulations\s+on\s+(?:your\s+)?settlement)\b/i, value: fixed('Settled') },
   { type: 'Stage move implied by email', target: 'opportunity', field: 'pipeline stage', plain: true,
     re: /\bcongratulations\b[^.\n]{0,40}\b(?:exchange|exchanging)\b/i, value: fixed('Exchanged') },
-  { type: 'Finance approval received', target: 'opportunity', field: 'financeApprovalReceived', plain: true,
+  { type: 'Finance approval received', target: 'opportunity', field: 'financeApprovalReceived', plain: true, need: 'finance_update',
     re: /\b(?:formal|unconditional|full)\s+(?:finance\s+|loan\s+)?approval\b[^.\n]{0,40}\b(?:received|issued|granted|has\s+been|is\s+in|came\s+through|attached)|\b(?:loan|finance)\s+(?:has\s+been\s+|is\s+now\s+)?formally\s+approved\b/i, value: fixed('Yes') },
   { type: 'Finance Status step', target: 'opportunity', field: 'financeStatus', plain: true,
     re: /\b(?:loan|finance|application)\b[^.\n]{0,30}\b(?:has\s+been\s+|was\s+|now\s+)(?:lodged|submitted)\b/i, value: fixed('Lodged') },
@@ -92,7 +110,7 @@ const RULES: Rule[] = [
     value: (s, _m, c) => { const d = findDate(s, c.ref); return { value: 'Handover', note: d ? `date ${d.iso}` : undefined }; } },
   { type: 'BA issued', target: 'property_record', field: 'construction_stage', plain: true,
     re: /\b(?:building\s+(?:approval|permit)|\bBA\b)\b[^.\n]{0,40}\b(?:has\s+been\s+|was\s+|now\s+)?(?:issued|approved|granted)\b/i,
-    value: (s, _m, c) => ({ value: 'BA Issued', note: `BA issued ${dateOr(s, c).value}` }) },
+    value: (s, _m, c) => { const d = dateOnly(s, c); return { value: 'BA Issued', note: d ? `BA issued ${d.value}` : undefined }; } },
   { type: 'PCI booked / report', target: 'opportunity', field: 'preSettlementInspectionDate', plain: true,
     re: /\b(?:PCI|practical\s+completion\s+inspection|pre-?settlement\s+inspection)\b[^.\n]{0,50}\b(?:booked|scheduled|arranged|confirmed|set)\b/i, value: (s, _m, c) => dateOnly(s, c) },
   { type: 'PCI booked / report', target: 'opportunity', field: 'preSettlementInspectionStatus', plain: true,
@@ -115,7 +133,8 @@ export function isReplySubject(subject: string): boolean {
   return /^\s*(re|fw|fwd)\s*:/i.test(subject);
 }
 
-export function mineFacts(subject: string, fresh: string, ref: Date, fromBuilder: boolean, contractEvent: boolean): MinedFact[] {
+export function mineFacts(subject: string, fresh: string, ref: Date, fromBuilder: boolean, emailType: InboxClass): MinedFact[] {
+  const contractEvent = ['contract_executed_exchanged', 'registration_titles_issued', 'contract_received_unsigned'].includes(emailType);
   const out: MinedFact[] = [];
   const seen = new Set<string>();
   const add = (f: MinedFact) => {
@@ -131,6 +150,7 @@ export function mineFacts(subject: string, fresh: string, ref: Date, fromBuilder
   const sents = [subj, ...splitSentences(fresh)].filter(Boolean);
   for (const s of sents) {
     for (const r of RULES) {
+      if (r.need && r.need !== emailType) continue;
       const m = s.match(r.re);
       if (!m) continue;
       if (r.plain && (QUESTION.test(s) || NEGATED.test(s.slice(0, (m.index || 0) + m[0].length)))) continue;
@@ -161,7 +181,7 @@ export function mineFacts(subject: string, fresh: string, ref: Date, fromBuilder
     if (facts.contractDate) add({ type: 'Build / land contract dates', target: 'none', field: 'contract_date', value: findDate(facts.contractDate.value, ref)?.iso || facts.contractDate.value, quote: facts.contractDate.quote });
     if (facts.vendorBuilder) add({ type: 'Builder / developer', target: 'opportunity', field: 'agentBuilderDetails', value: facts.vendorBuilder.value, quote: facts.vendorBuilder.quote });
   }
-  if (facts.bp && /\b(?:attached|enclosed|received|find|here\s+is|please\s+see)\b/i.test(facts.bp.quote))
+  if (emailType === 'bp_report' && facts.bp && /\b(?:attached|enclosed|received|find|here\s+is|please\s+see)\b/i.test(facts.bp.quote))
     add({ type: 'B&P report received', target: 'opportunity', field: 'bpConditionStatus', value: 'Report received', quote: facts.bp.quote });
   return out;
 }
