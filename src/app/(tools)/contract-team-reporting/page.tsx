@@ -427,8 +427,19 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 
 interface ViewFilter {
   field: RecordKey;
-  operator: 'equals' | 'not equals' | 'contains' | 'not contains' | 'in' | 'not in' | 'is blank' | 'not blank';
+  operator: 'equals' | 'not equals' | 'contains' | 'contains any' | 'not contains' | 'in' | 'not in' | 'is blank' | 'not blank';
   value: string;
+}
+
+// "3338, 6030, 4650" = contains any of these terms (case-insensitive, trimmed).
+function containsTerms(pattern: string): string[] {
+  return Array.from(new Set(pattern.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)));
+}
+function containsAny(value: string, pattern: string): boolean {
+  const terms = containsTerms(pattern);
+  if (terms.length === 0) return true;
+  const v = value.toLowerCase();
+  return terms.some((term) => v.includes(term));
 }
 
 type ViewSection = 'Standard' | 'Custom' | 'Exception';
@@ -1067,6 +1078,7 @@ function describeView(view: ViewDef): string {
     'equals': '=',
     'not equals': '≠',
     'contains': 'contains',
+    'contains any': 'contains any of',
     'not contains': 'does not contain',
     'in': 'is one of',
     'not in': 'is not one of',
@@ -1115,6 +1127,8 @@ function applyViewFilters(records: OpportunityRecord[], filters: ViewFilter[]): 
           return cellValue !== filterValue;
         case 'contains':
           return cellValue.includes(filterValue);
+        case 'contains any':
+          return containsAny(cellValue, filterValue);
         case 'not contains':
           return !cellValue.includes(filterValue);
         case 'in': {
@@ -1457,7 +1471,9 @@ export default function ContractTeamReportingPage() {
   const gridFiltersToViewFilters = useCallback((): ViewFilter[] => {
     const out: ViewFilter[] = [];
     for (const [key, pattern] of Object.entries(textIncludeFilters)) {
-      if (pattern && pattern.trim()) out.push({ field: key as RecordKey, operator: 'contains', value: pattern.trim() });
+      const terms = (pattern || '').split(',').map((s) => s.trim()).filter(Boolean);
+      if (terms.length > 1) out.push({ field: key as RecordKey, operator: 'contains any', value: terms.join(', ') });
+      else if (terms.length === 1) out.push({ field: key as RecordKey, operator: 'contains', value: terms[0] });
     }
     for (const [key, patterns] of Object.entries(textExcludeFilters)) {
       for (const p of patterns || []) {
@@ -2317,7 +2333,7 @@ export default function ContractTeamReportingPage() {
       if (passesOthers) {
         for (const [key, pattern] of Object.entries(textIncludeFilters)) {
           if (key === column || !pattern || !pattern.trim()) continue;
-          if (!getDisplayValue(r, key as RecordKey).toLowerCase().includes(pattern.toLowerCase().trim())) { passesOthers = false; break; }
+          if (!containsAny(getDisplayValue(r, key as RecordKey), pattern)) { passesOthers = false; break; }
         }
       }
       if (passesOthers) values.add(getDisplayValue(r, column) || '(blank)');
@@ -2395,7 +2411,7 @@ export default function ContractTeamReportingPage() {
       // Check text include filters (contains)
       return Object.entries(textIncludeFilters).every(([key, pattern]) => {
         if (!pattern || !pattern.trim()) return true;
-        return getDisplayValue(record, key as RecordKey).toLowerCase().includes(pattern.toLowerCase().trim());
+        return containsAny(getDisplayValue(record, key as RecordKey), pattern);
       });
     });
   }, [viewScopedRecords, excludedFilters, textExcludeFilters, textIncludeFilters, activePreset, projectFilter, projectList]);
@@ -2916,7 +2932,8 @@ export default function ContractTeamReportingPage() {
                   <div className={`text-[10px] ${t.headerText} opacity-60 mb-1`}>No field filters.</div>
                 )}
                 {builderExtraFilters.map((f, idx) => (
-                  <div key={`filter-${idx}`} className="flex items-center gap-1 mb-1">
+                  <div key={`filter-${idx}`} className="mb-1">
+                  <div className="flex items-center gap-1">
                     <select
                       value={f.field}
                       onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, field: e.target.value as RecordKey } : x)))}
@@ -2931,7 +2948,7 @@ export default function ContractTeamReportingPage() {
                       onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, operator: e.target.value as ViewFilter['operator'] } : x)))}
                       className={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
                     >
-                      {(['contains', 'not contains', 'equals', 'not equals', 'in', 'not in', 'is blank', 'not blank'] as ViewFilter['operator'][]).map((op) => (
+                      {(['contains', 'contains any', 'not contains', 'equals', 'not equals', 'in', 'not in', 'is blank', 'not blank'] as ViewFilter['operator'][]).map((op) => (
                         <option key={op} value={op}>{op}</option>
                       ))}
                     </select>
@@ -2939,7 +2956,7 @@ export default function ContractTeamReportingPage() {
                       <input
                         type="text"
                         value={f.value}
-                        placeholder={f.operator === 'in' || f.operator === 'not in' ? 'a, b, c' : 'value'}
+                        placeholder={f.operator === 'in' || f.operator === 'not in' || f.operator === 'contains any' ? 'a, b, c' : 'value'}
                         onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, value: e.target.value } : x)))}
                         className={`w-28 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText} placeholder-gray-500 focus:outline-none`}
                       />
@@ -2951,6 +2968,27 @@ export default function ContractTeamReportingPage() {
                     >
                       ✕
                     </button>
+                  </div>
+                  {f.operator === 'contains any' && (() => {
+                    const terms = f.value.split(',').map((s) => s.trim()).filter(Boolean);
+                    return terms.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-0.5 pl-1" title="Rows containing any of these terms">
+                        {terms.map((term, ti) => (
+                          <span key={`${term}-${ti}`} className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300 px-1.5 text-[9px]">
+                            {term}
+                            <button
+                              type="button"
+                              title={`Remove "${term}"`}
+                              onClick={() => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, value: terms.filter((_, j) => j !== ti).join(', ') } : x)))}
+                              className="leading-none text-blue-500 hover:text-red-500"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   </div>
                 ))}
                 <button
@@ -3377,7 +3415,8 @@ export default function ContractTeamReportingPage() {
                         <div className={`mb-1 px-1 pb-1 border-b ${t.inputBorder}`}>
                           <input
                             type="text"
-                            placeholder="Contains... (saveable)"
+                            placeholder="Contains... (a, b = any; saveable)"
+                            title="Separate terms with commas to match rows containing ANY of them, e.g. 3338, 6030, 4650"
                             value={textIncludeFilters[col.key] || ''}
                             onChange={(e) => setTextIncludeFilters((prev) => ({ ...prev, [col.key]: e.target.value }))}
                             className={`w-full px-1.5 py-0.5 text-[10px] ${t.inputBg} border ${
