@@ -3412,17 +3412,27 @@ export default function ContractTeamReportingPage() {
 
 
                         {/* Contains — the filter that can be saved into a view */}
-                        <div className={`mb-1 px-1 pb-1 border-b ${t.inputBorder}`}>
+                        <div className={`relative mb-1 px-1 pb-1 border-b ${t.inputBorder}`}>
                           <input
                             type="text"
                             placeholder="Contains... (a, b = any; saveable)"
                             title="Separate terms with commas to match rows containing ANY of them, e.g. 3338, 6030, 4650"
                             value={textIncludeFilters[col.key] || ''}
                             onChange={(e) => setTextIncludeFilters((prev) => ({ ...prev, [col.key]: e.target.value }))}
-                            className={`w-full px-1.5 py-0.5 text-[10px] ${t.inputBg} border ${
+                            className={`w-full px-1.5 py-0.5 pr-5 text-[10px] ${t.inputBg} border ${
                               textIncludeFilters[col.key] ? 'border-blue-500' : t.inputBorder
                             } rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
                           />
+                          {textIncludeFilters[col.key] && (
+                            <button
+                              type="button"
+                              title="Clear contains"
+                              onClick={() => setTextIncludeFilters((prev) => { const next = { ...prev }; delete next[col.key]; return next; })}
+                              className="absolute right-2 top-[calc(50%-2px)] -translate-y-1/2 text-[11px] leading-none text-gray-400 hover:text-red-500"
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
 
                         {/* Search */}
