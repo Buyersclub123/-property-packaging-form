@@ -47,7 +47,8 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
   const { start, end } = utcCover(addDays(from, -3), addDays(to, 3));
   const rows = await sql`SELECT m.appointment_id, m.calendar_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.start_at, m.ghl_status, m.title,
       m.created_by, m.meeting_source, m.meeting_source_level, m.meeting_source_detail, c.name AS contact_name, c.email AS contact_email, c.phones, c.lead_source, c.referrer,
-      o.outcome, o.invalid_reason, o.note, o.source, o.source_ref, o.recorded_by, o.recorded_at
+      o.outcome, o.invalid_reason, o.note, o.source, o.source_ref, o.recorded_by, o.recorded_at,
+      o.confirmed, o.confirmed_by, o.note_reason, o.note_next_action, o.note_by, o.note_at
     FROM review_meetings m
     LEFT JOIN review_contacts c ON c.contact_id = m.contact_id
     LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id
@@ -166,6 +167,12 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
         outcomeSource,
         invalidReason: dbOutcome ? (r.invalid_reason as string | null) : null,
         note: (r.note as string | null) || null,
+        noteReason: (r.note_reason as string | null) || null,
+        noteNextAction: (r.note_next_action as string | null) || null,
+        noteBy: (r.note_by as string | null) || null,
+        noteAt: r.note_at ? iso(r.note_at) : null,
+        confirmed: !!r.confirmed,
+        confirmedBy: (r.confirmed_by as string | null) || null,
         sourceRef: dbOutcome ? (r.source_ref as string | null) || null : schedOutcome && sr ? `Calendar schedule sheet, tab "${sr.tab}": ${[sr.sat, sr.outcome].filter(Boolean).join(' / ')}` : null,
         recordedBy: dbOutcome ? String(r.recorded_by) : null,
         recordedAt: dbOutcome ? iso(r.recorded_at) : null,

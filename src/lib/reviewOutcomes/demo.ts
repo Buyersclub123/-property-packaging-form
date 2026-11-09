@@ -40,7 +40,7 @@ export function demoData(): ReviewData {
       contactId: `demo-c${i}`, contactName: name, contactEmail: `${name.split(' ')[0].toLowerCase()}@example.com`, contactLink: '',
       consultantId: `demo-u${i % 3}`, consultant: cons, ghlStatus: src === 'ghl' && outcome ? outcome.replace(' (DNQ)', '') : 'Confirmed', title: '',
       outcome, outcomeSource: src as ReviewMeeting['outcomeSource'],
-      invalidReason: outcome === 'Invalid (DNQ)' ? 'Not ready' : null, note: null, sourceRef: src === 'sheet' ? 'Demo sheet row' : null,
+      invalidReason: outcome === 'Invalid (DNQ)' ? 'Not ready' : null, note: null, noteReason: null, noteNextAction: null, noteBy: null, noteAt: null, confirmed: false, confirmedBy: null, sourceRef: src === 'sheet' ? 'Demo sheet row' : null,
       recordedBy: outcome && src !== 'ghl' ? 'demo' : null, recordedAt: null,
       gcal: hasG ? { event: gcal, basis: 'Email + Name', minutesApart: Math.round(Math.abs(Date.parse(gStart) - Date.parse(start)) / 60e3) } : null,
       booker: hasG && i % 5 ? CALL_CENTRE[i % 3] : null,

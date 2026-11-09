@@ -126,6 +126,10 @@ async function create(): Promise<void> {
   await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS meeting_source TEXT, ADD COLUMN IF NOT EXISTS meeting_source_level TEXT, ADD COLUMN IF NOT EXISTS meeting_source_detail TEXT, ADD COLUMN IF NOT EXISTS meeting_source_at TIMESTAMPTZ`;
   // Cancelled Google invites are kept (still the meeting's calendar event, JT 9/11) and flagged.
   await sql`ALTER TABLE review_gcal_events ADD COLUMN IF NOT EXISTS cancelled BOOLEAN NOT NULL DEFAULT FALSE`;
+  // Row Confirm toggle and the row Note's reason / next action (tool DB only; GHL write-back is demo text for now).
+  await sql`ALTER TABLE review_outcomes ADD COLUMN IF NOT EXISTS confirmed BOOLEAN NOT NULL DEFAULT FALSE, ADD COLUMN IF NOT EXISTS confirmed_by TEXT,
+    ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS note_reason TEXT, ADD COLUMN IF NOT EXISTS note_next_action TEXT,
+    ADD COLUMN IF NOT EXISTS note_by TEXT, ADD COLUMN IF NOT EXISTS note_at TIMESTAMPTZ`;
   // Google calendars the sync tried (info@ calendarList + GHL assignees' emails) and whether each was readable.
   await sql`CREATE TABLE IF NOT EXISTS review_gcal_calendars (
     calendar_id TEXT PRIMARY KEY,

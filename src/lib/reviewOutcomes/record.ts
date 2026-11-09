@@ -26,6 +26,25 @@ export async function saveOutcome(by: string, appointmentId: string, outcome: st
   await logReview(by, appointmentId, outcome ? 'outcome' : 'outcome_clear', { before: before[0] ?? null, after: { outcome, invalidReason } });
 }
 
+export async function saveConfirmed(by: string, appointmentId: string, confirmed: boolean): Promise<void> {
+  const at = confirmed ? new Date().toISOString() : null;
+  await getDb()`INSERT INTO review_outcomes (appointment_id, confirmed, confirmed_by, confirmed_at, source, recorded_by)
+    VALUES (${appointmentId}, ${confirmed}, ${confirmed ? by : null}, ${at}, 'tool', ${by})
+    ON CONFLICT (appointment_id) DO UPDATE SET confirmed = EXCLUDED.confirmed, confirmed_by = EXCLUDED.confirmed_by,
+      confirmed_at = EXCLUDED.confirmed_at, updated_at = NOW()`;
+  await logReview(by, appointmentId, 'confirm', { confirmed });
+}
+
+// Same note as the More panel (review_outcomes.note), plus the row's reason / next action.
+export async function saveRowNote(by: string, appointmentId: string, note: string | null, reason: string | null, nextAction: string | null): Promise<void> {
+  const at = note || reason || nextAction ? new Date().toISOString() : null;
+  await getDb()`INSERT INTO review_outcomes (appointment_id, note, note_reason, note_next_action, note_by, note_at, source, recorded_by)
+    VALUES (${appointmentId}, ${note}, ${reason}, ${nextAction}, ${at ? by : null}, ${at}, 'tool', ${by})
+    ON CONFLICT (appointment_id) DO UPDATE SET note = EXCLUDED.note, note_reason = EXCLUDED.note_reason, note_next_action = EXCLUDED.note_next_action,
+      note_by = EXCLUDED.note_by, note_at = EXCLUDED.note_at, updated_at = NOW()`;
+  await logReview(by, appointmentId, 'row_note', { note, reason, nextAction });
+}
+
 let portfolioCache: { at: number; data: PortfolioData } | null = null;
 
 async function portfolio(): Promise<PortfolioData> {

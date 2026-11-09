@@ -133,6 +133,9 @@ export interface SalesData {
   warnings: string[];
 }
 
+export const NOTE_REASONS = ["Can't afford", 'Timing', 'Went elsewhere', 'Rescheduling', 'Other'];
+export const NOTE_NEXT_ACTIONS = ['Call to rebook', 'Nurture', 'No action'];
+
 export const DEFAULT_SETTINGS: ReviewSettings = {
   outcomes: ['Showed', 'No show', 'Invalid (DNQ)', 'Cancelled', 'Rescheduled', 'Not sat'],
   invalidReasons: ["Can't afford to buy again", 'Not ready', 'Waiting on a sale', 'Restructure', 'Divorce'],
@@ -236,6 +239,13 @@ export interface ReviewMeeting {
   outcomeSource: OutcomeSource | null;
   invalidReason: string | null;
   note: string | null;
+  noteReason: string | null;
+  noteNextAction: string | null;
+  noteBy: string | null;
+  noteAt: string | null;
+  /** Confirm toggle on the row (tool DB only). */
+  confirmed: boolean;
+  confirmedBy: string | null;
   sourceRef: string | null;
   recordedBy: string | null;
   recordedAt: string | null;

@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDays, DISCREPANCY_MINUTES, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { addDays, DISCREPANCY_MINUTES, MIN_YMD, NOTE_NEXT_ACTIONS, NOTE_REASONS, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
 import { demoData } from '@/lib/reviewOutcomes/demo';
 import { meetingSourceTitle } from '@/lib/reviewOutcomes/meetingSource';
 import MorePanel from '@/components/reviewOutcomes/MorePanel';
@@ -16,13 +16,63 @@ import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
 
-function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
+const GHL_NOTE_LABEL = 'Would post as a GHL contact note (not written in demo)';
+const CONFIRM_TOAST = 'Would set GHL status = confirmed and prefix the invite title with CONFIRMED (not written in demo)';
+const who = (email: string | null) => (email ? email.split('@')[0].replace(/[._]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
+const longDate = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const needsNextAction = (outcome: string | null) => /^(cancelled|rescheduled)$/i.test(outcome || '');
+const needsReason = (outcome: string | null) => /^invalid/i.test(outcome || '');
+
+function NoteBox({ m, onSave, onClose }: { m: ReviewMeeting; onSave: (note: string | null, reason: string | null, next: string | null) => void; onClose: () => void }) {
+  const [reason, setReason] = useState(m.noteReason || '');
+  const [next, setNext] = useState(m.noteNextAction || '');
+  const [text, setText] = useState(m.note || '');
+  const ta = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ta.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [text]);
+  const showReason = needsReason(m.outcome);
+  const showNext = needsNextAction(m.outcome);
+  const save = () => onSave(text.trim() || null, showReason ? reason || null : null, showNext ? next || null : null);
+  return (
+    <div className="flex flex-wrap items-start gap-1 rounded border border-blue-200 bg-blue-50/50 px-2 py-1">
+      {showReason && (
+        <select value={reason} onChange={(e) => setReason(e.target.value)} className="rounded border bg-white px-1 py-0.5 text-xs" aria-label="Reason">
+          <option value="">Reason…</option>
+          {NOTE_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      )}
+      {showNext && (
+        <select value={next} onChange={(e) => setNext(e.target.value)} className="rounded border bg-white px-1 py-0.5 text-xs" aria-label="Next action">
+          <option value="">Next action…</option>
+          {NOTE_NEXT_ACTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      )}
+      <textarea ref={ta} rows={1} value={text} onChange={(e) => setText(e.target.value)} placeholder="Note" autoFocus aria-label="Note"
+        onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && save()} title="Ctrl+Enter to save"
+        className="min-w-[220px] flex-1 resize-none overflow-hidden rounded border bg-white px-1.5 py-0.5 text-xs leading-snug" />
+      <button onClick={save} className="rounded bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-blue-700">Save</button>
+      <button onClick={onClose} className="px-1 text-xs text-gray-500 hover:text-gray-800">Cancel</button>
+      <span className="text-[11px] text-gray-400">{GHL_NOTE_LABEL}</span>
+    </div>
+  );
+}
+
+function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onNote }: {
   m: ReviewMeeting;
   settings: ReviewSettings;
   canEdit: boolean;
   onRecord: (m: ReviewMeeting, outcome: string | null, reason?: string | null) => void;
   onMore?: (m: ReviewMeeting) => void;
+  onConfirm: (m: ReviewMeeting, on: boolean) => void;
+  onNote: (m: ReviewMeeting, note: string | null, reason: string | null, next: string | null) => void;
 }) {
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteExpanded, setNoteExpanded] = useState(false);
+  const hasNote = !!(m.note || m.noteReason || m.noteNextAction);
   const g = m.gcal;
   const off = g && g.minutesApart !== null && g.minutesApart > DISCREPANCY_MINUTES;
   const isInvalid = !!m.outcome && /^invalid/i.test(m.outcome) && m.outcomeSource !== 'ghl';
@@ -40,6 +90,7 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
         </div>
         <div className="text-xs text-gray-500">
           GHL: {m.ghlStatus}
+          {m.confirmed && <span className="ml-2 rounded bg-green-600 px-1 text-[10px] font-bold tracking-wide text-white" title={`Confirmed in this tool${m.confirmedBy ? ` by ${who(m.confirmedBy)}` : ''}`}>CONFIRMED</span>}
           {m.kind === 'NL' && <span className="ml-2 rounded bg-purple-50 px-1 text-[11px] text-purple-700">Presentation 1 · {m.leadType}</span>}
           {m.selfBooked && <span className="ml-2 rounded bg-gray-100 px-1 text-[11px] text-gray-600" title="Created in GHL by the consultant">Self-booked – no outcome needed</span>}
         </div>
@@ -83,7 +134,15 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
         {m.outcome && !settings.outcomes.includes(m.outcome) && (
           <span className={`rounded-full border px-2 py-0.5 text-xs ${outcomeStyle(m.outcome).on}`}>{m.outcome}</span>
         )}
-        {onMore && <button onClick={() => onMore(m)} className="ml-1 rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>}
+        <button disabled={!canEdit} onClick={() => onConfirm(m, !m.confirmed)} title={m.confirmed ? 'Confirmed - click to undo' : 'Mark as confirmed'}
+          className={`ml-1 rounded border px-1.5 py-0.5 text-[11px] font-medium disabled:cursor-default ${m.confirmed ? 'border-green-600 bg-green-600 text-white' : 'border-green-300 bg-white text-green-700 hover:bg-green-50'}`}>
+          {m.confirmed ? '✔ Confirmed' : 'Confirm'}
+        </button>
+        <button disabled={!canEdit} onClick={() => setNoteOpen((o) => !o)} title="Reason, next action and note"
+          className={`rounded border px-1.5 py-0.5 text-[11px] disabled:cursor-default ${noteOpen || hasNote ? 'border-blue-400 bg-blue-50 text-blue-700' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+          Note
+        </button>
+        {onMore && <button onClick={() => onMore(m)} className="rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>}
        </div>
        <div className="mt-1 flex flex-wrap items-center gap-2 empty:hidden md:justify-end">
         {isInvalid && (
@@ -99,6 +158,32 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore }: {
         )}
        </div>
       </div>
+      {(noteOpen || hasNote) && (
+        <div className="col-span-full mt-1 text-xs">
+          {noteOpen ? (
+            <NoteBox m={m} onClose={() => setNoteOpen(false)} onSave={(note, reason, next) => { onNote(m, note, reason, next); setNoteOpen(false); }} />
+          ) : (
+            (() => {
+              const prefix = `[${m.kind} ${longDate(m.ymd)} · ${m.outcome || 'No outcome'}${m.noteBy || m.recordedBy ? ` · ${who(m.noteBy || m.recordedBy)}` : ''}]`;
+              const body = [m.noteReason, m.noteNextAction && `Next: ${m.noteNextAction}`, m.note].filter(Boolean).join(' · ');
+              return (
+                <div className="group relative flex items-start gap-2 text-gray-700" data-testid="saved-note">
+                  <div className={`min-w-0 flex-1 ${noteExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>
+                    <span className="font-semibold text-gray-500">{prefix}</span> {body}
+                  </div>
+                  <button onClick={() => setNoteExpanded((x) => !x)} className="shrink-0 text-[11px] text-blue-700 hover:underline">{noteExpanded ? 'Collapse' : 'Open'}</button>
+                  <span className="shrink-0 text-[11px] text-gray-400">{GHL_NOTE_LABEL}</span>
+                  {!noteExpanded && (
+                    <div role="tooltip" className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden max-w-[640px] whitespace-pre-wrap break-words rounded border bg-white px-2 py-1.5 text-xs text-gray-800 shadow-lg group-hover:block">
+                      <span className="font-semibold text-gray-500">{prefix}</span> {body}
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -130,6 +215,12 @@ export default function ReviewOutcomesPage() {
   const [error, setError] = useState<string | null>(null);
   const [more, setMore] = useState<ReviewMeeting | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const data = useMemo<ReviewData | null>(
     () => (demo && demoAll ? { ...demoAll, from, to, meetings: demoAll.meetings.filter((m) => m.ymd >= from && m.ymd <= to) } : live),
@@ -241,6 +332,34 @@ export default function ReviewOutcomesPage() {
     } catch { /* keep the row as tapped */ }
   };
 
+  // Confirm toggle / row Note: tool DB only (demo: this browser tab only). GHL is never written here.
+  const patchRow = (id: string, patch: Partial<ReviewMeeting>) => {
+    const f = (d: ReviewData | null) => d && { ...d, meetings: d.meetings.map((x) => (x.id === id ? { ...x, ...patch } : x)) };
+    if (demo) setDemoAll(f); else setLive(f);
+  };
+  const postRow = async (m: ReviewMeeting, body: Record<string, unknown>) => {
+    if (demo) return;
+    try {
+      const res = await fetch('/api/review-outcomes/row', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appointmentId: m.id, ...body }) });
+      const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      if (!res.ok) throw new Error(b.error || `HTTP ${res.status}`);
+    } catch (e) {
+      setSaveError(`${m.contactName}: ${(e as Error).message}`);
+    }
+  };
+  const confirmRow = (m: ReviewMeeting, on: boolean) => {
+    setSaveError(null);
+    patchRow(m.id, { confirmed: on, confirmedBy: on ? data?.viewer.email || null : null });
+    if (on) setToast(CONFIRM_TOAST);
+    void postRow(m, { confirmed: on });
+  };
+  const noteRow = (m: ReviewMeeting, note: string | null, reason: string | null, next: string | null) => {
+    setSaveError(null);
+    const any = !!(note || reason || next);
+    patchRow(m.id, { note, noteReason: reason, noteNextAction: next, noteBy: any ? data?.viewer.email || null : null, noteAt: any ? new Date().toISOString() : null });
+    void postRow(m, { note, noteReason: reason, noteNextAction: next });
+  };
+
   const meetings = useMemo(() => {
     const s = q.trim().toLowerCase();
     return (data?.meetings || []).filter((m) =>
@@ -330,6 +449,7 @@ export default function ReviewOutcomesPage() {
             {data && (
               <div className="mb-3 flex flex-wrap gap-3 text-sm">
                 <Stat label="Meetings" value={meetings.length} />
+                <Stat label="Confirmed" value={meetings.filter((m) => m.confirmed).length} tone="text-green-700" />
                 <Stat label="Outcome recorded" value={meetings.filter((m) => m.outcome).length} />
                 <Stat label="Updated here ✔" value={meetings.filter((m) => m.outcomeSource === 'tool').length} tone="text-green-700" />
                 <Stat label="No outcome (past)" value={meetings.filter((m) => m.past && !m.outcome && !m.selfBooked).length} tone="text-red-700" />
@@ -387,7 +507,7 @@ export default function ReviewOutcomesPage() {
             {data && byDay.map(([ymd, list]) => (
               <div key={ymd} className="mb-3 overflow-hidden rounded border bg-white">
                 <div className="bg-gray-50 px-3 py-1.5 text-sm font-semibold text-brand-charcoal">{weekday(ymd)} {dmy(ymd)} <span className="font-normal text-gray-500">· {list.length}</span></div>
-                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} />)}
+                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onNote={noteRow} />)}
               </div>
             ))}
           </>
@@ -403,6 +523,12 @@ export default function ReviewOutcomesPage() {
         )}
       </div>
       {more && <MorePanel meeting={more} demo={demo} onClose={() => setMore(null)} />}
+      {toast && (
+        <div role="status" className="fixed bottom-4 right-4 z-50 max-w-[420px] rounded border border-green-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-lg">
+          <span className="mr-1 font-bold text-green-700">CONFIRMED</span> {toast}
+          <button onClick={() => setToast(null)} className="ml-2 text-xs text-gray-400 hover:text-gray-700" aria-label="Dismiss">✕</button>
+        </div>
+      )}
     </main>
   );
 }
