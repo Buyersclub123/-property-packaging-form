@@ -1775,7 +1775,7 @@ export default function ContractTeamReportingPage() {
   }, []);
 
   const clampToViewport = useCallback((x: number, y: number) => ({
-    x: Math.max(4, Math.min(x, window.innerWidth - SORT_DIALOG_WIDTH - 4)),
+    x: Math.max(4, Math.min(x, window.innerWidth - Math.min(SORT_DIALOG_WIDTH, window.innerWidth - 8) - 4)),
     // Keep at least the drag bar on screen
     y: Math.max(4, Math.min(y, window.innerHeight - 40)),
   }), []);
@@ -1785,8 +1785,9 @@ export default function ContractTeamReportingPage() {
       if (open) return false;
       // First open: drop it just under the Sort button, then it stays where the
       // user last dragged it.
+      // Re-clamp a remembered spot: the window or zoom may have changed since.
       setSortDialogPos((pos) => {
-        if (pos) return pos;
+        if (pos) return clampToViewport(pos.x, pos.y);
         const r = sortBtnRef.current?.getBoundingClientRect();
         return clampToViewport(r ? r.left : 100, r ? r.bottom + 6 : 100);
       });
@@ -1817,6 +1818,14 @@ export default function ContractTeamReportingPage() {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   }, [clampToViewport]);
+
+  // Keep the open panel fully on screen when the window resizes or the zoom changes.
+  useEffect(() => {
+    if (!showSortDialog) return;
+    const onResize = () => setSortDialogPos((pos) => (pos ? clampToViewport(pos.x, pos.y) : pos));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [showSortDialog, clampToViewport]);
 
   const t = THEMES[theme];
 
@@ -2338,9 +2347,15 @@ export default function ContractTeamReportingPage() {
       }
       if (passesOthers) values.add(getDisplayValue(r, column) || '(blank)');
     }
-    return Array.from(values).sort();
+    // Dropdown fields (Finance Status, Construction stage...) list in their GHL option order; the rest A-Z.
+    const order = (dropdownOptions(column) || []).map((o) => o.label);
+    const rank = (v: string) => { const i = order.indexOf(v); return i < 0 ? Infinity : i; };
+    return Array.from(values).sort((a, b) => {
+      const ra = rank(a), rb = rank(b);
+      return ra !== rb ? (ra === Infinity ? 1 : rb === Infinity ? -1 : ra - rb) : a < b ? -1 : a > b ? 1 : 0;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewScopedRecords, excludedFilters, textExcludeFilters, textIncludeFilters]);
+  }, [viewScopedRecords, excludedFilters, textExcludeFilters, textIncludeFilters, schemaInfo]);
 
   // Apply filters (effectiveView = live builder preview when it's open)
   const filteredRecords = useMemo(() => {
@@ -3733,7 +3748,11 @@ export default function ContractTeamReportingPage() {
         <div
           data-sort-dialog
           className={`fixed z-[90] ${t.bg} border ${t.inputBorder} rounded shadow-2xl dropdown-container`}
-          style={{ left: sortDialogPos.x, top: sortDialogPos.y, width: SORT_DIALOG_WIDTH }}
+          style={{
+            left: sortDialogPos.x, top: sortDialogPos.y,
+            width: `min(${SORT_DIALOG_WIDTH}px, calc(100vw - 8px))`,
+            maxHeight: `calc(100vh - ${sortDialogPos.y + 4}px)`, overflowY: 'auto',
+          }}
         >
           {/* Drag bar */}
           <div
