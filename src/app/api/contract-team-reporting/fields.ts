@@ -3013,9 +3013,9 @@ export const MONTH_NAMES = [
 export const LAND_REG_PARTS = ['Early', 'Mid', 'Late'] as const;
 export type LandRegPart = '' | (typeof LAND_REG_PARTS)[number];
 const LAND_REG_MONTH_RE = new RegExp(`^(?:(${LAND_REG_PARTS.join('|')}) )?(${MONTH_NAMES.join('|')}) (\\d{4}) approx\\.$`);
-/** Allowed land_registration values: "Registered", "TBC" or "[Early|Mid|Late ]Month YYYY approx." */
+/** Allowed land_registration values: "Registered", "TBC" or "[Early|Mid|Late ]Month YYYY approx.", or blank to clear a mistake. */
 export function isValidLandRegistration(v: string): boolean {
-  return v === 'Registered' || v === 'TBC' || LAND_REG_MONTH_RE.test(v);
+  return v === '' || v === 'Registered' || v === 'TBC' || LAND_REG_MONTH_RE.test(v);
 }
 export function parseLandRegistrationMonth(v: string): { part: LandRegPart; month: string; year: number } | null {
   const m = LAND_REG_MONTH_RE.exec(v);

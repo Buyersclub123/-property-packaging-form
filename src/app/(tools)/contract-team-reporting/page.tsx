@@ -138,9 +138,9 @@ function checkboxOnValue(key: string): string | null {
 // Land registration edit control (JT mock-up 3/11): Registered / TBC / Expected month, never free text.
 // The cell stays one line; the buttons and pickers open in a floating panel so the column doesn't widen.
 // Also used for completion_date (packaging tool control): COMPLETED / TBC / Expected month, no Early/Mid/Late.
-function LandRegistrationControl({ value, original, onChange, inputClass, panelClass, fixed = 'Registered', parts = true, title = 'Change land registration', allowBlank = false }: {
+function LandRegistrationControl({ value, original, onChange, inputClass, panelClass, fixed = 'Registered', parts = true, title = 'Change land registration' }: {
   value: string; original: string; onChange: (v: string) => void; inputClass: string; panelClass: string;
-  fixed?: string; parts?: boolean; title?: string; allowBlank?: boolean;
+  fixed?: string; parts?: boolean; title?: string;
 }) {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -204,7 +204,7 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
             <button type="button" className={btn(mode === 'reg')} onClick={() => { onChange(fixed); setPos(null); }}>{fixed}</button>
             <button type="button" className={btn(mode === 'tbc')} onClick={() => { onChange('TBC'); setPos(null); }}>TBC</button>
             <button type="button" className={btn(mode === 'month')} onClick={() => setMonth(month, year)}>Expected month</button>
-            {allowBlank && <button type="button" title="Clear the value (blank)" className={btn(mode === '' && value === '')} onClick={() => { onChange(''); setPos(null); }}>Clear</button>}
+            <button type="button" title="Clear the value (blank)" className={btn(value === '')} onClick={() => { onChange(''); setPos(null); }}>Clear</button>
           </div>
           {mode === 'month' && (
             <div className="flex gap-1">
@@ -3631,7 +3631,6 @@ export default function ContractTeamReportingPage() {
                             panelClass={`${t.inputBg} ${t.text} border ${t.inputBorder}`}
                             fixed="COMPLETED"
                             parts={false}
-                            allowBlank
                             title={`Change ${headerLabel(col)}`}
                           />
                         );
