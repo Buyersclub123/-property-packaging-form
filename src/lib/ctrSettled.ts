@@ -21,7 +21,7 @@ const SETTLED_STATUS = '04_settled';
 
 export type SettledStep = { step: string; field: string; before: string; after: string; readBack: string; result: string };
 export type SettledSummary = { runId: string; dryRun: boolean; steps: SettledStep[] };
-type Opp = { pipelineId?: string; pipelineStageId?: string; customFields?: { id: string; fieldValue?: unknown; fieldValueArray?: unknown; fieldValueString?: unknown; value?: unknown }[] };
+type Opp = { name?: string; pipelineId?: string; pipelineStageId?: string; customFields?: { id: string; fieldValue?: unknown; fieldValueArray?: unknown; fieldValueString?: unknown; value?: unknown }[] };
 
 const headers = () => ({ Authorization: `Bearer ${TOKEN}`, Version: VERSION, 'Content-Type': 'application/json' });
 
@@ -34,6 +34,7 @@ function str(v: unknown): string {
 export async function ensureSettledTables(): Promise<void> {
   await ensureStampTables();
   await getDb()`CREATE TABLE IF NOT EXISTS ctr_settled_log (id serial PRIMARY KEY, run_id text NOT NULL, at timestamptz NOT NULL DEFAULT now(), user_email text, opportunity_id text NOT NULL, record_id text, step text NOT NULL, field text, old_value text, new_value text, read_back text, dry_run boolean NOT NULL, result text NOT NULL)`;
+  await getDb()`ALTER TABLE ctr_settled_log ADD COLUMN IF NOT EXISTS opportunity_name text`;
 }
 
 // Same settings table as the nightly stamp; a missing row = dry run.
@@ -157,14 +158,15 @@ export async function runSettled(args: { email: string | null; opportunityId: st
     }
   }
 
+  const oppName = afterOpp?.name || oppBefore?.name || null;
   try {
     const sql = getDb();
     for (const s of steps) {
-      await sql`INSERT INTO ctr_settled_log (run_id, user_email, opportunity_id, record_id, step, field, old_value, new_value, read_back, dry_run, result)
-        VALUES (${runId}, ${email}, ${opportunityId}, ${propertyRecordId}, ${s.step}, ${s.field}, ${s.before}, ${s.after}, ${s.readBack}, ${dryRun}, ${s.result})`;
+      await sql`INSERT INTO ctr_settled_log (run_id, user_email, opportunity_id, opportunity_name, record_id, step, field, old_value, new_value, read_back, dry_run, result)
+        VALUES (${runId}, ${email}, ${opportunityId}, ${oppName}, ${propertyRecordId}, ${s.step}, ${s.field}, ${s.before}, ${s.after}, ${s.readBack}, ${dryRun}, ${s.result})`;
     }
-    await sql`INSERT INTO ctr_settled_log (run_id, user_email, opportunity_id, record_id, step, dry_run, result)
-      VALUES (${runId}, ${email}, ${opportunityId}, ${propertyRecordId}, 'run', ${dryRun}, ${steps.map((s) => `${s.step}: ${s.result}`).join('; ')})`;
+    await sql`INSERT INTO ctr_settled_log (run_id, user_email, opportunity_id, opportunity_name, record_id, step, dry_run, result)
+      VALUES (${runId}, ${email}, ${opportunityId}, ${oppName}, ${propertyRecordId}, 'run', ${dryRun}, ${steps.map((s) => `${s.step}: ${s.result}`).join('; ')})`;
   } catch (e) {
     console.error('CTR settled log failed:', e);
   }
@@ -177,7 +179,7 @@ export async function runSettled(args: { email: string | null; opportunityId: st
       reason: 'A user ticked Settlement confirmed in CTRT and part of the automatic update did not complete.',
       impact: 'The opportunity stage and/or Property Record status may not match Settlement confirmed.',
       action: 'Check Admin > Automated updates (Settlement confirmed log) and fix the record in GHL.',
-      detailsHtml: `<p>Opportunity: ${opportunityId}</p><ul>${failed.map((s) => `<li>${s.step}: ${s.result}</li>`).join('')}</ul>`,
+      detailsHtml: `<p>Opportunity: ${oppName || ''} (${opportunityId})</p><ul>${failed.map((s) => `<li>${s.step}: ${s.result}</li>`).join('')}</ul>`,
     });
   }
   return { runId, dryRun, steps };

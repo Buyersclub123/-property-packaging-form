@@ -7,7 +7,7 @@ type Row = Record<string, string | boolean | null>;
 interface Data {
   register: AutomatedUpdate[];
   stamp: { apply: boolean; runs: Row[]; recent: Row[] };
-  settled: { apply: boolean; recent: Row[] };
+  settled: { apply: boolean; switchedBy: string | null; switchedAt: string | null; recent: Row[] };
 }
 
 // Admin > Automated updates: every non-human write path into GHL, plus the nightly stamp's switch and log.
@@ -46,7 +46,14 @@ export default function AutomatedUpdatesPage() {
     load();
   }
 
-  const fmt = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+  // Timestamps are stored in UTC; show them in Brisbane time.
+  const fmt = (v: unknown) => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)
+      ? new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
+      : s;
+  };
 
   return (
     <div className="min-h-screen bg-white p-6 text-sm text-gray-800">
@@ -111,6 +118,7 @@ export default function AutomatedUpdatesPage() {
             <button disabled={saving} onClick={() => setSettledApply(!data.settled.apply)} className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-500 disabled:opacity-50">
               {data.settled.apply ? 'Switch to dry run' : 'Switch on writing'}
             </button>
+            {data.settled.switchedBy && <span className="text-gray-500">Last switched by {data.settled.switchedBy}, {fmt(data.settled.switchedAt)} (Brisbane)</span>}
           </div>
           <h3 className="mb-1 font-medium">Recent runs (last 200 steps)</h3>
           <table className="w-full border-collapse border border-gray-200">
@@ -121,7 +129,9 @@ export default function AutomatedUpdatesPage() {
               {data.settled.recent.length === 0 && <tr><td colSpan={10} className="px-2 py-1 text-gray-500">No runs yet.</td></tr>}
               {data.settled.recent.map((r, i) => (
                 <tr key={i}>
-                  {['at', 'user_email', 'opportunity_id', 'record_id', 'step', 'old_value', 'new_value', 'read_back'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}
+                  {['at', 'user_email'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}
+                  <td className="border border-gray-200 px-2 py-1" title={`Opportunity ID ${fmt(r.opportunity_id)}`}>{fmt(r.opportunity_name || r.opportunity_id)}</td>
+                  {['record_id', 'step', 'old_value', 'new_value', 'read_back'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}
                   <td className="border border-gray-200 px-2 py-1">{r.dry_run ? 'Dry run' : 'Applied'}</td>
                   <td className="border border-gray-200 px-2 py-1">{fmt(r.result)}</td>
                 </tr>
