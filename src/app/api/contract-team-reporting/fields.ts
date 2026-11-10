@@ -2995,7 +2995,9 @@ export const CO_PREFIX = 'co_';
 // Replaced on 1/11 by per-field rules from "CTRT editability - for JT v1 (Devin).xlsx", column "Agreed (1/11)".
 // Y = human editable in CTRT. T = tool-proposed, human-accepted (read-only until that flow exists). Everything else N.
 export const CO_EDITABLE_KEYS = new Set<string>([
-  'agent_email', 'agent_mobile', 'agent_name', 'completion_date', 'construction_stage',
+  'agent_email', 'agent_mobile', 'agent_name', 'construction_stage',
+  // Packaging-tool control only: Expected "Month YYYY approx." / TBC / COMPLETED (isValidCompletionDate).
+  'completion_date',
   // Address fields (street_name, street_number, unit__lot) are read-only per the workbook (1/11).
   'status',
   // JT 3/11: edited only through the Registered / TBC / Expected month control, never free text.
@@ -3026,6 +3028,19 @@ export function formatLandRegistrationMonth(part: LandRegPart, month: string, ye
 export function landRegistrationSortKey(v: string): number | null {
   const p = parseLandRegistrationMonth(v);
   return p ? p.year * 100 + MONTH_NAMES.indexOf(p.month) * 4 + (p.part ? LAND_REG_PARTS.indexOf(p.part) + 1 : 0) : null;
+}
+const COMPLETION_MONTH_RE = new RegExp(`^(${MONTH_NAMES.join('|')}) (\\d{4}) approx\\.$`);
+/** Allowed completion_date values (same as the packaging tool): "COMPLETED", "TBC" or "Month YYYY approx." */
+export function isValidCompletionDate(v: string): boolean {
+  return v === 'COMPLETED' || v === 'TBC' || COMPLETION_MONTH_RE.test(v);
+}
+/** Sort key: COMPLETED, then expected months in date order, then TBC. Null for blank / anything else. */
+export function completionDateSortKey(v: string): number | null {
+  const t = v.trim();
+  if (t.toUpperCase() === 'COMPLETED') return 0;
+  if (t.toUpperCase() === 'TBC') return 1e7;
+  const m = COMPLETION_MONTH_RE.exec(t);
+  return m ? Number(m[2]) * 100 + MONTH_NAMES.indexOf(m[1]) + 1 : null;
 }
 export const CO_TOOL_PROPOSED_KEYS = new Set<string>(['closing_price']);
 export function isCoFieldEditable(key: string): boolean {

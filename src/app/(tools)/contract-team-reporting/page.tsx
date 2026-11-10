@@ -6,7 +6,7 @@ import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } fro
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
-import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, formatLandRegistrationMonth, landRegistrationSortKey, LAND_REG_PARTS, LandRegPart, getColumnBadge, OPP_DYNAMIC_PREFIX, isOppDynamicReadOnly } from '@/app/api/contract-team-reporting/fields';
+import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, formatLandRegistrationMonth, landRegistrationSortKey, completionDateSortKey, LAND_REG_PARTS, LandRegPart, getColumnBadge, OPP_DYNAMIC_PREFIX, isOppDynamicReadOnly } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
 // USER MAP
@@ -137,8 +137,10 @@ function checkboxOnValue(key: string): string | null {
 
 // Land registration edit control (JT mock-up 3/11): Registered / TBC / Expected month, never free text.
 // The cell stays one line; the buttons and pickers open in a floating panel so the column doesn't widen.
-function LandRegistrationControl({ value, original, onChange, inputClass, panelClass }: {
+// Also used for completion_date (packaging tool control): COMPLETED / TBC / Expected month, no Early/Mid/Late.
+function LandRegistrationControl({ value, original, onChange, inputClass, panelClass, fixed = 'Registered', parts = true, title = 'Change land registration' }: {
   value: string; original: string; onChange: (v: string) => void; inputClass: string; panelClass: string;
+  fixed?: string; parts?: boolean; title?: string;
 }) {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -168,11 +170,11 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
     setPos({ left: Math.max(4, Math.min(r.left, window.innerWidth - width - 4)), top: r.bottom + 2 });
   };
   const parsed = parseLandRegistrationMonth(value);
-  const mode = value === 'Registered' ? 'reg' : value === 'TBC' ? 'tbc' : parsed ? 'month' : '';
+  const mode = value === fixed ? 'reg' : value === 'TBC' ? 'tbc' : parsed ? 'month' : '';
   const now = new Date();
   const month = parsed?.month ?? MONTH_NAMES[now.getMonth()];
   const year = parsed?.year ?? now.getFullYear();
-  const part: LandRegPart = parsed?.part ?? '';
+  const part: LandRegPart = parts ? parsed?.part ?? '' : '';
   const years = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 1 + i);
   if (!years.includes(year)) years.unshift(year);
   const setMonth = (m: string, y: number, p: LandRegPart = part) => onChange(formatLandRegistrationMonth(p, m, y));
@@ -185,7 +187,7 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
         ref={triggerRef}
         type="button"
         onClick={toggle}
-        title={changed ? `Will save: ${value} (current: ${original || 'blank'})` : 'Change land registration'}
+        title={changed ? `Will save: ${value} (current: ${original || 'blank'})` : title}
         className={`w-full flex items-center justify-between gap-1 text-left ${inputClass} ${changed ? 'ring-1 ring-blue-500' : ''}`}
       >
         <span className="truncate">{value || '(blank)'}</span>
@@ -199,16 +201,16 @@ function LandRegistrationControl({ value, original, onChange, inputClass, panelC
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex gap-1">
-            <button type="button" className={btn(mode === 'reg')} onClick={() => { onChange('Registered'); setPos(null); }}>Registered</button>
+            <button type="button" className={btn(mode === 'reg')} onClick={() => { onChange(fixed); setPos(null); }}>{fixed}</button>
             <button type="button" className={btn(mode === 'tbc')} onClick={() => { onChange('TBC'); setPos(null); }}>TBC</button>
             <button type="button" className={btn(mode === 'month')} onClick={() => setMonth(month, year)}>Expected month</button>
           </div>
           {mode === 'month' && (
             <div className="flex gap-1">
-              <select value={part} title="Early / Mid / Late (optional)" onChange={(e) => setMonth(month, year, e.target.value as LandRegPart)} className={`w-14 flex-none ${inputClass}`}>
+              {parts && <select value={part} title="Early / Mid / Late (optional)" onChange={(e) => setMonth(month, year, e.target.value as LandRegPart)} className={`w-14 flex-none ${inputClass}`}>
                 <option value="">-</option>
                 {LAND_REG_PARTS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              </select>}
               <select value={month} onChange={(e) => setMonth(e.target.value, year)} className={`flex-1 ${inputClass}`}>
                 {MONTH_NAMES.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -2354,8 +2356,12 @@ export default function ContractTeamReportingPage() {
       if (passesOthers) values.add(getDisplayValue(r, column) || '(blank)');
     }
     // Dropdown fields (Finance Status, Construction stage...) list in their GHL option order; the rest A-Z.
+    // Completion date lists COMPLETED, then expected months in date order, then TBC.
     const order = (dropdownOptions(column) || []).map((o) => o.label);
-    const rank = (v: string) => { const i = order.indexOf(v); return i < 0 ? Infinity : i; };
+    const rank = (v: string) => {
+      if (column === 'co_completion_date') return completionDateSortKey(v) ?? Infinity;
+      const i = order.indexOf(v); return i < 0 ? Infinity : i;
+    };
     return Array.from(values).sort((a, b) => {
       const ra = rank(a), rb = rank(b);
       return ra !== rb ? (ra === Infinity ? 1 : rb === Infinity ? -1 : ra - rb) : a < b ? -1 : a > b ? 1 : 0;
@@ -2468,8 +2474,9 @@ export default function ContractTeamReportingPage() {
       const ia = optIndex(a, aVal), ib = optIndex(b, bVal);
       if (opts && (ia >= 0 || ib >= 0)) {
         compare = ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : 1;
-      } else if (sortColumn === 'co_land_registration') {
-        const ka = landRegistrationSortKey(aVal), kb = landRegistrationSortKey(bVal);
+      } else if (sortColumn === 'co_land_registration' || sortColumn === 'co_completion_date') {
+        const key = sortColumn === 'co_land_registration' ? landRegistrationSortKey : completionDateSortKey;
+        const ka = key(aVal), kb = key(bVal);
         compare = ka !== null && kb !== null ? ka - kb : ka !== null ? -1 : kb !== null ? 1 : aVal.localeCompare(bVal);
       } else if (isDateField(sortColumn)) {
         // Parse DD/MM/YYYY or YYYY-MM-DD
@@ -3611,6 +3618,19 @@ export default function ContractTeamReportingPage() {
                             onChange={(v) => setEditValue(record.id, col.key, v)}
                             inputClass={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-0.5 py-0 ${t.text}`}
                             panelClass={`${t.inputBg} ${t.text} border ${t.inputBorder}`}
+                          />
+                        );
+                      } else if (col.key === 'co_completion_date') {
+                        cellContent = (
+                          <LandRegistrationControl
+                            value={currentValue}
+                            original={rawValue}
+                            onChange={(v) => setEditValue(record.id, col.key, v)}
+                            inputClass={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-0.5 py-0 ${t.text}`}
+                            panelClass={`${t.inputBg} ${t.text} border ${t.inputBorder}`}
+                            fixed="COMPLETED"
+                            parts={false}
+                            title={`Change ${headerLabel(col)}`}
                           />
                         );
                       } else if (dropdownOptions(col.key)) {

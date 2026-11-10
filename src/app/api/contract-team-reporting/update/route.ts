@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX, CO_EDITABLE_KEYS, CO_CHANGE_DATE_FIELDS, READ_ONLY_FIELDS, isValidLandRegistration } from '../fields';
+import { FRIENDLY_TO_FIELD_ID, PROPERTY_OBJECT_ID, PROPERTY_FIELD_TYPES, CO_PREFIX, CO_EDITABLE_KEYS, CO_CHANGE_DATE_FIELDS, READ_ONLY_FIELDS, isValidLandRegistration, isValidCompletionDate } from '../fields';
 import { sendCtrAlert } from '../alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { getDb } from '@/lib/db';
@@ -83,6 +83,12 @@ export async function PUT(request: NextRequest) {
         if (coKey === 'land_registration' && !isValidLandRegistration(value)) {
           return NextResponse.json(
             { error: `Land registration must be Registered, TBC or "[Early|Mid|Late ]Month YYYY approx." (got "${value}")` },
+            { status: 400 }
+          );
+        }
+        if (coKey === 'completion_date' && !isValidCompletionDate(value)) {
+          return NextResponse.json(
+            { error: `Completion date must be COMPLETED, TBC or "Month YYYY approx." (got "${value}")` },
             { status: 400 }
           );
         }
