@@ -6,7 +6,7 @@ import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } fro
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
-import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, formatLandRegistrationMonth, landRegistrationSortKey, LAND_REG_PARTS, LandRegPart, getColumnBadge, OPP_DYNAMIC_PREFIX } from '@/app/api/contract-team-reporting/fields';
+import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, formatLandRegistrationMonth, landRegistrationSortKey, LAND_REG_PARTS, LandRegPart, getColumnBadge, OPP_DYNAMIC_PREFIX, isOppDynamicReadOnly } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
 // USER MAP
@@ -2037,7 +2037,7 @@ export default function ContractTeamReportingPage() {
     // Send every edited field that isn't read-only; the update API maps
     // friendly names to GHL field IDs and safely ignores anything unwritable.
     for (const [key, newVal] of Object.entries(edits)) {
-      if (READ_ONLY_FIELDS.has(key) || key === 'assignedTo' || key.startsWith(OPP_DYNAMIC_PREFIX)) continue;
+      if (READ_ONLY_FIELDS.has(key) || key === 'assignedTo' || isOppDynamicReadOnly(key)) continue;
       if (key.startsWith(CO_PREFIX) && !isCoFieldEditable(key)) continue;
       if (newVal !== undefined && newVal !== original[key]) {
         changes[key] = newVal;
@@ -2079,6 +2079,12 @@ export default function ContractTeamReportingPage() {
           delete next[recordId];
           return next;
         });
+        // Settlement confirmed ticked: show what the automated update did (or would do in dry run).
+        const data = await res.json().catch(() => ({}));
+        if (data.settled) {
+          const steps = (data.settled.steps || []) as { step: string; result: string; before: string; after: string }[];
+          alert(`Settlement confirmed saved for ${original.opportunityName || original.name}.${data.settled.dryRun ? '\nDry run: the stage and Property Record were NOT changed (switch in Admin > Automated updates).' : ''}\n\n${steps.map((s) => `${s.step}: ${s.result}\n   ${s.before} -> ${s.after}`).join('\n')}`);
+        }
       }
     } catch (err: any) {
       alert(`Save error: ${err.message}`);
@@ -3576,7 +3582,7 @@ export default function ContractTeamReportingPage() {
                     const displayValue = getDisplayValue(record, col.key);
                     // Property Record fields are per row: an opp with no linked Property Record has nothing to edit.
                     const noPropertyRecord = col.key.startsWith(CO_PREFIX) && !record.propertyRecordIds;
-                    const isEditable = editMode && isSelected && !noPropertyRecord && !READ_ONLY_FIELDS.has(col.key) && !col.key.startsWith(OPP_DYNAMIC_PREFIX) && !(col.key.startsWith(CO_PREFIX) && !isCoFieldEditable(col.key));
+                    const isEditable = editMode && isSelected && !noPropertyRecord && !READ_ONLY_FIELDS.has(col.key) && !isOppDynamicReadOnly(col.key) && !(col.key.startsWith(CO_PREFIX) && !isCoFieldEditable(col.key));
                     const currentValue = isEditable ? getEditValue(record.id, col.key) : rawValue;
                     let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;
 

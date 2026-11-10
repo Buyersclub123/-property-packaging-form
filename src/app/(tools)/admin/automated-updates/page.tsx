@@ -7,6 +7,7 @@ type Row = Record<string, string | boolean | null>;
 interface Data {
   register: AutomatedUpdate[];
   stamp: { apply: boolean; runs: Row[]; recent: Row[] };
+  settled: { apply: boolean; recent: Row[] };
 }
 
 // Admin > Automated updates: every non-human write path into GHL, plus the nightly stamp's switch and log.
@@ -29,6 +30,16 @@ export default function AutomatedUpdatesPage() {
     if (apply && !confirm('Switch the nightly stamp from dry run to writing dates into GHL?')) return;
     setSaving(true);
     const res = await fetch('/api/admin/automated-updates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apply }) });
+    const json = await res.json();
+    setSaving(false);
+    if (!res.ok) { setError(json.error || `HTTP ${res.status}`); return; }
+    load();
+  }
+
+  async function setSettledApply(on: boolean) {
+    if (on && !confirm('Switch Settlement confirmed -> Settled from dry run to moving the opportunity and writing the Property Record status in GHL?')) return;
+    setSaving(true);
+    const res = await fetch('/api/admin/automated-updates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settledApply: on }) });
     const json = await res.json();
     setSaving(false);
     if (!res.ok) { setError(json.error || `HTTP ${res.status}`); return; }
@@ -88,6 +99,32 @@ export default function AutomatedUpdatesPage() {
             <tbody>
               {data.stamp.recent.map((r, i) => (
                 <tr key={i}>{['at', 'object', 'record_id', 'field', 'old_value', 'new_value', 'date_field', 'date_written', 'result'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h2 className="mb-2 mt-8 text-lg font-semibold">Settlement confirmed -&gt; Settled</h2>
+          <div className="mb-3 flex items-center gap-3">
+            <span className={`rounded px-2 py-0.5 ${data.settled.apply ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>
+              {data.settled.apply ? 'Moving stage + writing Property Record status' : 'Dry run (log only): only the checkbox is written'}
+            </span>
+            <button disabled={saving} onClick={() => setSettledApply(!data.settled.apply)} className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-500 disabled:opacity-50">
+              {data.settled.apply ? 'Switch to dry run' : 'Switch on writing'}
+            </button>
+          </div>
+          <h3 className="mb-1 font-medium">Recent runs (last 200 steps)</h3>
+          <table className="w-full border-collapse border border-gray-200">
+            <thead className="bg-gray-50 text-left text-gray-500">
+              <tr>{['When', 'User', 'Opportunity', 'Property Record', 'Step', 'Before', 'After', 'Read back', 'Mode', 'Result'].map((h) => <th key={h} className="border border-gray-200 px-2 py-1">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {data.settled.recent.length === 0 && <tr><td colSpan={10} className="px-2 py-1 text-gray-500">No runs yet.</td></tr>}
+              {data.settled.recent.map((r, i) => (
+                <tr key={i}>
+                  {['at', 'user_email', 'opportunity_id', 'record_id', 'step', 'old_value', 'new_value', 'read_back'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}
+                  <td className="border border-gray-200 px-2 py-1">{r.dry_run ? 'Dry run' : 'Applied'}</td>
+                  <td className="border border-gray-200 px-2 py-1">{fmt(r.result)}</td>
+                </tr>
               ))}
             </tbody>
           </table>

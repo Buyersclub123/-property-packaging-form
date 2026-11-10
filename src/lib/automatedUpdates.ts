@@ -35,6 +35,14 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
     log: 'Postgres ctr_edit_log (old -> new, with user); failures emailed (CTR alerts)',
   },
   {
+    name: 'Settlement confirmed -> Settled',
+    what: 'When a user ticks Settlement confirmed on an opportunity in CTRT, the opportunity moves to Property Team > Settled and the linked Property Record to 04 Settled',
+    trigger: 'Same save call as the user tick (/api/contract-team-reporting/update)',
+    fieldsWritten: 'Opportunity settlement_confirmed = Yes (the user edit); Opportunity pipeline/stage = Property Team > Settled; Property Record status = 04_settled, status_change_date = today (Sydney)',
+    rule: 'Tick only; untick writes the checkbox and nothing else. Stage skipped if already Property Team > Settled; Property Record skipped if none is linked, it is already 04_settled, or the user set Status in the same save. Stage and Property Record are dry run (log only) until switched on below.',
+    log: 'Postgres ctr_settled_log (each step before -> after with read back, plus a run row; switch in ctr_stamp_settings key settled_apply); failures emailed (CTR alerts)',
+  },
+  {
     name: 'Sales Meeting Outcomes GHL write-back',
     what: 'Writes the meeting outcome a user clicks to the GHL appointment',
     trigger: 'User clicks an outcome in /review-outcomes, when Settings > "Write outcomes to" = DB + GHL appointment status',

@@ -4,6 +4,7 @@ import { sendCtrAlert } from '../alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { getDb } from '@/lib/db';
 import { emailFromHeaders } from '@/lib/tileAccess';
+import { SETTLEMENT_CONFIRMED_FIELD_ID, SETTLEMENT_CONFIRMED_KEY, readOpportunity, runSettled } from '@/lib/ctrSettled';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -60,9 +61,17 @@ export async function PUT(request: NextRequest) {
     // Split changes into opportunity custom fields and property record (co_) fields
     const customFields: { id: string; field_value: unknown }[] = [];
     const propertyProps: Record<string, unknown> = {};
+    let settledTicked = false;
 
     for (const [rawKey, rawValue] of Object.entries(changes || {})) {
       const value = rawValue === null || rawValue === undefined ? '' : String(rawValue);
+
+      // Settlement confirmed (live-schema opp_ column): ticking it runs the Settled automated update after the save.
+      if (rawKey === SETTLEMENT_CONFIRMED_KEY) {
+        settledTicked = value === 'true' || value === 'Yes';
+        customFields.push({ id: SETTLEMENT_CONFIRMED_FIELD_ID, field_value: settledTicked ? ['Yes'] : [] });
+        continue;
+      }
 
       // Custom object (Property Review) fields — written to the property record.
       if (rawKey.startsWith(CO_PREFIX)) {
@@ -149,6 +158,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No changes to save' }, { status: 400 });
     }
 
+    const oppBefore = settledTicked ? await readOpportunity(opportunityId) : null;
+
     // 1. Update opportunity custom fields
     if (Object.keys(payload).length > 0) {
       const url = `${GHL_BASE_URL}/opportunities/${opportunityId}?locationId=${GHL_LOCATION_ID}`;
@@ -205,7 +216,12 @@ export async function PUT(request: NextRequest) {
       await logEdits(emailFromHeaders(request.headers), opportunityId, propertyRecordId, before, propertyProps);
     }
 
-    return NextResponse.json({ success: true });
+    // 3. Settlement confirmed ticked -> Property Team > Settled + Property Record 04_settled (dry run until switched on).
+    const settled = settledTicked
+      ? await runSettled({ email: emailFromHeaders(request.headers), opportunityId, propertyRecordId: propertyRecordId || null, oppBefore, statusInSameSave: 'status' in propertyProps })
+      : undefined;
+
+    return NextResponse.json({ success: true, settled });
   } catch (error) {
     console.error('CTR update error:', error);
     return NextResponse.json({ error: 'Failed to update opportunity' }, { status: 500 });

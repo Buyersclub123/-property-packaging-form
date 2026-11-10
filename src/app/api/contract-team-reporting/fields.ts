@@ -100,6 +100,10 @@ export const FIELD_MAP: Record<string, string> = {
 
 // Opportunity custom fields not in FIELD_MAP are sent as opp_<GHL key> columns from the live schema (read-only).
 export const OPP_DYNAMIC_PREFIX = 'opp_';
+// The live-schema Opportunity columns that CAN be edited (the update route handles each one explicitly).
+// Settlement confirmed: ticking it also runs the "Settlement confirmed -> Settled" automated update (src/lib/ctrSettled.ts).
+export const OPP_DYNAMIC_EDITABLE = new Set<string>(['opp_settlement_confirmed']);
+export const isOppDynamicReadOnly = (key: string) => key.startsWith(OPP_DYNAMIC_PREFIX) && !OPP_DYNAMIC_EDITABLE.has(key);
 
 // Values computed by the reporting API (never written to GHL). Used by the NEW-mapping views.
 export const COMPUTED_FIELDS = [
