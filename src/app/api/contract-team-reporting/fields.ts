@@ -3030,9 +3030,9 @@ export function landRegistrationSortKey(v: string): number | null {
   return p ? p.year * 100 + MONTH_NAMES.indexOf(p.month) * 4 + (p.part ? LAND_REG_PARTS.indexOf(p.part) + 1 : 0) : null;
 }
 const COMPLETION_MONTH_RE = new RegExp(`^(${MONTH_NAMES.join('|')}) (\\d{4}) approx\\.$`);
-/** Allowed completion_date values (same as the packaging tool): "COMPLETED", "TBC" or "Month YYYY approx." */
+/** Allowed completion_date values (same as the packaging tool): "COMPLETED", "TBC" or "Month YYYY approx.", or blank to clear a mistake. */
 export function isValidCompletionDate(v: string): boolean {
-  return v === 'COMPLETED' || v === 'TBC' || COMPLETION_MONTH_RE.test(v);
+  return v === '' || v === 'COMPLETED' || v === 'TBC' || COMPLETION_MONTH_RE.test(v);
 }
 /** Sort key: COMPLETED, then expected months in date order, then TBC. Null for blank / anything else. */
 export function completionDateSortKey(v: string): number | null {

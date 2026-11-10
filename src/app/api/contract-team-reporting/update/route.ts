@@ -88,7 +88,7 @@ export async function PUT(request: NextRequest) {
         }
         if (coKey === 'completion_date' && !isValidCompletionDate(value)) {
           return NextResponse.json(
-            { error: `Completion date must be COMPLETED, TBC or "Month YYYY approx." (got "${value}")` },
+            { error: `Completion date must be COMPLETED, TBC, "Month YYYY approx." or blank (got "${value}")` },
             { status: 400 }
           );
         }
