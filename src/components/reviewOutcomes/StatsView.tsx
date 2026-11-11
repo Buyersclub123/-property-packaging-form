@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, dataSourceLines, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type SalesData, type StatTarget } from '@/lib/reviewOutcomes/types';
-import { aud, emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sumSold } from '@/lib/reviewOutcomes/salesStats';
+import { emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sumSold } from '@/lib/reviewOutcomes/salesStats';
 import { dmy, weekday } from './ui';
 import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
 import type { Signup, SignupsData } from '@/lib/reviewOutcomes/signups';
@@ -158,7 +158,7 @@ function CcTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: 
         {T(t.ref.sat, 'sat', 'ref')}{T(t.ref.dnq, 'dnq', 'ref')}<td className={TD}>{n0(s.ref)}</td>
         <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td>
         <td className={`${TD} ${SHADE}`}>{exB}</td><td className={`${TD} ${SHADE}`}>{exS}</td>
-        <td className={`${TD} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td><td className={TD}>{aud(s.revenue)}</td>
+        <td className={`${TD} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
         <td className={`${TD} ${SHADE}`}>{pct(t.nl.sat, t.nl.booked)}</td><td className={`${TD} ${SHADE}`} title="SOLD / Sat (all meeting types)">{pct(s.total, r.sat + exS)}</td>
       </tr>
     );
@@ -172,7 +172,6 @@ function CcTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: 
           <th className={TH} colSpan={12}>Sat</th>
           <th className={TH} rowSpan={3}>SOLD</th>
           <th className={TH} rowSpan={3}><V>Cancelled</V></th>
-          <th className={TH} rowSpan={3}><V>Revenue $</V></th>
           <th className={TH} rowSpan={3}><V>N/L Sat %</V></th>
           <th className={TH} rowSpan={3}><V>Sold %</V></th>
         </tr>
@@ -211,7 +210,6 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT, selfOf, pickSel
         {T(t.ref.sat, 'sat', 'ref')}{T(t.ref.dnq, 'dnq', 'ref')}<td className={TD}>{n0(s.ref)}</td><td className={`${TD} ${SHADE}`}>{pct(s.ref, t.ref.sat)}</td>
         <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td><td className={`${TD} ${SHADE}`}>{pct(s.pr, r.sat)}</td>
         <td className={TD}>{n0(s.selfGen)}</td><td className={TD}>{n0(s.repeat)}</td><td className={`${TD} ${SHADE} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
-        <td className={TD}>{aud(s.revenue)}</td>
         <td className={`${TD} ${SHADE}`}>{pct(allSat, r.booked + exB)}</td><td className={`${TD} ${SHADE}`} title="Sold / Sat (all meeting types)">{pct(s.total, allSat)}</td>
       </tr>
     );
@@ -224,7 +222,6 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT, selfOf, pickSel
           <th className={TH} colSpan={5}>BOOKED</th>
           <th className={TH} colSpan={12}>Sat</th>
           <th className={TH} colSpan={4}>Sold</th>
-          <th className={TH} rowSpan={3}><V>Revenue $</V></th>
           <th className={TH} rowSpan={3}><V>Overall Sat %</V></th>
           <th className={TH} rowSpan={3}><V>Overall Sold %</V></th>
         </tr>
@@ -291,27 +288,27 @@ const ratio = (n: number, d: number) => (d ? n / d : 0);
 async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, ccSold: SoldOf, salesSold: SoldOf, ccT: TypeOf, salesT: TypeOf, selfOf: (name: string) => number) {
   const XLSX = await import('xlsx');
   const ccHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sat %',
-    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'PR Sat', 'PR DNQ', 'PR Sold', 'Total (Excl PR) Booked', 'Total (Excl PR) Sat', 'SOLD', 'Cancelled', 'Revenue $', 'N/L Sat %', 'Sold %'];
+    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'PR Sat', 'PR DNQ', 'PR Sold', 'Total (Excl PR) Booked', 'Total (Excl PR) Sat', 'SOLD', 'Cancelled', 'N/L Sat %', 'Sold %'];
   const ccRow = (r: Row) => {
     const s = ccSold(r.name);
     const t = ccT(r.name);
     const exB = t.nl.booked + t.ref.booked + t.unk.booked;
     const exS = t.nl.sat + t.ref.sat + t.unk.sat;
-    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, t.nl.sat, t.nl.dnq, s.nl, ratio(t.nl.sat, t.nl.booked), t.ref.sat, t.ref.dnq, s.ref, r.sat, r.dnq, s.pr, exB, exS, s.total, s.cancelled, s.revenue, ratio(t.nl.sat, t.nl.booked), ratio(s.total, r.sat + exS)];
+    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, t.nl.sat, t.nl.dnq, s.nl, ratio(t.nl.sat, t.nl.booked), t.ref.sat, t.ref.dnq, s.ref, r.sat, r.dnq, s.pr, exB, exS, s.total, s.cancelled, ratio(t.nl.sat, t.nl.booked), ratio(s.total, r.sat + exS)];
   };
   const salesHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'Self-booked', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sold %',
-    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'Ref Sold %', 'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Cancelled', 'Revenue $', 'Overall Sat %', 'Overall Sold %'];
+    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'Ref Sold %', 'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Cancelled', 'Overall Sat %', 'Overall Sold %'];
   const salesRow = (r: Row) => {
     const s = salesSold(r.name);
     const t = salesT(r.name);
     const exB = t.nl.booked + t.ref.booked + t.unk.booked;
     const allSat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
-    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, selfOf(r.name), t.nl.sat, t.nl.dnq, s.nl, ratio(s.nl, t.nl.sat), t.ref.sat, t.ref.dnq, s.ref, ratio(s.ref, t.ref.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, s.revenue, ratio(allSat, r.booked + exB), ratio(s.total, allSat)];
+    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, selfOf(r.name), t.nl.sat, t.nl.dnq, s.nl, ratio(s.nl, t.nl.sat), t.ref.sat, t.ref.dnq, s.ref, ratio(s.ref, t.ref.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, ratio(allSat, r.booked + exB), ratio(s.total, allSat)];
   };
   const aoa: unknown[][] = [
     [`Sales Meeting Outcomes stats - ${label}`],
     ['PR and New Lead (Presentation Meeting One) meetings. New Lead vs Referral from the calendar schedule sheet (from March 2026); others Unknown, in TOTAL only.'],
-    ['Sold, Cancelled and Revenue: Buyers Club Tracking sheet, all lead sources.'],
+    ['Sold and Cancelled: Buyers Club Tracking sheet, all lead sources.'],
     [],
     ['CC Stats'], ccHead, ...cc.rows.map(ccRow), ccRow(cc.total),
     [],
