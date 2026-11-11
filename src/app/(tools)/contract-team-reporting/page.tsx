@@ -881,7 +881,11 @@ function emptyCellLabel(record: object, key: string): string {
   }
   return 'Not set';
 }
-const isNewOrMinedView = (id: string) => id.endsWith('-new') || id.endsWith('-mined');
+// Blank-cell placeholders apply on any view built from the new mapping - judged by its columns, not its name or id -
+// so copies such as "B&P (JT)" behave exactly like the built-in NEW views.
+const NEW_MAPPING_KEYS = new Set(['financeStatus', 'daysInFinanceStatus', 'daysInConstructionStage', 'purchasingEntityName', 'purchasingEntityType']);
+const isNewOrMinedView = (view: ViewDef) =>
+  view.id.endsWith('-new') || view.id.endsWith('-mined') || view.columns.some((c) => c.key.startsWith(CO_PREFIX) || NEW_MAPPING_KEYS.has(c.key));
 
 // Finance NEW views leave out Construction-pipeline opps unless "include deals in construction" is ticked (JT, parity 1/11).
 const EXCLUDE_CONSTRUCTION: ViewFilter = { field: 'pipelineId', operator: 'not equals', value: CONSTRUCTION_PIPELINE_ID };
@@ -1285,7 +1289,8 @@ export default function ContractTeamReportingPage() {
   // view at render time without declaration-order issues.
   const activeViewRef = useRef<{ name: string }>({ name: 'B&P' });
   // B&P formatting (coloured column groups, end-state greens) also applies to its NEW / MINED copies.
-  const isBpView = () => ['B&P', 'B&P NEW', 'B&P MINED'].includes(activeViewRef.current.name);
+  // Any view named "B&P…" (built-in or a copy such as "B&P (JT)") gets the B&P colouring.
+  const isBpView = () => /^B&P\b/.test(activeViewRef.current.name.trim());
 
   function getColumnBg(colKey: string, isHeader: boolean): string {
     const s = columnSettings[colKey];
@@ -1669,9 +1674,18 @@ export default function ContractTeamReportingPage() {
   // Unsaved-changes indicator: does the current layout differ from the active view?
   const hasUnsavedViewChanges = useMemo(() => {
     const stripWidths = (cols: ColumnDef[]) => cols.map((c) => ({ key: c.key, color: c.color || '', end: (c.endStateValues || []).join('|') }));
-    return JSON.stringify(stripWidths(columns)) !== JSON.stringify(stripWidths(activeView.columns))
-      || JSON.stringify(sortLevels) !== JSON.stringify(viewSortLevels(activeView));
-  }, [columns, sortLevels, activeView]);
+    return builderDraft
+      || JSON.stringify(stripWidths(columns)) !== JSON.stringify(stripWidths(activeView.columns))
+      || JSON.stringify(sortLevels) !== JSON.stringify(viewSortLevels(activeView))
+      || (showViewBuilder && JSON.stringify(effectiveView.filters) !== JSON.stringify(activeView.filters));
+  }, [columns, sortLevels, activeView, builderDraft, showViewBuilder, effectiveView.filters]);
+  // Reload / close tab with unsaved changes: the browser asks first (changes are only kept after Save).
+  useEffect(() => {
+    if (!hasUnsavedViewChanges) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasUnsavedViewChanges]);
 
   // John and Julie can delete any view; everyone else only views they created.
   function canDeleteView(view: ViewDef): boolean {
@@ -1731,15 +1745,6 @@ export default function ContractTeamReportingPage() {
   }, [userEmail, personalViews]);
 
   // Load public views from the server
-  const fetchPublicViews = useCallback(async () => {
-    try {
-      const res = await fetch('/api/contract-team-reporting/views');
-      if (!res.ok) return;
-      const data = await res.json();
-      if (Array.isArray(data.views)) setPublicViews(data.views.map(stripGeneratedExclusions));
-    } catch { /* server views unavailable — personal + builtin still work */ }
-  }, []);
-  useEffect(() => { fetchPublicViews(); }, [fetchPublicViews]);
   useEffect(() => {
     fetch('/api/contract-team-reporting/hidden-views', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
@@ -1824,6 +1829,23 @@ export default function ContractTeamReportingPage() {
     setActivePreset('none');
     setShowViewMenu(false);
   }, []);
+
+  const fetchPublicViews = useCallback(async () => {
+    try {
+      const res = await fetch('/api/contract-team-reporting/views');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data.views)) {
+        const views = data.views.map(stripGeneratedExclusions) as ViewDef[];
+        setPublicViews(views);
+        // On load, the remembered view's saved definition (columns, sort, filters) is applied in full,
+        // exactly as if it had just been picked from the menu - the browser never overrides the server.
+        const current = views.find((v) => v.id === (localStorage.getItem('ctr-view-id') || ''));
+        if (current) selectView(current);
+      }
+    } catch { /* server views unavailable — personal + builtin still work */ }
+  }, [selectView]);
+  useEffect(() => { fetchPublicViews(); }, [fetchPublicViews]);
 
 
   // Export
@@ -2768,7 +2790,7 @@ export default function ContractTeamReportingPage() {
                     valAttendedNoOutcome: 'Attended no outcome',
                     valShortfall: 'Shortfall',
                   }
-                : activeView.name === 'B&P' || activeView.name === 'B&P NEW' || activeView.name === 'B&P MINED'
+                : /^B&P\b/.test(activeView.name.trim())
                   ? {
                       none: 'All *',
                       blankPropertyType: 'Blank P-type',
@@ -2884,7 +2906,10 @@ export default function ContractTeamReportingPage() {
                           className={`flex items-center group ${t.hoverBg}`}
                         >
                           <button
-                            onClick={() => selectView(view)}
+                            onClick={() => {
+                              if (hasUnsavedViewChanges && !confirm('You have unsaved filter changes on this view. Filters are only kept after Save. Switch view and lose them?')) return;
+                              selectView(view);
+                            }}
                             className={`flex-1 text-left pl-6 pr-3 py-1.5 text-xs ${t.text} ${activeViewId === view.id ? 'font-bold' : ''}`}
                           >
                             <span className="opacity-40 mr-1.5 cursor-grab">⠿</span>
@@ -3085,15 +3110,31 @@ export default function ContractTeamReportingPage() {
                         <option key={op} value={op}>{op}</option>
                       ))}
                     </select>
-                    {f.operator !== 'is blank' && f.operator !== 'not blank' && (
-                      <input
-                        type="text"
-                        value={f.value}
-                        placeholder={f.operator === 'in' || f.operator === 'not in' || f.operator === 'contains any' ? 'a, b, c' : 'value'}
-                        onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, value: e.target.value } : x)))}
-                        className={`w-28 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText} placeholder-gray-500 focus:outline-none`}
-                      />
-                    )}
+                    {f.operator !== 'is blank' && f.operator !== 'not blank' && (() => {
+                      // Dropdown fields: pick the option by its label; the saved value stays the GHL key, so matching is unchanged.
+                      const opts = (f.operator === 'equals' || f.operator === 'not equals') ? dropdownOptions(f.field) : null;
+                      if (opts && opts.length > 1) {
+                        return (
+                          <select
+                            value={f.value}
+                            onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, value: e.target.value } : x)))}
+                            className={`w-36 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
+                          >
+                            {!opts.some((o) => o.key === f.value) && <option value={f.value}>{f.value || 'choose…'}</option>}
+                            {opts.filter((o) => o.key !== '').map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                          </select>
+                        );
+                      }
+                      return (
+                        <input
+                          type="text"
+                          value={f.value}
+                          placeholder={f.operator === 'in' || f.operator === 'not in' || f.operator === 'contains any' ? 'a, b, c' : 'value'}
+                          onChange={(e) => setBuilderExtraFilters((prev) => prev.map((x, i) => (i === idx ? { ...x, value: e.target.value } : x)))}
+                          className={`w-28 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText} placeholder-gray-500 focus:outline-none`}
+                        />
+                      );
+                    })()}
                     <button
                       onClick={() => setBuilderExtraFilters((prev) => prev.filter((_, i) => i !== idx))}
                       className="text-[11px] px-1 text-red-400 hover:text-red-300"
@@ -3849,7 +3890,7 @@ export default function ContractTeamReportingPage() {
                           Draft email
                         </a>
                       );
-                    } else if (!displayValue && isNewOrMinedView(activeView.id)) {
+                    } else if (!displayValue && isNewOrMinedView(activeView)) {
                       cellContent = <span className="italic text-gray-400 text-[0.9em]">{emptyCellLabel(record, col.key)}</span>;
                     } else {
                       cellContent = displayValue;
