@@ -14,6 +14,8 @@ import BackLink from '@/components/BackLink';
 import AsAtRefresh, { asAtLabel } from '@/components/AsAtRefresh';
 import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
+import { weekStart as statsWeekStart } from '@/lib/reviewOutcomes/stats';
+
 type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
 
 const GHL_NOTE_LABEL = "Posted to the client's contact notes (shows under the linked opportunity)";
@@ -292,13 +294,13 @@ export default function ReviewOutcomesPage() {
     setFrom(f);
     setTo(t);
   };
-  const weekStart = addDays(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7));
+  const weekStart = statsWeekStart(today);
   const monthStart = `${today.slice(0, 7)}-01`;
   const monthEnd = addDays(`${addDays(monthStart, 32).slice(0, 7)}-01`, -1);
   const allTo = addDays(today, 90);
   const quick: [string, string, string][] = [
     ['Today', today, today],
-    ['This week', weekStart, addDays(weekStart, 6)],
+    ['This week (Fri-Thu)', weekStart, addDays(weekStart, 6)],
     ['This month', monthStart, monthEnd],
     ['All', MIN_YMD, allTo],
   ];
