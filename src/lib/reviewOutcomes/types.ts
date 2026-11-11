@@ -243,6 +243,9 @@ export interface ReviewMeeting {
   noteNextAction: string | null;
   noteBy: string | null;
   noteAt: string | null;
+  /** GHL contact note the row note was posted as; error if the last post failed. */
+  noteGhlId: string | null;
+  noteGhlError: string | null;
   /** Confirm toggle on the row (tool DB only). */
   confirmed: boolean;
   confirmedBy: string | null;

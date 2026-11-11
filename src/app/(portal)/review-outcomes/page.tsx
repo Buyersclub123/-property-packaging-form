@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, DISCREPANCY_MINUTES, MIN_YMD, NOTE_NEXT_ACTIONS, NOTE_REASONS, sydYmd, tlcLocked, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
+import { addDays, DISCREPANCY_MINUTES, MIN_YMD, NOTE_NEXT_ACTIONS, sydYmd, tlcLocked, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
 import { demoData } from '@/lib/reviewOutcomes/demo';
 import { meetingSourceTitle } from '@/lib/reviewOutcomes/meetingSource';
 import MorePanel from '@/components/reviewOutcomes/MorePanel';
@@ -16,15 +16,13 @@ import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
 type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
 
-const GHL_NOTE_LABEL = 'Would post as a GHL contact note (not written in demo)';
+const GHL_NOTE_LABEL = "Posted to the client's contact notes (shows under the linked opportunity)";
 const CONFIRM_TOAST = 'Demo: would set GHL status = confirmed and prefix the invite title with CONFIRMED (not written in demo)';
 const who = (email: string | null) => (email ? email.split('@')[0].replace(/[._]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
 const longDate = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const needsNextAction = (outcome: string | null) => /^(cancelled|rescheduled)$/i.test(outcome || '');
-const needsReason = (outcome: string | null) => /^invalid/i.test(outcome || '');
 
-function NoteBox({ m, onSave, onClose }: { m: ReviewMeeting; onSave: (note: string | null, reason: string | null, next: string | null) => void; onClose: () => void }) {
-  const [reason, setReason] = useState(m.noteReason || '');
+function NoteBox({ m, onSave, onClose }: { m: ReviewMeeting; onSave: (note: string | null, next: string | null) => void; onClose: () => void }) {
   const [next, setNext] = useState(m.noteNextAction || '');
   const [text, setText] = useState(m.note || '');
   const ta = useRef<HTMLTextAreaElement>(null);
@@ -34,17 +32,10 @@ function NoteBox({ m, onSave, onClose }: { m: ReviewMeeting; onSave: (note: stri
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight + 2}px`;
   }, [text]);
-  const showReason = needsReason(m.outcome);
   const showNext = needsNextAction(m.outcome);
-  const save = () => onSave(text.trim() || null, showReason ? reason || null : null, showNext ? next || null : null);
+  const save = () => onSave(text.trim() || null, showNext ? next || null : null);
   return (
     <div className="flex flex-wrap items-start gap-1 rounded border border-blue-200 bg-blue-50/50 px-2 py-1">
-      {showReason && (
-        <select value={reason} onChange={(e) => setReason(e.target.value)} className="rounded border bg-white px-1 py-0.5 text-xs" aria-label="Reason">
-          <option value="">Reason…</option>
-          {NOTE_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-      )}
       {showNext && (
         <select value={next} onChange={(e) => setNext(e.target.value)} className="rounded border bg-white px-1 py-0.5 text-xs" aria-label="Next action">
           <option value="">Next action…</option>
@@ -69,7 +60,7 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, 
   onMore?: (m: ReviewMeeting) => void;
   onConfirm: (m: ReviewMeeting, on: boolean) => void;
   onTlc: (m: ReviewMeeting, on: boolean) => void;
-  onNote: (m: ReviewMeeting, note: string | null, reason: string | null, next: string | null) => void;
+  onNote: (m: ReviewMeeting, note: string | null, next: string | null) => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteExpanded, setNoteExpanded] = useState(false);
@@ -173,18 +164,22 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, 
       {(noteOpen || hasNote) && (
         <div className="col-span-full mt-1 text-xs">
           {noteOpen ? (
-            <NoteBox m={m} onClose={() => setNoteOpen(false)} onSave={(note, reason, next) => { onNote(m, note, reason, next); setNoteOpen(false); }} />
+            <NoteBox m={m} onClose={() => setNoteOpen(false)} onSave={(note, next) => { onNote(m, note, next); setNoteOpen(false); }} />
           ) : (
             (() => {
-              const prefix = `[${m.kind} ${longDate(m.ymd)} · ${m.outcome || 'No outcome'}${m.noteBy || m.recordedBy ? ` · ${who(m.noteBy || m.recordedBy)}` : ''}]`;
-              const body = [m.noteReason, m.noteNextAction && `Next: ${m.noteNextAction}`, m.note].filter(Boolean).join(' · ');
+              const prefix = `[${m.calendar} ${longDate(m.ymd)} - ${m.outcome || 'No outcome'}${m.noteBy || m.recordedBy ? ` - ${who(m.noteBy || m.recordedBy)}` : ''}]`;
+              const body = [m.noteNextAction && `Next action: ${m.noteNextAction}`, m.note].filter(Boolean).join(' · ');
               return (
                 <div className="group relative flex items-start gap-2 text-gray-700" data-testid="saved-note">
                   <div className={`min-w-0 flex-1 ${noteExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>
                     <span className="font-semibold text-gray-500">{prefix}</span> {body}
                   </div>
                   <button onClick={() => setNoteExpanded((x) => !x)} className="shrink-0 text-[11px] text-blue-700 hover:underline">{noteExpanded ? 'Collapse' : 'Open'}</button>
-                  <span className="shrink-0 text-[11px] text-gray-400">{GHL_NOTE_LABEL}</span>
+                  {m.noteGhlError ? (
+                    <span className="shrink-0 text-[11px] font-medium text-red-600" title={m.noteGhlError}>Not posted to GHL ({m.noteGhlError})</span>
+                  ) : (
+                    <span className={`shrink-0 text-[11px] ${m.noteGhlId ? 'text-green-700' : 'text-gray-400'}`}>{m.noteGhlId ? '✔ ' : ''}{GHL_NOTE_LABEL}</span>
+                  )}
                   {!noteExpanded && (
                     <div role="tooltip" className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden max-w-[640px] whitespace-pre-wrap break-words rounded border bg-white px-2 py-1.5 text-xs text-gray-800 shadow-lg group-hover:block">
                       <span className="font-semibold text-gray-500">{prefix}</span> {body}
@@ -355,7 +350,7 @@ export default function ReviewOutcomesPage() {
       const res = await fetch('/api/review-outcomes/row', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appointmentId: m.id, ...body }) });
       const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(b.error || `HTTP ${res.status}`);
-      return b as { confirm?: { dryRun: boolean; steps: { field: string; before: string; after: string; readBack: string; result: string }[] } };
+      return b as { ghlNote?: { posted: boolean; noteId: string | null; error: string | null } | null; confirm?: { dryRun: boolean; steps: { field: string; before: string; after: string; readBack: string; result: string }[] } };
     } catch (e) {
       setSaveError(`${m.contactName}: ${(e as Error).message}`);
       return null;
@@ -388,11 +383,15 @@ export default function ReviewOutcomesPage() {
       }
     });
   };
-  const noteRow = (m: ReviewMeeting, note: string | null, reason: string | null, next: string | null) => {
+  const noteRow = async (m: ReviewMeeting, note: string | null, next: string | null) => {
     setSaveError(null);
-    const any = !!(note || reason || next);
-    patchRow(m.id, { note, noteReason: reason, noteNextAction: next, noteBy: any ? data?.viewer.email || null : null, noteAt: any ? new Date().toISOString() : null });
-    void postRow(m, { note, noteReason: reason, noteNextAction: next });
+    const any = !!(note || next);
+    patchRow(m.id, { note, noteReason: null, noteNextAction: next, noteBy: any ? data?.viewer.email || null : null, noteAt: any ? new Date().toISOString() : null });
+    const r = await postRow(m, { note, noteNextAction: next, outcome: m.outcome });
+    const g = r?.ghlNote;
+    if (!g) return;
+    patchRow(m.id, { noteGhlId: g.posted ? g.noteId : m.noteGhlId, noteGhlError: g.error });
+    if (g.error) setSaveError(`${m.contactName}: note saved in the tool but not posted to GHL (${g.error})`);
   };
 
   const meetings = useMemo(() => {

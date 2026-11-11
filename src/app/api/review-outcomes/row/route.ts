@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { canRecord, reviewAccess } from '@/lib/reviewOutcomes/access';
 import { meetingOwner, saveConfirmed, saveRowNote, saveTlc } from '@/lib/reviewOutcomes/record';
-import { NOTE_NEXT_ACTIONS, NOTE_REASONS } from '@/lib/reviewOutcomes/types';
+import { NOTE_NEXT_ACTIONS } from '@/lib/reviewOutcomes/types';
+import { postContactNote } from '@/lib/reviewOutcomes/contactNote';
 import { runConfirm } from '@/lib/reviewOutcomes/confirm';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
   const access = await reviewAccess(request.headers);
   if (!access.ok) return json({ error: access.error }, access.status);
   const b = (await request.json().catch(() => null)) as
-    | { appointmentId?: string; confirmed?: boolean; note?: string | null; noteReason?: string | null; noteNextAction?: string | null }
+    | { appointmentId?: string; confirmed?: boolean; note?: string | null; noteReason?: string | null; noteNextAction?: string | null; outcome?: string | null }
     | null;
   if (!b?.appointmentId) return json({ error: 'appointmentId is required.' }, 400);
   try {
@@ -32,13 +33,13 @@ export async function POST(request: NextRequest) {
       const confirm = await runConfirm(access.viewer.email, b.appointmentId, b.confirmed);
       return json({ ok: true, confirm });
     }
-    const reason = b.noteReason || null;
     const next = b.noteNextAction || null;
-    if (reason && !NOTE_REASONS.includes(reason)) return json({ error: `Unknown reason "${reason}".` }, 400);
     if (next && !NOTE_NEXT_ACTIONS.includes(next)) return json({ error: `Unknown next action "${next}".` }, 400);
     const note = b.note ? String(b.note).trim().slice(0, 4000) || null : null;
-    await saveRowNote(access.viewer.email, b.appointmentId, note, reason, next);
-    return json({ ok: true });
+    await saveRowNote(access.viewer.email, b.appointmentId, note, null, next);
+    const outcome = b.outcome ? String(b.outcome).slice(0, 60) : null;
+    const ghlNote = await postContactNote(access.viewer.email, b.appointmentId, note, next, outcome);
+    return json({ ok: true, ghlNote });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }

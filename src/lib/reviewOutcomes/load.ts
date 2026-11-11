@@ -48,7 +48,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
   const rows = await sql`SELECT m.appointment_id, m.calendar_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.start_at, m.ghl_status, m.title,
       m.created_by, m.meeting_source, m.meeting_source_level, m.meeting_source_detail, c.name AS contact_name, c.email AS contact_email, c.phones, c.lead_source, c.referrer,
       o.outcome, o.invalid_reason, o.note, o.source, o.source_ref, o.recorded_by, o.recorded_at,
-      o.confirmed, o.confirmed_by, o.tlc, o.tlc_by, o.note_reason, o.note_next_action, o.note_by, o.note_at
+      o.confirmed, o.confirmed_by, o.tlc, o.tlc_by, o.note_reason, o.note_next_action, o.note_by, o.note_at, o.note_ghl_id, o.note_ghl_error
     FROM review_meetings m
     LEFT JOIN review_contacts c ON c.contact_id = m.contact_id
     LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id
@@ -173,6 +173,8 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
         noteAt: r.note_at ? iso(r.note_at) : null,
         confirmed: !!r.confirmed,
         confirmedBy: (r.confirmed_by as string | null) || null,
+        noteGhlId: (r.note_ghl_id as string | null) || null,
+        noteGhlError: (r.note_ghl_error as string | null) || null,
         tlc: !!r.tlc,
         tlcBy: (r.tlc_by as string | null) || null,
         sourceRef: dbOutcome ? (r.source_ref as string | null) || null : schedOutcome && sr ? `Calendar schedule sheet, tab "${sr.tab}": ${[sr.sat, sr.outcome].filter(Boolean).join(' / ')}` : null,
