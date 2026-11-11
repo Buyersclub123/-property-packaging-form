@@ -6,6 +6,7 @@ import { emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sum
 import { dmy, weekday } from './ui';
 import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
 import type { Signup, SignupsData } from '@/lib/reviewOutcomes/signups';
+import type { OpenOpp, OpenOppsData } from '@/lib/reviewOutcomes/openOpps';
 import { MEETING_SOURCE_LEVEL_LABEL, meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from '@/lib/reviewOutcomes/meetingSource';
 import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
 import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
@@ -513,6 +514,59 @@ function BarChart({ rows }: { rows: Row[] }) {
   );
 }
 
+/** Exception reports (JT 11/11): (a) contact has 0 or >1 open opportunities; (b) no open opp owned by the meeting's consultant. */
+function ExceptionReports({ meetings, opps, err }: { meetings: ReviewMeeting[]; opps: OpenOppsData | null; err: string | null }) {
+  const rows = useMemo(() => {
+    if (!opps) return null;
+    const live = meetings.filter((m) => m.contactId && m.ghlStatus !== 'Cancelled' && m.outcome !== 'Cancelled');
+    const of = (m: ReviewMeeting) => opps.byContact[m.contactId] || [];
+    return {
+      count: live.filter((m) => of(m).length !== 1),
+      owner: live.filter((m) => of(m).length > 0 && !of(m).some((o) => o.ownerId === m.consultantId)),
+      of,
+    };
+  }, [meetings, opps]);
+  const oppText = (list: OpenOpp[]) => list.map((o) => `${o.name || o.id} (${o.pipeline || '?'} > ${o.stage || '?'}${o.owner ? `, ${o.owner}` : ''})`).join('; ');
+  const table = (title: string, list: ReviewMeeting[], extra: [string, (m: ReviewMeeting) => React.ReactNode][], testId: string) => (
+    <div className="min-w-0 overflow-x-auto rounded border bg-white" data-testid={testId}>
+      <Title>{title} ({list.length})</Title>
+      {!list.length ? <div className="p-3 text-sm text-gray-500">None in this period.</div> : (
+        <div className="max-h-[420px] overflow-y-auto">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0"><tr>{['Date', 'Client', 'Calendar', 'Consultant', ...extra.map(([h]) => h)].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+            <tbody>
+              {list.map((m) => (
+                <tr key={m.id} className="odd:bg-gray-50">
+                  <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
+                  <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
+                  <td className={TDN}>{m.kind === 'PR' ? 'Portfolio Review' : 'Presentation 1'}</td>
+                  <td className={TDN}>{m.consultant}</td>
+                  {extra.map(([h, f]) => <td key={h} className={TDN}>{f(m)}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+  if (err) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">Exception reports: {err}</div>;
+  if (!rows) return <div className="rounded border bg-white p-3 text-sm text-gray-500">Exception reports: reading open opportunities from GHL…</div>;
+  return (
+    <div className="grid gap-3">
+      {table('Exceptions (a) - contact has 0 or more than 1 open opportunity', rows.count, [
+        ['Open opps', (m) => <span className="font-semibold text-red-700">{rows.of(m).length}</span>],
+        ['Opportunities (pipeline > stage, owner)', (m) => oppText(rows.of(m)) || 'None open'],
+      ], 'exc-count')}
+      {table('Exceptions (b) - opportunity owner is not the consultant', rows.owner, [
+        ['Opportunity owner', (m) => <span className="font-semibold text-amber-800">{[...new Set(rows.of(m).map((o) => o.owner || 'Unassigned'))].join(', ')}</span>],
+        ['Opportunities (pipeline > stage, owner)', (m) => oppText(rows.of(m))],
+      ], 'exc-owner')}
+      <div className="text-xs text-gray-500">Meetings in this period (cancelled left out). Open opportunities read live from GHL (read-only, refreshed every 10 minutes).</div>
+    </div>
+  );
+}
+
 export default function StatsView({ demoData = null }: { demoData?: ReviewData | null }) {
   const today = sydYmd(Date.now());
   const [data, setData] = useState<ReviewData | null>(null);
@@ -527,6 +581,8 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const [signups, setSignups] = useState<Signup[] | null>(null);
   const [signupsErr, setSignupsErr] = useState<string | null>(null);
   const [mailMsg, setMailMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [openOpps, setOpenOpps] = useState<OpenOppsData | null>(null);
+  const [openOppsErr, setOpenOppsErr] = useState<string | null>(null);
   useEffect(() => {
     try {
       const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null') as ViewPrefs | null;
@@ -562,6 +618,13 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         setSignups((body as SignupsData).signups);
       })
       .catch((e) => setSignupsErr((e as Error).message));
+    fetch('/api/review-outcomes/open-opps', { cache: 'no-store' })
+      .then(async (res) => {
+        const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        setOpenOpps(body as OpenOppsData);
+      })
+      .catch((e) => setOpenOppsErr((e as Error).message));
   }, [demoData]);
   useEffect(() => {
     try {
@@ -924,6 +987,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         </div>
         <TargetsTable targets={data.settings.targets || {}} factor={targetFactor(p, today)} rows={[...cc.rows, ...sales.rows]} />
         <Leaderboard rows={sales.rows} typeOf={consTypeOf} soldOf={consSoldOf} net={view.net} />
+        {!demoData && <ExceptionReports meetings={list} opps={openOpps} err={openOppsErr} />}
         <ChartCard title={`Trend - ${r.label}`}><TrendChart points={trend.cur} ly={trend.ly} /></ChartCard>
         <div className="grid gap-4 lg:grid-cols-2">
           <ChartCard title="Consultants - Booked vs Sat"><BarChart rows={sales.rows} /></ChartCard>
