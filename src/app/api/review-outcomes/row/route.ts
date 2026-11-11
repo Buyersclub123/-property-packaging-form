@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { canRecord, reviewAccess } from '@/lib/reviewOutcomes/access';
 import { meetingOwner, saveConfirmed, saveRowNote } from '@/lib/reviewOutcomes/record';
 import { NOTE_NEXT_ACTIONS, NOTE_REASONS } from '@/lib/reviewOutcomes/types';
+import { runConfirm } from '@/lib/reviewOutcomes/confirm';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -22,7 +23,9 @@ export async function POST(request: NextRequest) {
     if (!canRecord(access.viewer, owner.assignedUserId)) return json({ error: 'You can only record your own meetings.' }, 403);
     if (typeof b.confirmed === 'boolean') {
       await saveConfirmed(access.viewer.email, b.appointmentId, b.confirmed);
-      return json({ ok: true });
+      // GHL status + CONFIRMED title prefix (dry run until switched on in Admin > Automated updates).
+      const confirm = await runConfirm(access.viewer.email, b.appointmentId, b.confirmed);
+      return json({ ok: true, confirm });
     }
     const reason = b.noteReason || null;
     const next = b.noteNextAction || null;

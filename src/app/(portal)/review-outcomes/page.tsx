@@ -17,7 +17,7 @@ import { useLiveRefresh } from '@/lib/useLiveRefresh';
 type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
 
 const GHL_NOTE_LABEL = 'Would post as a GHL contact note (not written in demo)';
-const CONFIRM_TOAST = 'Would set GHL status = confirmed and prefix the invite title with CONFIRMED (not written in demo)';
+const CONFIRM_TOAST = 'Demo: would set GHL status = confirmed and prefix the invite title with CONFIRMED (not written in demo)';
 const who = (email: string | null) => (email ? email.split('@')[0].replace(/[._]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
 const longDate = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const needsNextAction = (outcome: string | null) => /^(cancelled|rescheduled)$/i.test(outcome || '');
@@ -122,6 +122,11 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onNote 
       </div>
       <div className="col-start-2 mt-1 md:col-start-auto md:mt-0">
        <div className="flex flex-wrap items-center gap-1 md:flex-nowrap md:justify-end">
+        <label title={m.confirmed ? `Confirmed${m.confirmedBy ? ` by ${who(m.confirmedBy)}` : ''} - untick to put the GHL status back and remove CONFIRMED from the title` : 'Tick to set the GHL status to confirmed and put CONFIRMED in front of the invite title'}
+          className={`mr-1 inline-flex items-center gap-1 text-[11px] font-medium ${m.confirmed ? 'text-green-700' : 'text-gray-500'}`}>
+          <input type="checkbox" checked={m.confirmed} disabled={!canEdit} onChange={(e) => onConfirm(m, e.target.checked)} className="h-3.5 w-3.5 accent-green-600" aria-label="Confirmed" />
+          Confirmed
+        </label>
         {settings.outcomes.map((o) => {
           const on = m.outcome === o;
           return (
@@ -134,10 +139,6 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onNote 
         {m.outcome && !settings.outcomes.includes(m.outcome) && (
           <span className={`rounded-full border px-2 py-0.5 text-xs ${outcomeStyle(m.outcome).on}`}>{m.outcome}</span>
         )}
-        <button disabled={!canEdit} onClick={() => onConfirm(m, !m.confirmed)} title={m.confirmed ? 'Confirmed - click to undo' : 'Mark as confirmed'}
-          className={`ml-1 rounded border px-1.5 py-0.5 text-[11px] font-medium disabled:cursor-default ${m.confirmed ? 'border-green-600 bg-green-600 text-white' : 'border-green-300 bg-white text-green-700 hover:bg-green-50'}`}>
-          {m.confirmed ? '✔ Confirmed' : 'Confirm'}
-        </button>
         <button disabled={!canEdit} onClick={() => setNoteOpen((o) => !o)} title="Reason, next action and note"
           className={`rounded border px-1.5 py-0.5 text-[11px] disabled:cursor-default ${noteOpen || hasNote ? 'border-blue-400 bg-blue-50 text-blue-700' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
           Note
@@ -338,20 +339,38 @@ export default function ReviewOutcomesPage() {
     if (demo) setDemoAll(f); else setLive(f);
   };
   const postRow = async (m: ReviewMeeting, body: Record<string, unknown>) => {
-    if (demo) return;
+    if (demo) return null;
     try {
       const res = await fetch('/api/review-outcomes/row', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appointmentId: m.id, ...body }) });
       const b = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(b.error || `HTTP ${res.status}`);
+      return b as { confirm?: { dryRun: boolean; steps: { field: string; before: string; after: string; readBack: string; result: string }[] } };
     } catch (e) {
       setSaveError(`${m.contactName}: ${(e as Error).message}`);
+      return null;
     }
   };
   const confirmRow = (m: ReviewMeeting, on: boolean) => {
     setSaveError(null);
     patchRow(m.id, { confirmed: on, confirmedBy: on ? data?.viewer.email || null : null });
-    if (on) setToast(CONFIRM_TOAST);
-    void postRow(m, { confirmed: on });
+    if (demo) {
+      if (on) setToast(CONFIRM_TOAST);
+      return;
+    }
+    void postRow(m, { confirmed: on }).then((b) => {
+      const c = b?.confirm;
+      if (!c) return;
+      const st = c.steps.find((s) => s.field === 'appointmentStatus');
+      const ti = c.steps.find((s) => s.field === 'title');
+      const failed = c.steps.find((s) => s.result.startsWith('failed') || s.result.startsWith('read back'));
+      if (failed) setSaveError(`${m.contactName}: GHL not updated - ${failed.result}`);
+      else if (c.dryRun) setToast(`Dry run (not written): would set GHL status ${st?.before || '?'} -> ${st?.after || '?'} and title "${ti?.after || ''}". Switch on in Admin > Automated updates.`);
+      else {
+        setToast(`GHL status ${st?.readBack || ''}, title "${ti?.readBack || ''}" (Google follows in about 30s)`);
+        const label = st?.readBack === 'noshow' ? 'No show' : st?.readBack ? st.readBack.charAt(0).toUpperCase() + st.readBack.slice(1) : m.ghlStatus;
+        patchRow(m.id, { ghlStatus: label, title: ti?.readBack || m.title });
+      }
+    });
   };
   const noteRow = (m: ReviewMeeting, note: string | null, reason: string | null, next: string | null) => {
     setSaveError(null);
@@ -449,7 +468,7 @@ export default function ReviewOutcomesPage() {
             {data && (
               <div className="mb-3 flex flex-wrap gap-3 text-sm">
                 <Stat label="Meetings" value={meetings.length} />
-                <Stat label="Confirmed" value={meetings.filter((m) => m.confirmed).length} tone="text-green-700" />
+                <Stat label="Confirmed" value={meetings.filter((m) => m.ghlStatus === 'Confirmed').length} tone="text-green-700" />
                 <Stat label="Outcome recorded" value={meetings.filter((m) => m.outcome).length} />
                 <Stat label="Updated here ✔" value={meetings.filter((m) => m.outcomeSource === 'tool').length} tone="text-green-700" />
                 <Stat label="No outcome (past)" value={meetings.filter((m) => m.past && !m.outcome && !m.selfBooked).length} tone="text-red-700" />
@@ -525,7 +544,7 @@ export default function ReviewOutcomesPage() {
       {more && <MorePanel meeting={more} demo={demo} onClose={() => setMore(null)} />}
       {toast && (
         <div role="status" className="fixed bottom-4 right-4 z-50 max-w-[420px] rounded border border-green-300 bg-white px-3 py-2 text-sm text-gray-800 shadow-lg">
-          <span className="mr-1 font-bold text-green-700">CONFIRMED</span> {toast}
+          {toast}
           <button onClick={() => setToast(null)} className="ml-2 text-xs text-gray-400 hover:text-gray-700" aria-label="Dismiss">✕</button>
         </div>
       )}

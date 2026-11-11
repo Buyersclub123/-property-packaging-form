@@ -51,6 +51,14 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
     log: 'Postgres review_outcome_log',
   },
   {
+    name: 'Sales Meeting Outcomes Confirmed tick',
+    what: 'When a user ticks Confirmed on a meeting row, the GHL appointment is set to confirmed and its title prefixed "CONFIRMED " (the Google invite subject follows); untick puts the previous status back and removes the prefix',
+    trigger: 'User ticks / unticks Confirmed in /review-outcomes (/api/review-outcomes/row)',
+    fieldsWritten: 'Calendar appointment appointmentStatus, title',
+    rule: 'Every meeting incl. self-booked; Presentation Meeting One and Portfolio Review Meeting calendars only. Status before the tick is kept in review_outcomes.confirm_prev_status for the untick. toNotify false. Demo never writes. Dry run (log only) until switched on below.',
+    log: 'Postgres review_outcome_log action confirm_ghl (before -> after with read back; switch in review_settings key confirm_apply)',
+  },
+  {
     name: 'Finance Status change-date workflow (GHL)',
     what: 'GHL workflow stamps the date when Finance Status changes',
     trigger: 'GHL workflow: Opportunity custom field changed = Finance Status (finance_status__residential)',
