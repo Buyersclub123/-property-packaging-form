@@ -528,18 +528,25 @@ export default function ReviewOutcomesPage() {
                     {data.gcalCalendars.length > 0 && (() => {
                       const bad = data.gcalCalendars.filter((c) => c.status !== 'ok');
                       return (
-                        <details className={`relative self-center rounded border px-2 py-1 text-xs ${bad.length ? 'border-amber-300 bg-amber-50 text-amber-900' : 'bg-white text-gray-600'}`}>
+                        !bad.length ? (
+                          <span data-testid="gcal-panel" className="self-center rounded border bg-white px-2 py-1 text-xs text-gray-600" title={`${data.gcalCalendars.length} Google calendars read (suspended GHL users skipped)`}>
+                            Google calendars read: all readable
+                          </span>
+                        ) : (
+                        <details data-testid="gcal-panel" className="relative self-center rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900">
                           <summary className="cursor-pointer whitespace-nowrap">
-                            Google calendars read: {data.gcalCalendars.length - bad.length}{bad.length ? ` · ${bad.length} not readable` : ''}
+                            Google calendars read: {bad.length} not readable
                           </summary>
                           <ul className="absolute right-0 z-20 mt-1 max-h-72 w-[460px] overflow-auto rounded border bg-white p-2 text-gray-700 shadow">
-                            {data.gcalCalendars.map((c) => (
-                              <li key={c.id} title={c.error || ''} className={c.status === 'ok' ? '' : 'font-semibold text-amber-800'}>
-                                {c.status === 'ok' ? '✔' : `✖ ${c.status}`} {c.name} <span className="text-gray-400">({c.id}) · {c.via}{c.status === 'ok' ? ` · ${c.events} events` : c.status === '403' || c.status === '404' ? ' - not shared with info@' : ' - read failed'}</span>
+                            {bad.map((c) => (
+                              <li key={c.id} title={c.error || ''} className="font-semibold text-amber-800">
+                                ✖ {c.status} {c.name} <span className="text-gray-400">({c.id}) · {c.via}{c.status === '403' || c.status === '404' ? ' - not shared with info@' : ' - read failed'}</span>
                               </li>
                             ))}
+                            <li className="mt-1 text-gray-400">Readable calendars are not listed; suspended GHL users are skipped.</li>
                           </ul>
                         </details>
+                        )
                       );
                     })()}
                   </>
