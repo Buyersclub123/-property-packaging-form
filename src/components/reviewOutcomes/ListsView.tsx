@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting } from '@/lib/reviewOutcomes/types';
 import { dateTime, dmy, outcomeStyle, periodKey, periodLabel, Stat, type Period } from './ui';
+import { bookerKey, isSat } from '@/lib/reviewOutcomes/stats';
 
 type Section = 'noOutcome' | 'repeats' | 'completed';
 
@@ -96,20 +97,21 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
     for (const m of noOutcome) g.set(m.consultant, [...(g.get(m.consultant) || []), m]);
     return [...g.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [noOutcome]);
-  // Same client booked again within N days: 2nd meetings booked as Presentation Meeting One (cancelled ones ignored).
+  // Same client booked again within N days (JT 11/11): a sat Presentation 1, then the client's next Presentation 1 with any outcome.
   const repeats = useMemo(() => {
     const by = new Map<string, ReviewMeeting[]>();
     for (const m of inRange) {
-      if (m.kind === 'PR' || m.outcome === 'Cancelled' || m.ghlStatus === 'Cancelled') continue;
+      if (m.kind === 'PR') continue;
       const k = (m.contactId || m.contactName.replace(/\*$/, '').trim().toLowerCase()) + (sameConsultant ? `|${m.consultantId}` : '');
       if (k) by.set(k, [...(by.get(k) || []), m]);
     }
     const out: { first: ReviewMeeting; next: ReviewMeeting; days: number }[] = [];
     for (const list of by.values()) {
       const s = [...list].sort((a, b) => a.start.localeCompare(b.start));
-      for (let i = 1; i < s.length; i++) {
-        const days = daysBetween(s[i - 1].ymd, s[i].ymd);
-        if (days <= repeatDays) out.push({ first: s[i - 1], next: s[i], days });
+      for (let i = 0; i + 1 < s.length; i++) {
+        if (!isSat(s[i])) continue;
+        const days = daysBetween(s[i].ymd, s[i + 1].ymd);
+        if (days <= repeatDays) out.push({ first: s[i], next: s[i + 1], days });
       }
     }
     return out.sort((a, b) => b.next.start.localeCompare(a.next.start));
@@ -213,26 +215,31 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
           <label className="inline-flex items-center gap-1">
             <input type="checkbox" checked={sameConsultant} onChange={(e) => setSameConsultant(e.target.checked)} /> Same consultant only
           </label>
-          <span>Presentation Meeting One only; cancelled meetings are ignored.</span>
+          <span>Presentation Meeting One only. Left = a meeting the client sat; right = their next Presentation 1, any outcome. Amber = the 2nd booking has a different booker.</span>
         </div>
         {repeats.length === 0 ? <div className="text-sm text-gray-500">None.</div> : (
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-gray-500">
-              <tr><th className="p-1">Client</th><th className="p-1">Earlier meeting</th><th className="p-1">Later meeting</th><th className="p-1 text-right">Days apart</th></tr>
+              <tr><th className="p-1">Client</th><th className="p-1">Earlier meeting (sat, Presentation 1)</th><th className="p-1">Later meeting (Presentation 1, any outcome)</th><th className="p-1 text-right">Days apart</th></tr>
             </thead>
             <tbody>
-              {repeats.map(({ first, next, days }) => (
-                <tr key={`${first.id}-${next.id}`} className="border-t">
+              {repeats.map(({ first, next, days }) => {
+                const differs = bookerKey(first) !== bookerKey(next);
+                return (
+                <tr key={`${first.id}-${next.id}`} data-testid="repeat-row" data-booker-differs={differs ? '1' : '0'} className={`border-t ${differs ? 'bg-amber-50' : ''}`}
+                  title={differs ? `Booked by ${bookerKey(first)} first, then ${bookerKey(next)}` : undefined}>
                   <td className="p-1">{next.contactLink ? <a href={next.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{next.contactName}</a> : next.contactName}</td>
                   {[first, next].map((m) => (
                     <td key={m.id} className="p-1">
                       <button onClick={() => onOpenDay(m.ymd)} className="text-blue-700 hover:underline">{dateTime(m.start)}</button>
-                      <span className="text-xs text-gray-600"> · {m.consultant} · {m.kind === 'PR' ? 'Portfolio Review' : 'Presentation 1'}{m.outcome ? ` · ${m.outcome}` : ''}</span>
+                      <span className="text-xs text-gray-600"> · {m.consultant} · {m.outcome || (m.ghlStatus === 'Cancelled' ? 'Cancelled' : 'No outcome')}</span>
+                      <span className={`text-xs ${differs && m === next ? 'font-semibold text-amber-800' : 'text-gray-600'}`}> · Booker: {bookerKey(m)}</span>
                     </td>
                   ))}
                   <td className="p-1 text-right font-semibold">{days}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
