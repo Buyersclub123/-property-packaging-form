@@ -7,6 +7,7 @@ import { dmy, weekday } from './ui';
 import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
 import type { Signup, SignupsData } from '@/lib/reviewOutcomes/signups';
 import type { OpenOpp, OpenOppsData } from '@/lib/reviewOutcomes/openOpps';
+import CcPaysPanel from './CcPaysPanel';
 import { MEETING_SOURCE_LEVEL_LABEL, meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from '@/lib/reviewOutcomes/meetingSource';
 import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
 import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
@@ -990,6 +991,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         <TargetsTable targets={data.settings.targets || {}} factor={targetFactor(p, today)} rows={[...cc.rows, ...sales.rows]} />
         <Leaderboard rows={sales.rows} typeOf={consTypeOf} soldOf={consSoldOf} net={view.net} />
         {!demoData && <ExceptionReports meetings={list} opps={openOpps} err={openOppsErr} />}
+        {!demoData && data.viewer.recorder && <CcPaysPanel today={today} />}
         <ChartCard title={`Trend - ${r.label}`}><TrendChart points={trend.cur} ly={trend.ly} /></ChartCard>
         <div className="grid gap-4 lg:grid-cols-2">
           <ChartCard title="Consultants - Booked vs Sat"><BarChart rows={sales.rows} /></ChartCard>

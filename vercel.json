@@ -41,6 +41,10 @@
       "schedule": "15 * * * *"
     },
     {
+      "path": "/api/review-outcomes/cc-pays/cron",
+      "schedule": "25 * * * *"
+    },
+    {
       "path": "/api/ghl-monitor/digest",
       "schedule": "0 7 * * *"
     },
