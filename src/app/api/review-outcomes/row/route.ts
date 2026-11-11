@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { canRecord, reviewAccess } from '@/lib/reviewOutcomes/access';
-import { meetingOwner, saveConfirmed, saveRowNote } from '@/lib/reviewOutcomes/record';
+import { meetingOwner, saveConfirmed, saveRowNote, saveTlc } from '@/lib/reviewOutcomes/record';
 import { NOTE_NEXT_ACTIONS, NOTE_REASONS } from '@/lib/reviewOutcomes/types';
 import { runConfirm } from '@/lib/reviewOutcomes/confirm';
 
@@ -21,6 +21,11 @@ export async function POST(request: NextRequest) {
     const owner = await meetingOwner(b.appointmentId);
     if (!owner) return json({ error: 'Appointment not found.' }, 404);
     if (!canRecord(access.viewer, owner.assignedUserId)) return json({ error: 'You can only record your own meetings.' }, 403);
+    const tlc = (b as { tlc?: unknown }).tlc;
+    if (typeof tlc === 'boolean') {
+      const err = await saveTlc(access.viewer.email, b.appointmentId, tlc);
+      return err ? json({ error: err }, 409) : json({ ok: true });
+    }
     if (typeof b.confirmed === 'boolean') {
       await saveConfirmed(access.viewer.email, b.appointmentId, b.confirmed);
       // GHL status + CONFIRMED title prefix (dry run until switched on in Admin > Automated updates).

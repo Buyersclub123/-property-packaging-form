@@ -246,6 +246,9 @@ export interface ReviewMeeting {
   /** Confirm toggle on the row (tool DB only). */
   confirmed: boolean;
   confirmedBy: string | null;
+  /** TLC tick on the row (tool DB only). */
+  tlc: boolean;
+  tlcBy: string | null;
   sourceRef: string | null;
   recordedBy: string | null;
   recordedAt: string | null;
@@ -322,6 +325,35 @@ export const sydYmd = (t: string | number | Date): string =>
 export const isYmd = (s: string | null | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 /** UTC instants that safely cover Sydney days from..to (AEST or AEDT); callers filter by sydYmd. */
+// Sydney wall-clock time as a UTC-based ms value (so getUTC* give Sydney's date / hour).
+function sydWall(ms: number): number {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-AU', { timeZone: 'Australia/Sydney', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    .formatToParts(ms).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+}
+
+/** Working minutes (Mon-Fri 9-5 Sydney) from now until the meeting start; stops counting at `cap`. */
+export function workingMinutesUntil(startIso: string, now = Date.now(), cap = Infinity): number {
+  let a = sydWall(now);
+  const b = sydWall(Date.parse(startIso));
+  let mins = 0;
+  while (a < b && mins < cap) {
+    const d = new Date(a);
+    const day0 = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5) {
+      const s = Math.max(a, day0 + 9 * 3600e3);
+      const e = Math.min(b, day0 + 17 * 3600e3);
+      if (e > s) mins += (e - s) / 60e3;
+    }
+    a = day0 + 864e5;
+  }
+  return mins;
+}
+
+export const TLC_LOCK_HOURS = 8;
+/** TLC is locked from 8 working hours (Mon-Fri 9-5) before the meeting start (JT 11/11). */
+export const tlcLocked = (startIso: string, now = Date.now()) => workingMinutesUntil(startIso, now, TLC_LOCK_HOURS * 60) < TLC_LOCK_HOURS * 60;
+
 export function utcCover(from: string, to: string): { start: Date; end: Date } {
   return {
     start: new Date(Date.parse(`${from}T00:00:00Z`) - 11 * 3600e3),

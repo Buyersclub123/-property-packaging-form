@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, DISCREPANCY_MINUTES, MIN_YMD, NOTE_NEXT_ACTIONS, NOTE_REASONS, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
+import { addDays, DISCREPANCY_MINUTES, MIN_YMD, NOTE_NEXT_ACTIONS, NOTE_REASONS, sydYmd, tlcLocked, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
 import { demoData } from '@/lib/reviewOutcomes/demo';
 import { meetingSourceTitle } from '@/lib/reviewOutcomes/meetingSource';
 import MorePanel from '@/components/reviewOutcomes/MorePanel';
@@ -61,13 +61,14 @@ function NoteBox({ m, onSave, onClose }: { m: ReviewMeeting; onSave: (note: stri
   );
 }
 
-function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onNote }: {
+function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, onNote }: {
   m: ReviewMeeting;
   settings: ReviewSettings;
   canEdit: boolean;
   onRecord: (m: ReviewMeeting, outcome: string | null, reason?: string | null) => void;
   onMore?: (m: ReviewMeeting) => void;
   onConfirm: (m: ReviewMeeting, on: boolean) => void;
+  onTlc: (m: ReviewMeeting, on: boolean) => void;
   onNote: (m: ReviewMeeting, note: string | null, reason: string | null, next: string | null) => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
@@ -127,6 +128,16 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onNote 
           <input type="checkbox" checked={m.confirmed} disabled={!canEdit} onChange={(e) => onConfirm(m, e.target.checked)} className="h-3.5 w-3.5 accent-green-600" aria-label="Confirmed" />
           Confirmed
         </label>
+        {(() => {
+          const locked = tlcLocked(m.start);
+          return (
+            <label title={locked ? 'TLC locked: less than 8 working hours (Mon-Fri 9-5) before the meeting start' : m.tlc ? `TLC done${m.tlcBy ? ` by ${who(m.tlcBy)}` : ''} - untick to undo (tool only)` : 'Tick when TLC is done (saved in this tool only, not GHL)'}
+              className={`mr-1 inline-flex items-center gap-1 text-[11px] font-medium ${locked ? 'cursor-not-allowed text-gray-300' : m.tlc ? 'text-purple-700' : 'text-gray-500'}`}>
+              <input type="checkbox" checked={m.tlc} disabled={!canEdit || locked} onChange={(e) => onTlc(m, e.target.checked)} className="h-3.5 w-3.5 accent-purple-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label="TLC" />
+              TLC
+            </label>
+          );
+        })()}
         {settings.outcomes.map((o) => {
           const on = m.outcome === o;
           return (
@@ -350,6 +361,11 @@ export default function ReviewOutcomesPage() {
       return null;
     }
   };
+  const tlcRow = (m: ReviewMeeting, on: boolean) => {
+    setSaveError(null);
+    patchRow(m.id, { tlc: on, tlcBy: on ? data?.viewer.email || null : null });
+    void postRow(m, { tlc: on });
+  };
   const confirmRow = (m: ReviewMeeting, on: boolean) => {
     setSaveError(null);
     patchRow(m.id, { confirmed: on, confirmedBy: on ? data?.viewer.email || null : null });
@@ -526,7 +542,7 @@ export default function ReviewOutcomesPage() {
             {data && byDay.map(([ymd, list]) => (
               <div key={ymd} className="mb-3 overflow-hidden rounded border bg-white">
                 <div className="bg-gray-50 px-3 py-1.5 text-sm font-semibold text-brand-charcoal">{weekday(ymd)} {dmy(ymd)} <span className="font-normal text-gray-500">· {list.length}</span></div>
-                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onNote={noteRow} />)}
+                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} />)}
               </div>
             ))}
           </>

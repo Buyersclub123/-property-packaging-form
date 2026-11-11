@@ -130,6 +130,9 @@ async function create(): Promise<void> {
   await sql`ALTER TABLE review_outcomes ADD COLUMN IF NOT EXISTS confirmed BOOLEAN NOT NULL DEFAULT FALSE, ADD COLUMN IF NOT EXISTS confirmed_by TEXT,
     ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS note_reason TEXT, ADD COLUMN IF NOT EXISTS note_next_action TEXT,
     ADD COLUMN IF NOT EXISTS note_by TEXT, ADD COLUMN IF NOT EXISTS note_at TIMESTAMPTZ`;
+  // TLC tick (JT 11/11): tool DB only, no GHL field.
+  await sql`ALTER TABLE review_outcomes ADD COLUMN IF NOT EXISTS tlc BOOLEAN NOT NULL DEFAULT FALSE, ADD COLUMN IF NOT EXISTS tlc_by TEXT,
+    ADD COLUMN IF NOT EXISTS tlc_at TIMESTAMPTZ`;
   // Google calendars the sync tried (info@ calendarList + GHL assignees' emails) and whether each was readable.
   await sql`CREATE TABLE IF NOT EXISTS review_gcal_calendars (
     calendar_id TEXT PRIMARY KEY,

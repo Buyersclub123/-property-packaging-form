@@ -4,7 +4,7 @@ import { loadContactLinks } from '@/lib/portfolio/contactLinks';
 import { loadGhlUsers, loadSources } from '@/lib/portfolio/sources';
 import type { PortfolioData } from '@/lib/portfolio/types';
 import { ensureReviewTables, logReview } from './store';
-import type { ClientPanel, ClientProperty } from './types';
+import { TLC_LOCK_HOURS, tlcLocked, type ClientPanel, type ClientProperty } from './types';
 
 // Writes to the app DB only (review_outcomes, review_property_checks, review_outcome_log). Phase 2 write-back is not built.
 
@@ -33,6 +33,19 @@ export async function saveConfirmed(by: string, appointmentId: string, confirmed
     ON CONFLICT (appointment_id) DO UPDATE SET confirmed = EXCLUDED.confirmed, confirmed_by = EXCLUDED.confirmed_by,
       confirmed_at = EXCLUDED.confirmed_at, updated_at = NOW()`;
   await logReview(by, appointmentId, 'confirm', { confirmed });
+}
+
+/** TLC tick: tool DB only. Returns an error message when locked (8 working hours before the start). */
+export async function saveTlc(by: string, appointmentId: string, tlc: boolean): Promise<string | null> {
+  const [m] = await getDb()`SELECT start_at FROM review_meetings WHERE appointment_id = ${appointmentId}`;
+  if (!m) return 'Appointment not found.';
+  if (tlcLocked(new Date(m.start_at).toISOString())) return `TLC is locked from ${TLC_LOCK_HOURS} working hours (Mon-Fri 9-5) before the meeting.`;
+  const at = tlc ? new Date().toISOString() : null;
+  await getDb()`INSERT INTO review_outcomes (appointment_id, tlc, tlc_by, tlc_at, source, recorded_by)
+    VALUES (${appointmentId}, ${tlc}, ${tlc ? by : null}, ${at}, 'tool', ${by})
+    ON CONFLICT (appointment_id) DO UPDATE SET tlc = EXCLUDED.tlc, tlc_by = EXCLUDED.tlc_by, tlc_at = EXCLUDED.tlc_at, updated_at = NOW()`;
+  await logReview(by, appointmentId, 'tlc', { tlc });
+  return null;
 }
 
 // Same note as the More panel (review_outcomes.note), plus the row's reason / next action.
