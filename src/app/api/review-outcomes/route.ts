@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       from,
       to,
       consultants: loaded.consultants,
+      ghlUsers: loaded.ghlUsers,
       meetings: loaded.meetings,
       gcalUnmatched: loaded.gcalUnmatched,
       lastSync: sync,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { reviewAccess } from '@/lib/reviewOutcomes/access';
-import { meetingOwner, saveConfirmed, saveRowNote, saveTlc } from '@/lib/reviewOutcomes/record';
+import { meetingOwner, saveBookerOverride, saveConfirmed, saveRowNote, saveTlc } from '@/lib/reviewOutcomes/record';
+import { ghlUsers } from '@/lib/reviewOutcomes/sync';
 import { NOTE_NEXT_ACTIONS } from '@/lib/reviewOutcomes/types';
 import { postContactNote } from '@/lib/reviewOutcomes/contactNote';
 import { runConfirm } from '@/lib/reviewOutcomes/confirm';
@@ -21,6 +22,13 @@ export async function POST(request: NextRequest) {
   try {
     const owner = await meetingOwner(b.appointmentId);
     if (!owner) return json({ error: 'Appointment not found.' }, 404);
+    if ('bookerOverride' in b) {
+      const id = (b as { bookerOverride?: unknown }).bookerOverride;
+      if (id !== null && typeof id !== 'string') return json({ error: 'bookerOverride must be a GHL user id or null.' }, 400);
+      if (id && !(await ghlUsers()).some((u) => u.id === id)) return json({ error: `Unknown GHL user "${id}".` }, 400);
+      await saveBookerOverride(access.viewer.email, b.appointmentId, id || null);
+      return json({ ok: true });
+    }
     const tlc = (b as { tlc?: unknown }).tlc;
     if (typeof tlc === 'boolean') {
       const err = await saveTlc(access.viewer.email, b.appointmentId, tlc);

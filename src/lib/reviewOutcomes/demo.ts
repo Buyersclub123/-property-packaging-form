@@ -47,6 +47,8 @@ export function demoData(): ReviewData {
       bookerEmail: null,
       bookerFrom: hasG && i % 5 ? ('invite' as const) : null,
       createdByEmail: null,
+      bookerAuto: hasG && i % 5 ? CALL_CENTRE[i % 3] : null,
+      bookerOverrideId: null,
       mode: hasG ? gcal.mode : 'Unknown',
       kind: 'PR' as const, leadType: 'PR' as const, schedule: null, selfBooked: false, leadSource: null, referrer: null, meetingSource: null, meetingSourceLevel: null, meetingSourceDetail: null,
     };
@@ -61,6 +63,7 @@ export function demoData(): ReviewData {
     from: addDays(today, -5),
     to: addDays(today, 3),
     consultants: CONSULTANTS,
+    ghlUsers: [...CONSULTANTS, ...CALL_CENTRE].map((n) => ({ id: n, name: n })),
     meetings,
     gcalUnmatched,
     lastSync: null,

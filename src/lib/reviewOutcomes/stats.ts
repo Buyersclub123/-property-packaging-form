@@ -158,7 +158,7 @@ export function sumTypes(rows: TypeRow[]): TypeRow {
   return t;
 }
 
-export const bookerKey = (m: ReviewMeeting) => m.booker || (m.bookerFrom === 'self' ? SELF_BOOKED : NO_BOOKER);
+export const bookerKey = (m: ReviewMeeting) => (m.bookerFrom === 'self' ? SELF_BOOKED : m.booker || NO_BOOKER);
 export const consultantKey = (m: ReviewMeeting) => m.consultant;
 export const inRange = (list: ReviewMeeting[], from: string, to: string) => list.filter((m) => m.ymd >= from && m.ymd <= to);
 export const pct = (n: number, d: number) => (d ? `${((n / d) * 100).toFixed(2)}%` : '0.00%');

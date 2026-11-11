@@ -261,9 +261,13 @@ export interface ReviewMeeting {
   booker: string | null;
   bookerEmail: string | null;
   /** 'self' = created in GHL by the consultant, with no Call Centre person on the invite. */
-  bookerFrom: 'ghl' | 'invite' | 'self' | 'sheet' | null;
+  bookerFrom: 'ghl' | 'invite' | 'self' | 'sheet' | 'created' | 'override' | null;
   /** Who created the appointment in GHL (email), whether or not they are Call Centre. */
   createdByEmail: string | null;
+  /** Booker before any override: GHL created-by user, else invite / sheet. */
+  bookerAuto: string | null;
+  /** "Booked by" set on the row (GHL user id, tool DB); stats and CC PAYS use it. */
+  bookerOverrideId: string | null;
   /** From the matched Google event's location: Meet link = Google, street address = F2F. */
   mode: MeetingMode;
 }
@@ -281,6 +285,8 @@ export interface ReviewData {
   from: string;
   to: string;
   consultants: string[];
+  /** GHL Users (Consultant / Booker dropdowns and Booked by). */
+  ghlUsers: { id: string; name: string }[];
   meetings: ReviewMeeting[];
   /** Google 'Portfolio Review' events in the range with no GHL appointment (from MIN_YMD on). */
   gcalUnmatched: GcalEvent[];

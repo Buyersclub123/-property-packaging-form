@@ -135,6 +135,9 @@ async function create(): Promise<void> {
     ADD COLUMN IF NOT EXISTS tlc_at TIMESTAMPTZ`;
   // Row note posted as a GHL contact note (contactNote.ts): note id for later edits, last error if it failed.
   await sql`ALTER TABLE review_outcomes ADD COLUMN IF NOT EXISTS note_ghl_id TEXT, ADD COLUMN IF NOT EXISTS note_ghl_error TEXT`;
+  // "Booked by" override on the row (GHL user id); stats and CC PAYS use it over the GHL created-by.
+  await sql`ALTER TABLE review_outcomes ADD COLUMN IF NOT EXISTS booker_override_id TEXT, ADD COLUMN IF NOT EXISTS booker_override_by TEXT,
+    ADD COLUMN IF NOT EXISTS booker_override_at TIMESTAMPTZ`;
   // Google calendars the sync tried (info@ calendarList + GHL assignees' emails) and whether each was readable.
   await sql`CREATE TABLE IF NOT EXISTS review_gcal_calendars (
     calendar_id TEXT PRIMARY KEY,
