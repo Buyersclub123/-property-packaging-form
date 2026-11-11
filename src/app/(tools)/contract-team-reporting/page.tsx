@@ -448,6 +448,17 @@ function containsAny(value: string, pattern: string): boolean {
 type ViewSection = 'Standard' | 'Custom' | 'Exception';
 const VIEW_SECTIONS: ViewSection[] = ['Standard', 'Custom', 'Exception'];
 
+// View dropdown folders. Public folders come from /api/contract-team-reporting/view-folders;
+// these defaults show until it answers. Unassigned built-in/public views sit in Contract Team.
+interface ViewFolder { id: string; name: string; deletable?: boolean }
+const DEFAULT_VIEW_FOLDERS: ViewFolder[] = [
+  { id: 'contract-team', name: 'Contract Team' },
+  { id: 'property-team', name: 'Property Team' },
+  { id: 'jt', name: 'JT', deletable: true },
+];
+const DEFAULT_VIEW_FOLDER = 'contract-team';
+const PERSONAL_VIEW_FOLDER: ViewFolder = { id: 'personal', name: 'Personal' };
+
 interface ViewDef {
   id: string;
   name: string;
@@ -1397,11 +1408,16 @@ export default function ContractTeamReportingPage() {
   });
   // Built-in views deleted in the View Builder: hidden for everyone (DB), restored from Admin > Views.
   const [hiddenViewIds, setHiddenViewIds] = useState<Set<string>>(new Set());
+  // Personal views only show for the person who saved them.
+  const myPersonalViews = useMemo(() => {
+    const me = (userEmail || '').toLowerCase();
+    return personalViews.filter((v) => !!me && (v.createdBy || '').toLowerCase() === me);
+  }, [personalViews, userEmail]);
   const allViews = useMemo(() => {
     // A saved public view with the same id as a preset replaces it.
     const overridden = new Set(publicViews.map((v) => v.id));
-    return [...PRESET_VIEWS.filter((p) => !overridden.has(p.id) && !hiddenViewIds.has(p.id)), ...publicViews.filter((v) => !hiddenViewIds.has(v.id)), ...personalViews];
-  }, [publicViews, personalViews, hiddenViewIds]);
+    return [...PRESET_VIEWS.filter((p) => !overridden.has(p.id) && !hiddenViewIds.has(p.id)), ...publicViews.filter((v) => !hiddenViewIds.has(v.id)), ...myPersonalViews];
+  }, [publicViews, myPersonalViews, hiddenViewIds]);
 
   const [activeViewId, setActiveViewId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -1611,6 +1627,7 @@ export default function ContractTeamReportingPage() {
         sortBy: sortLevels[0]?.column ?? 'name',
         sortDir: sortLevels[0]?.dir ?? null,
         sorts: sortLevels,
+        createdBy: userEmail || undefined,
       };
       if (await persistView(view, builderScope)) {
         setBuilderDraft(false);
@@ -1706,6 +1723,12 @@ export default function ContractTeamReportingPage() {
   useEffect(() => {
     localStorage.setItem('ctr-personal-views', JSON.stringify(personalViews));
   }, [personalViews]);
+  // Personal views saved before owners were recorded belong to whoever uses this browser.
+  useEffect(() => {
+    if (userEmail && personalViews.some((v) => !v.createdBy)) {
+      setPersonalViews((prev) => prev.map((v) => (v.createdBy ? v : { ...v, createdBy: userEmail })));
+    }
+  }, [userEmail, personalViews]);
 
   // Load public views from the server
   const fetchPublicViews = useCallback(async () => {
@@ -1723,6 +1746,55 @@ export default function ContractTeamReportingPage() {
       .then((d) => { if (d?.hidden) setHiddenViewIds(new Set(d.hidden.map((h: { view_id: string }) => h.view_id))); })
       .catch(() => { /* hidden list unavailable — every built-in shows */ });
   }, []);
+
+  // View dropdown folders (server-side) and the last folder opened (per browser; '' = all closed)
+  const [viewFolders, setViewFolders] = useState<ViewFolder[]>(DEFAULT_VIEW_FOLDERS);
+  const [viewFolderOf, setViewFolderOf] = useState<Record<string, string>>({});
+  const [openViewFolder, setOpenViewFolder] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('ctr-view-folder-open') : null);
+  const applyFolderState = useCallback((d: { folders?: ViewFolder[]; assignments?: Record<string, string> } | null) => {
+    if (!d || !Array.isArray(d.folders)) return;
+    setViewFolders(d.folders);
+    setViewFolderOf(d.assignments || {});
+  }, []);
+  useEffect(() => {
+    fetch('/api/contract-team-reporting/view-folders', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(applyFolderState)
+      .catch(() => { /* folders unavailable — every public view shows under Contract Team */ });
+  }, [applyFolderState]);
+  const folderOfView = useCallback((v: ViewDef) => {
+    if (v.id.startsWith('personal-')) return PERSONAL_VIEW_FOLDER.id;
+    const f = viewFolderOf[v.id];
+    return f && viewFolders.some((x) => x.id === f) ? f : DEFAULT_VIEW_FOLDER;
+  }, [viewFolderOf, viewFolders]);
+  function toggleViewFolder(id: string) {
+    const shown = openViewFolder === null ? folderOfView(activeView) : openViewFolder;
+    const next = shown === id ? '' : id;
+    setOpenViewFolder(next);
+    localStorage.setItem('ctr-view-folder-open', next);
+  }
+  async function moveViewToFolder(view: ViewDef, folderId: string) {
+    const res = await fetch('/api/contract-team-reporting/view-folders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ viewId: view.id, folderId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(`Move failed: ${data.error || res.status}`); return; }
+    applyFolderState(data);
+  }
+  async function deleteViewFolder(folder: ViewFolder) {
+    if (!confirm(`Delete the "${folder.name}" folder? Its views move back to Contract Team.`)) return;
+    const res = await fetch('/api/contract-team-reporting/view-folders', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderId: folder.id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(`Delete failed: ${data.error || res.status}`); return; }
+    applyFolderState(data);
+  }
 
   // View menu drag-sort order (per browser)
   const [viewOrder, setViewOrder] = useState<Record<string, number>>(() => {
@@ -2762,14 +2834,33 @@ export default function ContractTeamReportingPage() {
             </button>
             {showViewMenu && (
               <div className={`absolute top-full left-0 mt-1 w-64 max-h-[70vh] overflow-y-auto ${t.bg} border ${t.inputBorder} rounded shadow-lg z-50 py-1`}>
-                {VIEW_SECTIONS.map((section) => {
-                  const sectionViews = allViews
+                {[...viewFolders, PERSONAL_VIEW_FOLDER].map((folder) => {
+                  const folderViews = allViews.filter((v) => folderOfView(v) === folder.id);
+                  const isOpen = (openViewFolder === null ? folderOfView(activeView) : openViewFolder) === folder.id;
+                  return (
+                    <div key={folder.id}>
+                      <button
+                        onClick={() => toggleViewFolder(folder.id)}
+                        className={`w-full flex items-center gap-1 px-2 py-1 text-[11px] font-bold ${t.headerText} ${t.hoverBg}`}
+                        title={isOpen ? 'Collapse folder' : 'Open folder'}
+                      >
+                        <span className="w-3 text-[9px] opacity-70">{isOpen ? '▾' : '▸'}</span>
+                        <span className="flex-1 text-left">{folder.name}</span>
+                        <span className="text-[9px] font-normal opacity-50">{folderViews.length}</span>
+                      </button>
+                      {isOpen && folderViews.length === 0 && (
+                        <div className={`pl-6 pr-3 py-1 text-[10px] italic opacity-50 ${t.text}`}>
+                          {folder.id === PERSONAL_VIEW_FOLDER.id ? 'No personal views yet' : 'No views yet'}
+                        </div>
+                      )}
+                      {isOpen && VIEW_SECTIONS.map((section) => {
+                  const sectionViews = folderViews
                     .filter((v) => v.section === section)
                     .sort((a, b) => (viewOrder[a.id] ?? 999) - (viewOrder[b.id] ?? 999));
                   if (sectionViews.length === 0) return null;
                   return (
                     <div key={section}>
-                      <div className={`px-3 pt-1.5 pb-0.5 text-[9px] font-bold uppercase opacity-60 ${t.headerText}`}>
+                      <div className={`pl-6 pr-3 pt-1.5 pb-0.5 text-[9px] font-bold uppercase opacity-60 ${t.headerText}`}>
                         {section} reports
                       </div>
                       {sectionViews.map((view) => (
@@ -2794,11 +2885,10 @@ export default function ContractTeamReportingPage() {
                         >
                           <button
                             onClick={() => selectView(view)}
-                            className={`flex-1 text-left px-3 py-1.5 text-xs ${t.text} ${activeViewId === view.id ? 'font-bold' : ''}`}
+                            className={`flex-1 text-left pl-6 pr-3 py-1.5 text-xs ${t.text} ${activeViewId === view.id ? 'font-bold' : ''}`}
                           >
                             <span className="opacity-40 mr-1.5 cursor-grab">⠿</span>
                             {view.name}
-                            {view.id.startsWith('personal-') && <span className="ml-1 text-[8px] opacity-50">(personal)</span>}
                           </button>
                           {showColumnBuilder && canDeleteView(view) && (
                             <button
@@ -2811,6 +2901,9 @@ export default function ContractTeamReportingPage() {
                           )}
                         </div>
                       ))}
+                    </div>
+                  );
+                })}
                     </div>
                   );
                 })}
@@ -3103,6 +3196,29 @@ export default function ContractTeamReportingPage() {
                     onChange={(e) => setBuilderName(e.target.value)}
                     className={`w-full px-1.5 py-0.5 mb-1 text-[10px] ${t.inputBg} border ${t.inputBorder} rounded ${t.headerText} placeholder-gray-500 focus:outline-none`}
                   />
+                  {!builderDraft && canDeleteAnyView(userEmail) && !activeView.id.startsWith('personal-') && (
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <label className={`text-[10px] ${t.headerText}`}>Folder:</label>
+                      <select
+                        value={folderOfView(activeView)}
+                        onChange={(e) => moveViewToFolder(activeView, e.target.value)}
+                        title={`Move "${activeView.name}" to another folder (saved for everyone)`}
+                        className={`text-[10px] ${t.inputBg} border ${t.inputBorder} rounded px-1 py-0.5 ${t.headerText}`}
+                      >
+                        {viewFolders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                      </select>
+                      {viewFolders.filter((f) => f.deletable).map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => deleteViewFolder(f)}
+                          className="text-[10px] text-red-400 hover:underline"
+                          title={`Delete the "${f.name}" folder; its views move back to Contract Team`}
+                        >
+                          Delete &ldquo;{f.name}&rdquo; folder
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 mb-2">
                     <select
                       value={builderSection}
