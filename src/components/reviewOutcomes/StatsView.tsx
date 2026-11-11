@@ -909,11 +909,12 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
               <div className="font-semibold text-brand-charcoal">{drill.title} ({drill.meetings.length})</div>
               <button onClick={() => setDrill(null)} className="rounded border px-2 py-0.5 text-sm hover:bg-gray-50">Close</button>
             </div>
+            <div className="max-h-[75vh] overflow-y-auto" data-testid="drill-list">
             <table className="w-full border-collapse text-sm">
-              <thead><tr>{['Date', 'Client', 'Meeting source', 'Consultant', 'Booker', 'Booked as', 'GHL', 'Outcome'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+              <thead className="sticky top-0 z-10"><tr>{['Date', 'Client', 'Meeting source', 'Consultant', 'Booker', 'Mode', 'GHL status', 'Outcome'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
               <tbody>
                 {drill.meetings.map((m) => (
-                  <tr key={m.id}>
+                  <tr key={m.id} className="odd:bg-gray-50 hover:bg-blue-50">
                     <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
                     <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
                     <td className={TDN} title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>{m.meetingSource || NOT_RECORDED}</td>
@@ -926,6 +927,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
