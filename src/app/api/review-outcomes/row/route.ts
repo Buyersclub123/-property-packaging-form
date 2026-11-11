@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { canRecord, reviewAccess } from '@/lib/reviewOutcomes/access';
+import { reviewAccess } from '@/lib/reviewOutcomes/access';
 import { meetingOwner, saveConfirmed, saveRowNote, saveTlc } from '@/lib/reviewOutcomes/record';
 import { NOTE_NEXT_ACTIONS } from '@/lib/reviewOutcomes/types';
 import { postContactNote } from '@/lib/reviewOutcomes/contactNote';
@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
   try {
     const owner = await meetingOwner(b.appointmentId);
     if (!owner) return json({ error: 'Appointment not found.' }, 404);
-    if (!canRecord(access.viewer, owner.assignedUserId)) return json({ error: 'You can only record your own meetings.' }, 403);
     const tlc = (b as { tlc?: unknown }).tlc;
     if (typeof tlc === 'boolean') {
       const err = await saveTlc(access.viewer.email, b.appointmentId, tlc);

@@ -404,7 +404,7 @@ export default function ReviewOutcomesPage() {
     for (const m of meetings) g.set(m.ymd, [...(g.get(m.ymd) || []), m]);
     return [...g.entries()];
   }, [meetings]);
-  const canEdit = (m: ReviewMeeting) => !!data && (data.viewer.recorder || data.viewer.consultantIds.includes(m.consultantId));
+  const canEdit = (m: ReviewMeeting) => !!data && !!m.id;
 
   return (
     <main className="min-h-screen bg-white">
@@ -471,7 +471,7 @@ export default function ReviewOutcomesPage() {
                 ))}
               </div>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client" className="w-[200px] rounded border px-2 py-1" />
-              {data?.viewer.recorder && (
+              {data && (
                 <select value={consultant} onChange={(e) => setConsultant(e.target.value)} className="rounded border px-1 py-1" aria-label="Consultant">
                   <option value="">All consultants</option>
                   {data.consultants.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -518,9 +518,6 @@ export default function ReviewOutcomesPage() {
               </div>
             )}
             {saveError && <div className="mb-2 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">Not saved - {saveError}</div>}
-            {data && !data.viewer.recorder && data.viewer.consultantIds.length === 0 && (
-              <div className="mb-2 rounded border bg-gray-50 px-3 py-2 text-sm text-gray-600">Your login email doesn&apos;t match a GHL user, so no meetings are shown.</div>
-            )}
 
             <div className="mb-3 flex items-center justify-between gap-3 rounded border bg-white px-2 py-2">
               <button onClick={() => shift(-1)} disabled={isAll || addDays(from, -span) < MIN_YMD} aria-label="Previous"

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { canRecord, reviewAccess } from '@/lib/reviewOutcomes/access';
+import { reviewAccess } from '@/lib/reviewOutcomes/access';
 import { loadMeetings } from '@/lib/reviewOutcomes/load';
 import { meetingOwner, saveOutcome } from '@/lib/reviewOutcomes/record';
 import { lastSync, loadSettings, logReview } from '@/lib/reviewOutcomes/store';
@@ -60,7 +60,6 @@ export async function POST(request: NextRequest) {
   try {
     const owner = await meetingOwner(b.appointmentId);
     if (!owner) return json({ error: 'Appointment not found.' }, 404);
-    if (!canRecord(access.viewer, owner.assignedUserId)) return json({ error: 'You can only record your own meetings.' }, 403);
     const settings = await loadSettings();
     const outcome = b.outcome ?? null;
     if (outcome !== null && !settings.outcomes.includes(outcome)) return json({ error: `Unknown outcome "${outcome}".` }, 400);

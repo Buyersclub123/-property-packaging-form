@@ -5,7 +5,7 @@ import { ghlUsers } from './sync';
 import { RECORDERS_GROUP, TOOL_HREF, type ReviewViewer } from './types';
 
 // Server-side access for the review-outcomes page and APIs (Tile access only hides tiles, so the API checks too).
-// 'Review recorders' (and Admin) see and record every meeting; everyone else only meetings assigned to their GHL user.
+// Everyone with access sees and records every meeting (JT 11/11). 'Review recorders' (and Admin) also get Settings, full sync and the stats email.
 
 // JT: always see every meeting and Settings, without relying on Tile access groups.
 const FULL_VIEW_EMAILS = ['john.t@buyersclub.com.au', 'john.e@buyersclub.com.au', 'ali.h@buyersclub.com.au', 'samara@buyersclub.com.au'];
@@ -30,8 +30,4 @@ export async function reviewAccess(h: Headers): Promise<ReviewAccess> {
   } catch (e) {
     return { ok: false, status: 500, error: e instanceof Error ? e.message : String(e) };
   }
-}
-
-export function canRecord(v: ReviewViewer, assignedUserId: string | null | undefined): boolean {
-  return v.recorder || (!!assignedUserId && v.consultantIds.includes(assignedUserId));
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { canRecord, reviewAccess } from '@/lib/reviewOutcomes/access';
+import { reviewAccess } from '@/lib/reviewOutcomes/access';
 import { loadClientPanel, meetingOwner, saveClientPanel, type PropertyCheckInput } from '@/lib/reviewOutcomes/record';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,6 @@ async function guard(request: NextRequest, appointmentId: string | null | undefi
   if (!appointmentId) return { error: json({ error: 'appointmentId is required.' }, 400) };
   const owner = await meetingOwner(appointmentId);
   if (!owner) return { error: json({ error: 'Appointment not found.' }, 404) };
-  if (!canRecord(access.viewer, owner.assignedUserId)) return { error: json({ error: 'You can only open your own meetings.' }, 403) };
   return { access, owner };
 }
 

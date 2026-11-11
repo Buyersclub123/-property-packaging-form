@@ -30,7 +30,8 @@ export function meetingMode(location: string): MeetingMode {
 /** 'ethan.l@buyersclub.com.au' -> 'Ethan.L' (the sheet's style) when GHL has no name for the email. */
 const emailName = (e: string) => e.split('@')[0].split('.').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('.');
 
-export async function loadMeetings(viewer: ReviewViewer, from: string, to: string, callCentre: string[], aliases: Record<string, string> = {}, ghlOnlyFrom: string | null = null): Promise<LoadedMeetings> {
+// Every viewer sees every meeting (JT 11/11); the viewer is kept for the signature.
+export async function loadMeetings(_viewer: ReviewViewer, from: string, to: string, callCentre: string[], aliases: Record<string, string> = {}, ghlOnlyFrom: string | null = null): Promise<LoadedMeetings> {
   await ensureReviewTables();
   const sql = getDb();
   const warnings: string[] = [];
@@ -111,9 +112,8 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
   const agentOf = nameMatcher(callCentre.map((e) => staffByEmail.get(e.toLowerCase()) || emailName(e)), aliases);
 
   const now = Date.now();
-  const mine = (assigned: unknown) => viewer.recorder || viewer.consultantIds.includes(String(assigned || ''));
   const meetings: ReviewMeeting[] = base
-    .filter((b) => b.ymd >= from && b.ymd <= to && mine(b.r.assigned_user_id))
+    .filter((b) => b.ymd >= from && b.ymd <= to)
     .map(({ r, startIso, t, ymd, name }) => {
       const status = String(r.ghl_status || '');
       const dbOutcome = r.outcome && (r.source !== 'sheet' || sheetOk(ymd)) ? String(r.outcome) : null;
@@ -192,7 +192,7 @@ export async function loadMeetings(viewer: ReviewViewer, from: string, to: strin
   const matchedIds = new Set([...matches.values()].map((m) => m.eventId));
   const lo = from < MIN_YMD ? MIN_YMD : from;
   const gcalUnmatched = prepared
-    .filter((e) => e.ymd >= lo && e.ymd <= to && !matchedIds.has(e.id) && !e.cancelled && (viewer.recorder || e.staffEmails.includes(viewer.email)))
+    .filter((e) => e.ymd >= lo && e.ymd <= to && !matchedIds.has(e.id) && !e.cancelled)
     .sort((a, b) => a.t - b.t)
     .map(toEvent);
 
