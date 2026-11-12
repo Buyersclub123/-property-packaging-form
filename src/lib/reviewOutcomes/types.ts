@@ -2,7 +2,7 @@
 import type { MeetingSourceLevel } from './meetingSource';
 
 export const MIN_YMD = '2024-07-01';
-export const TOOL_HREF = '/team/resources/new-initiatives/review-outcomes';
+export const TOOL_HREF = '/team/sales/review-outcomes';
 export const RECORDERS_GROUP = 'Review recorders';
 export const DISCREPANCY_MINUTES = 15;
 

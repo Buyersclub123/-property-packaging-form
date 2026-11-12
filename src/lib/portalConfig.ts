@@ -124,7 +124,7 @@ export const teams: TeamTile[] = [
         name: 'Sales Meeting Outcomes',
         accessKey: 'review-outcomes',
         description: 'Record Portfolio Review and Presentation Meeting 1 outcomes, with stats, sales and lists',
-        href: '/team/resources/new-initiatives/review-outcomes',
+        href: '/team/sales/review-outcomes',
       },
       {
         name: 'SPIN Call Coach',
