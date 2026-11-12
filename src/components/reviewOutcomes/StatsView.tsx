@@ -514,9 +514,41 @@ function BarChart({ rows }: { rows: Row[] }) {
   );
 }
 
-/** Exception reports (JT 11/11): (a) contact has 0 or >1 open opportunities; (b) no open opp owned by the meeting's consultant. */
+/** Data completeness (JT 12/11): Meeting source counts only the latest attribution, never the Lead Source fallback. */
+function DataCompleteness({ list, pick }: { list: ReviewMeeting[]; pick: (title: string, meetings: ReviewMeeting[]) => void }) {
+  const past = list.filter((m) => m.past && !m.selfBooked);
+  const rows: [string, string, ReviewMeeting[], ReviewMeeting[]][] = [
+    ['no-source', 'No Meeting source (no latest attribution in GHL; Lead Source not used)', list.filter((m) => m.meetingSourceLevel !== 'last'), list],
+    ['no-referrer', 'No referrer name (GHL Referrer blank)', list.filter((m) => !m.referrer?.trim()), list],
+    ['no-outcome', 'No outcome (past meetings; self-booked need none)', past.filter((m) => !m.outcome), past],
+    ['no-booker', 'No booker (no GHL creator; self-booked count as booked)', list.filter((m) => !m.booker && !m.selfBooked), list],
+  ];
+  return (
+    <div className="min-w-0 overflow-x-auto rounded border bg-white" data-testid="completeness">
+      <Title>Data completeness</Title>
+      <table className="w-full border-collapse">
+        <thead><tr>{['Missing', 'Meetings', 'of', '%'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+        <tbody>
+          {rows.map(([k, label, ms, of]) => (
+            <tr key={k} className="odd:bg-gray-50">
+              <td className={TDN}>{label}</td>
+              <td className={TD}>
+                <button data-testid={`dc-${k}`} className={`hover:underline ${ms.length ? 'font-semibold text-red-700' : 'text-blue-700'}`}
+                  onClick={() => pick(label.split(' (')[0], [...ms].sort((a, b) => a.start.localeCompare(b.start)))}>{ms.length}</button>
+              </td>
+              <td className={TD}>{of.length}</td>
+              <td className={TD}>{pct(ms.length, of.length)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 const OPP_BATCH = 15;
 const OPP_BATCH_TIMEOUT_MS = 90_000;
+/** Exception reports (JT 11/11): (a) contact has 0 or >1 open opportunities; (b) no open opp owned by the meeting's consultant. */
 function ExceptionReports({ meetings }: { meetings: ReviewMeeting[] }) {
   // Read once per period: the period's contacts, in batches, with a progress count; any failure stops and shows (JT 12/11).
   const contactKey = useMemo(() => [...new Set(meetings.map((m) => m.contactId).filter(Boolean))].sort().join(','), [meetings]);
@@ -1020,6 +1052,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         </div>
         <TargetsTable targets={data.settings.targets || {}} factor={targetFactor(p, today)} rows={[...cc.rows, ...sales.rows]} />
         <Leaderboard rows={sales.rows} typeOf={consTypeOf} soldOf={consSoldOf} net={view.net} />
+        <DataCompleteness list={list} pick={(title, meetings) => setDrill({ title: `${title} - ${r.label}`, meetings })} />
         {!demoData && <ExceptionReports meetings={list} />}
         {!demoData && data.viewer.recorder && <CcPaysPanel today={today} />}
         <ChartCard title={`Trend - ${r.label}`}><TrendChart points={trend.cur} ly={trend.ly} /></ChartCard>
