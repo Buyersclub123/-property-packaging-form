@@ -126,15 +126,21 @@ export async function buildCcPays(ws: string): Promise<CcPays> {
   return { week: ws, label: weekLabel(ws), blocks, skipped, templateTab: tpl.tab };
 }
 
-export type CcWriteResult = { tab: string; rows: number; readBack: number };
+export type CcWriteResult = { tab: string; rows: number; readBack: number; replaced: boolean };
 
-/** Writes a NEW tab "<week> AUTOMATED"; refuses if the tab exists. */
-export async function writeCcPays(by: string, ws: string): Promise<CcWriteResult> {
+/** Writes a NEW tab "<week> AUTOMATED". If it exists: refuses, unless replace (manual Write, JT 12/11) - then only that
+ *  AUTOMATED tab is deleted and written again. Manual tabs are never touched; the Friday job never replaces. */
+export async function writeCcPays(by: string, ws: string, replace = false): Promise<CcWriteResult> {
   const data = await buildCcPays(ws);
   const tab = automatedTab(ws);
   const sh = sheets();
-  const meta = await sh.spreadsheets.get({ spreadsheetId: CC_PAYS_SHEET_ID, fields: 'sheets.properties.title' });
-  if ((meta.data.sheets || []).some((s) => s.properties?.title === tab)) throw new Error(`Tab "${tab}" already exists; existing tabs are never modified.`);
+  const meta = await sh.spreadsheets.get({ spreadsheetId: CC_PAYS_SHEET_ID, fields: 'sheets.properties(sheetId,title)' });
+  const old = (meta.data.sheets || []).find((s) => s.properties?.title === tab);
+  if (old && !replace) throw new Error(`Tab "${tab}" already exists; existing tabs are never modified.`);
+  if (old) {
+    if (!tab.endsWith(` ${AUTOMATED}`)) throw new Error(`Refusing to delete "${tab}": only AUTOMATED tabs can be replaced.`);
+    await sh.spreadsheets.batchUpdate({ spreadsheetId: CC_PAYS_SHEET_ID, requestBody: { requests: [{ deleteSheet: { sheetId: old.properties?.sheetId } }] } });
+  }
 
   const values: string[][] = [];
   const heads: number[] = [];
@@ -162,8 +168,8 @@ export async function writeCcPays(by: string, ws: string): Promise<CcWriteResult
   const back = await sh.spreadsheets.values.get({ spreadsheetId: CC_PAYS_SHEET_ID, range: `'${tab}'!A1:F${values.length + 5}` });
   const readBack = (back.data.values || []).filter((r) => r.length >= 2 && r[1] && !HEAD.includes(String(r[1]))).length;
   const rows = data.blocks.reduce((n, b) => n + b.rows.length, 0);
-  await logReview(by, null, 'cc_pays', { week: ws, tab, rows, readBack, skipped: data.skipped.length });
-  return { tab, rows, readBack };
+  await logReview(by, null, 'cc_pays', { week: ws, tab, rows, readBack, skipped: data.skipped.length, replaced: !!old });
+  return { tab, rows, readBack, replaced: !!old };
 }
 
 export async function ccPaysTabExists(tab: string): Promise<boolean> {
