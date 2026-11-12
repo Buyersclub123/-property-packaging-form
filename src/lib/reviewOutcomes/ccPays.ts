@@ -1,7 +1,7 @@
 // CC PAYS AUTOMATED (JT 11/11). One NEW tab per Fri-Thu week in the CC PAYS workbook, same layout as the manual tabs:
 // a block per booker (header "<NAME> - <STATE>" | COMMS DUE | CRM NOTES | TLC | CONSULTANT | DAY OFF), a row per Showed
-// meeting. Existing tabs are never modified. "(test)" tabs can always be written; "(tool)" tabs only once the switch
-// (review_settings cc_pays_apply) is on. Every write is logged in review_outcome_log (action cc_pays).
+// meeting. The workbook is a copy (JT 12/11): tabs are named "<week> AUTOMATED", written Fridays 9am Sydney (cron) or from
+// Stats; existing tabs are never modified. Every write is logged in review_outcome_log (action cc_pays).
 import { google } from 'googleapis';
 import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
@@ -11,7 +11,8 @@ import { ensureReviewTables, loadSettings, logReview } from './store';
 import { addDays, type ReviewMeeting, type ReviewViewer } from './types';
 
 export const CC_PAYS_SHEET_ID = '1LWRtH2ps3aZbpUb1lzV-4c1WV_otp1UciwLHu4mWbZs';
-const APPLY_KEY = 'cc_pays_apply';
+export const AUTOMATED = 'AUTOMATED';
+export const automatedTab = (ws: string) => `${weekLabel(ws)} ${AUTOMATED}`;
 const HEAD = ['COMMS DUE', 'CRM NOTES', 'TLC', 'CONSULTANT', 'DAY OFF'];
 const WIDTHS = [368, 141, 100, 100, 100, 223];
 const BLANK_ROWS = 3;
@@ -39,18 +40,12 @@ function sheets() {
   return google.sheets({ version: 'v4', auth });
 }
 
-export async function ccPaysSwitch(): Promise<{ apply: boolean; by: string | null; at: string | null }> {
-  await ensureReviewTables();
-  const rows = await getDb()`SELECT value, updated_by, updated_at FROM review_settings WHERE key = ${APPLY_KEY}`;
-  return { apply: rows[0]?.value === true, by: rows[0]?.updated_by ?? null, at: rows[0]?.updated_at ? new Date(rows[0].updated_at).toISOString() : null };
-}
-
 /** Block headers (in order) from the latest manual tab; "OLD STAFF" marks the rest as old. */
 async function templateBlocks(): Promise<{ tab: string; headers: { header: string; old: boolean }[]; titles: string[] }> {
   const sh = sheets();
   const meta = await sh.spreadsheets.get({ spreadsheetId: CC_PAYS_SHEET_ID, fields: 'sheets.properties(title,index)' });
   const titles = (meta.data.sheets || []).map((s) => String(s.properties?.title || ''));
-  const tab = [...titles].reverse().find((t) => !/\((tool|test)\)\s*$/i.test(t) && /\d/.test(t)) || '';
+  const tab = [...titles].reverse().find((t) => !/(\((tool|test)\)|AUTOMATED)\s*$/i.test(t) && /\d/.test(t)) || '';
   if (!tab) return { tab: '', headers: [], titles };
   const v = await sh.spreadsheets.values.get({ spreadsheetId: CC_PAYS_SHEET_ID, range: `'${tab.replace(/'/g, "''")}'!A1:B300` });
   const headers: { header: string; old: boolean }[] = [];
@@ -131,13 +126,12 @@ export async function buildCcPays(ws: string): Promise<CcPays> {
   return { week: ws, label: weekLabel(ws), blocks, skipped, templateTab: tpl.tab };
 }
 
-export type CcWriteResult = { tab: string; rows: number; dryRun: boolean; readBack: number };
+export type CcWriteResult = { tab: string; rows: number; readBack: number };
 
-/** Writes a NEW tab "<week> (test)" or "<week> (tool)"; refuses if the tab exists. */
-export async function writeCcPays(by: string, ws: string, target: 'test' | 'tool'): Promise<CcWriteResult> {
-  if (target === 'tool' && !(await ccPaysSwitch()).apply) throw new Error('CC PAYS writing is in dry run: only a "(test)" tab can be written until the switch is on.');
+/** Writes a NEW tab "<week> AUTOMATED"; refuses if the tab exists. */
+export async function writeCcPays(by: string, ws: string): Promise<CcWriteResult> {
   const data = await buildCcPays(ws);
-  const tab = `${data.label} (${target})`;
+  const tab = automatedTab(ws);
   const sh = sheets();
   const meta = await sh.spreadsheets.get({ spreadsheetId: CC_PAYS_SHEET_ID, fields: 'sheets.properties.title' });
   if ((meta.data.sheets || []).some((s) => s.properties?.title === tab)) throw new Error(`Tab "${tab}" already exists; existing tabs are never modified.`);
@@ -168,11 +162,10 @@ export async function writeCcPays(by: string, ws: string, target: 'test' | 'tool
   const back = await sh.spreadsheets.values.get({ spreadsheetId: CC_PAYS_SHEET_ID, range: `'${tab}'!A1:F${values.length + 5}` });
   const readBack = (back.data.values || []).filter((r) => r.length >= 2 && r[1] && !HEAD.includes(String(r[1]))).length;
   const rows = data.blocks.reduce((n, b) => n + b.rows.length, 0);
-  await logReview(by, null, 'cc_pays', { week: ws, tab, target, rows, readBack, skipped: data.skipped.length });
-  return { tab, rows, dryRun: target === 'test', readBack };
+  await logReview(by, null, 'cc_pays', { week: ws, tab, rows, readBack, skipped: data.skipped.length });
+  return { tab, rows, readBack };
 }
 
-/** Previous Fri-Thu week's "(tool)" tab, if the switch is on and the tab is not there yet (cron, Fridays). */
 export async function ccPaysTabExists(tab: string): Promise<boolean> {
   const meta = await sheets().spreadsheets.get({ spreadsheetId: CC_PAYS_SHEET_ID, fields: 'sheets.properties.title' });
   return (meta.data.sheets || []).some((s) => s.properties?.title === tab);

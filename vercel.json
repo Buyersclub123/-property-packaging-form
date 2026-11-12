@@ -42,7 +42,7 @@
     },
     {
       "path": "/api/review-outcomes/cc-pays/cron",
-      "schedule": "25 * * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/ghl-monitor/digest",
