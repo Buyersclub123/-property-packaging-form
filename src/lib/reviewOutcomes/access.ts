@@ -26,7 +26,8 @@ export async function reviewAccess(h: Headers): Promise<ReviewAccess> {
     }
     const recorder = fullView || groupsOf(email, data).has(RECORDERS_GROUP) || isAdmin(email, data);
     const users = await ghlUsers().catch(() => []);
-    return { ok: true, viewer: { email, recorder, consultantIds: users.filter((u) => u.email === email).map((u) => u.id) } };
+    const mine = users.filter((u) => u.email === email);
+    return { ok: true, viewer: { email, recorder, consultantIds: mine.map((u) => u.id), name: mine[0]?.name || null } };
   } catch (e) {
     return { ok: false, status: 500, error: e instanceof Error ? e.message : String(e) };
   }

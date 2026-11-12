@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, DISCREPANCY_MINUTES, MIN_YMD, NOTE_NEXT_ACTIONS, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
+import { addDays, MIN_YMD, NOTE_NEXT_ACTIONS, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
 import { demoData } from '@/lib/reviewOutcomes/demo';
 import { meetingSourceTitle } from '@/lib/reviewOutcomes/meetingSource';
 import MorePanel from '@/components/reviewOutcomes/MorePanel';
@@ -24,38 +24,50 @@ const who = (email: string | null) => (email ? email.split('@')[0].replace(/[._]
 const longDate = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const needsNextAction = (outcome: string | null) => /^(cancelled|rescheduled)$/i.test(outcome || '');
 
-function NoteBox({ m, onSave, onClose }: { m: ReviewMeeting; onSave: (note: string | null, next: string | null) => void; onClose: () => void }) {
+/** First non-blank line = the latest comment (Next Comment inserts at the top, as on CTRT). */
+const latestLine = (note: string | null) => (note || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
+
+// Same as the CTRT "Latest Status Update" editor: title + x, textarea, "+ Next Comment", Done.
+function NoteModal({ m, userName, onSave, onClose }: { m: ReviewMeeting; userName: string; onSave: (note: string | null, next: string | null) => void; onClose: () => void }) {
   const [next, setNext] = useState(m.noteNextAction || '');
   const [text, setText] = useState(m.note || '');
   const ta = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = ta.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight + 2}px`;
-  }, [text]);
   const showNext = needsNextAction(m.outcome);
-  const save = () => onSave(text.trim() || null, showNext ? next || null : null);
+  const done = () => onSave(text.trim() || null, showNext ? next || null : null);
+  const nextComment = () => {
+    const [, mm, dd] = sydYmd(Date.now()).split('-');
+    const prefix = `${dd}/${mm} ${userName} - `;
+    setText((cur) => (cur ? `${prefix}\n${cur}` : prefix));
+    setTimeout(() => { const el = ta.current; if (el) { el.focus(); el.setSelectionRange(prefix.length, prefix.length); } }, 50);
+  };
   return (
-    <div className="flex flex-wrap items-start gap-1 rounded border border-blue-200 bg-blue-50/50 px-2 py-1">
-      {showNext && (
-        <select value={next} onChange={(e) => setNext(e.target.value)} className="rounded border bg-white px-1 py-0.5 text-xs" aria-label="Next action">
-          <option value="">Next action…</option>
-          {NOTE_NEXT_ACTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-      )}
-      <textarea ref={ta} rows={1} value={text} onChange={(e) => setText(e.target.value)} placeholder="Note" autoFocus aria-label="Note"
-        onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && save()} title="Ctrl+Enter to save"
-        className="min-w-[220px] flex-1 resize-none overflow-hidden rounded border bg-white px-1.5 py-0.5 text-xs leading-snug" />
-      <button onClick={save} className="rounded bg-blue-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-blue-700">Save</button>
-      <button onClick={onClose} className="px-1 text-xs text-gray-500 hover:text-gray-800">Cancel</button>
-      <span className="text-[11px] text-gray-400">{GHL_NOTE_LABEL}</span>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="w-[700px] max-w-[90vw] rounded-lg border border-gray-300 bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Note">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-900">Note - {m.contactName || '(no name)'} · {m.calendar} {longDate(m.ymd)}</h3>
+          <button onClick={onClose} className="px-1 text-lg leading-none text-gray-500 hover:text-gray-900" aria-label="Close">x</button>
+        </div>
+        {showNext && (
+          <select value={next} onChange={(e) => setNext(e.target.value)} className="mb-2 rounded border bg-white px-1 py-0.5 text-xs" aria-label="Next action">
+            <option value="">Next action…</option>
+            {NOTE_NEXT_ACTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        )}
+        <textarea ref={ta} value={text} onChange={(e) => setText(e.target.value)} autoFocus aria-label="Note"
+          className="h-80 w-full resize-y rounded border border-gray-300 bg-white p-3 text-sm text-gray-900 focus:border-blue-500 focus:outline-none" />
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <button onClick={nextComment} className="shrink-0 whitespace-nowrap rounded bg-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-300">+ Next Comment ({userName})</button>
+          <span className="min-w-0 flex-1 text-center text-[11px] text-gray-400">{GHL_NOTE_LABEL}</span>
+          <button onClick={done} className="rounded bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-500">Done</button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, onNote }: {
+function MeetingRow({ m, settings, canEdit, userName, onRecord, onMore, onConfirm, onTlc, onNote }: {
   m: ReviewMeeting;
+  userName: string;
   settings: ReviewSettings;
   canEdit: boolean;
   onRecord: (m: ReviewMeeting, outcome: string | null, reason?: string | null) => void;
@@ -65,67 +77,46 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, 
   onNote: (m: ReviewMeeting, note: string | null, next: string | null) => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
-  const [noteExpanded, setNoteExpanded] = useState(false);
-  const hasNote = !!(m.note || m.noteReason || m.noteNextAction);
-  const g = m.gcal;
-  const off = g && g.minutesApart !== null && g.minutesApart > DISCREPANCY_MINUTES;
+  const noteLine = latestLine(m.note) || (m.noteNextAction ? `Next action: ${m.noteNextAction}` : '');
+  const [src, ...camp] = (m.meetingSource || '').split(' · ');
+  const campaign = camp.join(' · ');
   const isInvalid = !!m.outcome && /^invalid/i.test(m.outcome) && m.outcomeSource !== 'ghl';
   const responded = !!m.outcome;
   const srcLabel = m.outcomeSource === 'tool' ? 'recorded in this tool' : m.outcomeSource === 'schedule' ? 'from calendar sheet' : m.outcomeSource === 'ghl' ? 'from GHL' : 'from sheet';
   return (
-    <div className={`grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 border-t px-3 py-2 first:border-t-0 md:grid-cols-[72px_minmax(0,1.1fr)_150px_minmax(0,0.9fr)_minmax(0,1fr)_680px] ${responded ? 'bg-green-50' : ''}`}>
+    <div className={`grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 border-t px-3 py-2 first:border-t-0 md:grid-cols-[64px_minmax(130px,1fr)_minmax(120px,0.8fr)_minmax(180px,1.6fr)_auto] ${responded ? 'bg-green-50' : ''}`}>
       <div className="text-sm font-semibold text-brand-charcoal">
         {time(m.start)}
         {responded && <div className="text-2xl leading-none text-green-600" title={`Outcome ${srcLabel}`}>✔</div>}
       </div>
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium">
+        <div className="break-words text-sm font-medium">
+          <span className="text-xs font-normal text-gray-400">Client: </span>
           {m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-brand-charcoal hover:underline">{m.contactName || '(no name)'}</a> : m.contactName}
         </div>
-        <div className="text-xs text-gray-500">
-          GHL: {m.ghlStatus}
-          {m.confirmed && <span className="ml-2 rounded bg-green-600 px-1 text-[10px] font-bold tracking-wide text-white" title={`Confirmed in this tool${m.confirmedBy ? ` by ${who(m.confirmedBy)}` : ''}`}>CONFIRMED</span>}
-          {m.kind === 'NL' && <span className="ml-2 rounded bg-purple-50 px-1 text-[11px] text-purple-700">Presentation 1 · {m.leadType}</span>}
+        <div className="text-xs text-gray-700">
+          <span className="text-gray-400">Type: </span>{m.kind === 'NL' ? 'Presentation 1' : 'Portfolio Review'}
           {m.selfBooked && <span className="ml-2 rounded bg-gray-100 px-1 text-[11px] text-gray-600" title="Created in GHL by the consultant">Self-booked – no outcome needed</span>}
         </div>
       </div>
-      <div className="col-start-2 min-w-0 text-sm text-gray-700 md:col-start-auto">
-        <div className="truncate" title="GHL assigned consultant">{m.consultant}</div>
-        <div className="truncate text-[11px] text-gray-500" title="Booked by = who created the appointment in GHL" data-testid="booked-by">
-          Booked by <span className="text-gray-600">{m.booker || '-'}</span>
-        </div>
+      <div className="col-start-2 min-w-0 text-xs text-gray-700 md:col-start-auto">
+        <div className="break-words" title="GHL assigned consultant"><span className="text-gray-400">Consultant: </span>{m.consultant || '-'}</div>
+        <div className="break-words" title="Who created the appointment in GHL" data-testid="booked-by"><span className="text-gray-400">Booker: </span>{m.booker || '-'}</div>
       </div>
-      <div className="col-start-2 min-w-0 text-xs md:col-start-auto" title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>
-        <div className="text-[11px] text-gray-400">Meeting source{m.meetingSourceLevel && m.meetingSourceLevel !== 'last' ? ` (${m.meetingSourceLevel === 'first' ? 'first touch' : 'Lead Source'})` : ''}</div>
-        <div className={`line-clamp-2 break-words ${m.meetingSource ? 'text-gray-700' : 'text-gray-400'}`}>{m.meetingSource || 'Not recorded'}</div>
-      </div>
-      <div className="col-start-2 min-w-0 text-xs md:col-start-auto">
-        {g ? (
-          <div className={off ? 'text-red-700' : 'text-gray-600'} title={`Matched on ${g.basis}${g.event.cancelled ? ' · cancelled in Google' : ''}`}>
-            {g.event.cancelled && <div className="text-amber-700">Calendar event cancelled</div>}
-            Google: {g.event.allDay ? `${dmy(g.event.ymd)} all day` : `${g.event.ymd !== m.ymd ? `${dmy(g.event.ymd)} ` : ''}${time(g.event.start)}`} · {g.event.staff || g.event.calendars.join(', ')}
-            {off && ` · ${g.minutesApart! >= 1440 ? `${Math.round(g.minutesApart! / 1440)}d` : `${g.minutesApart} min`} apart`}
-            <div className="truncate text-gray-400">{g.event.title}</div>
-          </div>
-        ) : (
-          m.kind === 'NL' ? (
-            <div className="text-gray-600" title={m.schedule ? `Calendar schedule sheet, tab "${m.schedule.tab}"` : ''}>
-              {m.schedule
-                ? `Sheet: ${m.schedule.sat || '-'}${m.schedule.outcome ? ` / ${m.schedule.outcome}` : ''} · Agent ${m.booker || m.schedule.agent || '-'} · ${m.schedule.location || '-'}`
-                : 'Not found in the calendar schedule sheet'}
-            </div>
-          ) : (
-            <div className="text-amber-700">No consultant calendar event</div>
-          )
-        )}
+      <div className="col-start-2 min-w-0 text-xs text-gray-700 md:col-start-auto" title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)} data-testid="meeting-source">
+        <div className="break-words"><span className="text-gray-400">Source{m.meetingSourceLevel && m.meetingSourceLevel !== 'last' ? ` (${m.meetingSourceLevel === 'first' ? 'first touch' : 'Lead Source'})` : ''}: </span>{src || <span className="text-gray-400">Not recorded</span>}</div>
+        <div className="break-words"><span className="text-gray-400">Campaign: </span>{campaign || <span className="text-gray-400">-</span>}</div>
       </div>
       <div className="col-start-2 mt-1 md:col-start-auto md:mt-0">
-       <div className="flex flex-wrap items-center gap-1 md:flex-nowrap md:justify-end">
-        <label title={m.confirmed ? `Confirmed${m.confirmedBy ? ` by ${who(m.confirmedBy)}` : ''} - untick to put the GHL status back and remove CONFIRMED from the title` : 'Tick to set the GHL status to confirmed and put CONFIRMED in front of the invite title'}
-          className={`mr-1 inline-flex items-center gap-1 text-[11px] font-medium ${m.confirmed ? 'text-green-700' : 'text-gray-500'}`}>
-          <input type="checkbox" checked={m.confirmed} disabled={!canEdit} onChange={(e) => onConfirm(m, e.target.checked)} className="h-3.5 w-3.5 accent-green-600" aria-label="Confirmed" />
-          Confirmed
-        </label>
+       <div className="flex flex-wrap items-start gap-1 md:flex-nowrap md:justify-end">
+        <div className="mr-1 flex flex-col items-start">
+          <label title={m.confirmed ? `Confirmed${m.confirmedBy ? ` by ${who(m.confirmedBy)}` : ''} - untick to put the GHL status back and remove CONFIRMED from the title` : 'Tick to set the GHL status to confirmed and put CONFIRMED in front of the invite title'}
+            className={`inline-flex items-center gap-1 text-[11px] font-medium ${m.confirmed ? 'text-green-700' : 'text-gray-500'}`}>
+            <input type="checkbox" checked={m.confirmed} disabled={!canEdit} onChange={(e) => onConfirm(m, e.target.checked)} className="h-3.5 w-3.5 accent-green-600" aria-label="Confirmed" />
+            Confirmed
+          </label>
+          {m.confirmed && <span className="mt-0.5 rounded bg-green-600 px-1 text-[10px] font-bold tracking-wide text-white" title={`Confirmed in this tool${m.confirmedBy ? ` by ${who(m.confirmedBy)}` : ''}`}>CONFIRMED</span>}
+        </div>
         {(() => {
           const locked = false; // TLC lock deferred (JT 12/11): tick/untick allowed at any time
           return (
@@ -140,7 +131,7 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, 
           const on = m.outcome === o;
           return (
             <button key={o} disabled={!canEdit} onClick={() => !on && onRecord(m, o)}
-              className={`rounded-full border px-2 py-0.5 text-xs font-medium ${on ? outcomeStyle(o).on : `bg-white ${outcomeStyle(o).off}`} disabled:cursor-default`}>
+              className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${on ? outcomeStyle(o).on : `bg-white ${outcomeStyle(o).off}`} disabled:cursor-default`}>
               {o}
             </button>
           );
@@ -148,10 +139,11 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, 
         {m.outcome && !settings.outcomes.includes(m.outcome) && (
           <span className={`rounded-full border px-2 py-0.5 text-xs ${outcomeStyle(m.outcome).on}`}>{m.outcome}</span>
         )}
-        <button disabled={!canEdit} onClick={() => setNoteOpen((o) => !o)} title="Reason, next action and note"
-          className={`rounded border px-1.5 py-0.5 text-[11px] disabled:cursor-default ${noteOpen || hasNote ? 'border-blue-400 bg-blue-50 text-blue-700' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
-          Note
-        </button>
+        <div className="ml-1 flex w-[150px] min-w-0 items-center gap-0.5" data-testid="note-cell">
+          <div className={`min-w-0 flex-1 truncate rounded border px-1 py-0.5 text-[11px] ${noteLine ? 'text-gray-800' : 'text-gray-400'}`} title={m.note || ''}>{noteLine || 'Note'}</div>
+          <button disabled={!canEdit} onClick={() => setNoteOpen(true)} title="Expand editor" aria-label="Edit note"
+            className="shrink-0 rounded bg-blue-600 px-1 py-0 text-[11px] text-white hover:bg-blue-500 disabled:opacity-50">↗</button>
+        </div>
         {onMore && <button onClick={() => onMore(m)} className="rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>}
        </div>
        <div className="mt-1 flex flex-wrap items-center gap-2 empty:hidden md:justify-end">
@@ -166,38 +158,10 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, 
         {canEdit && (m.outcomeSource === 'tool' || m.outcomeSource === 'sheet') && (
           <button onClick={() => onRecord(m, null)} className="text-[11px] text-gray-400 hover:text-red-600">clear</button>
         )}
+        {m.noteGhlError && <span className="text-[11px] font-medium text-red-600" title={m.noteGhlError}>Note not posted to GHL ({m.noteGhlError})</span>}
        </div>
       </div>
-      {(noteOpen || hasNote) && (
-        <div className="col-span-full mt-1 text-xs">
-          {noteOpen ? (
-            <NoteBox m={m} onClose={() => setNoteOpen(false)} onSave={(note, next) => { onNote(m, note, next); setNoteOpen(false); }} />
-          ) : (
-            (() => {
-              const prefix = `[${m.calendar} ${longDate(m.ymd)} - ${m.outcome || 'No outcome'}${m.noteBy || m.recordedBy ? ` - ${who(m.noteBy || m.recordedBy)}` : ''}]`;
-              const body = [m.noteNextAction && `Next action: ${m.noteNextAction}`, m.note].filter(Boolean).join(' · ');
-              return (
-                <div className="group relative flex items-start gap-2 text-gray-700" data-testid="saved-note">
-                  <div className={`min-w-0 flex-1 ${noteExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>
-                    <span className="font-semibold text-gray-500">{prefix}</span> {body}
-                  </div>
-                  <button onClick={() => setNoteExpanded((x) => !x)} className="shrink-0 text-[11px] text-blue-700 hover:underline">{noteExpanded ? 'Collapse' : 'Open'}</button>
-                  {m.noteGhlError ? (
-                    <span className="shrink-0 text-[11px] font-medium text-red-600" title={m.noteGhlError}>Not posted to GHL ({m.noteGhlError})</span>
-                  ) : (
-                    <span className={`shrink-0 text-[11px] ${m.noteGhlId ? 'text-green-700' : 'text-gray-400'}`}>{m.noteGhlId ? '✔ ' : ''}{GHL_NOTE_LABEL}</span>
-                  )}
-                  {!noteExpanded && (
-                    <div role="tooltip" className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden max-w-[640px] whitespace-pre-wrap break-words rounded border bg-white px-2 py-1.5 text-xs text-gray-800 shadow-lg group-hover:block">
-                      <span className="font-semibold text-gray-500">{prefix}</span> {body}
-                    </div>
-                  )}
-                </div>
-              );
-            })()
-          )}
-        </div>
-      )}
+      {noteOpen && <NoteModal m={m} userName={userName} onClose={() => setNoteOpen(false)} onSave={(note, next) => { onNote(m, note, next); setNoteOpen(false); }} />}
     </div>
   );
 }
@@ -562,7 +526,7 @@ export default function ReviewOutcomesPage() {
             {data && byDay.map(([ymd, list]) => (
               <div key={ymd} className="mb-3 overflow-hidden rounded border bg-white">
                 <div className="bg-gray-50 px-3 py-1.5 text-sm font-semibold text-brand-charcoal">{weekday(ymd)} {dmy(ymd)} <span className="font-normal text-gray-500">· {list.length}</span></div>
-                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} />)}
+                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} userName={data.viewer.name || who(data.viewer.email)} />)}
               </div>
             ))}
           </>

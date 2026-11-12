@@ -273,6 +273,8 @@ export interface ReviewViewer {
   recorder: boolean;
   /** GHL users whose email is the viewer's (their own meetings). */
   consultantIds: string[];
+  /** GHL user's full name (Note "+ Next Comment"); falls back to the email name. */
+  name?: string | null;
 }
 
 export interface ReviewData {
