@@ -25,6 +25,8 @@ export function addMonths(ymd: string, n: number): string {
   return `${Math.floor(t / 12)}-${pad((t % 12) + 1)}-01`;
 }
 const monthEnd = (ymd: string) => addDays(addMonths(ymd, 1), -1);
+/** Stated on Meetings, Stats, Sales and CC PAYS (JT 12/11). Meeting dates are Sydney dates (sydYmd). */
+export const WEEK_RULE = 'Week = Friday 00:00 to Thursday 23:59 Sydney time';
 /** Weeks run Friday to Thursday, as in the STATS sheet. */
 export const weekStart = (ymd: string) => addDays(ymd, -((new Date(`${ymd}T00:00:00Z`).getUTCDay() + 2) % 7));
 /** The sheet counts DNQ as a kind of Sat, so Sat = Showed + Invalid (DNQ). */

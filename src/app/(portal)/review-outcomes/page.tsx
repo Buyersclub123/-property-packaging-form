@@ -14,7 +14,7 @@ import BackLink from '@/components/BackLink';
 import AsAtRefresh, { asAtLabel } from '@/components/AsAtRefresh';
 import { useLiveRefresh } from '@/lib/useLiveRefresh';
 
-import { weekStart as statsWeekStart } from '@/lib/reviewOutcomes/stats';
+import { weekStart as statsWeekStart, WEEK_RULE } from '@/lib/reviewOutcomes/stats';
 
 type Tab = 'day' | 'lists' | 'stats' | 'sales' | 'settings';
 
@@ -438,6 +438,7 @@ export default function ReviewOutcomesPage() {
                   </button>
                 ))}
               </div>
+              <span className="text-[11px] text-gray-500" data-testid="week-rule">{WEEK_RULE}</span>
               <div className="inline-flex overflow-hidden rounded border border-gray-200 text-xs" role="group" aria-label="Meeting type">
                 {([['PR', 'Portfolio Review'], ['NL', 'Presentation Meeting 1'], ['both', 'Both']] as const).map(([k, label]) => (
                   <button key={k} onClick={() => pickKinds(k)}

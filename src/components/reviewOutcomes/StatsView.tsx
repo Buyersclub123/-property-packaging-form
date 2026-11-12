@@ -10,7 +10,7 @@ import type { OpenOpp, OpenOppsData } from '@/lib/reviewOutcomes/openOpps';
 import CcPaysPanel from './CcPaysPanel';
 import { MEETING_SOURCE_LEVEL_LABEL, meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from '@/lib/reviewOutcomes/meetingSource';
 import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
-import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
+import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, WEEK_RULE, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
 
 // Item 15: CC Stats (left) and Sales Stats (right) for one shared period, laid out like the team's STATS sheet.
 // PR = Portfolio Review meetings; New Lead / Referral = Presentation Meeting One (lead type and Sat? from the calendar
@@ -813,6 +813,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         )}
+        <span className="text-[11px] text-gray-500" data-testid="week-rule">{WEEK_RULE}</span>
         <div className="relative ml-2">
           <button onClick={() => setNamesOpen(!namesOpen)} aria-expanded={namesOpen} className="rounded border bg-white px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">
             Names: {NAME_MODES.find(([k]) => k === names.mode)?.[1]} ▾

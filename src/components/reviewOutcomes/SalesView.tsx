@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, sydYmd, type SalesData } from '@/lib/reviewOutcomes/types';
-import { KINDS, MONTHS, periodRange, shift, weekStart, type Period } from '@/lib/reviewOutcomes/stats';
+import { KINDS, MONTHS, periodRange, shift, WEEK_RULE, weekStart, type Period } from '@/lib/reviewOutcomes/stats';
 import { aud, itemsIn, saleItems, soldBy, type SaleItem, type SoldRow } from '@/lib/reviewOutcomes/salesStats';
 import { dmy } from './ui';
 
@@ -249,6 +249,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
         <label className="ml-2 inline-flex items-center gap-1">
           <input type="checkbox" checked={net} onChange={() => saveNet(!net)} /> Net of cancellations
         </label>
+        <span className="text-[11px] text-gray-500" data-testid="week-rule">{WEEK_RULE} (signed date)</span>
         <button onClick={() => exportXlsx(r.label, list)} className="ml-2 rounded border bg-white px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50">Export xlsx</button>
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">

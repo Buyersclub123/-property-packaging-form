@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { CcPays, CcWriteResult } from '@/lib/reviewOutcomes/ccPays';
 import { addDays } from '@/lib/reviewOutcomes/types';
-import { weekStart } from '@/lib/reviewOutcomes/stats';
+import { WEEK_RULE, weekStart } from '@/lib/reviewOutcomes/stats';
 import { dmy } from './ui';
 
 /** CC PAYS AUTOMATED: preview a Fri-Thu week and write it as a NEW "(test)" / "(tool)" tab (recorders). */
@@ -37,7 +37,7 @@ export default function CcPaysPanel({ today }: { today: string }) {
     <div className="rounded border bg-white p-3 text-sm" data-testid="cc-pays">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="font-semibold text-brand-charcoal">CC PAYS (automated)</span>
-        <span className="text-xs text-gray-500">Week (Fri-Thu) starting</span>
+        <span className="text-xs text-gray-500" data-testid="week-rule">{WEEK_RULE} · week starting</span>
         <input type="date" value={week} onChange={(e) => { setWeek(weekStart(e.target.value)); setData(null); }} className="rounded border px-1 py-0.5 text-xs" aria-label="CC PAYS week" />
         <span className="text-xs text-gray-500">{dmy(week)} - {dmy(addDays(week, 6))}</span>
         <button onClick={preview} disabled={busy} className="rounded border px-2 py-0.5 text-xs hover:bg-gray-50 disabled:opacity-50">{busy ? 'Working…' : 'Preview'}</button>
