@@ -4,7 +4,12 @@ import { ghlUsers } from './sync';
 // Read-only: every open GHL opportunity, grouped by contact, for the Stats exception reports (JT 11/11).
 
 export interface OpenOpp { id: string; name: string; pipeline: string; stage: string; ownerId: string; owner: string }
-export interface OpenOppsData { at: string; byContact: Record<string, OpenOpp[]> }
+export interface OpenOppsData {
+  at: string;
+  byContact: Record<string, OpenOpp[]>;
+  /** Existing client (JT 12/11): the contact's won or Settled-stage opps as "pipeline > stage" (per-contact reads only). */
+  won?: Record<string, string[]>;
+}
 
 const CACHE_MS = 10 * 60e3;
 let cache: OpenOppsData | null = null;
@@ -23,7 +28,7 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-type Opp = { id: string; name?: string; contactId?: string; contact?: { id?: string }; assignedTo?: string; pipelineId?: string; pipelineStageId?: string };
+type Opp = { id: string; status?: string; name?: string; contactId?: string; contact?: { id?: string }; assignedTo?: string; pipelineId?: string; pipelineStageId?: string };
 type Pipeline = { id: string; name: string; stages?: { id: string; name: string }[] };
 
 type Names = { at: number; pipe: Map<string, string>; stage: Map<string, string>; user: Map<string, string> };
@@ -45,28 +50,32 @@ const toOpen = (o: Opp, n: Names): OpenOpp => {
   return { id: o.id, name: o.name || '', pipeline: n.pipe.get(o.pipelineId || '') || '', stage: n.stage.get(o.pipelineStageId || '') || '', ownerId, owner: ownerId ? n.user.get(ownerId) || ownerId : '' };
 };
 
-const byContactCache = new Map<string, { at: number; opps: OpenOpp[] }>();
-/** Open opps for just these contacts (one GHL search per contact, 5 at a time, cached 10 min). Stats exceptions read
- *  the selected period's contacts in small batches so the page can show progress (JT 12/11). */
+const byContactCache = new Map<string, { at: number; opps: OpenOpp[]; won: string[] }>();
+/** Open opps and won/Settled opps for just these contacts (one GHL search per contact, 5 at a time, cached 10 min).
+ *  Stats exceptions and the Meetings "Existing client" flag read in small batches so the page can show progress (JT 12/11). */
 export async function loadOpenOppsFor(contactIds: string[]): Promise<OpenOppsData> {
   const { locationId } = env();
   const n = await nameMaps();
   const byContact: Record<string, OpenOpp[]> = {};
+  const won: Record<string, string[]> = {};
   const todo = [...new Set(contactIds.filter(Boolean))];
   let i = 0;
   await Promise.all(Array.from({ length: 5 }, async () => {
     while (i < todo.length) {
       const id = todo[i++];
       const hit = byContactCache.get(id);
-      if (hit && Date.now() - hit.at < CACHE_MS) { byContact[id] = hit.opps; continue; }
-      const q = new URLSearchParams({ location_id: locationId, contact_id: id, status: 'open', limit: '100' });
+      if (hit && Date.now() - hit.at < CACHE_MS) { byContact[id] = hit.opps; won[id] = hit.won; continue; }
+      const q = new URLSearchParams({ location_id: locationId, contact_id: id, status: 'all', limit: '100' });
       const j = await get<{ opportunities?: Opp[] }>(`/opportunities/search?${q}`);
-      const opps = (j.opportunities || []).filter((o) => (o.contactId || o.contact?.id) === id).map((o) => toOpen(o, n));
-      byContactCache.set(id, { at: Date.now(), opps });
+      const mine = (j.opportunities || []).filter((o) => (o.contactId || o.contact?.id) === id).map((o) => ({ o, x: toOpen(o, n) }));
+      const opps = mine.filter(({ o }) => o.status === 'open').map(({ x }) => x);
+      const w = mine.filter(({ o, x }) => o.status === 'won' || /settled/i.test(x.stage)).map(({ x }) => `${x.pipeline} > ${x.stage}`);
+      byContactCache.set(id, { at: Date.now(), opps, won: w });
       byContact[id] = opps;
+      won[id] = w;
     }
   }));
-  return { at: new Date().toISOString(), byContact };
+  return { at: new Date().toISOString(), byContact, won };
 }
 
 export async function loadOpenOpps(force = false): Promise<OpenOppsData> {

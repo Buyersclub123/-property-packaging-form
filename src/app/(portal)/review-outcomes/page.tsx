@@ -65,8 +65,10 @@ function NoteModal({ m, userName, onSave, onClose }: { m: ReviewMeeting; userNam
   );
 }
 
-function MeetingRow({ m, settings, canEdit, userName, onRecord, onMore, onConfirm, onTlc, onNote }: {
+function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onConfirm, onTlc, onNote }: {
   m: ReviewMeeting;
+  /** The contact's won / Settled opps; undefined = not read yet. */
+  won?: string[];
   userName: string;
   settings: ReviewSettings;
   canEdit: boolean;
@@ -97,6 +99,7 @@ function MeetingRow({ m, settings, canEdit, userName, onRecord, onMore, onConfir
         <div className="text-xs text-gray-700">
           <span className="text-gray-400">Type: </span>{m.kind === 'NL' ? 'Presentation 1' : 'Portfolio Review'}
           {m.selfBooked && <span className="ml-2 rounded bg-gray-100 px-1 text-[11px] text-gray-600" title="Created in GHL by the consultant">Self-booked – no outcome needed</span>}
+          {!!won?.length && <span data-testid="existing-client" className="ml-2 rounded bg-purple-100 px-1 text-[11px] font-semibold text-purple-800" title={`Won / Settled in GHL: ${won.join('; ')}. ${EXISTING_CAVEAT}`}>Existing client</span>}
         </div>
       </div>
       <div className="col-start-2 min-w-0 text-xs text-gray-700 md:col-start-auto">
@@ -165,6 +168,10 @@ function MeetingRow({ m, settings, canEdit, userName, onRecord, onMore, onConfir
     </div>
   );
 }
+
+const EXISTING_CAVEAT = 'Not perfect: a client whose won/settled opportunity sits on a duplicate GHL contact shows as new.';
+const WON_BATCH = 50;
+const WON_MAX_CONTACTS = 600;
 
 let loadSeq = 0;
 /** JT: More (property checks) is demo-only until the historical data is loaded; set true to show it on live meetings. */
@@ -371,6 +378,34 @@ export default function ReviewOutcomesPage() {
     return (data?.meetings || []).filter((m) =>
       (kinds === 'both' || m.kind === kinds) && (!consultant || m.consultant === consultant) && (!booker || m.booker === booker) && (!s || m.contactName.toLowerCase().includes(s) || m.contactEmail.toLowerCase().includes(s)));
   }, [data, q, consultant, booker, kinds]);
+  // Existing client (JT 12/11): won / Settled opps for the contacts shown, read once per date range (read-only, cached 10 min).
+  const contactKey = useMemo(() => (demo ? '' : [...new Set((data?.meetings || []).map((m) => m.contactId).filter(Boolean))].sort().join(',')), [data, demo]);
+  const [won, setWon] = useState<{ key: string; byContact: Record<string, string[]>; err: string | null } | null>(null);
+  useEffect(() => {
+    let stop = false;
+    const ids = contactKey ? contactKey.split(',') : [];
+    setWon(null);
+    if (!ids.length) return;
+    if (ids.length > WON_MAX_CONTACTS) { setWon({ key: contactKey, byContact: {}, err: `more than ${WON_MAX_CONTACTS} clients - narrow the dates` }); return; }
+    (async () => {
+      const byContact: Record<string, string[]> = {};
+      for (let i = 0; i < ids.length; i += WON_BATCH) {
+        try {
+          const res = await fetch('/api/review-outcomes/open-opps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactIds: ids.slice(i, i + WON_BATCH) }), cache: 'no-store', signal: AbortSignal.timeout(120_000) });
+          const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+          if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+          Object.assign(byContact, body.won || {});
+        } catch (e) {
+          if (!stop) setWon({ key: contactKey, byContact, err: (e as Error).name === 'TimeoutError' ? 'GHL did not answer' : (e as Error).message });
+          return;
+        }
+        if (stop) return;
+      }
+      setWon({ key: contactKey, byContact, err: null });
+    })();
+    return () => { stop = true; };
+  }, [contactKey]);
+  const wonOf = (m: ReviewMeeting) => (won && !won.err ? won.byContact[m.contactId] || [] : undefined);
   const byDay = useMemo(() => {
     const g = new Map<string, ReviewMeeting[]>();
     for (const m of meetings) g.set(m.ymd, [...(g.get(m.ymd) || []), m]);
@@ -471,6 +506,15 @@ export default function ReviewOutcomesPage() {
                 <Stat label="No outcome (past)" value={meetings.filter((m) => m.past && !m.outcome && !m.selfBooked).length} tone="text-red-700" />
                 <Stat label="No calendar event (PR)" value={meetings.filter((m) => m.kind === 'PR' && !m.gcal).length} />
                 {!demo && (
+                  <div className="rounded border bg-white px-3 py-2" data-testid="existing-tile" title={`Contact has a won or Settled-stage opportunity in GHL. ${EXISTING_CAVEAT}`}>
+                    <div className="text-xs text-gray-500">Existing client</div>
+                    <div className="font-semibold text-purple-800">
+                      {!won ? 'Reading GHL…' : won.err ? <span className="text-sm text-red-700">Not read: {won.err}</span> : meetings.filter((m) => (won.byContact[m.contactId] || []).length).length}
+                    </div>
+                    <div className="max-w-[220px] text-[10px] leading-tight text-gray-400">{EXISTING_CAVEAT}</div>
+                  </div>
+                )}
+                {!demo && (
                   <>
                     <span className="ml-auto self-center whitespace-nowrap text-xs text-gray-500">{lr.asAt ? asAtLabel(lr.asAt) : 'Loading…'}</span>
                     <button onClick={() => load('force')} disabled={loading} title="Re-read GHL appointments and Google invites for the dates shown, plus the calendar schedule sheet, now"
@@ -527,7 +571,7 @@ export default function ReviewOutcomesPage() {
             {data && byDay.map(([ymd, list]) => (
               <div key={ymd} className="mb-3 overflow-hidden rounded border bg-white">
                 <div className="bg-gray-50 px-3 py-1.5 text-sm font-semibold text-brand-charcoal">{weekday(ymd)} {dmy(ymd)} <span className="font-normal text-gray-500">· {list.length}</span></div>
-                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} userName={data.viewer.name || who(data.viewer.email)} />)}
+                {list.map((m) => <MeetingRow key={m.id} m={m} won={wonOf(m)} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} userName={data.viewer.name || who(data.viewer.email)} />)}
               </div>
             ))}
           </>
