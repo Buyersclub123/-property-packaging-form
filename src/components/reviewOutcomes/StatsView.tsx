@@ -646,6 +646,14 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const [names, setNames] = useState<NameConfig>({ mode: 'all', hiddenCc: [], hiddenSales: [] });
   const [namesOpen, setNamesOpen] = useState(false);
   const [drill, setDrill] = useState<{ title: string; meetings: ReviewMeeting[] } | null>(null);
+  useEffect(() => {
+    if (!drill) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrill(null); };
+    const body = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('keydown', esc); document.body.style.overflow = body; };
+  }, [drill]);
   const [view, setView] = useState<ViewPrefs>({ includeHidden: true, compare: 'off', base: 'prev', baseYear: Number(today.slice(0, 4)) - 1, net: true });
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [salesErr, setSalesErr] = useState<string | null>(null);
@@ -966,15 +974,17 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
       </div>
 
       {drill && (
-        <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/30 p-6" onClick={() => setDrill(null)}>
-          <div className="w-full max-w-4xl rounded bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-2 flex items-center justify-between">
-              <div className="font-semibold text-brand-charcoal">{drill.title} ({drill.meetings.length})</div>
-              <button onClick={() => setDrill(null)} className="rounded border px-2 py-0.5 text-sm hover:bg-gray-50">Close</button>
+        // Drill-down (JT 12/11): full-screen panel above the site header so the tables are hidden; title row fixed, header sticky, body scrolls.
+        <div className="fixed inset-0 z-[60] flex justify-center bg-gray-700/60 p-4" onClick={() => setDrill(null)} data-testid="drill-panel">
+          <div className="flex h-full w-full max-w-6xl flex-col overflow-hidden rounded bg-white shadow-xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={drill.title}>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-brand-charcoal px-4 py-2 text-white" data-testid="drill-title">
+              <div className="font-semibold">{drill.title} <span className="ml-1 rounded bg-white/20 px-2 py-0.5 text-sm">{drill.meetings.length}</span></div>
+              <button onClick={() => setDrill(null)} className="rounded border border-white/40 px-3 py-0.5 text-sm hover:bg-white/10" aria-label="Close">Close ✕</button>
             </div>
-            <div className="max-h-[75vh] overflow-y-auto" data-testid="drill-list">
+            <div className="min-h-0 flex-1 overflow-auto" data-testid="drill-list">
+            {!drill.meetings.length && <div className="p-4 text-sm text-gray-500">No meetings.</div>}
             <table className="w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10"><tr>{['Date', 'Client', 'Meeting source', 'Consultant', 'Booker', 'Mode', 'GHL status', 'Outcome'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+              <thead className="sticky top-0 z-10 shadow-[0_1px_0_#d1d5db]"><tr>{['Date', 'Client', 'Meeting source', 'Consultant', 'Booker', 'Mode', 'GHL status', 'Outcome'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
               <tbody>
                 {drill.meetings.map((m) => (
                   <tr key={m.id} className="odd:bg-gray-50 hover:bg-blue-50">
