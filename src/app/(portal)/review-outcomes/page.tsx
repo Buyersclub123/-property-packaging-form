@@ -98,7 +98,6 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
         </div>
         <div className="text-xs text-gray-700">
           <span className="text-gray-400">Type: </span>{m.kind === 'NL' ? 'Presentation 1' : 'Portfolio Review'}
-          {m.selfBooked && <span className="ml-2 rounded bg-gray-100 px-1 text-[11px] text-gray-600" title="Created in GHL by the consultant">Self-booked – no outcome needed</span>}
           {!!won?.length && <span data-testid="existing-client" className="ml-2 rounded bg-purple-100 px-1 text-[11px] font-semibold text-purple-800" title={`Won / Settled in GHL: ${won.join('; ')}. ${EXISTING_CAVEAT}`}>Existing client</span>}
         </div>
       </div>
@@ -503,7 +502,7 @@ export default function ReviewOutcomesPage() {
                 <Stat label="Confirmed" value={meetings.filter((m) => m.ghlStatus === 'Confirmed').length} tone="text-green-700" />
                 <Stat label="Outcome recorded" value={meetings.filter((m) => m.outcome).length} />
                 <Stat label="Updated here ✔" value={meetings.filter((m) => m.outcomeSource === 'tool').length} tone="text-green-700" />
-                <Stat label="No outcome (past)" value={meetings.filter((m) => m.past && !m.outcome && !m.selfBooked).length} tone="text-red-700" />
+                <Stat label="No outcome (past)" value={meetings.filter((m) => m.past && !m.outcome).length} tone="text-red-700" />
                 <Stat label="No calendar event (PR)" value={meetings.filter((m) => m.kind === 'PR' && !m.gcal).length} />
                 {!demo && (
                   <div className="rounded border bg-white px-3 py-2" data-testid="existing-tile" title={`Contact has a won or Settled-stage opportunity in GHL. ${EXISTING_CAVEAT}`}>

@@ -118,7 +118,7 @@ async function create(): Promise<void> {
     seen_at TIMESTAMPTZ DEFAULT NOW()
   )`;
   await sql`CREATE INDEX IF NOT EXISTS review_meeting_moves_appt ON review_meeting_moves (appointment_id)`;
-  // GHL createdBy.userId: equal to the assigned consultant = self-booked (no outcome needed).
+  // GHL createdBy.userId: equal to the assigned consultant = self-booked (still needs an outcome; no call-centre credit).
   await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS created_by TEXT`;
   await sql`ALTER TABLE review_contacts ADD COLUMN IF NOT EXISTS lead_source TEXT, ADD COLUMN IF NOT EXISTS referrer TEXT, ADD COLUMN IF NOT EXISTS source_fetched_at TIMESTAMPTZ`;
   // GHL attribution (last / first touch) and the Meeting source captured from it at sync.

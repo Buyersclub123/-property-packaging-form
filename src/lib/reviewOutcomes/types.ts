@@ -210,7 +210,7 @@ export interface ReviewMeeting {
   calendar: string;
   kind: MeetingKind;
   schedule: ScheduleInfo | null;
-  /** Created in GHL by the assigned consultant: no outcome needed (still counted in Stats). */
+  /** Created in GHL by the assigned consultant. Treated like any meeting (outcome needed, JT 12/11); only excluded from call-centre credit. */
   selfBooked: boolean;
   start: string;
   ymd: string;

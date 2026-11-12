@@ -91,7 +91,7 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
   };
 
   const inRange = useMemo(() => (data?.meetings || []).filter((m) => m.ymd >= from && m.ymd <= to), [data, from, to]);
-  const noOutcome = useMemo(() => inRange.filter((m) => m.past && !m.outcome && !m.selfBooked), [inRange]);
+  const noOutcome = useMemo(() => inRange.filter((m) => m.past && !m.outcome), [inRange]);
   const noOutcomeByCons = useMemo(() => {
     const g = new Map<string, ReviewMeeting[]>();
     for (const m of noOutcome) g.set(m.consultant, [...(g.get(m.consultant) || []), m]);

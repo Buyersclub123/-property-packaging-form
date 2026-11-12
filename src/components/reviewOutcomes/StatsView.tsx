@@ -505,12 +505,12 @@ function BarChart({ rows }: { rows: Row[] }) {
 
 /** Data completeness (JT 12/11): Meeting source counts only the latest attribution, never the Lead Source fallback. */
 function DataCompleteness({ list, pick }: { list: ReviewMeeting[]; pick: (title: string, meetings: ReviewMeeting[]) => void }) {
-  const past = list.filter((m) => m.past && !m.selfBooked);
+  const past = list.filter((m) => m.past);
   const rows: [string, string, ReviewMeeting[], ReviewMeeting[]][] = [
     ['no-source', 'No Meeting source (no latest attribution in GHL; Lead Source not used)', list.filter((m) => m.meetingSourceLevel !== 'last'), list],
     ['no-referrer', 'No referrer name (GHL Referrer blank)', list.filter((m) => !m.referrer?.trim()), list],
-    ['no-outcome', 'No outcome (past meetings; self-booked need none)', past.filter((m) => !m.outcome), past],
-    ['no-booker', 'No booker (no GHL creator; self-booked count as booked)', list.filter((m) => !m.booker && !m.selfBooked), list],
+    ['no-outcome', 'No outcome (past meetings, incl. self-booked)', past.filter((m) => !m.outcome), past],
+    ['no-booker', 'No booker (no GHL creator)', list.filter((m) => !m.booker), list],
   ];
   return (
     <div className="min-w-0 overflow-x-auto rounded border bg-white" data-testid="completeness">
@@ -798,7 +798,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   }, [data, list, p.kind, r.from, r.to]);
   const canShift = p.kind !== 'ytd' && p.kind !== 'all';
   const prevOk = canShift && periodRange(shift(p, -1), today).to >= MIN_YMD;
-  const noOutcome = useMemo(() => list.filter((m) => m.past && !m.outcome && !m.selfBooked).length, [list]);
+  const noOutcome = useMemo(() => list.filter((m) => m.past && !m.outcome).length, [list]);
   const years = Array.from({ length: Number(today.slice(0, 4)) - 2023 }, (_, i) => 2024 + i);
   const shownSales = new Set(sales.rows.map((x) => x.name));
   const selfList = (name: string) => list.filter((m) => m.selfBooked && (name === 'TOTAL' ? shownSales.has(m.consultant) : m.consultant === name));
