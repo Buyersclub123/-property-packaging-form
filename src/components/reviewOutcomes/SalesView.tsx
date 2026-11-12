@@ -10,6 +10,8 @@ import { dmy } from './ui';
 // consultant, CC member, Meeting source, broker and SMSF. Revenue = paid + balance.
 
 const FIRST = '2018-01-01';
+// Revenue lives only here, by Month / Quarter / YTD - no weekly view (JT 12/11).
+const SALES_KINDS = KINDS.filter(([k]) => k === 'month' || k === 'quarter' || k === 'ytd');
 const PREF_KEY = 'review-outcomes-sales-view';
 const TH = 'border border-gray-300 bg-gray-100 px-1 py-0.5 text-center text-[11px] font-semibold text-gray-700';
 const TD = 'border border-gray-200 px-1 py-0.5 text-center text-[12px]';
@@ -26,7 +28,7 @@ function rangeOf(p: Period, today: string) {
 }
 
 type Bucket = 'day' | 'week' | 'month' | 'year';
-const bucketOf = (k: Period['kind']): Bucket => (k === 'day' || k === 'week' || k === 'month' ? 'day' : k === 'quarter' ? 'week' : k === 'all' ? 'year' : 'month');
+const bucketOf = (k: Period['kind']): Bucket => (k === 'day' || k === 'week' || k === 'month' ? 'day' : k === 'quarter' ? 'month' : k === 'all' ? 'year' : 'month');
 const bucketKey = (ymd: string, b: Bucket) => (b === 'day' ? ymd : b === 'week' ? weekStart(ymd) : b === 'month' ? ymd.slice(0, 7) : ymd.slice(0, 4));
 const bucketLabel = (k: string, b: Bucket) =>
   b === 'year' ? k : b === 'month' ? `${MONTHS[Number(k.slice(5, 7)) - 1].slice(0, 3)} ${k.slice(2, 4)}` : `${k.slice(8, 10)}/${k.slice(5, 7)}`;
@@ -232,7 +234,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
 
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
         <div className="inline-flex overflow-hidden rounded border border-gray-200" role="group" aria-label="Period">
-          {KINDS.map(([k, label]) => (
+          {SALES_KINDS.map(([k, label]) => (
             <button key={k} onClick={() => setP({ kind: k, anchor: k === 'year' ? `${today.slice(0, 4)}-01-01` : today })}
               className={`px-2 py-1 font-semibold ${p.kind === k ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
               {label}

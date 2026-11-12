@@ -462,16 +462,16 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
       const t = typeOf(r.name);
       const s = soldOf(r.name);
       const sat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
-      return { name: r.name, sat, sold: s.total, cancelled: s.cancelled, revenue: s.revenue };
+      return { name: r.name, sat, sold: s.total, cancelled: s.cancelled };
     })
     .filter((x) => x.sat || x.sold || x.cancelled)
-    .sort((a, b) => b.sold - a.sold || b.revenue - a.revenue);
+    .sort((a, b) => b.sold - a.sold || b.sat - a.sat);
   return (
     <div className="min-w-0 overflow-x-auto rounded border bg-white">
       <Title>Consultant leaderboard - conversion and cancellations</Title>
       {!list.length ? <div className="p-3 text-sm text-gray-500">No meetings or sales in this period.</div> : (
         <table className="w-full border-collapse">
-          <thead><tr>{['#', 'Consultant', 'Sat (all types)', 'Sold', 'Conversion (Sold / Sat)', 'Cancelled', 'Cancel rate', 'Revenue'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
+          <thead><tr>{['#', 'Consultant', 'Sat (all types)', 'Sold', 'Conversion (Sold / Sat)', 'Cancelled', 'Cancel rate'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
           <tbody>
             {list.map((x, i) => {
               const gross = net ? x.sold + x.cancelled : x.sold;
@@ -484,14 +484,13 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
                   <td className={TD}>{pct(x.sold, x.sat)}</td>
                   <td className={`${TD} text-red-700`}>{x.cancelled || ''}</td>
                   <td className={TD}>{pct(x.cancelled, gross)}</td>
-                  <td className={TD}>{x.revenue ? `$${Math.round(x.revenue).toLocaleString()}` : ''}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       )}
-      <div className="px-3 py-1 text-xs text-gray-500">Sat counts PR, New Lead, Referral and Unknown meetings; Sold, Cancelled and Revenue come from the Tracking sheet (by date signed). A high cancel rate means clients sign but don&apos;t go through.</div>
+      <div className="px-3 py-1 text-xs text-gray-500">Sat counts PR, New Lead, Referral and Unknown meetings; Sold and Cancelled come from the Tracking sheet (by date signed). Revenue is only on Sales (Work in Progress). A high cancel rate means clients sign but don&apos;t go through.</div>
     </div>
   );
 }
