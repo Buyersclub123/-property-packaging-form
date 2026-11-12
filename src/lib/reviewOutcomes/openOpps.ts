@@ -26,13 +26,53 @@ async function get<T>(path: string): Promise<T> {
 type Opp = { id: string; name?: string; contactId?: string; contact?: { id?: string }; assignedTo?: string; pipelineId?: string; pipelineStageId?: string };
 type Pipeline = { id: string; name: string; stages?: { id: string; name: string }[] };
 
+type Names = { at: number; pipe: Map<string, string>; stage: Map<string, string>; user: Map<string, string> };
+let names: Names | null = null;
+async function nameMaps(): Promise<Names> {
+  if (names && Date.now() - names.at < CACHE_MS) return names;
+  const { locationId } = env();
+  const pipelines = (await get<{ pipelines?: Pipeline[] }>(`/opportunities/pipelines?locationId=${locationId}`)).pipelines || [];
+  names = {
+    at: Date.now(),
+    pipe: new Map(pipelines.map((p) => [p.id, p.name])),
+    stage: new Map(pipelines.flatMap((p) => (p.stages || []).map((s) => [s.id, s.name] as const))),
+    user: new Map((await ghlUsers()).map((u) => [u.id, u.name])),
+  };
+  return names;
+}
+const toOpen = (o: Opp, n: Names): OpenOpp => {
+  const ownerId = o.assignedTo || '';
+  return { id: o.id, name: o.name || '', pipeline: n.pipe.get(o.pipelineId || '') || '', stage: n.stage.get(o.pipelineStageId || '') || '', ownerId, owner: ownerId ? n.user.get(ownerId) || ownerId : '' };
+};
+
+const byContactCache = new Map<string, { at: number; opps: OpenOpp[] }>();
+/** Open opps for just these contacts (one GHL search per contact, 5 at a time, cached 10 min). Stats exceptions read
+ *  the selected period's contacts in small batches so the page can show progress (JT 12/11). */
+export async function loadOpenOppsFor(contactIds: string[]): Promise<OpenOppsData> {
+  const { locationId } = env();
+  const n = await nameMaps();
+  const byContact: Record<string, OpenOpp[]> = {};
+  const todo = [...new Set(contactIds.filter(Boolean))];
+  let i = 0;
+  await Promise.all(Array.from({ length: 5 }, async () => {
+    while (i < todo.length) {
+      const id = todo[i++];
+      const hit = byContactCache.get(id);
+      if (hit && Date.now() - hit.at < CACHE_MS) { byContact[id] = hit.opps; continue; }
+      const q = new URLSearchParams({ location_id: locationId, contact_id: id, status: 'open', limit: '100' });
+      const j = await get<{ opportunities?: Opp[] }>(`/opportunities/search?${q}`);
+      const opps = (j.opportunities || []).filter((o) => (o.contactId || o.contact?.id) === id).map((o) => toOpen(o, n));
+      byContactCache.set(id, { at: Date.now(), opps });
+      byContact[id] = opps;
+    }
+  }));
+  return { at: new Date().toISOString(), byContact };
+}
+
 export async function loadOpenOpps(force = false): Promise<OpenOppsData> {
   if (!force && cache && Date.now() - Date.parse(cache.at) < CACHE_MS) return cache;
   const { locationId } = env();
-  const pipelines = (await get<{ pipelines?: Pipeline[] }>(`/opportunities/pipelines?locationId=${locationId}`)).pipelines || [];
-  const pipeName = new Map(pipelines.map((p) => [p.id, p.name]));
-  const stageName = new Map(pipelines.flatMap((p) => (p.stages || []).map((s) => [s.id, s.name] as const)));
-  const userName = new Map((await ghlUsers()).map((u) => [u.id, u.name]));
+  const n = await nameMaps();
   const byContact: Record<string, OpenOpp[]> = {};
   let after = '', afterId = '';
   for (let page = 0; page < 500; page++) {
@@ -43,11 +83,7 @@ export async function loadOpenOpps(force = false): Promise<OpenOppsData> {
     for (const o of list) {
       const contactId = o.contactId || o.contact?.id || '';
       if (!contactId) continue;
-      const ownerId = o.assignedTo || '';
-      (byContact[contactId] ||= []).push({
-        id: o.id, name: o.name || '', pipeline: pipeName.get(o.pipelineId || '') || '', stage: stageName.get(o.pipelineStageId || '') || '',
-        ownerId, owner: ownerId ? userName.get(ownerId) || ownerId : '',
-      });
+      (byContact[contactId] ||= []).push(toOpen(o, n));
     }
     if (list.length < 100 || !j.meta?.startAfterId) break;
     afterId = j.meta.startAfterId;

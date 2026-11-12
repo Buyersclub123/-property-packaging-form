@@ -515,7 +515,41 @@ function BarChart({ rows }: { rows: Row[] }) {
 }
 
 /** Exception reports (JT 11/11): (a) contact has 0 or >1 open opportunities; (b) no open opp owned by the meeting's consultant. */
-function ExceptionReports({ meetings, opps, err }: { meetings: ReviewMeeting[]; opps: OpenOppsData | null; err: string | null }) {
+const OPP_BATCH = 15;
+const OPP_BATCH_TIMEOUT_MS = 90_000;
+function ExceptionReports({ meetings }: { meetings: ReviewMeeting[] }) {
+  // Read once per period: the period's contacts, in batches, with a progress count; any failure stops and shows (JT 12/11).
+  const contactKey = useMemo(() => [...new Set(meetings.map((m) => m.contactId).filter(Boolean))].sort().join(','), [meetings]);
+  const [opps, setOpps] = useState<OpenOppsData | null>(null);
+  const [done, setDone] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const total = contactKey ? contactKey.split(',').length : 0;
+  useEffect(() => {
+    let stop = false;
+    const ids = contactKey ? contactKey.split(',') : [];
+    setOpps(null); setDone(0); setErr(null);
+    (async () => {
+      const byContact: OpenOppsData['byContact'] = {};
+      for (let i = 0; i < ids.length; i += OPP_BATCH) {
+        const batch = ids.slice(i, i + OPP_BATCH);
+        try {
+          const res = await fetch('/api/review-outcomes/open-opps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contactIds: batch }), cache: 'no-store', signal: AbortSignal.timeout(OPP_BATCH_TIMEOUT_MS) });
+          const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+          if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+          Object.assign(byContact, (body as OpenOppsData).byContact);
+        } catch (e) {
+          const msg = (e as Error).name === 'TimeoutError' ? `GHL did not answer within ${OPP_BATCH_TIMEOUT_MS / 1000}s` : (e as Error).message;
+          if (!stop) setErr(`could not read open opportunities from GHL after ${i} of ${ids.length} contacts: ${msg}`);
+          return;
+        }
+        if (stop) return;
+        setDone(Math.min(i + OPP_BATCH, ids.length));
+      }
+      if (!stop) setOpps({ at: new Date().toISOString(), byContact });
+    })();
+    return () => { stop = true; };
+  }, [contactKey, attempt]);
   const rows = useMemo(() => {
     if (!opps) return null;
     const live = meetings.filter((m) => m.contactId && m.ghlStatus !== 'Cancelled' && m.outcome !== 'Cancelled');
@@ -550,8 +584,13 @@ function ExceptionReports({ meetings, opps, err }: { meetings: ReviewMeeting[]; 
       )}
     </div>
   );
-  if (err) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">Exception reports: {err}</div>;
-  if (!rows) return <div className="rounded border bg-white p-3 text-sm text-gray-500">Exception reports: reading open opportunities from GHL…</div>;
+  if (err) return (
+    <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800" data-testid="exc-status">
+      Exception reports: {err}
+      <button onClick={() => setAttempt((a) => a + 1)} className="ml-2 rounded border border-red-300 bg-white px-2 py-0.5 text-xs hover:bg-red-100">Try again</button>
+    </div>
+  );
+  if (!rows) return <div className="rounded border bg-white p-3 text-sm text-gray-500" data-testid="exc-status">Exception reports: reading open opportunities from GHL - {done} of {total} contacts…</div>;
   return (
     <div className="grid gap-3">
       {table('Exceptions (a) - contact has 0 or more than 1 open opportunity', rows.count, [
@@ -562,7 +601,7 @@ function ExceptionReports({ meetings, opps, err }: { meetings: ReviewMeeting[]; 
         ['Opportunity owner', (m) => <span className="font-semibold text-amber-800">{[...new Set(rows.of(m).map((o) => o.owner || 'Unassigned'))].join(', ')}</span>],
         ['Opportunities (pipeline > stage, owner)', (m) => oppText(rows.of(m))],
       ], 'exc-owner')}
-      <div className="text-xs text-gray-500">Meetings in this period (cancelled left out). Open opportunities read live from GHL (read-only, refreshed every 10 minutes).</div>
+      <div className="text-xs text-gray-500">Meetings in this period (cancelled left out). Open opportunities read live from GHL for this period's contacts (read-only, cached 10 minutes).</div>
     </div>
   );
 }
@@ -581,8 +620,6 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const [signups, setSignups] = useState<Signup[] | null>(null);
   const [signupsErr, setSignupsErr] = useState<string | null>(null);
   const [mailMsg, setMailMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [openOpps, setOpenOpps] = useState<OpenOppsData | null>(null);
-  const [openOppsErr, setOpenOppsErr] = useState<string | null>(null);
   useEffect(() => {
     try {
       const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null') as ViewPrefs | null;
@@ -618,13 +655,6 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         setSignups((body as SignupsData).signups);
       })
       .catch((e) => setSignupsErr((e as Error).message));
-    fetch('/api/review-outcomes/open-opps', { cache: 'no-store' })
-      .then(async (res) => {
-        const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-        setOpenOpps(body as OpenOppsData);
-      })
-      .catch((e) => setOpenOppsErr((e as Error).message));
   }, [demoData]);
   useEffect(() => {
     try {
@@ -990,7 +1020,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         </div>
         <TargetsTable targets={data.settings.targets || {}} factor={targetFactor(p, today)} rows={[...cc.rows, ...sales.rows]} />
         <Leaderboard rows={sales.rows} typeOf={consTypeOf} soldOf={consSoldOf} net={view.net} />
-        {!demoData && <ExceptionReports meetings={list} opps={openOpps} err={openOppsErr} />}
+        {!demoData && <ExceptionReports meetings={list} />}
         {!demoData && data.viewer.recorder && <CcPaysPanel today={today} />}
         <ChartCard title={`Trend - ${r.label}`}><TrendChart points={trend.cur} ly={trend.ly} /></ChartCard>
         <div className="grid gap-4 lg:grid-cols-2">
