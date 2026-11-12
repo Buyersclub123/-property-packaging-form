@@ -120,7 +120,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<'general' | 'sources'>('general');
 
-  const save = async (freezeSchedule = false) => {
+  const save = async () => {
     if (demo) {
       onSaved({ ...settings, outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget, ghlOnlyFrom: ghlOnlyFrom || null });
       setMsg({ ok: true, text: 'Saved (demo only)' });
@@ -132,7 +132,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       const res = await fetch('/api/review-outcomes/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget, ghlOnlyFrom: ghlOnlyFrom || null, freezeSchedule }),
+        body: JSON.stringify({ outcomes, invalidReasons: reasons, callCentre, targets, salesAliases, writeTarget, ghlOnlyFrom: ghlOnlyFrom || null }),
       });
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
@@ -159,21 +159,13 @@ export default function SettingsView({ settings, recorder, demo = false, names =
       {tab === 'sources' && <div className="rounded border bg-white p-3">
         <div className="mb-1 text-sm font-semibold text-brand-charcoal">Source of data (Stats)</div>
         <ul className="mb-2 list-disc pl-5 text-sm text-gray-800">
-          {dataSourceLines({ ghlOnlyFrom: ghlOnlyFrom || null, scheduleCopy: settings.scheduleCopy }).map((l) => <li key={l}>{l}</li>)}
+          {dataSourceLines({ ghlOnlyFrom: ghlOnlyFrom || null }).map((l) => <li key={l}>{l}</li>)}
         </ul>
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <label className="inline-flex items-center gap-2">
             GHL only from
             <input type="date" value={ghlOnlyFrom} disabled={!recorder} onChange={(e) => setGhlOnlyFrom(e.target.value)} className="rounded border px-2 py-0.5" />
           </label>
-          {settings.scheduleCopy?.frozen ? (
-            <span className="text-xs text-gray-500">Sheet copy frozen: {settings.scheduleCopy.rows} rows.</span>
-          ) : recorder && !demo && (
-            <button disabled={saving} className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-              onClick={() => confirm('Take a last copy of the CALENDAR SCHEDULE sheet and stop re-reading it? Later edits to the sheet will not change Stats.') && save(true)}>
-              Take final copy of the sheet
-            </button>
-          )}
         </div>
         <div className="mt-1 text-xs text-gray-500">
           Leave GHL only from blank until GHL has been brought up to date.

@@ -2,9 +2,7 @@ import { getDb } from '@/lib/db';
 import { ensureReviewTables } from './store';
 import { ghlLocationId, ghlUsers, SECOND_MEETING_CALENDAR_ID } from './sync';
 import { matchMeetings, prepareGcal, type RawGcal } from './match';
-import { addDays, MIN_YMD, NEW_LEAD_CALENDAR_ID, sydYmd, utcCover, type GcalEvent, type MeetingMode, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
-import { ensureSchedule, loadScheduleRows, matchSchedule, scheduleMode, scheduleOutcome, type ScheduleRow } from './schedule';
-import { nameMatcher } from './sales';
+import { addDays, MIN_YMD, NEW_LEAD_CALENDAR_ID, sydYmd, utcCover, type GcalEvent, type MeetingMode, type ScheduleInfo, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
 
 // Reads meetings for Sydney days from..to from the cache, with recorded outcomes and the matching Google event.
 
@@ -48,7 +46,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
 
   const { start, end } = utcCover(addDays(from, -3), addDays(to, 3));
   const rows = await sql`SELECT m.appointment_id, m.calendar_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.start_at, m.ghl_status, m.title,
-      m.created_by, m.meeting_source, m.meeting_source_level, m.meeting_source_detail, c.name AS contact_name, c.email AS contact_email, c.phones, c.lead_source, c.referrer,
+      m.created_by, m.address, m.meeting_source, m.meeting_source_level, m.meeting_source_detail, c.name AS contact_name, c.email AS contact_email, c.phones, c.lead_source, c.referrer,
       o.outcome, o.invalid_reason, o.note, o.source, o.source_ref, o.recorded_by, o.recorded_at,
       o.confirmed, o.confirmed_by, o.tlc, o.tlc_by, o.note_reason, o.note_next_action, o.note_by, o.note_at, o.note_ghl_id, o.note_ghl_error
     FROM review_meetings m
@@ -99,18 +97,20 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
     prepared,
   );
 
-  // New Lead / Referral meetings: Lead type, Sat? / Outcome, Agent and Location from the calendar schedule sheet.
-  // From Settings' "GHL only from" day, no sheet data is used (JT 4/11: GHL is the single source of truth).
+  // Presentation Meeting One: outcome, Google/F2F and booker from the one-time CALENDAR SCHEDULE 2026 snapshot (JT 12/11,
+  // Mar-Nov 2026; the sheet is no longer read). From Settings' "GHL only from" day, no sheet data is used (JT 4/11).
   const sheetOk = (ymd: string) => !ghlOnlyFrom || ymd < ghlOnlyFrom;
-  const nlBase = base.filter((b) => isNl(b.r) && b.ymd >= from && b.ymd <= to && sheetOk(b.ymd));
-  let schedByAppt = new Map<string, ScheduleRow>();
-  if (nlBase.length) {
-    const w = await ensureSchedule(false);
-    if (w) warnings.push(w);
-    const sched = await loadScheduleRows(addDays(from, -4), addDays(to, 4));
-    schedByAppt = matchSchedule(nlBase.map((b) => ({ id: String(b.r.appointment_id), ymd: b.ymd, name: b.name, phones: (b.r.phones as string[]) || [] })), sched);
-  }
-  const agentOf = nameMatcher(callCentre.map((e) => staffByEmail.get(e.toLowerCase()) || emailName(e)), aliases);
+  const nlIds = base.filter((b) => isNl(b.r) && b.ymd >= from && b.ymd <= to && sheetOk(b.ymd)).map((b) => String(b.r.appointment_id));
+  const snapRows = nlIds.length
+    ? await sql`SELECT appointment_id, outcome, mode, booker, schedule FROM review_schedule_snapshot
+        WHERE appointment_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(nlIds)}::jsonb))`
+    : [];
+  const snapByAppt = new Map(snapRows.map((s) => [String(s.appointment_id), {
+    outcome: (s.outcome as string | null) || null,
+    mode: (s.mode as MeetingMode | null) || null,
+    booker: (s.booker as string | null) || null,
+    schedule: (s.schedule as ScheduleInfo | null) || null,
+  }]));
 
   const now = Date.now();
   const meetings: ReviewMeeting[] = base
@@ -120,8 +120,9 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
       const dbOutcome = r.outcome && (r.source !== 'sheet' || sheetOk(ymd)) ? String(r.outcome) : null;
       const ghlOutcome = GHL_OUTCOME[status] || null;
       const nl = isNl(r);
-      const sr = nl ? schedByAppt.get(String(r.appointment_id)) : undefined;
-      const schedOutcome = sr ? scheduleOutcome(sr, t <= Date.now()) : null;
+      const snap = nl ? snapByAppt.get(String(r.appointment_id)) : undefined;
+      const sr = snap?.schedule || undefined;
+      const schedOutcome = snap?.outcome || null;
       const outcomeSource: OutcomeSource | null = dbOutcome ? (r.source === 'sheet' ? 'sheet' : 'tool') : schedOutcome ? 'schedule' : ghlOutcome ? 'ghl' : null;
       const m = nl ? undefined : matches.get(String(r.appointment_id));
       const ev = m ? eventById.get(m.eventId) : undefined;
@@ -134,7 +135,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
       const inviteBooker = ev?.attendees.map((a) => a.email).find((e) => cc.has(e) && e !== consEmail) || null;
       const bookerEmail = ghlBooker || inviteBooker;
       const selfBooked = !!r.created_by && r.created_by === r.assigned_user_id;
-      const sheetBooker = nl && !bookerEmail && !selfBooked && sr?.agent ? agentOf(sr.agent) : null;
+      const sheetBooker = nl && !bookerEmail && !selfBooked && snap?.booker ? snap.booker : null;
       // Booker = GHL created-by user (JT 11/11), else invite / sheet. No per-row override (JT 12/11).
       const createdName = r.created_by ? userName.get(String(r.created_by)) || (createdEmail ? emailName(createdEmail) : null) : null;
       const autoBooker = createdName || (bookerEmail ? staffByEmail.get(bookerEmail) || emailName(bookerEmail) : sheetBooker);
@@ -175,7 +176,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
         noteGhlError: (r.note_ghl_error as string | null) || null,
         tlc: !!r.tlc,
         tlcBy: (r.tlc_by as string | null) || null,
-        sourceRef: dbOutcome ? (r.source_ref as string | null) || null : schedOutcome && sr ? `Calendar schedule sheet, tab "${sr.tab}": ${[sr.sat, sr.outcome].filter(Boolean).join(' / ')}` : null,
+        sourceRef: dbOutcome ? (r.source_ref as string | null) || null : schedOutcome && sr ? `Calendar schedule snapshot (12/11/2026), tab "${sr.tab}": ${[sr.sat, sr.outcome].filter(Boolean).join(' / ')}` : null,
         recordedBy: dbOutcome ? String(r.recorded_by) : null,
         recordedAt: dbOutcome ? iso(r.recorded_at) : null,
         gcal: m && ev ? { event: toEvent(ev), basis: m.basis, minutesApart: m.minutesApart } : null,
@@ -183,7 +184,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
         bookerEmail: createdName ? createdEmail || null : bookerEmail,
         bookerFrom: createdName ? (ghlBooker ? 'ghl' : selfBooked ? 'self' : 'created') : inviteBooker ? 'invite' : sheetBooker ? 'sheet' : null,
         createdByEmail: createdEmail || null,
-        mode: nl ? scheduleMode(sr?.location || '') : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
+        mode: nl ? snap?.mode || meetingMode(String(r.address || '')) : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
       };
     });
 

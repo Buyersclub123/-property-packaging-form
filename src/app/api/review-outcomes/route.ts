@@ -4,7 +4,6 @@ import { loadMeetings } from '@/lib/reviewOutcomes/load';
 import { meetingOwner, saveOutcome } from '@/lib/reviewOutcomes/record';
 import { lastSync, loadSettings, logReview } from '@/lib/reviewOutcomes/store';
 import { GHL_STATUS_FOR, ghlSetStatus } from '@/lib/reviewOutcomes/sync';
-import { ensureSchedule } from '@/lib/reviewOutcomes/schedule';
 import { gcalCalendars, syncRange } from '@/lib/reviewOutcomes/sync';
 import { isYmd, sydYmd, type ReviewData } from '@/lib/reviewOutcomes/types';
 
@@ -28,9 +27,6 @@ export async function GET(request: NextRequest) {
     const mode = p.get('sync') || 'auto';
     const days = (Date.parse(to) - Date.parse(from)) / 864e5 + 1;
     const syncWarnings: string[] = mode === 'none' || (mode === 'auto' && days > 31) ? [] : await syncRange(from, to, mode === 'force');
-    // "Refresh from GHL" also re-reads the calendar schedule sheet now (otherwise it's re-read at most hourly).
-    const sheetWarning = mode === 'force' ? await ensureSchedule(true) : null;
-    if (sheetWarning) syncWarnings.push(sheetWarning);
     const settings = await loadSettings();
     const [loaded, sync, calendars] = await Promise.all([loadMeetings(access.viewer, from, to, settings.callCentre, settings.salesAliases, settings.ghlOnlyFrom), lastSync(), gcalCalendars()]);
     const body: ReviewData = {

@@ -69,8 +69,6 @@ export interface ReviewSettings {
   phase2Approved: boolean;
   /** Meetings on or after this day use GHL only (no calendar schedule sheet, no imported sheet outcomes). Null = not yet. */
   ghlOnlyFrom: string | null;
-  /** The tool's copy of the calendar schedule sheet. Once frozen it is never re-read, so later sheet edits don't change Stats. */
-  scheduleCopy: { at: string; rows: number; frozen: boolean } | null;
 }
 
 /** Lead source of a sale in the Buyers Club Tracking sheet, grouped as the STATS sheet columns. */
@@ -150,31 +148,28 @@ export const DEFAULT_SETTINGS: ReviewSettings = {
   writeTarget: 'db',
   phase2Approved: false,
   ghlOnlyFrom: null,
-  scheduleCopy: null,
 };
 
 const dmyOf = (ymd: string) => ymd.slice(0, 10).split('-').reverse().join('/');
 
 /** "Source of data" text for Settings and Stats. */
-export function dataSourceText(s: Pick<ReviewSettings, 'ghlOnlyFrom' | 'scheduleCopy'>): string {
-  const copy = s.scheduleCopy?.frozen
-    ? `a copy of the CALENDAR SCHEDULE sheet taken on ${dmyOf(s.scheduleCopy.at)} (later edits to the sheet are not reflected)`
-    : 'the CALENDAR SCHEDULE sheet (live copy, re-read hourly)';
+const SNAPSHOT = 'a one-time snapshot of the CALENDAR SCHEDULE 2026 sheet (taken 12/11/2026; Presentation Meeting One, Mar-Nov 2026; the sheet is no longer read, so later edits change nothing)';
+export function dataSourceText(s: Pick<ReviewSettings, 'ghlOnlyFrom'>): string {
   return s.ghlOnlyFrom
-    ? `Source of data: before ${dmyOf(s.ghlOnlyFrom)}, GHL calendar enhanced with ${copy}. From ${dmyOf(s.ghlOnlyFrom)}, GHL calendar only.`
-    : `Source of data: GHL calendar, enhanced with ${copy}.`;
+    ? `Source of data: before ${dmyOf(s.ghlOnlyFrom)}, GHL calendar enhanced with ${SNAPSHOT}. From ${dmyOf(s.ghlOnlyFrom)}, GHL calendar only.`
+    : `Source of data: GHL calendar, enhanced with ${SNAPSHOT}.`;
 }
 
 /** Where each figure on Stats comes from (Settings and the Stats banner). */
-export function dataSourceLines(s: Pick<ReviewSettings, 'ghlOnlyFrom' | 'scheduleCopy'>): string[] {
-  const copy = s.scheduleCopy?.frozen ? 'the sheet copy' : 'the CALENDAR SCHEDULE sheet';
+export function dataSourceLines(s: Pick<ReviewSettings, 'ghlOnlyFrom'>): string[] {
+  const copy = 'the CALENDAR SCHEDULE snapshot';
   const until = s.ghlOnlyFrom ? ` (before ${dmyOf(s.ghlOnlyFrom)} only)` : '';
   return [
     dataSourceText(s),
     'Meetings, date, consultant and GHL status: GHL Portfolio Review Meeting and Presentation Meeting One calendars (follow-up meetings excluded).',
     `Booker: the Call Centre user who created the GHL appointment, else a Call Centre person on the Google invite, else the Agent on ${copy}${until}. Self-booked = the consultant created it in GHL.`,
     `Sat / DNQ: the outcome recorded in this tool, else ${copy}'s Sat? column for Presentation Meeting One${until}, else the GHL status. Some Portfolio Review outcomes${until} come from a one-off import of the sheet.`,
-    `Google Meet vs face-to-face (Presentation Meeting One): ${copy}${until}, from March 2026; GHL has no appointment field for it yet, so otherwise Unknown. There is no New Lead / Referral split: Meeting source replaces it.`,
+    `Google Meet vs face-to-face (Presentation Meeting One): ${copy}${until} for Mar-Nov 2026; otherwise the GHL appointment location (Google Meet link = Google, an address = F2F). There is no New Lead / Referral split: Meeting source replaces it.`,
     'Meeting Source Stats (Presentation Meeting One): the GHL contact\'s latest attribution (session source · campaign), else its first attribution, else its Lead Source field; the tooltip shows which. Captured on the meeting at the first sync after it is booked; meetings already cached when this was added use the attribution as read then. "Not recorded in GHL" = none of these. Its Sold columns come from GHL, not the Tracking sheet: a sign-up = an opportunity in a post-sale pipeline (Sale Administration onwards) with "Date signed up" set. "Sold" = sign-ups dated in the period, by the Meeting source of the client\'s last Presentation Meeting One on or before signing; "Sold from these meetings" = clients met in the period who have signed up since.',
     'Sold, Cancelled and Revenue: Buyers Club Tracking sheet (read-only, by date signed). Targets: Settings.',
   ];

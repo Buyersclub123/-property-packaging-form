@@ -93,7 +93,7 @@ async function create(): Promise<void> {
     reason TEXT,
     synced_at TIMESTAMPTZ DEFAULT NOW()
   )`;
-  // Read-only copy of the team's CALENDAR SCHEDULE sheet (weekly booking log): Lead type, Sat? and Outcome per meeting.
+  // Former read-only copy of the team's CALENDAR SCHEDULE sheet (kept; no longer read or written, JT 12/11).
   await sql`CREATE TABLE IF NOT EXISTS review_schedule_rows (
     id TEXT PRIMARY KEY,
     tab TEXT,
@@ -109,6 +109,17 @@ async function create(): Promise<void> {
     synced_at TIMESTAMPTZ DEFAULT NOW()
   )`;
   await sql`CREATE INDEX IF NOT EXISTS review_schedule_rows_ymd ON review_schedule_rows (ymd)`;
+  // One-time snapshot of what the tool read from CALENDAR SCHEDULE 2026 per Presentation 1 meeting, Mar-Nov 2026 (JT 12/11).
+  await sql`CREATE TABLE IF NOT EXISTS review_schedule_snapshot (
+    appointment_id TEXT PRIMARY KEY,
+    outcome TEXT,
+    mode TEXT,
+    booker TEXT,
+    schedule JSONB,
+    taken_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+  // GHL appointment location: a Google Meet link = Google, an address = F2F (JT 12/11).
+  await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS address TEXT`;
   // GHL keeps the same appointment when it is moved; each sync records a changed start time here (= Rescheduled).
   await sql`CREATE TABLE IF NOT EXISTS review_meeting_moves (
     id SERIAL PRIMARY KEY,
@@ -186,7 +197,7 @@ export function ensureReviewTables(): Promise<void> {
 
 export async function loadSettings(): Promise<ReviewSettings> {
   await ensureReviewTables();
-  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets', 'sales_aliases', 'write_target', 'ghl_only_from', 'schedule_sync')`;
+  const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets', 'sales_aliases', 'write_target', 'ghl_only_from')`;
   const get = (k: string) => rows.find((r) => r.key === k)?.value as string[] | undefined;
   return {
     outcomes: get('outcomes') ?? DEFAULT_SETTINGS.outcomes,
@@ -198,10 +209,6 @@ export async function loadSettings(): Promise<ReviewSettings> {
     // JT approved GHL status write-back (2026-10-28); it stays off until switched on in Settings.
     phase2Approved: true,
     ghlOnlyFrom: (rows.find((r) => r.key === 'ghl_only_from')?.value as string | null | undefined) ?? null,
-    scheduleCopy: (() => {
-      const v = rows.find((r) => r.key === 'schedule_sync')?.value as { at: string; rows: number; frozen?: boolean } | undefined;
-      return v ? { at: v.at, rows: v.rows, frozen: !!v.frozen } : null;
-    })(),
   };
 }
 

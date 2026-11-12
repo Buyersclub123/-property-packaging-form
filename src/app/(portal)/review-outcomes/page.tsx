@@ -84,7 +84,7 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
   const campaign = camp.join(' · ');
   const isInvalid = !!m.outcome && /^invalid/i.test(m.outcome) && m.outcomeSource !== 'ghl';
   const responded = !!m.outcome;
-  const srcLabel = m.outcomeSource === 'tool' ? 'recorded in this tool' : m.outcomeSource === 'schedule' ? 'from calendar sheet' : m.outcomeSource === 'ghl' ? 'from GHL' : 'from sheet';
+  const srcLabel = m.outcomeSource === 'tool' ? 'recorded in this tool' : m.outcomeSource === 'schedule' ? 'from calendar schedule snapshot' : m.outcomeSource === 'ghl' ? 'from GHL' : 'from sheet';
   return (
     <div className={`grid grid-cols-[72px_minmax(0,1fr)] gap-x-3 border-t px-3 py-2 first:border-t-0 md:grid-cols-[64px_minmax(130px,1fr)_minmax(120px,0.8fr)_minmax(180px,1.6fr)_auto] ${responded ? 'bg-green-50' : ''}`}>
       <div className="text-sm font-semibold text-brand-charcoal">

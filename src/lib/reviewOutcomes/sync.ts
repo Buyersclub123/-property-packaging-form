@@ -119,6 +119,8 @@ interface GhlEvent {
   appoinmentStatus?: string;
   deleted?: boolean;
   createdBy?: { userId?: string; source?: string };
+  /** Meeting location: a Google Meet link or a street address (Google vs F2F, JT 12/11). */
+  address?: string;
 }
 
 function attr(a: Attribution): Attribution {
@@ -145,7 +147,7 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
       byId.set(x.id, {
         id: x.id, cal_id: cal.id, cal_name: cal.name, contact_id: x.contactId || null, user_id: x.assignedUserId || null,
         start_at: new Date(t).toISOString(), status: x.appointmentStatus || x.appoinmentStatus || '', title: x.title || '', deleted: !!x.deleted,
-        created_by: x.createdBy?.userId || null,
+        created_by: x.createdBy?.userId || null, address: x.address || null,
       });
     }
   });
@@ -160,13 +162,13 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
       WHERE m.start_at <> r.start_at::timestamptz`;
   }
   for (let i = 0; i < rows.length; i += 500) {
-    await sql`INSERT INTO review_meetings (appointment_id, calendar_id, calendar_name, contact_id, assigned_user_id, start_at, ghl_status, title, deleted, created_by, synced_at)
-      SELECT r.id, r.cal_id, r.cal_name, r.contact_id, r.user_id, r.start_at::timestamptz, r.status, r.title, r.deleted, r.created_by, ${syncStart}::timestamptz
+    await sql`INSERT INTO review_meetings (appointment_id, calendar_id, calendar_name, contact_id, assigned_user_id, start_at, ghl_status, title, deleted, created_by, address, synced_at)
+      SELECT r.id, r.cal_id, r.cal_name, r.contact_id, r.user_id, r.start_at::timestamptz, r.status, r.title, r.deleted, r.created_by, r.address, ${syncStart}::timestamptz
       FROM jsonb_to_recordset(${JSON.stringify(rows.slice(i, i + 500))}::jsonb)
-        AS r(id text, cal_id text, cal_name text, contact_id text, user_id text, start_at text, status text, title text, deleted boolean, created_by text)
+        AS r(id text, cal_id text, cal_name text, contact_id text, user_id text, start_at text, status text, title text, deleted boolean, created_by text, address text)
       ON CONFLICT (appointment_id) DO UPDATE SET calendar_id = EXCLUDED.calendar_id, created_by = EXCLUDED.created_by, calendar_name = EXCLUDED.calendar_name,
         contact_id = EXCLUDED.contact_id, assigned_user_id = EXCLUDED.assigned_user_id, start_at = EXCLUDED.start_at,
-        ghl_status = EXCLUDED.ghl_status, title = EXCLUDED.title, deleted = EXCLUDED.deleted, synced_at = EXCLUDED.synced_at`;
+        ghl_status = EXCLUDED.ghl_status, title = EXCLUDED.title, deleted = EXCLUDED.deleted, address = EXCLUDED.address, synced_at = EXCLUDED.synced_at`;
   }
   // Appointments in this window that GHL no longer returns were deleted or moved out of the window.
   await sql`UPDATE review_meetings SET deleted = TRUE
