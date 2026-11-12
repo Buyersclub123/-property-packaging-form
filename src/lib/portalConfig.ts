@@ -121,6 +121,12 @@ export const teams: TeamTile[] = [
     description: 'Client deal tracking.',
     subTiles: [
       {
+        name: 'Sales Meeting Outcomes',
+        accessKey: 'review-outcomes',
+        description: 'Record Portfolio Review and Presentation Meeting 1 outcomes, with stats, sales and lists',
+        href: '/team/resources/new-initiatives/review-outcomes',
+      },
+      {
         name: 'SPIN Call Coach',
         description: 'SPIN call prep and live-call question coach',
         href: '/team/sales/spin-call-coach',
@@ -146,12 +152,6 @@ export const teams: TeamTile[] = [
         name: 'Purchase Analytics',
         description: 'Client property purchases 2019–2026',
         href: '/team/resources/new-initiatives/purchase-analytics',
-      },
-      {
-        name: 'Sales Meeting Outcomes',
-        accessKey: 'review-outcomes',
-        description: 'Record Portfolio Review and Presentation Meeting 1 outcomes, with stats, sales and lists',
-        href: '/team/resources/new-initiatives/review-outcomes',
       },
     ],
   },
@@ -326,12 +326,6 @@ export const newInitiatives: TeamTile = {
       description: 'Where every deal is across Contract, Finance, Construction and Property Record (read-only).',
       href: '/team/resources/new-initiatives/journey',
       newTab: true,
-    },
-    {
-      name: 'Sales Meeting Outcomes',
-      accessKey: 'review-outcomes',
-      description: 'Record Portfolio Review and Presentation Meeting 1 outcomes, with stats, sales and lists.',
-      href: '/team/resources/new-initiatives/review-outcomes',
     },
     {
       name: 'Portfolio View',
