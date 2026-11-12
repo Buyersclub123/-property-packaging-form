@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, DISCREPANCY_MINUTES, MIN_YMD, NOTE_NEXT_ACTIONS, sydYmd, tlcLocked, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
+import { addDays, DISCREPANCY_MINUTES, MIN_YMD, NOTE_NEXT_ACTIONS, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
 import { demoData } from '@/lib/reviewOutcomes/demo';
 import { meetingSourceTitle } from '@/lib/reviewOutcomes/meetingSource';
 import MorePanel from '@/components/reviewOutcomes/MorePanel';
@@ -120,7 +120,7 @@ function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, 
           Confirmed
         </label>
         {(() => {
-          const locked = tlcLocked(m.start);
+          const locked = false; // TLC lock deferred (JT 12/11): tick/untick allowed at any time
           return (
             <label title={locked ? 'TLC locked: less than 8 working hours (Mon-Fri 9-5) before the meeting start' : m.tlc ? `TLC done${m.tlcBy ? ` by ${who(m.tlcBy)}` : ''} - untick to undo (tool only)` : 'Tick when TLC is done (saved in this tool only, not GHL)'}
               className={`mr-1 inline-flex items-center gap-1 text-[11px] font-medium ${locked ? 'cursor-not-allowed text-gray-300' : m.tlc ? 'text-purple-700' : 'text-gray-500'}`}>

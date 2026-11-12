@@ -4,7 +4,7 @@ import { loadContactLinks } from '@/lib/portfolio/contactLinks';
 import { loadGhlUsers, loadSources } from '@/lib/portfolio/sources';
 import type { PortfolioData } from '@/lib/portfolio/types';
 import { ensureReviewTables, logReview } from './store';
-import { TLC_LOCK_HOURS, tlcLocked, type ClientPanel, type ClientProperty } from './types';
+import { type ClientPanel, type ClientProperty } from './types';
 
 // Writes to the app DB only (review_outcomes, review_property_checks, review_outcome_log). Phase 2 write-back is not built.
 
@@ -39,7 +39,7 @@ export async function saveConfirmed(by: string, appointmentId: string, confirmed
 export async function saveTlc(by: string, appointmentId: string, tlc: boolean): Promise<string | null> {
   const [m] = await getDb()`SELECT start_at FROM review_meetings WHERE appointment_id = ${appointmentId}`;
   if (!m) return 'Appointment not found.';
-  if (tlcLocked(new Date(m.start_at).toISOString())) return `TLC is locked from ${TLC_LOCK_HOURS} working hours (Mon-Fri 9-5) before the meeting.`;
+  // TLC lock deferred (JT 12/11): no time restriction in v1.
   const at = tlc ? new Date().toISOString() : null;
   await getDb()`INSERT INTO review_outcomes (appointment_id, tlc, tlc_by, tlc_at, source, recorded_by)
     VALUES (${appointmentId}, ${tlc}, ${tlc ? by : null}, ${at}, 'tool', ${by})
