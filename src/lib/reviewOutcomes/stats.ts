@@ -123,11 +123,10 @@ export function sumRows(rows: Row[]): Row {
 
 export const isPR = (m: ReviewMeeting) => m.kind === 'PR';
 
-/** New Lead / Referral / Unknown (lead type not known) counts for the NL meetings of one name. */
-export interface TypeRow { name: string; nl: Row; ref: Row; unk: Row }
-export type TypeKey = 'nl' | 'ref' | 'unk';
-export const emptyTypeRow = (name: string): TypeRow => ({ name, nl: emptyRow('nl'), ref: emptyRow('ref'), unk: emptyRow('unk') });
-export const typeKeyOf = (m: ReviewMeeting): TypeKey => (m.leadType === 'New Lead' ? 'nl' : m.leadType === 'Referral' ? 'ref' : 'unk');
+/** Presentation 1 (Presentation Meeting One) counts for one name. No New Lead / Referral split (JT 12/11: the CALENDAR SCHEDULE sheet is retired; Meeting source replaces it). */
+export interface TypeRow { name: string; nl: Row }
+export type TypeKey = 'nl';
+export const emptyTypeRow = (name: string): TypeRow => ({ name, nl: emptyRow('nl') });
 
 function bump(x: Row, m: ReviewMeeting) {
   x.booked++;
@@ -143,8 +142,8 @@ export function typeTally(list: ReviewMeeting[], key: (m: ReviewMeeting) => stri
     if (isPR(m)) continue;
     const k = key(m);
     const r = by.get(k) || emptyTypeRow(k);
-    bump(r[typeKeyOf(m)], m);
-    bump(total[typeKeyOf(m)], m);
+    bump(r.nl, m);
+    bump(total.nl, m);
     by.set(k, r);
   }
   return { by, total };
@@ -153,9 +152,7 @@ export function typeTally(list: ReviewMeeting[], key: (m: ReviewMeeting) => stri
 export function sumTypes(rows: TypeRow[]): TypeRow {
   const t = emptyTypeRow('TOTAL');
   for (const r of rows) {
-    for (const k of ['nl', 'ref', 'unk'] as const) {
-      t[k].booked += r[k].booked; t[k].sat += r[k].sat; t[k].dnq += r[k].dnq; t[k].noShow += r[k].noShow;
-    }
+    t.nl.booked += r.nl.booked; t.nl.sat += r.nl.sat; t.nl.dnq += r.nl.dnq; t.nl.noShow += r.nl.noShow;
   }
   return t;
 }

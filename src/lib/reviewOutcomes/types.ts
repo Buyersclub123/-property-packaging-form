@@ -10,12 +10,9 @@ export type WriteTarget = 'db' | 'db+ghl';
 
 export type MeetingMode = 'Google' | 'F2F' | 'Unknown';
 
-/** PR = Portfolio Review Meeting; NL = Presentation Meeting One (New Lead / Referral). */
+/** PR = Portfolio Review Meeting; NL = Presentation Meeting One (Presentation 1; no New Lead / Referral split, JT 12/11). */
 export type MeetingKind = 'PR' | 'NL';
-export type LeadType = 'New Lead' | 'Referral' | 'PR' | 'Unknown';
 export const NEW_LEAD_CALENDAR_ID = 'OfHMBFJUzIEMAx7UGZrR';
-/** The calendar schedule sheet's LEAD column (New Lead / Referral) is filled from this date; earlier NL meetings are Unknown. */
-export const LEAD_SPLIT_FROM = '2026-03-01';
 
 /** The matching row of the team's CALENDAR SCHEDULE sheet (NL meetings only). */
 export interface ScheduleInfo {
@@ -177,9 +174,9 @@ export function dataSourceLines(s: Pick<ReviewSettings, 'ghlOnlyFrom' | 'schedul
     'Meetings, date, consultant and GHL status: GHL Portfolio Review Meeting and Presentation Meeting One calendars (follow-up meetings excluded).',
     `Booker: the Call Centre user who created the GHL appointment, else a Call Centre person on the Google invite, else the Agent on ${copy}${until}. Self-booked = the consultant created it in GHL.`,
     `Sat / DNQ: the outcome recorded in this tool, else ${copy}'s Sat? column for Presentation Meeting One${until}, else the GHL status. Some Portfolio Review outcomes${until} come from a one-off import of the sheet.`,
-    `New Lead vs Referral and Google Meet vs face-to-face: ${copy}${until}, from March 2026; GHL has no appointment field for them yet, so otherwise Unknown.`,
+    `Google Meet vs face-to-face (Presentation Meeting One): ${copy}${until}, from March 2026; GHL has no appointment field for it yet, so otherwise Unknown. There is no New Lead / Referral split: Meeting source replaces it.`,
     'Meeting Source Stats (Presentation Meeting One): the GHL contact\'s latest attribution (session source · campaign), else its first attribution, else its Lead Source field; the tooltip shows which. Captured on the meeting at the first sync after it is booked; meetings already cached when this was added use the attribution as read then. "Not recorded in GHL" = none of these. Its Sold columns come from GHL, not the Tracking sheet: a sign-up = an opportunity in a post-sale pipeline (Sale Administration onwards) with "Date signed up" set. "Sold" = sign-ups dated in the period, by the Meeting source of the client\'s last Presentation Meeting One on or before signing; "Sold from these meetings" = clients met in the period who have signed up since.',
-    'Sold, Cancelled and Revenue: Buyers Club Tracking sheet (read-only, by date signed). Targets: Settings. Sheet check: the team\'s STATS sheet, for comparison only.',
+    'Sold, Cancelled and Revenue: Buyers Club Tracking sheet (read-only, by date signed). Targets: Settings.',
   ];
 }
 
@@ -212,7 +209,6 @@ export interface ReviewMeeting {
   id: string;
   calendar: string;
   kind: MeetingKind;
-  leadType: LeadType;
   schedule: ScheduleInfo | null;
   /** Created in GHL by the assigned consultant: no outcome needed (still counted in Stats). */
   selfBooked: boolean;

@@ -4,17 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, dataSourceLines, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type SalesData, type StatTarget } from '@/lib/reviewOutcomes/types';
 import { emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sumSold } from '@/lib/reviewOutcomes/salesStats';
 import { dmy, weekday } from './ui';
-import type { SheetStats } from '@/lib/reviewOutcomes/statsSheet';
 import type { Signup, SignupsData } from '@/lib/reviewOutcomes/signups';
 import type { OpenOpp, OpenOppsData } from '@/lib/reviewOutcomes/openOpps';
 import CcPaysPanel from './CcPaysPanel';
 import { MEETING_SOURCE_LEVEL_LABEL, meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from '@/lib/reviewOutcomes/meetingSource';
-import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
+import { emptyTypeRow, isPR, sumTypes, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
 import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, WEEK_RULE, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
 
 // Item 15: CC Stats (left) and Sales Stats (right) for one shared period, laid out like the team's STATS sheet.
-// PR = Portfolio Review meetings; New Lead / Referral = Presentation Meeting One (lead type and Sat? from the calendar
-// schedule sheet); Sold / Revenue from the Tracking sheet. Marketing stays a placeholder.
+// PR = Portfolio Review meetings; Presentation 1 = Presentation Meeting One (no New Lead / Referral split;
+// Meeting source replaces it); Sold / Revenue from the Tracking sheet. Marketing stays a placeholder.
 
 
 const n0 = (n: number) => (n ? String(n) : '');
@@ -149,19 +148,16 @@ function CcTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: 
   const line = (r: Row, total = false) => {
     const s = soldOf(total ? 'TOTAL' : r.name);
     const t = typeOf(total ? 'TOTAL' : r.name);
-    const exB = t.nl.booked + t.ref.booked + t.unk.booked;
-    const exS = t.nl.sat + t.ref.sat + t.unk.sat;
-    const T = (v: number, f: Field, k: TypeKey) => <NumCell v={v} total={total} onClick={() => pickT(r.name, f, k)} />;
+    const exS = t.nl.sat;
+    const T = (v: number, f: Field) => <NumCell v={v} total={total} onClick={() => pickT(r.name, f, 'nl')} />;
     return (
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
         <td className={TDN}>{r.name}</td>
-        {T(t.nl.booked, 'booked', 'nl')}{T(t.ref.booked, 'booked', 'ref')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`} title={t.unk.booked ? `Includes ${t.unk.booked} with unknown lead type` : ''}>{r.booked + exB}</td>
-        {T(t.nl.sat, 'sat', 'nl')}{T(t.nl.dnq, 'dnq', 'nl')}<td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>{pct(t.nl.sat, t.nl.booked)}</td>
-        {T(t.ref.sat, 'sat', 'ref')}{T(t.ref.dnq, 'dnq', 'ref')}<td className={TD}>{n0(s.ref)}</td>
+        {T(t.nl.booked, 'booked')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked + t.nl.booked}</td>
+        {T(t.nl.sat, 'sat')}{T(t.nl.dnq, 'dnq')}<td className={TD}>{n0(s.nl + s.ref)}</td><td className={`${TD} ${SHADE}`}>{pct(t.nl.sat, t.nl.booked)}</td>
         <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td>
-        <td className={`${TD} ${SHADE}`}>{exB}</td><td className={`${TD} ${SHADE}`}>{exS}</td>
         <td className={`${TD} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
-        <td className={`${TD} ${SHADE}`}>{pct(t.nl.sat, t.nl.booked)}</td><td className={`${TD} ${SHADE}`} title="SOLD / Sat (all meeting types)">{pct(s.total, r.sat + exS)}</td>
+        <td className={`${TD} ${SHADE}`} title="SOLD / Sat (all meeting types)">{pct(s.total, r.sat + exS)}</td>
       </tr>
     );
   };
@@ -170,22 +166,19 @@ function CcTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: 
       <thead>
         <tr>
           <th className={TH} rowSpan={3}>Name</th>
-          <th className={TH} colSpan={4}>Booked</th>
-          <th className={TH} colSpan={12}>Sat</th>
+          <th className={TH} colSpan={3}>Booked</th>
+          <th className={TH} colSpan={7}>Sat</th>
           <th className={TH} rowSpan={3}>SOLD</th>
           <th className={TH} rowSpan={3}><V>Cancelled</V></th>
-          <th className={TH} rowSpan={3}><V>N/L Sat %</V></th>
           <th className={TH} rowSpan={3}><V>Sold %</V></th>
         </tr>
         <tr>
-          {['New Lead', 'Referral', 'PR', 'TOTAL'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
-          <th className={TH} colSpan={4}>New Lead</th>
-          <th className={TH} colSpan={3}>Referral</th>
+          {['Presentation 1', 'PR', 'TOTAL'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
+          <th className={TH} colSpan={4}>Presentation 1</th>
           <th className={TH} colSpan={3}>PR</th>
-          <th className={TH} colSpan={2}>Total (Excl PR&apos;s)</th>
         </tr>
         <tr>
-          {['Sat', 'DNQ', 'Sold', 'Sat %', 'Sat', 'DNQ', 'Sold', 'Sat', 'DNQ', 'Sold', 'BOOKED', 'SAT'].map((h, i) => <th key={i} className={TH}>{h}</th>)}
+          {['Sat', 'DNQ', 'Sold', 'Sat %', 'Sat', 'DNQ', 'Sold'].map((h, i) => <th key={i} className={TH}>{h}</th>)}
         </tr>
       </thead>
       <tbody>
@@ -200,16 +193,15 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT, selfOf, pickSel
   const line = (r: Row, total = false) => {
     const s = soldOf(total ? 'TOTAL' : r.name);
     const t = typeOf(total ? 'TOTAL' : r.name);
-    const exB = t.nl.booked + t.ref.booked + t.unk.booked;
-    const allSat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
-    const T = (v: number, f: Field, k: TypeKey) => <NumCell v={v} total={total} onClick={() => pickT(r.name, f, k)} />;
+    const exB = t.nl.booked;
+    const allSat = r.sat + t.nl.sat;
+    const T = (v: number, f: Field) => <NumCell v={v} total={total} onClick={() => pickT(r.name, f, 'nl')} />;
     return (
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
         <td className={TDN}>{r.name}</td>
-        {T(t.nl.booked, 'booked', 'nl')}{T(t.ref.booked, 'booked', 'ref')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`} title={t.unk.booked ? `Includes ${t.unk.booked} with unknown lead type` : ''}>{r.booked + exB}</td>
+        {T(t.nl.booked, 'booked')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked + t.nl.booked}</td>
         <NumCell v={selfOf(total ? 'TOTAL' : r.name)} total={total} onClick={() => pickSelf(total ? 'TOTAL' : r.name)} />
-        {T(t.nl.sat, 'sat', 'nl')}{T(t.nl.dnq, 'dnq', 'nl')}<td className={TD}>{n0(s.nl)}</td><td className={`${TD} ${SHADE}`}>{pct(s.nl, t.nl.sat)}</td>
-        {T(t.ref.sat, 'sat', 'ref')}{T(t.ref.dnq, 'dnq', 'ref')}<td className={TD}>{n0(s.ref)}</td><td className={`${TD} ${SHADE}`}>{pct(s.ref, t.ref.sat)}</td>
+        {T(t.nl.sat, 'sat')}{T(t.nl.dnq, 'dnq')}<td className={TD}>{n0(s.nl + s.ref)}</td><td className={`${TD} ${SHADE}`}>{pct(s.nl + s.ref, t.nl.sat)}</td>
         <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td><td className={`${TD} ${SHADE}`}>{pct(s.pr, r.sat)}</td>
         <td className={TD}>{n0(s.selfGen)}</td><td className={TD}>{n0(s.repeat)}</td><td className={`${TD} ${SHADE} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
         <td className={`${TD} ${SHADE}`}>{pct(allSat, r.booked + exB)}</td><td className={`${TD} ${SHADE}`} title="Sold / Sat (all meeting types)">{pct(s.total, allSat)}</td>
@@ -221,22 +213,21 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT, selfOf, pickSel
       <thead>
         <tr>
           <th className={TH} rowSpan={3}>Name</th>
-          <th className={TH} colSpan={5}>BOOKED</th>
-          <th className={TH} colSpan={12}>Sat</th>
+          <th className={TH} colSpan={4}>BOOKED</th>
+          <th className={TH} colSpan={8}>Sat</th>
           <th className={TH} colSpan={4}>Sold</th>
           <th className={TH} rowSpan={3}><V>Overall Sat %</V></th>
           <th className={TH} rowSpan={3}><V>Overall Sold %</V></th>
         </tr>
         <tr>
-          {['New Lead', 'Referral', 'PR', 'TOTAL'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
+          {['Presentation 1', 'PR', 'TOTAL'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
           <th className={TH} rowSpan={2} title="Created in GHL by the consultant themselves (included in TOTAL)"><V>Self-booked</V></th>
-          <th className={TH} colSpan={4}>New Lead</th>
-          <th className={TH} colSpan={4}>Referral</th>
+          <th className={TH} colSpan={4}>Presentation 1</th>
           <th className={TH} colSpan={4}>PR</th>
           {['Self Gen', 'Repeat', 'Total', 'Cancelled'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
         </tr>
         <tr>
-          {[0, 1, 2].flatMap((g) => ['Sat', 'DNQ', 'Sold', 'Sold %'].map((h) => <th key={`${g}${h}`} className={TH}>{h}</th>))}
+          {[0, 1].flatMap((g) => ['Sat', 'DNQ', 'Sold', 'Sold %'].map((h) => <th key={`${g}${h}`} className={TH}>{h}</th>))}
         </tr>
       </thead>
       <tbody>
@@ -289,27 +280,25 @@ const ratio = (n: number, d: number) => (d ? n / d : 0);
 /** Download the period in the STATS sheet's column order; only the PR columns are filled for now. */
 async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, ccSold: SoldOf, salesSold: SoldOf, ccT: TypeOf, salesT: TypeOf, selfOf: (name: string) => number) {
   const XLSX = await import('xlsx');
-  const ccHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sat %',
-    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'PR Sat', 'PR DNQ', 'PR Sold', 'Total (Excl PR) Booked', 'Total (Excl PR) Sat', 'SOLD', 'Cancelled', 'N/L Sat %', 'Sold %'];
+  const ccHead = ['Name', 'Booked Presentation 1', 'Booked PR', 'Booked TOTAL', 'Pres 1 Sat', 'Pres 1 DNQ', 'Pres 1 Sold', 'Pres 1 Sat %',
+    'PR Sat', 'PR DNQ', 'PR Sold', 'SOLD', 'Cancelled', 'Sold %'];
   const ccRow = (r: Row) => {
     const s = ccSold(r.name);
     const t = ccT(r.name);
-    const exB = t.nl.booked + t.ref.booked + t.unk.booked;
-    const exS = t.nl.sat + t.ref.sat + t.unk.sat;
-    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, t.nl.sat, t.nl.dnq, s.nl, ratio(t.nl.sat, t.nl.booked), t.ref.sat, t.ref.dnq, s.ref, r.sat, r.dnq, s.pr, exB, exS, s.total, s.cancelled, ratio(t.nl.sat, t.nl.booked), ratio(s.total, r.sat + exS)];
+    return [r.name, t.nl.booked, r.booked, r.booked + t.nl.booked, t.nl.sat, t.nl.dnq, s.nl + s.ref, ratio(t.nl.sat, t.nl.booked), r.sat, r.dnq, s.pr, s.total, s.cancelled, ratio(s.total, r.sat + t.nl.sat)];
   };
-  const salesHead = ['Name', 'Booked New Lead', 'Booked Referral', 'Booked PR', 'Booked TOTAL', 'Self-booked', 'NL Sat', 'NL DNQ', 'NL Sold', 'NL Sold %',
-    'Ref Sat', 'Ref DNQ', 'Ref Sold', 'Ref Sold %', 'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Cancelled', 'Overall Sat %', 'Overall Sold %'];
+  const salesHead = ['Name', 'Booked Presentation 1', 'Booked PR', 'Booked TOTAL', 'Self-booked', 'Pres 1 Sat', 'Pres 1 DNQ', 'Pres 1 Sold', 'Pres 1 Sold %',
+    'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Cancelled', 'Overall Sat %', 'Overall Sold %'];
   const salesRow = (r: Row) => {
     const s = salesSold(r.name);
     const t = salesT(r.name);
-    const exB = t.nl.booked + t.ref.booked + t.unk.booked;
-    const allSat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
-    return [r.name, t.nl.booked, t.ref.booked, r.booked, r.booked + exB, selfOf(r.name), t.nl.sat, t.nl.dnq, s.nl, ratio(s.nl, t.nl.sat), t.ref.sat, t.ref.dnq, s.ref, ratio(s.ref, t.ref.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, ratio(allSat, r.booked + exB), ratio(s.total, allSat)];
+    const exB = t.nl.booked;
+    const allSat = r.sat + t.nl.sat;
+    return [r.name, t.nl.booked, r.booked, r.booked + exB, selfOf(r.name), t.nl.sat, t.nl.dnq, s.nl + s.ref, ratio(s.nl + s.ref, t.nl.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, ratio(allSat, r.booked + exB), ratio(s.total, allSat)];
   };
   const aoa: unknown[][] = [
     [`Sales Meeting Outcomes stats - ${label}`],
-    ['PR and New Lead (Presentation Meeting One) meetings. New Lead vs Referral from the calendar schedule sheet (from March 2026); others Unknown, in TOTAL only.'],
+    ['PR and Presentation 1 (Presentation Meeting One) meetings. No New Lead / Referral split: see Meeting Source Stats.'],
     ['Sold and Cancelled: Buyers Club Tracking sheet, all lead sources.'],
     [],
     ['CC Stats'], ccHead, ...cc.rows.map(ccRow), ccRow(cc.total),
@@ -461,7 +450,7 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
     .map((r) => {
       const t = typeOf(r.name);
       const s = soldOf(r.name);
-      const sat = r.sat + t.nl.sat + t.ref.sat + t.unk.sat;
+      const sat = r.sat + t.nl.sat;
       return { name: r.name, sat, sold: s.total, cancelled: s.cancelled };
     })
     .filter((x) => x.sat || x.sold || x.cancelled)
@@ -490,7 +479,7 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
           </tbody>
         </table>
       )}
-      <div className="px-3 py-1 text-xs text-gray-500">Sat counts PR, New Lead, Referral and Unknown meetings; Sold and Cancelled come from the Tracking sheet (by date signed). Revenue is only on Sales (Work in Progress). A high cancel rate means clients sign but don&apos;t go through.</div>
+      <div className="px-3 py-1 text-xs text-gray-500">Sat counts PR and Presentation 1 meetings; Sold and Cancelled come from the Tracking sheet (by date signed). Revenue is only on Sales (Work in Progress). A high cancel rate means clients sign but don&apos;t go through.</div>
     </div>
   );
 }
@@ -670,17 +659,8 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
     setView(v);
     try { localStorage.setItem(VIEW_KEY, JSON.stringify(v)); } catch { /* storage unavailable */ }
   };
-  const [sheet, setSheet] = useState<SheetStats | null>(null);
-  const [sheetErr, setSheetErr] = useState<string | null>(null);
   useEffect(() => {
     if (demoData) return;
-    fetch('/api/review-outcomes/sheet-stats', { cache: 'no-store' })
-      .then(async (res) => {
-        const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-        setSheet(body as SheetStats);
-      })
-      .catch((e) => setSheetErr((e as Error).message));
     fetch('/api/review-outcomes/sales', { cache: 'no-store' })
       .then(async (res) => {
         const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -819,22 +799,6 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const canShift = p.kind !== 'ytd' && p.kind !== 'all';
   const prevOk = canShift && periodRange(shift(p, -1), today).to >= MIN_YMD;
   const noOutcome = useMemo(() => list.filter((m) => m.past && !m.outcome && !m.selfBooked).length, [list]);
-  const check = useMemo(() => {
-    if (!sheet) return null;
-    const inside = sheet.blocks.filter((b) => b.from >= r.from && b.to <= r.to && b.booked + b.sat + b.dnq > 0);
-    const chosen: typeof inside = [];
-    const len = (b: { from: string; to: string }) => Date.parse(b.to) - Date.parse(b.from);
-    // Month tabs repeat boundary days (e.g. "1st October" after "25th Sep - 1st Oct"); keep the longest non-overlapping weeks.
-    for (const b of [...inside].sort((a, c) => len(c) - len(a))) {
-      if (!chosen.some((c) => b.from <= c.to && b.to >= c.from)) chosen.push(b);
-    }
-    if (!chosen.length) return { weeks: 0, from: '', to: '', s: emptyRow('s'), t: emptyRow('t') };
-    chosen.sort((a, c) => a.from.localeCompare(c.from));
-    const s = emptyRow('Sheet');
-    for (const b of chosen) { s.booked += b.booked; s.sat += b.sat; s.dnq += b.dnq; }
-    const covered = (data?.meetings || []).filter(isPR).filter((m) => chosen.some((b) => m.ymd >= b.from && m.ymd <= b.to));
-    return { weeks: chosen.length, from: chosen[0].from, to: chosen[chosen.length - 1].to, s, t: tally(covered, () => 'x').total };
-  }, [sheet, data, r.from, r.to]);
   const years = Array.from({ length: Number(today.slice(0, 4)) - 2023 }, (_, i) => 2024 + i);
   const shownSales = new Set(sales.rows.map((x) => x.name));
   const selfList = (name: string) => list.filter((m) => m.selfBooked && (name === 'TOTAL' ? shownSales.has(m.consultant) : m.consultant === name));
@@ -844,10 +808,10 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
     const key = side === 'cc' ? bookerKey : (m: ReviewMeeting) => m.consultant;
     const meetings = list
       .filter((m) => name === 'TOTAL' || key(m) === name)
-      .filter((m) => (type === 'PR' ? isPR(m) : !isPR(m) && typeKeyOf(m) === type))
+      .filter((m) => (type === 'PR' ? isPR(m) : !isPR(m)))
       .filter((m) => (f === 'sat' ? isSat(m) : f === 'dnq' ? isDnq(m) : true))
       .sort((a, b) => a.start.localeCompare(b.start));
-    setDrill({ title: `${name === 'TOTAL' ? (side === 'cc' ? 'Call Centre total' : 'Sales total') : name} - ${f === 'booked' ? 'Booked' : f === 'sat' ? 'Sat' : 'DNQ'} - ${type === 'PR' ? 'PR' : type === 'nl' ? 'New Lead' : type === 'ref' ? 'Referral' : 'Unknown lead type'} - ${r.label}`, meetings });
+    setDrill({ title: `${name === 'TOTAL' ? (side === 'cc' ? 'Call Centre total' : 'Sales total') : name} - ${f === 'booked' ? 'Booked' : f === 'sat' ? 'Sat' : 'DNQ'} - ${type === 'PR' ? 'PR' : 'Presentation 1'} - ${r.label}`, meetings });
   };
 
   if (error) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>;
@@ -860,7 +824,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         {data.settings && (
           <ul className="mb-1 mt-1 list-disc pl-5">{dataSourceLines(data.settings).map((l) => <li key={l}>{l}</li>)}</ul>
         )}
-        Unknown lead types count only in TOTAL / Total (Excl PR&apos;s). Comparisons, targets and the sheet check are PR only. Sold % = PR Sold / PR Sat.
+        Presentation 1 is not split into New Lead / Referral: see Meeting Source Stats. Comparisons and targets are PR only. Sold % = PR Sold / PR Sat.
       </details>
       {!demoData && salesErr && <div className="mb-3 text-sm text-red-700">Sales not loaded: {salesErr}</div>}
       {noOutcome > 0 && (
@@ -1002,28 +966,6 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
             </table>
             </div>
           </div>
-        </div>
-      )}
-      {!demoData && data.viewer.recorder && (
-        <div className="mb-3 rounded border bg-white px-3 py-2 text-sm">
-          <span className="font-semibold text-brand-charcoal">Sheet check (PR): </span>
-          {sheetErr ? <span className="text-red-700">{sheetErr}</span>
-            : !check ? <span className="text-gray-500">Reading the STATS sheet…</span>
-            : !check.weeks ? <span className="text-gray-500">No complete STATS-sheet week falls inside this period (the sheet has PR figures from May 2026).</span>
-            : (
-              <span>
-                {check.weeks} sheet week{check.weeks === 1 ? '' : 's'}, {dmy(check.from)} – {dmy(check.to)}:{' '}
-                {([['Booked', 'booked'], ['Sat', 'sat'], ['DNQ', 'dnq']] as const).map(([k, f]) => {
-                  const d = check.t[f] - check.s[f];
-                  return (
-                    <span key={f} className="mr-3 whitespace-nowrap">
-                      {k} sheet {check.s[f]} / tool {check.t[f]}{' '}
-                      <span className={d === 0 ? 'text-green-700' : Math.abs(d) <= Math.max(2, check.s[f] * 0.05) ? 'text-amber-700' : 'text-red-700'}>({d > 0 ? '+' : ''}{d})</span>
-                    </span>
-                  );
-                })}
-              </span>
-            )}
         </div>
       )}
       <div className="grid gap-4">

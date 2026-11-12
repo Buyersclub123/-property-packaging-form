@@ -62,7 +62,7 @@ ${table('Sales Stats (consultant)', sales.rows, sales.total, prevSales)}`;
   return {
     subject: `Portfolio Review stats - ${labels}`,
     html: `<html><body style="font-family:Arial,sans-serif;color:#111">
-<div style="font-size:13px">PR meetings only. Referral attribution and New Lead / Referral meetings not yet included. Sat = Showed + DNQ.</div>
+<div style="font-size:13px">PR meetings only. Presentation 1 meetings are not yet included. Sat = Showed + DNQ.</div>
 ${sections.join('\n')}
 <div style="margin-top:16px;font-size:11px;color:#6b7280">From the Sales Meeting Outcomes tool (Stats tab).</div>
 </body></html>`,

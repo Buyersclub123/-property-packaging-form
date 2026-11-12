@@ -2,7 +2,7 @@ import { getDb } from '@/lib/db';
 import { ensureReviewTables } from './store';
 import { ghlLocationId, ghlUsers, SECOND_MEETING_CALENDAR_ID } from './sync';
 import { matchMeetings, prepareGcal, type RawGcal } from './match';
-import { addDays, LEAD_SPLIT_FROM, MIN_YMD, NEW_LEAD_CALENDAR_ID, sydYmd, utcCover, type GcalEvent, type LeadType, type MeetingMode, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
+import { addDays, MIN_YMD, NEW_LEAD_CALENDAR_ID, sydYmd, utcCover, type GcalEvent, type MeetingMode, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
 import { ensureSchedule, loadScheduleRows, matchSchedule, scheduleMode, scheduleOutcome, type ScheduleRow } from './schedule';
 import { nameMatcher } from './sales';
 
@@ -138,16 +138,10 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
       // Booker = GHL created-by user (JT 11/11), else invite / sheet. No per-row override (JT 12/11).
       const createdName = r.created_by ? userName.get(String(r.created_by)) || (createdEmail ? emailName(createdEmail) : null) : null;
       const autoBooker = createdName || (bookerEmail ? staffByEmail.get(bookerEmail) || emailName(bookerEmail) : sheetBooker);
-      const leadType: LeadType = !nl ? 'PR'
-        : ymd < LEAD_SPLIT_FROM || !sr ? 'Unknown'
-        : /^referr?al/i.test(sr.lead) ? 'Referral'
-        : /^new lead/i.test(sr.lead) ? 'New Lead'
-        : 'Unknown';
       return {
         id: String(r.appointment_id),
         calendar: String(r.calendar_name),
         kind: nl ? ('NL' as const) : ('PR' as const),
-        leadType,
         schedule: sr ? { tab: sr.tab, lead: sr.lead, sat: sr.sat, outcome: sr.outcome, agent: sr.agent, location: sr.location } : null,
         start: startIso,
         ymd,
