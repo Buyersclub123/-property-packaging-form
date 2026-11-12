@@ -184,7 +184,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
         bookerEmail: createdName ? createdEmail || null : bookerEmail,
         bookerFrom: createdName ? (ghlBooker ? 'ghl' : selfBooked ? 'self' : 'created') : inviteBooker ? 'invite' : sheetBooker ? 'sheet' : null,
         createdByEmail: createdEmail || null,
-        mode: nl ? snap?.mode || meetingMode(String(r.address || '')) : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
+        mode: nl ? (snap?.mode && snap.mode !== 'Unknown' ? snap.mode : meetingMode(String(r.address || ''))) : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
       };
     });
 
