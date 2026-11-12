@@ -50,7 +50,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
   const rows = await sql`SELECT m.appointment_id, m.calendar_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.start_at, m.ghl_status, m.title,
       m.created_by, m.meeting_source, m.meeting_source_level, m.meeting_source_detail, c.name AS contact_name, c.email AS contact_email, c.phones, c.lead_source, c.referrer,
       o.outcome, o.invalid_reason, o.note, o.source, o.source_ref, o.recorded_by, o.recorded_at,
-      o.confirmed, o.confirmed_by, o.tlc, o.tlc_by, o.note_reason, o.note_next_action, o.note_by, o.note_at, o.note_ghl_id, o.note_ghl_error, o.booker_override_id
+      o.confirmed, o.confirmed_by, o.tlc, o.tlc_by, o.note_reason, o.note_next_action, o.note_by, o.note_at, o.note_ghl_id, o.note_ghl_error
     FROM review_meetings m
     LEFT JOIN review_contacts c ON c.contact_id = m.contact_id
     LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id
@@ -135,10 +135,9 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
       const bookerEmail = ghlBooker || inviteBooker;
       const selfBooked = !!r.created_by && r.created_by === r.assigned_user_id;
       const sheetBooker = nl && !bookerEmail && !selfBooked && sr?.agent ? agentOf(sr.agent) : null;
-      // Booker = GHL created-by user (JT 11/11), else invite / sheet; a "Booked by" override on the row wins.
+      // Booker = GHL created-by user (JT 11/11), else invite / sheet. No per-row override (JT 12/11).
       const createdName = r.created_by ? userName.get(String(r.created_by)) || (createdEmail ? emailName(createdEmail) : null) : null;
       const autoBooker = createdName || (bookerEmail ? staffByEmail.get(bookerEmail) || emailName(bookerEmail) : sheetBooker);
-      const overrideId = r.booker_override_id ? String(r.booker_override_id) : null;
       const leadType: LeadType = !nl ? 'PR'
         : ymd < LEAD_SPLIT_FROM || !sr ? 'Unknown'
         : /^referr?al/i.test(sr.lead) ? 'Referral'
@@ -186,11 +185,9 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
         recordedBy: dbOutcome ? String(r.recorded_by) : null,
         recordedAt: dbOutcome ? iso(r.recorded_at) : null,
         gcal: m && ev ? { event: toEvent(ev), basis: m.basis, minutesApart: m.minutesApart } : null,
-        booker: overrideId ? userName.get(overrideId) || overrideId : autoBooker,
-        bookerEmail: overrideId ? userEmail.get(overrideId) || null : createdName ? createdEmail || null : bookerEmail,
-        bookerFrom: overrideId ? 'override' : createdName ? (ghlBooker ? 'ghl' : selfBooked ? 'self' : 'created') : inviteBooker ? 'invite' : sheetBooker ? 'sheet' : null,
-        bookerAuto: autoBooker,
-        bookerOverrideId: overrideId,
+        booker: autoBooker,
+        bookerEmail: createdName ? createdEmail || null : bookerEmail,
+        bookerFrom: createdName ? (ghlBooker ? 'ghl' : selfBooked ? 'self' : 'created') : inviteBooker ? 'invite' : sheetBooker ? 'sheet' : null,
         createdByEmail: createdEmail || null,
         mode: nl ? scheduleMode(sr?.location || '') : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
       };

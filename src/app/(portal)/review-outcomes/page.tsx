@@ -54,7 +54,7 @@ function NoteBox({ m, onSave, onClose }: { m: ReviewMeeting; onSave: (note: stri
   );
 }
 
-function MeetingRow({ m, settings, canEdit, users, onRecord, onMore, onConfirm, onTlc, onNote, onBooker }: {
+function MeetingRow({ m, settings, canEdit, onRecord, onMore, onConfirm, onTlc, onNote }: {
   m: ReviewMeeting;
   settings: ReviewSettings;
   canEdit: boolean;
@@ -63,8 +63,6 @@ function MeetingRow({ m, settings, canEdit, users, onRecord, onMore, onConfirm, 
   onConfirm: (m: ReviewMeeting, on: boolean) => void;
   onTlc: (m: ReviewMeeting, on: boolean) => void;
   onNote: (m: ReviewMeeting, note: string | null, next: string | null) => void;
-  users: { id: string; name: string }[];
-  onBooker: (m: ReviewMeeting, userId: string | null) => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteExpanded, setNoteExpanded] = useState(false);
@@ -93,15 +91,9 @@ function MeetingRow({ m, settings, canEdit, users, onRecord, onMore, onConfirm, 
       </div>
       <div className="col-start-2 min-w-0 text-sm text-gray-700 md:col-start-auto">
         <div className="truncate" title="GHL assigned consultant">{m.consultant}</div>
-        <label className="flex min-w-0 items-center gap-1 text-[11px] text-gray-500"
-          title={m.bookerOverrideId ? `Booked by changed in this tool (GHL created-by: ${m.bookerAuto || '-'}). Stats and CC PAYS use this.` : 'Booked by = who created the appointment in GHL. Change it here if someone else booked it (stats and CC PAYS use this).'}>
-          Booked by
-          <select value={m.bookerOverrideId || ''} disabled={!canEdit} onChange={(e) => onBooker(m, e.target.value || null)} aria-label="Booked by"
-            className={`min-w-0 max-w-[140px] truncate rounded border-0 bg-transparent p-0 text-[11px] ${m.bookerOverrideId ? 'font-semibold text-blue-700' : 'text-gray-600'}`}>
-            <option value="">{m.bookerAuto || '-'}</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </label>
+        <div className="truncate text-[11px] text-gray-500" title="Booked by = who created the appointment in GHL" data-testid="booked-by">
+          Booked by <span className="text-gray-600">{m.booker || '-'}</span>
+        </div>
       </div>
       <div className="col-start-2 min-w-0 text-xs md:col-start-auto" title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>
         <div className="text-[11px] text-gray-400">Meeting source{m.meetingSourceLevel && m.meetingSourceLevel !== 'last' ? ` (${m.meetingSourceLevel === 'first' ? 'first touch' : 'Lead Source'})` : ''}</div>
@@ -372,12 +364,6 @@ export default function ReviewOutcomesPage() {
       return null;
     }
   };
-  const bookerRow = (m: ReviewMeeting, userId: string | null) => {
-    setSaveError(null);
-    const u = data?.ghlUsers?.find((x) => x.id === userId);
-    patchRow(m.id, { bookerOverrideId: userId, booker: userId ? u?.name || userId : m.bookerAuto, bookerFrom: userId ? 'override' : m.bookerFrom === 'override' ? null : m.bookerFrom });
-    void postRow(m, { bookerOverride: userId });
-  };
   const tlcRow = (m: ReviewMeeting, on: boolean) => {
     setSaveError(null);
     patchRow(m.id, { tlc: on, tlcBy: on ? data?.viewer.email || null : null });
@@ -454,6 +440,9 @@ export default function ReviewOutcomesPage() {
         <button onClick={toggleDemo} className={`ml-3 rounded border px-2 py-1 text-xs ${demo ? 'border-amber-400 bg-amber-50 text-amber-900' : 'text-gray-600 hover:bg-gray-50'}`}>
           {demo ? 'Exit demo' : 'Demo'}
         </button>
+        {tab === 'day' && (
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client" className="ml-2 w-[200px] rounded border px-2 py-1 text-sm" />
+        )}
         {demo && (
           <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             Demo mode: 20 made-up meetings. Taps, notes and settings stay in this browser tab - nothing is saved.
@@ -493,18 +482,17 @@ export default function ReviewOutcomesPage() {
                   </button>
                 ))}
               </div>
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search client" className="w-[200px] rounded border px-2 py-1" />
               {data && (
-                <select value={booker} onChange={(e) => setBooker(e.target.value)} className="rounded border px-1 py-1" aria-label="Booker" title="Booker = who created the appointment in GHL, or the row's Booked by">
-                  <option value="">All call centre</option>
-                  {userNames.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              )}
-              {data && (
-                <select value={consultant} onChange={(e) => setConsultant(e.target.value)} className="rounded border px-1 py-1" aria-label="Consultant">
-                  <option value="">All consultants</option>
-                  {userNames.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <div className="inline-flex items-center gap-2">
+                  <select value={consultant} onChange={(e) => setConsultant(e.target.value)} className="rounded border px-1 py-1" aria-label="Consultant">
+                    <option value="">All consultants</option>
+                    {userNames.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <select value={booker} onChange={(e) => setBooker(e.target.value)} className="rounded border px-1 py-1" aria-label="Booker" title="Booker = who created the appointment in GHL">
+                    <option value="">All call centre</option>
+                    {userNames.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
               )}
               {loading && <span className="text-xs text-gray-500">Refreshing from GHL…</span>}
             </div>
@@ -574,7 +562,7 @@ export default function ReviewOutcomesPage() {
             {data && byDay.map(([ymd, list]) => (
               <div key={ymd} className="mb-3 overflow-hidden rounded border bg-white">
                 <div className="bg-gray-50 px-3 py-1.5 text-sm font-semibold text-brand-charcoal">{weekday(ymd)} {dmy(ymd)} <span className="font-normal text-gray-500">· {list.length}</span></div>
-                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} users={data.ghlUsers || []} onBooker={bookerRow} />)}
+                {list.map((m) => <MeetingRow key={m.id} m={m} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} />)}
               </div>
             ))}
           </>

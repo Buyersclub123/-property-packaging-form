@@ -920,7 +920,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
                     <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
                     <td className={TDN} title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>{m.meetingSource || NOT_RECORDED}</td>
                     <td className={TDN}>{m.consultant}</td>
-                    <td className={TDN} title={m.bookerFrom ? `Booker from ${m.bookerFrom === 'override' ? `"Booked by" set on the row (GHL created-by: ${m.bookerAuto || '-'})` : m.bookerFrom === 'ghl' || m.bookerFrom === 'created' ? 'GHL (created the appointment)' : m.bookerFrom === 'invite' ? 'the Google invite attendees' : m.bookerFrom === 'self' ? 'GHL: the consultant created it (self-booked)' : 'the calendar schedule sheet'}` : m.createdByEmail ? `No Call Centre booker; GHL creator ${m.createdByEmail}` : undefined}>{m.booker || ''}</td>
+                    <td className={TDN} title={m.bookerFrom ? `Booker from ${m.bookerFrom === 'ghl' || m.bookerFrom === 'created' ? 'GHL (created the appointment)' : m.bookerFrom === 'invite' ? 'the Google invite attendees' : m.bookerFrom === 'self' ? 'GHL: the consultant created it (self-booked)' : 'the calendar schedule sheet'}` : m.createdByEmail ? `No Call Centre booker; GHL creator ${m.createdByEmail}` : undefined}>{m.booker || ''}</td>
                     <td className={TDN}>{m.mode}</td>
                     <td className={TDN}>{m.ghlStatus}</td>
                     <td className={TDN}>{m.outcome || 'No outcome'}{m.invalidReason ? ` - ${m.invalidReason}` : ''}</td>

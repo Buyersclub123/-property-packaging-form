@@ -48,16 +48,6 @@ export async function saveTlc(by: string, appointmentId: string, tlc: boolean): 
   return null;
 }
 
-/** "Booked by" override (GHL user id; null = back to the GHL created-by). Tool DB only. */
-export async function saveBookerOverride(by: string, appointmentId: string, userId: string | null): Promise<void> {
-  const at = userId ? new Date().toISOString() : null;
-  await getDb()`INSERT INTO review_outcomes (appointment_id, booker_override_id, booker_override_by, booker_override_at, source, recorded_by)
-    VALUES (${appointmentId}, ${userId}, ${userId ? by : null}, ${at}, 'tool', ${by})
-    ON CONFLICT (appointment_id) DO UPDATE SET booker_override_id = EXCLUDED.booker_override_id, booker_override_by = EXCLUDED.booker_override_by,
-      booker_override_at = EXCLUDED.booker_override_at, updated_at = NOW()`;
-  await logReview(by, appointmentId, 'booker_override', { userId });
-}
-
 // Same note as the More panel (review_outcomes.note), plus the row's reason / next action.
 export async function saveRowNote(by: string, appointmentId: string, note: string | null, reason: string | null, nextAction: string | null): Promise<void> {
   const at = note || reason || nextAction ? new Date().toISOString() : null;
