@@ -245,17 +245,10 @@ function calendarAuth() {
   return new google.auth.JWT({ email: key.client_email, key: key.private_key.replace(/\\n/g, '\n'), scopes: [CALENDAR_READONLY], subject: GCAL_MAILBOX });
 }
 
-// GHL /users returns only active users (no suspended flag; suspended / removed users are left out or deleted: true).
-const activeUserEmails = async () => new Set((await ghlUsers().catch(() => [] as GhlUser[])).filter((u) => !u.deleted && u.email).map((u) => u.email));
-
-/** Calendars checked by recent syncs (last 7 days), unreadable first; GHL-assignee calendars of suspended users are skipped. */
+/** Calendars checked by recent syncs (last 7 days), unreadable first. Every GHL user with a meeting is included, suspended or deleted too (JT 12/11). */
 export async function gcalCalendars(): Promise<GcalCalendarCheck[]> {
-  const [all, active] = await Promise.all([
-    getDb()`SELECT calendar_id, name, via, status, error, events, checked_at FROM review_gcal_calendars
-      WHERE checked_at > NOW() - INTERVAL '7 days' ORDER BY (status = 'ok'), name`.catch(() => []),
-    activeUserEmails(),
-  ]);
-  const rows = active.size ? all.filter((r) => r.via !== 'GHL assignee' || active.has(String(r.calendar_id).toLowerCase())) : all;
+  const rows = await getDb()`SELECT calendar_id, name, via, status, error, events, checked_at FROM review_gcal_calendars
+      WHERE checked_at > NOW() - INTERVAL '7 days' ORDER BY (status = 'ok'), name`.catch(() => []);
   return rows.map((r) => ({ id: String(r.calendar_id), name: String(r.name || r.calendar_id), via: String(r.via || ''), status: String(r.status || ''),
     error: (r.error as string | null) || null, events: Number(r.events || 0), checkedAt: new Date(r.checked_at as string).toISOString() }));
 }
@@ -273,11 +266,15 @@ async function syncGcal(start: Date, end: Date, syncStart: string, ghlDone: Prom
     ghlUsers().catch(() => [] as GhlUser[]),
   ]);
   const userById = new Map(users.map((u) => [u.id, u]));
-  for (const r of assigned) {
-    const u = userById.get(String(r.assigned_user_id));
-    if (u?.email && !u.deleted && !targets.has(u.email)) targets.set(u.email, { name: u.name || u.email, via: 'GHL assignee' });
-  }
   const checked: { id: string; name: string; via: string; status: string; error: string | null; events: number }[] = [];
+  for (const r of assigned) {
+    const id = String(r.assigned_user_id);
+    const u = userById.get(id);
+    const email = u?.email?.toLowerCase();
+    if (email) { if (!targets.has(email)) targets.set(email, { name: u?.name || email, via: u?.deleted ? 'GHL assignee (deleted in GHL)' : 'GHL assignee' }); }
+    else checked.push({ id: `ghl-user:${id}`, name: u?.name || `GHL user ${id}`, via: 'GHL assignee', status: 'no email',
+      error: u ? 'GHL user has no email, so the calendar is unknown' : 'GHL Users no longer returns this user (suspended or removed), so the calendar is unknown', events: 0 });
+  }
   const byId = new Map<string, Record<string, unknown> & { calendars: string[] }>();
   await pool([...targets], 6, async ([calId, t]) => {
     const calName = t.name;

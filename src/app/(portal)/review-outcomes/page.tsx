@@ -526,7 +526,7 @@ export default function ReviewOutcomesPage() {
                       const bad = data.gcalCalendars.filter((c) => c.status !== 'ok');
                       return (
                         !bad.length ? (
-                          <span data-testid="gcal-panel" className="self-center rounded border bg-white px-2 py-1 text-xs text-gray-600" title={`${data.gcalCalendars.length} Google calendars read (suspended GHL users skipped)`}>
+                          <span data-testid="gcal-panel" className="self-center rounded border bg-white px-2 py-1 text-xs text-gray-600" title={`${data.gcalCalendars.length} Google calendars read, incl. every GHL user with a meeting in range`}>
                             Google calendars read: all readable
                           </span>
                         ) : (
@@ -537,10 +537,10 @@ export default function ReviewOutcomesPage() {
                           <ul className="absolute right-0 z-20 mt-1 max-h-72 w-[460px] overflow-auto rounded border bg-white p-2 text-gray-700 shadow">
                             {bad.map((c) => (
                               <li key={c.id} title={c.error || ''} className="font-semibold text-amber-800">
-                                ✖ {c.status} {c.name} <span className="text-gray-400">({c.id}) · {c.via}{c.status === '403' || c.status === '404' ? ' - not shared with info@' : ' - read failed'}</span>
+                                ✖ {c.status} {c.name} <span className="text-gray-400">({c.id}) · {c.via}{c.status === '403' || c.status === '404' ? ' - not shared with info@' : c.status === 'no email' ? ` - ${c.error}` : ' - read failed'}</span>
                               </li>
                             ))}
-                            <li className="mt-1 text-gray-400">Readable calendars are not listed; suspended GHL users are skipped.</li>
+                            <li className="mt-1 text-gray-400">Readable calendars are not listed. Every GHL user with a meeting in range is read, incl. suspended / deleted users.</li>
                           </ul>
                         </details>
                         )
