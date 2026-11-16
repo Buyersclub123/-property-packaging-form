@@ -1565,7 +1565,10 @@ export default function ContractTeamReportingPage() {
     const filters: ViewFilter[] = builderExtraFilters.filter(
       (f) => f.operator === 'is blank' || f.operator === 'not blank' || f.value.trim() !== ''
     );
-    const pipelineIds = Array.from(builderPipelines);
+    // A ticked stage always implies its pipeline, so a stage can never be filtered out by its own pipeline box.
+    const pipelineSet = new Set(builderPipelines);
+    for (const p of ghlPipelines) if (p.stages.some((s) => builderStages.has(s.name))) pipelineSet.add(p.id);
+    const pipelineIds = Array.from(pipelineSet);
     if (pipelineIds.length > 0 && pipelineIds.length < 4) {
       filters.push(
         pipelineIds.length === 1
@@ -3068,9 +3071,15 @@ export default function ContractTeamReportingPage() {
                             type="checkbox"
                             checked={builderStages.has(s.name)}
                             onChange={() => {
-                              setBuilderStages((prev) => {
+                              // A stage tick implies its pipeline: ticking any stage ticks the pipeline,
+                              // unticking the last ticked stage unticks it.
+                              const nextStages = new Set(builderStages);
+                              if (nextStages.has(s.name)) { nextStages.delete(s.name); } else { nextStages.add(s.name); }
+                              setBuilderStages(nextStages);
+                              const anyStage = p.stages.some((x) => nextStages.has(x.name));
+                              setBuilderPipelines((prev) => {
                                 const next = new Set(prev);
-                                if (next.has(s.name)) { next.delete(s.name); } else { next.add(s.name); }
+                                if (anyStage) { next.add(p.id); } else { next.delete(p.id); }
                                 return next;
                               });
                             }}
