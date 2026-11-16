@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { JOURNEY_TEMPLATE } from './journeyTemplate';
 import { buildJourneyData } from './journeyData';
+import { STAGE_DEFINITIONS } from '@/lib/stageDefinitions';
 
 type Recon = Parameters<typeof buildJourneyData>[1];
 type Sales = Parameters<typeof buildJourneyData>[3];
@@ -25,6 +26,7 @@ export default function JourneyPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const lastAutoRefresh = useRef(0);
   const [pendingHtml, setPendingHtml] = useState('');
   const frame = useRef<HTMLIFrameElement>(null);
   const pos = useRef<{ tab: string | null; y: number }>({ tab: null, y: 0 });
@@ -47,7 +49,28 @@ export default function JourneyPage() {
     setError('');
     let records: Record<string, string>[] | null = null, recon: Recon | null = null, sales: Sales = null, asAt = 0, salesPending = true;
     let rendered = false;
-    const build = () => JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${JSON.stringify({ ...buildJourneyData(records!, recon!, false, sales, salesPending), asAt: new Date(asAt || Date.now()).toISOString(), restore: pos.current }).replace(/</g, '\\u003c')};</script>\n<script>`);
+    const build = () => {
+      const data = buildJourneyData(records!, recon!, false, sales, salesPending);
+      // A tile whose count differs from GHL's own stage count is usually timing (tool copy older than GHL). Re-read
+      // records + reconciliation once, live, and apply immediately; the ≠ GHL badge then only shows if the gap persists.
+      type Tile = { name: string; mismatch?: boolean; tool?: number; ghl?: number };
+      const tiles = (d: typeof data): Tile[] => [...d.stages, ...d.build, ...d.finance] as unknown as Tile[];
+      const mismatched = tiles(data).some((s) => s.mismatch);
+      if (mismatched && !force && Date.now() - lastAutoRefresh.current > 10 * 60_000) {
+        lastAutoRefresh.current = Date.now();
+        Promise.all([getJson<Record<string, string>[]>('/api/contract-team-reporting'), getJson<Recon>('/api/journey/reconcile')])
+          .then(([r, c]) => {
+            records = r.data; recon = c.data; asAt = r.at;
+            const fresh = buildJourneyData(records, recon, false, sales, salesPending);
+            const still = tiles(fresh).filter((s) => s.mismatch && typeof s.tool === 'number' && typeof s.ghl === 'number');
+            // Survived the live re-read: a real gap, not timing. Email it (1h cooldown server-side); no badge on the page.
+            if (still.length) fetch('/api/journey/mismatch-alert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiles: still.map((s) => ({ name: s.name, tool: s.tool, ghl: s.ghl })) }) }).catch(() => {});
+            setHtml(build()); setPendingHtml('');
+          })
+          .catch((e) => console.error('Journey auto-refresh after ≠ GHL:', e));
+      }
+      return JOURNEY_TEMPLATE.replace('<script>', `<script>window.JOURNEY=${JSON.stringify({ ...data, asAt: new Date(asAt || Date.now()).toISOString(), restore: pos.current, stageDefs: STAGE_DEFINITIONS }).replace(/</g, '\\u003c')};</script>\n<script>`);
+    };
     // Render the iframe once; later (background) data is held in pendingHtml and applied only when the user asks
     // (Refresh button) or comes back to the tab, so the page never jumps back to the first tab mid-use (JT 2/11).
     const render = () => {

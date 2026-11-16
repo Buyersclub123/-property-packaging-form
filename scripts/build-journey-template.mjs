@@ -197,7 +197,9 @@ swap('let dq="", dCons="", dBA="", dSat="";', 'let dq="", dCons="", dBA="", dSat
 
 // On Hold marker (detached, grey) at the start of Property Team; step numbers skip detached tiles.
 swap('const first=i===0||s.detached||(stair&&list0[i-1].phase!==s.phase),', 'const first=i===0||s.detached||list0[i-1].detached||(stair&&list0[i-1].phase!==s.phase),');
-swap('<button class="node${first?" first":""}${last?" last":""}"', '<button class="node${first?" first":""}${last?" last":""}${s.hold?" hold":""}${s.alert?" alert":""}"');
+swap('<button class="node${first?" first":""}${last?" last":""}"', '<button class="node${first?" first":""}${last?" last":""}${s.hold?" hold":""}${s.alert?" alert":""}${String(s.name).trim()==="Exchange WIP"?" bypass":""}${s.derived?" derived":""}"');
+// Exchange WIP can skip Conditional: draw the bypass arc to Unconditional (styled in the stage-meaning CSS block).
+swap('aria-pressed="${s.id===sel}">\n          <span class="circle">', 'aria-pressed="${s.id===sel}">${String(s.name).trim()==="Exchange WIP"?`<span class="byp"><i>no clauses</i></span>`:""}\n          <span class="circle">');
 // Exception tiles (e.g. No Property Record): red count when above 0.
 swap('</style>', '.node.hold.alert{opacity:1}\n.node.hold.alert .circle b{color:#D23B2E}\n</style>');
 // No stage-number badges on tiles (stages are still changing).
@@ -225,10 +227,12 @@ let fixWrapT; window.addEventListener("resize",()=>{clearTimeout(fixWrapT); fixW
 
 function renderPanel(){`);
 
-// Reconciliation: "All" prominent, a ≠ GHL flag on tiles whose All differs, and the per-stage reconciliation panel.
+// Reconciliation: "All" prominent and the per-stage reconciliation panel. No ≠ GHL badge: a count gap triggers a live re-read; a gap that survives it is emailed (JT 16/11).
 // One number per tile: All (bold). Period movement stays in the panel below.
 swap('<b>${n(s.counts[s.head])}</b><small>${PERIODS[s.head].label.toLowerCase()}</small></span>',
-  '<b>${n(s.counts[s.tileKey||"ever"])}</b><small>${s.tileKey?PERIODS[s.tileKey].label.toLowerCase():"now"}</small>${s.mismatch?`<i class="neq" title="All differs from GHL: see reconciliation">≠ GHL</i>`:""}</span>');
+  '<b>${n(s.counts[s.tileKey||"ever"])}</b><small>${s.tileKey?PERIODS[s.tileKey].label.toLowerCase():"now"}</small></span>');
+// Derived process step (EOI submitted): Deal Sheet tag in the tile and a sent/accepted sub-line under the name.
+swap('<small>${s.tileKey?PERIODS[s.tileKey].label.toLowerCase():"now"}</small>', '<small>${s.tileKey?PERIODS[s.tileKey].label.toLowerCase():"now"}</small>${s.derived?`<i class="dsrc">Deal Sheet</i>`:""}');
 // Counts supplied by the server (e.g. GHL contacts) are used as-is.
 swap('  s.counts = {}; if (s.hasLand) s.land = {};\n  [...new Set', '  s.counts = s.fixedCounts || {}; if (s.hasLand) s.land = {};\n  if (!s.fixedCounts) [...new Set');
 swap('    <div class="cards">${cards}</div>\n', '    <div class="cards">${cards}</div>\n    ${s.recon||""}\n');
@@ -240,13 +244,14 @@ swap('  fixWrap();\n}\nfunction fixWrap(){', `  const nw=JOURNEYS[tab].filter(s=
   if(ld.length){ const ph=track.querySelector('.node[data-id="'+ld[0].id+'"]')?.closest(".phase"); if(ph) ph.insertAdjacentHTML("beforeend", '<div class="nw-overlay">Loading sales figures…</div>'); }
   if(tab==="sales" && J.salesAsAt){ const h=track.querySelector('.node[data-id="contacts"]')?.closest(".phase")?.querySelector(".phase-head"); if(h) h.insertAdjacentHTML("beforeend", '<span class="asat">as at '+new Date(J.salesAsAt).toLocaleTimeString("en-AU",{hour:"2-digit",minute:"2-digit",timeZone:"Australia/Sydney"})+' (refreshes every 15 min)</span>'); }
   const chips=JOURNEYS[tab].filter(s=>s.chip);
-  if(chips.length) track.insertAdjacentHTML("beforeend", \`<div class="chipbar"><span class="chipbar-lbl">Derived filters (not stages)</span>\${chips.map(c=>\`<button class="node chip" data-id="\${c.id}" aria-pressed="\${c.id===sel}">\${esc(c.name)} <b>\${n(c.counts.ever)}</b>\${c.mismatch?'<i class="neq">≠ GHL</i>':""}</button>\`).join("")}</div>\`);
+  if(chips.length) track.insertAdjacentHTML("beforeend", \`<div class="chipbar"><span class="chipbar-lbl">Derived filters (not stages)</span>\${chips.map(c=>\`<button class="node chip" data-id="\${c.id}" aria-pressed="\${c.id===sel}">\${esc(c.name)} <b>\${n(c.counts.ever)}</b>\</button>\`).join("")}</div>\`);
   fixWrap();
 }
 function fixWrap(){`);
 
 // Tiles with no data source yet: count 0 plus a "not wired" note (never removed).
-swap('<span class="name">${s.name}</span>', '<span class="name">${s.name}</span>${s.notWired?`<small class="nw">not wired</small>`:""}');
+// Stage meaning: an (i) after the name where a definition exists (window.JOURNEY.stageDefs); the card is handled in the wiring block below.
+swap('<span class="name">${s.name}</span>', '<span class="name">${s.name}${(window.JOURNEY&&window.JOURNEY.stageDefs||[]).some(d=>d.stage.toLowerCase()===String(s.name).trim().toLowerCase())?`<span class="sdef-row"><i class="sdef" data-stage="${s.name}" role="button" tabindex="0" aria-label="What this stage means" title="What this stage means">i</i></span>`:""}</span>${s.sub?`<small class="tsub">${s.sub}</small>`:""}${s.notWired?`<small class="nw">not wired</small>`:""}');
 swap('    ${stageDef(s)}\n', '    ${stageDef(s)}\n    ${s.notWired?`<p class="hint nw">Not wired yet: no data source for this tile, so it shows 0.</p>`:""}\n');
 // No linked Property Record: Construction and Property Record lanes read "No record".
 swap('if(o.type==="est") return null;', 'if(o.type==="est"||o.type==="nopr") return null;');
@@ -346,7 +351,7 @@ swap('outcome:[["Client",x=>x.client],', `outcome:[["Client",x=>x.client],${MEET
 swap('No match</span>\'],\n           ["Consultant",x=>x.consultant]],\n  meeting:[', 'No match</span>\']],\n  meeting:[');
 swap('<label class="d-filter"><span>Consultant</span><select id="d-cons"><option value="">All</option>${opts(DETAIL_CONSULTANTS,dCons)}</select></label>', '${s.kind!=="contact"?`<label class="d-filter"><span>Consultant</span><select id="d-cons"><option value="">All</option>${opts(DETAIL_CONSULTANTS,dCons)}</select></label>`:""}');
 // Duplicate contacts group (visibility only; merging is a later build).
-swap('const OPP_KINDS=["opp","fin","property"];', `COLS.opp=[...COLS.opp.slice(0,2),["Stage",x=>x.stage,"stage"],${MEETING_SOURCE_COL},${SAT_COL},...COLS.opp.slice(2)];\n` + 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
+swap('const OPP_KINDS=["opp","fin","property"];', `COLS.opp=[...COLS.opp.slice(0,2),["Stage",x=>x.stage,"stage"],["EOI",x=>x.eoi||"","eoi"],["Offer",x=>x.offer&&!isNaN(Number(x.offer))?"$"+Number(x.offer).toLocaleString("en-AU"):(x.offer||""),"offer"],${MEETING_SOURCE_COL},${SAT_COL},...COLS.opp.slice(2)];\n` + 'COLS.dup=[["New contact",x=>x.client],["Existing match",x=>x.existing],["Match on",x=>x.why],["Created",x=>x.d?fmt(x.d):""],["Created by",x=>x.createdBy||\'<span class="more">Unknown</span>\'],["Existing since",x=>x.existingCreated]];\nPHASES.dups={name:"Duplicate contacts · new in the last 7 days",color:"var(--muted)"};\nconst OPP_KINDS=["opp","fin","property"];');
 
 if (/OPP-2\d{4}|Sample Estate|seed\(o\.ref\)/.test(html)) throw new Error('Sample data still present in the template');
 
@@ -399,8 +404,55 @@ html = html.trimEnd() + `\n<script>
   // Re-apply remembered section state after the track re-renders (tab switch / period change) - no MutationObserver (looped 3/11).
   document.addEventListener('click',function(){ setTimeout(applySections,0); },true);
   setTimeout(applySections,300); setTimeout(applySections,1500);
+  // Stage meaning card: click the (i) on a tile; Esc or click-away closes. Text from window.JOURNEY.stageDefs (src/lib/stageDefinitions.ts).
+  var SDEFS=(window.JOURNEY&&window.JOURNEY.stageDefs)||[];
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function closeDef(){ var c=document.getElementById('sdef-card'); if(c) c.remove(); }
+  function sizeBypass(){ var b=document.querySelector('.node.bypass'); if(!b) return; var n=b; for(var k=0;k<2;k++){ n=n.nextElementSibling; if(!n) return; }
+    var a=b.getBoundingClientRect(), z=n.getBoundingClientRect(); b.style.setProperty('--byp-w',((z.left+z.width/2)-(a.left+a.width/2))+'px'); }
+  document.addEventListener('click',function(){ setTimeout(sizeBypass,0); },true); window.addEventListener('resize',sizeBypass); setTimeout(sizeBypass,0); setTimeout(sizeBypass,400); setTimeout(sizeBypass,1600);
+  function openDef(el){ closeDef(); var name=el.getAttribute('data-stage')||''; var d=null; for(var i=0;i<SDEFS.length;i++){ if(SDEFS[i].stage.toLowerCase()===name.trim().toLowerCase()) d=SDEFS[i]; } if(!d) return;
+    var card=document.createElement('div'); card.id='sdef-card'; card.className='sdef-card'; card.setAttribute('role','dialog'); card.setAttribute('aria-label',d.stage+' - what it means');
+    function rich(t){ return esc(t).replace(new RegExp('[*]{2}([^*]+)[*]{2}','g'),'<b>$1</b>').split(String.fromCharCode(10)).join('<br>'); }
+    card.innerHTML='<div class="sdef-h"><b class="sdef-t">'+esc(d.stage)+':</b><button class="sdef-x" aria-label="Close">\u2715</button></div>'
+      +'<p><b>Definition:</b> '+rich(d.definition)+'</p>'
+      +(d.change&&d.change.length?(d.change.length===1&&!d.change[0].lead
+          ?'<p><b>Stage Change:</b> '+rich(d.change[0].text)+'</p>'
+          :'<p><b>Stage Change:</b></p>'+d.change.map(function(c){ return '<p class="sdef-c">'+(c.lead?'<b>'+esc(c.lead)+'</b><br>':'')+rich(c.text)+'</p>'; }).join('')):'');
+    document.body.appendChild(card);
+    var r=el.getBoundingClientRect(), w=Math.min(420,window.innerWidth-24), left=Math.max(12,Math.min(r.left+r.width/2-w/2,window.innerWidth-w-12));
+    card.style.width=w+'px'; card.style.left=left+'px'; card.style.top=(window.scrollY+r.bottom+8)+'px';
+    card.querySelector('.sdef-x').addEventListener('click',closeDef); }
+  document.addEventListener('click',function(e){ var t=e.target; if(!t||!t.closest) return;
+    var i=t.closest('.sdef'); if(i){ e.preventDefault(); e.stopPropagation(); openDef(i); return; }
+    if(!t.closest('#sdef-card')) closeDef(); },true);
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeDef(); if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&e.target.classList.contains('sdef')){ e.preventDefault(); e.stopPropagation(); openDef(e.target); } },true);
 })();
 </script>\n`;
+// Stage meaning (i) + card styles.
+html = html.replace('</style>', `.sdef{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;margin-left:4px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);font:700 9px/1 var(--display);font-style:normal;vertical-align:1px;cursor:pointer}
+.sdef:hover,.sdef:focus-visible{border-color:var(--ink);color:var(--ink);background:var(--chip)}
+.sdef-card{position:absolute;z-index:60;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:12px 14px;font-size:13px;line-height:1.45;text-align:left}
+.sdef-card .sdef-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}.sdef-card .sdef-h b{font-family:var(--display);font-size:14px}
+.sdef-card .sdef-x{background:none;border:0;color:var(--muted);font-size:13px;padding:2px 4px;border-radius:6px}.sdef-card .sdef-x:hover{color:var(--ink);background:var(--chip)}
+.sdef-card .sdef-t{text-decoration:underline;text-underline-offset:2px}.sdef-card p{margin:6px 0 0}.sdef-card p.sdef-c{margin-top:8px}.sdef-card b{font-weight:700}
+.sdef-row{display:block;line-height:1;margin-top:3px}.sdef-row .sdef{margin-left:0}
+/* Contract to settlement: the connector carries an arrowhead (stages run left to right); Exchange WIP also arcs over Conditional straight to Unconditional when there are no clauses. */
+.phase-head[data-ph="contract"] ~ .nodes .node:not(.last):not(.detached)::after{content:"";position:absolute;top:26px;right:-9px;width:0;height:0;border-top:10px solid transparent;border-bottom:10px solid transparent;border-left:14px solid var(--pc);z-index:1;pointer-events:none}
+.phase-head[data-ph="contract"] ~ .nodes .node::before{display:none}
+.phase-head[data-ph="contract"] ~ .nodes .node.bypass{overflow:visible}
+.phase-head[data-ph="contract"] ~ .nodes .node.bypass .byp{position:absolute;left:50%;top:-16px;width:var(--byp-w,344px);height:48px;border:3px solid var(--pc);border-bottom:0;border-radius:24px 24px 0 0;pointer-events:none;z-index:0;box-sizing:border-box}
+.phase-head[data-ph="contract"] ~ .nodes .node.bypass .byp::after{content:"";position:absolute;right:-7.5px;bottom:-4px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid var(--pc)}
+.phase-head[data-ph="contract"] ~ .nodes .node.bypass .byp i{position:absolute;left:50%;top:-9px;transform:translateX(-50%);font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.02em;color:var(--pc);background:var(--bg);padding:0 5px;white-space:nowrap}
+.phase-head[data-ph="contract"] ~ .nodes{padding-top:26px}
+.node.derived{transform:translateY(-30px)}
+.node.derived .circle{border-style:dashed;background:var(--surface)}
+.node.derived::before{top:64px;left:0;right:0}
+.phase-head[data-ph="property"] ~ .nodes{padding-top:30px}
+.node.derived .dsrc{position:absolute;bottom:-9px;left:50%;transform:translateX(-50%);font-style:normal;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--brand-ink);background:var(--brand);padding:1px 6px;border-radius:999px;white-space:nowrap}
+.node.derived.alert .circle b{color:#D23B2E}
+.node .tsub{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+</style>`);
 
 for (const [from, to] of SALES_MINI_SWAPS) swap(from, to);
 

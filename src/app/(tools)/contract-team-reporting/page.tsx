@@ -6,6 +6,7 @@ import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } fro
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
 import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
+import { STAGE_DEFINITIONS, boldSegments } from '@/lib/stageDefinitions';
 import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, formatLandRegistrationMonth, landRegistrationSortKey, completionDateSortKey, LAND_REG_PARTS, LandRegPart, getColumnBadge, OPP_DYNAMIC_PREFIX, isOppDynamicReadOnly } from '@/app/api/contract-team-reporting/fields';
 
 // ============================================================================
@@ -1443,6 +1444,13 @@ export default function ContractTeamReportingPage() {
   // VIEW BUILDER (hidden — Shift+double-click ⚙ to reveal)
   // --------------------------------------------------------------------------
   const [showViewBuilder, setShowViewBuilder] = useState(false);
+  const [showStageDefs, setShowStageDefs] = useState(false);
+  useEffect(() => {
+    if (!showStageDefs) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setShowStageDefs(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showStageDefs]);
   const [ghlPipelines, setGhlPipelines] = useState<{ id: string; name: string; stages: { id: string; name: string }[] }[]>([]);
   const [builderPipelines, setBuilderPipelines] = useState<Set<string>>(new Set());
   const [builderStages, setBuilderStages] = useState<Set<string>>(new Set()); // stage NAMES
@@ -3580,6 +3588,17 @@ export default function ContractTeamReportingPage() {
                     onClick={(e) => handleSort(col.key, e.shiftKey)}
                   >
                     <span className="text-[11px] leading-tight">{headerLabel(col)}</span>
+                    {col.key === 'pipelineStage' && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setShowStageDefs(true); }}
+                        title="What each stage means"
+                        aria-label="What each stage means"
+                        className={`ml-0.5 inline-flex h-[13px] w-[13px] shrink-0 items-center justify-center rounded-full border text-[9px] font-bold leading-none ${t.headerText} border-current opacity-70 hover:opacity-100`}
+                      >
+                        i
+                      </button>
+                    )}
                     {(() => {
                       const at = sortLevels.findIndex((l) => l.column === col.key);
                       if (at === -1) return null;
@@ -4019,6 +4038,43 @@ export default function ContractTeamReportingPage() {
             </div>
           </div>
           <div>{expandedCell.value}</div>
+        </div>
+      )}
+
+      {/* Stage meanings (from the Stage header (i)) */}
+      {showStageDefs && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={() => setShowStageDefs(false)}>
+          <div
+            className={`flex max-h-[85vh] w-[640px] max-w-[92vw] flex-col rounded-lg border shadow-2xl ${theme === 'dark' ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-300'}`}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className={`flex items-center justify-between border-b px-5 py-3 ${t.inputBorder}`}>
+              <h3 className={`text-sm font-bold ${t.text}`}>Stage meanings — Deal Closed to Settled</h3>
+              <button onClick={() => setShowStageDefs(false)} className={`rounded px-2 py-0.5 text-sm ${t.headerText} hover:opacity-70`} aria-label="Close">✕</button>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 text-xs">
+              {STAGE_DEFINITIONS.map((d) => {
+                const rich = (s: string) => boldSegments(s).map((seg, i) => (seg.bold ? <b key={i}>{seg.text}</b> : <span key={i} className="whitespace-pre-line">{seg.text}</span>));
+                return (
+                  <div key={d.stage} className={t.text}>
+                    <div className="text-sm font-bold underline underline-offset-2">{d.stage}:</div>
+                    <p className="mt-1"><b>Definition:</b> {rich(d.definition)}</p>
+                    {d.change.length === 1 && !d.change[0].lead && <p className="mt-1"><b>Stage Change:</b> {rich(d.change[0].text)}</p>}
+                    {(d.change.length > 1 || d.change[0]?.lead) && (
+                      <>
+                        <p className="mt-1"><b>Stage Change:</b></p>
+                        {d.change.map((c, i) => (
+                          <p key={i} className="mt-1.5">{c.lead && <><b>{c.lead}</b><br /></>}{rich(c.text)}</p>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 

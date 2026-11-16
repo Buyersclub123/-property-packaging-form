@@ -197,6 +197,25 @@ function noRecordTile(records: Rec[]) {
   };
 }
 
+/**
+ * Process step derived from the Deal Sheet (JT 16/11), not a GHL stage: an open Property Team opp in a Proposals price band
+ * whose linked Property Record is at 02 EOI. Sub-status from the record's offer_status: Sent (offered) / Accepted (not yet
+ * moved to Deal Closed). Sits in the row between the price bands and Deal Closed, drawn as derived.
+ */
+function eoiTile(records: Rec[], pt: { id: string; name: string }[]) {
+  const bands = new Set(pt.filter((s) => /proposals|\$\d/i.test(s.name)).map((s) => s.id));
+  const rows = records.filter((r) => r.pipelineId === PT_ID && r.status === 'open' && bands.has(r.pipelineStageId || '') && norm(r.co_status || '').startsWith('02'));
+  const sub = (r: Rec) => ((r.co_offer_status || '').toLowerCase() === 'accepted' ? 'Accepted · move to Deal Closed' : 'Sent · awaiting vendor');
+  const accepted = rows.filter((r) => sub(r).startsWith('Accepted')).length;
+  return {
+    id: 'pt-eoi', name: 'EOI submitted', kind: 'opp', phase: 'property', derived: true, alert: accepted > 0,
+    sub: `${rows.length - accepted} sent · ${accepted} accepted`,
+    rows: rows.map((r) => ({ ...stageRow(r, r.co_offer_date || r.lastStageChangeAt), stage: r.pipelineStage || '', eoi: sub(r), offer: r.co_offer_price || '' })),
+    mismatch: false, hold: false,
+    recon: '<div class="recon"><p><b>Derived from the Deal Sheet</b> (not a GHL stage): an open Property Team opportunity in a Proposals price band whose linked Property Record is at <b>02 EOI</b>. Sent = offer status offered; Accepted = offer status accepted but the opportunity has not yet been moved to Deal Closed.</p></div>',
+  };
+}
+
 /** Exception tile (JT): open Property Team opps in any Property Team row stage (up to Deal Closed) with Purchasing entity type blank. */
 function noEntityTile(records: Rec[], pt: { id: string; name: string }[]) {
   const to = pt.findIndex((s) => norm(s.name) === 'dealclosed');
@@ -247,7 +266,7 @@ function reconcile(tileRecs: Rec[], cmp: Compare, whyExtra: (r: Rec) => string) 
     `<li><b>${rs.length}</b> ${esc(k)}<details><summary>names</summary>${rs.slice(0, 40).map((r) => esc(r.opportunityName || r.name)).join('<br>')}${rs.length > 40 ? `<br>… ${rs.length - 40} more` : ''}</details></li>`);
   if (unloaded) rows.push(`<li><b>${Math.abs(unloaded)}</b> ${unloaded > 0 ? 'in the GHL count but not loaded by the tool (cache or timing; press Refresh in CTRT)' : 'loaded by the tool but no longer in the GHL count (cache or timing)'}</li>`);
   return {
-    mismatch: diff !== 0,
+    mismatch: diff !== 0, tool: tileRecs.length, ghl,
     html: `<div class="recon" data-diff="${diff}"><table><tr><td>Journey · All</td><td class="n">${tileRecs.length}</td></tr>
       <tr><td>${esc(cmp.label)}</td><td class="n">${ghl}</td></tr>
       <tr class="${diff ? 'bad' : 'ok'}"><td>Difference</td><td class="n">${diff > 0 ? '+' : ''}${diff}</td></tr></table>
@@ -287,7 +306,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
   const stages = [
     // Sales: movement only (last 24 hours / last 7 days), no all-time totals.
     ...SALES_TILES.map((s) => ({ ...s, head: 'd7', periods: ['d1', 'd7'], tileKey: 'd7', phase: 'sales', ...salesTile(s.id, sales, salesLoading) })),
-    ...pt.map((s, i) => {
+    ...pt.flatMap((s, i): any[] => [...(i === dealClosedAt ? [eoiTile(records, pt)] : []), (() => {
       const all = records.filter((r) => r.pipelineStageId === s.id);
       // Sales & Property tiles: every OPEN opp at the stage, as GHL counts it (no in-flight filter; JT 1/11).
       const tile = historical ? all : all.filter((r) => r.status === 'open');
@@ -297,9 +316,9 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
         phase: i <= dealClosedAt ? 'property' : 'contract',
         ...(norm(s.name) === 'onhold' ? { detached: true, hold: true } : {}),
         rows: tile.map((r) => stageRow(r, r.lastStageChangeAt)),
-        mismatch: rc.mismatch, recon: panel('Reconciliation', [rc.html]),
+        mismatch: rc.mismatch, tool: rc.tool, ghl: rc.ghl, recon: panel('Reconciliation', [rc.html]),
       };
-    }).sort((a, b) => Number(!!b.hold) - Number(!!a.hold)),
+    })()]).sort((a, b) => Number(!!b.hold) - Number(!!a.hold)),
     noEntityTile(records, pt),
     noBaTile(records, pt),
     noRecordTile(records),
@@ -322,7 +341,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
       return {
         id: 'f-' + norm(value), phase: 'finance', name: value, kind: 'fin', hasLand: true,
         rows: tile.map((r) => stageRow(r, r.financeStatusChangeDate, registered(r))),
-        mismatch: today_.mismatch, recon: panel('Reconciliation', [today_.html, after.html]),
+        mismatch: today_.mismatch, tool: today_.tool, ghl: today_.ghl, recon: panel('Reconciliation', [today_.html, after.html]),
       };
     }),
     // Derived filter chips (not stages), compared with the old Finance stage of the same name.
@@ -337,7 +356,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
       return {
         id: c.id, phase: 'finance', name: c.name, kind: 'fin', chip: true, detached: true,
         rows: tile.map((r) => stageRow(r, r.financeStatusChangeDate, registered(r))),
-        mismatch: rc.mismatch, recon: panel('Derived filter (not a stage) · Run Sheet rule', [rc.html]),
+        mismatch: rc.mismatch, tool: rc.tool, ghl: rc.ghl, recon: panel('Derived filter (not a stage) · Run Sheet rule', [rc.html]),
       };
     }),
   ];
@@ -358,7 +377,7 @@ export function buildJourneyData(records: Rec[], recon: Recon, historical: boole
     return {
       id: 'b-' + key, phase: 'build', name: label, kind: 'property',
       rows: tile.map((r) => stageRow(r, r.co_construction_stage_change_date)),
-      mismatch: today_.mismatch, recon: panel('Reconciliation', [today_.html, after.html]),
+      mismatch: today_.mismatch, tool: today_.tool, ghl: today_.ghl, recon: panel('Reconciliation', [today_.html, after.html]),
     };
   });
 
