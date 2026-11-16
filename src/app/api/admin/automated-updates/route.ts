@@ -5,6 +5,7 @@ import { AUTOMATED_UPDATES } from '@/lib/automatedUpdates';
 import { ensureStampTables, setStampApply, stampApplyEnabled } from '@/lib/ctrStamp';
 import { readOpportunity, setSettledApply, settledApplyEnabled } from '@/lib/ctrSettled';
 import { confirmSwitch, recentConfirmRuns, setConfirmApply } from '@/lib/reviewOutcomes/confirm';
+import { clearLinkMismatch, linkSweepAdminData, setLinkSweepApply } from '@/lib/linkSweep';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export async function GET() {
       if (opp?.name) await sql`UPDATE ctr_settled_log SET opportunity_name = ${opp.name} WHERE opportunity_id = ${opportunity_id} AND opportunity_name IS NULL`;
     }
     const settledRecent = await sql`SELECT run_id, at, user_email, opportunity_id, opportunity_name, record_id, step, field, old_value, new_value, read_back, dry_run, result FROM ctr_settled_log WHERE step <> 'run' ORDER BY at DESC, id LIMIT 200`;
-    return NextResponse.json({ register: AUTOMATED_UPDATES, stamp: { apply: await stampApplyEnabled(), runs, recent }, settled: { apply: settledApply, switchedBy: settledSwitch?.updated_by ?? null, switchedAt: settledSwitch?.updated_at ?? null, recent: settledRecent }, confirm: await confirmData() });
+    return NextResponse.json({ register: AUTOMATED_UPDATES, stamp: { apply: await stampApplyEnabled(), runs, recent }, settled: { apply: settledApply, switchedBy: settledSwitch?.updated_by ?? null, switchedAt: settledSwitch?.updated_at ?? null, recent: settledRecent }, confirm: await confirmData(), linkSweep: await linkSweepAdminData() });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
@@ -41,7 +42,15 @@ export async function POST(request: NextRequest) {
   if (!email) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
   try {
     if (!isAdmin(email, await loadAccess())) return NextResponse.json({ error: 'Admins only.' }, { status: 403 });
-    const { apply, settledApply, confirmApply } = await request.json();
+    const { apply, settledApply, confirmApply, linkSweepApply, clearMismatch } = await request.json();
+    if (typeof linkSweepApply === 'boolean') {
+      await setLinkSweepApply(linkSweepApply, email);
+      return NextResponse.json({ ok: true, linkSweepApply });
+    }
+    if (typeof clearMismatch === 'string' && clearMismatch) {
+      await clearLinkMismatch(clearMismatch, email);
+      return NextResponse.json({ ok: true, cleared: clearMismatch });
+    }
     if (typeof confirmApply === 'boolean') {
       await setConfirmApply(confirmApply, email);
       return NextResponse.json({ ok: true, confirmApply });

@@ -51,6 +51,14 @@
     {
       "path": "/api/contract-team-reporting/stamp-cron",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/contract-team-reporting/link-sweep-cron",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/contract-team-reporting/link-sweep-cron/full",
+      "schedule": "30 15 * * *"
     }
   ]
 }

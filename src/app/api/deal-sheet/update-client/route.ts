@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { updateCachedRecord } from '@/lib/dealSheetCache';
+import { recordDealSheetLink } from '@/lib/linkSweep';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -241,6 +242,7 @@ export async function POST(request: NextRequest) {
         { status: putRes.status }
       );
     }
+    await recordDealSheetLink(recordId, newOppId, 'update-client');
 
     // 5. Write back the BA to the opportunity if it changed (reassign / client_edited).
     let baWriteBackOk = true;

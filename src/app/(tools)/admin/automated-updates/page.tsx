@@ -9,7 +9,14 @@ interface Data {
   stamp: { apply: boolean; runs: Row[]; recent: Row[] };
   settled: { apply: boolean; switchedBy: string | null; switchedAt: string | null; recent: Row[] };
   confirm: { apply: boolean; switchedBy: string | null; switchedAt: string | null; recent: Row[] };
+  linkSweep: { apply: boolean; switchedBy: string | null; switchedAt: string | null; runs: (Row & { summary: Record<string, unknown> | null })[]; recent: Row[]; mismatches: Row[] };
 }
+
+const MISMATCH_LABEL: Record<string, string> = {
+  hand_changed: 'Link changed by hand in GHL (not via the Deal Sheet)',
+  not_pointing_back: 'Linked record no longer points back',
+  opp_missing: 'Record links to a missing opportunity',
+};
 
 // Admin > Automated updates: every non-human write path into GHL, plus the nightly stamp's switch and log.
 export default function AutomatedUpdatesPage() {
@@ -51,6 +58,16 @@ export default function AutomatedUpdatesPage() {
     if (on && !confirm('Switch Sales Meeting Outcomes Confirmed tick from dry run to writing the GHL appointment status and CONFIRMED title?')) return;
     setSaving(true);
     const res = await fetch('/api/admin/automated-updates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmApply: on }) });
+    const json = await res.json();
+    setSaving(false);
+    if (!res.ok) { setError(json.error || `HTTP ${res.status}`); return; }
+    load();
+  }
+
+  async function postLink(body: Record<string, unknown>, ask?: string) {
+    if (ask && !confirm(ask)) return;
+    setSaving(true);
+    const res = await fetch('/api/admin/automated-updates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const json = await res.json();
     setSaving(false);
     if (!res.ok) { setError(json.error || `HTTP ${res.status}`); return; }
@@ -172,6 +189,74 @@ export default function AutomatedUpdatesPage() {
                   {['at', 'user_email'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}
                   <td className="border border-gray-200 px-2 py-1" title={`Appointment ID ${fmt(r.appointment_id)}`}>{fmt(r.name || r.appointment_id)}</td>
                   {['action', 'field', 'old_value', 'new_value', 'read_back'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}
+                  <td className="border border-gray-200 px-2 py-1">{r.dry_run ? 'Dry run' : 'Applied'}</td>
+                  <td className="border border-gray-200 px-2 py-1">{fmt(r.result)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h2 className="mb-2 mt-8 text-lg font-semibold" data-testid="link-sweep">Link reconciliation sweep</h2>
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <span className={`rounded px-2 py-0.5 ${data.linkSweep.apply ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>
+              {data.linkSweep.apply ? 'Writing opportunity mirrors to GHL + emailing mismatches' : 'Dry run (log only): nothing written to GHL, no email'}
+            </span>
+            <button disabled={saving} onClick={() => postLink({ linkSweepApply: !data.linkSweep.apply }, data.linkSweep.apply ? undefined : 'Switch the link sweep from dry run to writing the opportunity mirrors in GHL and emailing Link mismatch cases?')} className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-500 disabled:opacity-50">
+              {data.linkSweep.apply ? 'Switch to dry run' : 'Switch on writing'}
+            </button>
+            {data.linkSweep.switchedBy && <span className="text-gray-500">Last switched by {data.linkSweep.switchedBy}, {fmt(data.linkSweep.switchedAt)} (Brisbane)</span>}
+          </div>
+          <h3 className="mb-1 font-medium">Last runs</h3>
+          <table className="mb-6 w-full border-collapse border border-gray-200">
+            <thead className="bg-gray-50 text-left text-gray-500">
+              <tr>{['When', 'Sweep', 'Mode', 'Linked records', 'In sync', 'Fixed', 'Reported', 'Failed'].map((h) => <th key={h} className="border border-gray-200 px-2 py-1">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {data.linkSweep.runs.length === 0 && <tr><td colSpan={8} className="px-2 py-1 text-gray-500">No runs yet.</td></tr>}
+              {data.linkSweep.runs.map((r) => (
+                <tr key={fmt(r.run_id)}>
+                  <td className="border border-gray-200 px-2 py-1">{fmt(r.at)}</td>
+                  <td className="border border-gray-200 px-2 py-1">{r.mode === 'full' ? 'Full (nightly)' : 'Since last run'}</td>
+                  <td className="border border-gray-200 px-2 py-1">{r.dry_run ? 'Dry run' : 'Applied'}</td>
+                  <td className="border border-gray-200 px-2 py-1">{String(r.summary?.linkedRecords ?? '')}</td>
+                  <td className="border border-gray-200 px-2 py-1">{String(r.summary?.inSync ?? '')}</td>
+                  <td className="border border-gray-200 px-2 py-1">{fmt(r.fixed)}</td>
+                  <td className="border border-gray-200 px-2 py-1">{fmt(r.reported)}</td>
+                  <td className="border border-gray-200 px-2 py-1">{fmt(r.failed)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <h3 className="mb-1 font-medium" data-testid="link-mismatch">Link mismatch ({data.linkSweep.mismatches.length}) - reported, not fixed</h3>
+          <table className="mb-6 w-full border-collapse border border-gray-200">
+            <thead className="bg-gray-50 text-left text-gray-500">
+              <tr>{['Case', 'Opportunity', 'Property Record', 'Detail', 'Last changed in GHL by', 'When', 'First seen', ''].map((h, i) => <th key={i} className="border border-gray-200 px-2 py-1">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {data.linkSweep.mismatches.length === 0 && <tr><td colSpan={8} className="px-2 py-1 text-gray-500">No open cases.</td></tr>}
+              {data.linkSweep.mismatches.map((r) => (
+                <tr key={fmt(r.key)}>
+                  <td className="border border-gray-200 px-2 py-1">{MISMATCH_LABEL[String(r.kind)] || fmt(r.kind)}</td>
+                  <td className="border border-gray-200 px-2 py-1" title={`Opportunity ID ${fmt(r.opp_id)}`}>{fmt(r.opp_name || r.opp_id)}</td>
+                  <td className="border border-gray-200 px-2 py-1" title={`Property Record ID ${fmt(r.record_id)}`}>{fmt(r.record_name || r.record_id)}</td>
+                  {['detail', 'who', 'when_at', 'first_seen'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}
+                  <td className="border border-gray-200 px-2 py-1"><button disabled={saving} onClick={() => postLink({ clearMismatch: r.key }, 'Clear this case? A hand-changed link is then accepted as the new baseline.')} className="text-blue-700 underline disabled:opacity-50">Clear</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <h3 className="mb-1 font-medium">Recent mirror fixes (last 200 fields)</h3>
+          <table className="w-full border-collapse border border-gray-200">
+            <thead className="bg-gray-50 text-left text-gray-500">
+              <tr>{['When', 'Opportunity', 'Field', 'Before', 'After', 'Read back', 'Record last changed by', 'Record changed', 'Opp updated', 'Mode', 'Result'].map((h) => <th key={h} className="border border-gray-200 px-2 py-1">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {data.linkSweep.recent.length === 0 && <tr><td colSpan={11} className="px-2 py-1 text-gray-500">No fixes yet.</td></tr>}
+              {data.linkSweep.recent.map((r, i) => (
+                <tr key={i}>
+                  <td className="border border-gray-200 px-2 py-1">{fmt(r.at)}</td>
+                  <td className="border border-gray-200 px-2 py-1" title={`Opportunity ID ${fmt(r.opportunity_id)} / Property Record ID ${fmt(r.record_id)}`}>{fmt(r.opportunity_name || r.opportunity_id)}</td>
+                  {['field', 'old_value', 'new_value', 'read_back', 'record_who', 'record_when', 'opp_updated_at'].map((k) => <td key={k} className="border border-gray-200 px-2 py-1">{fmt(r[k])}</td>)}
                   <td className="border border-gray-200 px-2 py-1">{r.dry_run ? 'Dry run' : 'Applied'}</td>
                   <td className="border border-gray-200 px-2 py-1">{fmt(r.result)}</td>
                 </tr>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { updateCachedRecord } from '@/lib/dealSheetCache';
+import { recordDealSheetLink } from '@/lib/linkSweep';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -129,6 +130,7 @@ export async function PUT(request: NextRequest) {
         { status: putRes.status }
       );
     }
+    await recordDealSheetLink(recordId, '', 'clear-and-archive');
 
     // 4. Archive the stripped data to Redis (append-only) only if there was
     // actually something to strip. Skip empty/noise entries.

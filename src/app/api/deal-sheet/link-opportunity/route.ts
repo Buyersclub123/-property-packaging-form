@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { updateCachedRecord } from '@/lib/dealSheetCache';
+import { recordDealSheetLink } from '@/lib/linkSweep';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
+    await recordDealSheetLink(recordId, opportunityId, 'link-opportunity');
 
     // Write the edited BA back to the opportunity's Assigned BA field (F6/F9).
     // The CO write above already succeeded — a failure here is reported to the

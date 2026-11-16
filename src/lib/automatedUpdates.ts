@@ -59,6 +59,14 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
     log: 'Postgres review_outcome_log action confirm_ghl (before -> after with read back; switch in review_settings key confirm_apply)',
   },
   {
+    name: 'Link reconciliation sweep',
+    what: 'Keeps the opportunity\'s Property Record mirrors in line with the record (the Property Record is the master: linked_opportunity_id)',
+    trigger: 'Vercel cron /api/contract-team-reporting/link-sweep-cron every 15 min (records and opps updated since the last run) + /api/contract-team-reporting/link-sweep-cron/full daily 15:30 UTC (every record with linked_opportunity_id)',
+    fieldsWritten: 'Opportunity linked_property_record_id, linked_property_address, property_record_ctrt_link',
+    rule: 'Writes a mirror only when it is blank or differs from the record (address never blanked; CTRT link accepted as record?id=<record> or record?opp=<opp>, written as record?opp=<opp>). Report only, never fixed: a record whose linked_opportunity_id changed outside the Deal Sheet, an opp whose linked record no longer points back, a record linked to a missing opp. Reported cases listed under Link mismatch below and emailed (CTR alerts) once. Dry run (log only, no email) until switched on below.',
+    log: 'Postgres link_sweep_log (each field before -> after with read back, record last changed by / when from GHL, opp updatedAt); runs in link_sweep_runs; cases in link_sweep_mismatch; Deal Sheet link writes in link_sweep_dealsheet; switch in ctr_stamp_settings key link_sweep_apply',
+  },
+  {
     name: 'Finance Status change-date workflow (GHL)',
     what: 'GHL workflow stamps the date when Finance Status changes',
     trigger: 'GHL workflow: Opportunity custom field changed = Finance Status (finance_status__residential)',
