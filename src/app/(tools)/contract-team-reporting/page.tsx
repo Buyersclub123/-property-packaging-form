@@ -1421,7 +1421,10 @@ export default function ContractTeamReportingPage() {
   const allViews = useMemo(() => {
     // A saved public view with the same id as a preset replaces it.
     const overridden = new Set(publicViews.map((v) => v.id));
-    return [...PRESET_VIEWS.filter((p) => !overridden.has(p.id) && !hiddenViewIds.has(p.id)), ...publicViews.filter((v) => !hiddenViewIds.has(v.id)), ...myPersonalViews];
+    // Browser-held views only count as personal if they carry a personal- id; stale public-/builtin- copies
+    // left in localStorage are dropped (the server list is the truth for those).
+    const personal = myPersonalViews.filter((v) => v.id.startsWith('personal-') && !overridden.has(v.id));
+    return [...PRESET_VIEWS.filter((p) => !overridden.has(p.id) && !hiddenViewIds.has(p.id)), ...publicViews.filter((v) => !hiddenViewIds.has(v.id)), ...personal];
   }, [publicViews, myPersonalViews, hiddenViewIds]);
 
   const [activeViewId, setActiveViewId] = useState<string>(() => {
