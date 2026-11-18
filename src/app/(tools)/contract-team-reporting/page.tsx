@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from 'react';
+import UnlinkAcks from './UnlinkAcks';
+import CtrFilterGroups from '@/components/CtrFilterGroups';
+import { applyViewFilters, filterGroupsError, type ViewFilter, type ViewFilterGroup } from '@/lib/ctrViewFilters';
 import { createPortal } from 'react-dom';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
@@ -429,12 +432,6 @@ const DEFAULT_COLUMNS: ColumnDef[] = [
 // PRESET VIEWS — ported from Contract Team Reports Tool
 // ============================================================================
 
-interface ViewFilter {
-  field: RecordKey;
-  operator: 'equals' | 'not equals' | 'contains' | 'contains any' | 'not contains' | 'in' | 'not in' | 'is blank' | 'not blank';
-  value: string;
-}
-
 // "3338, 6030, 4650" = contains any of these terms (case-insensitive, trimmed).
 function containsTerms(pattern: string): string[] {
   return Array.from(new Set(pattern.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)));
@@ -465,6 +462,7 @@ interface ViewDef {
   name: string;
   section: ViewSection;
   filters: ViewFilter[];
+  filterGroups?: ViewFilterGroup[];
   columns: ColumnDef[];
   // sortBy/sortDir are the level-1 sort. They stay for backwards compatibility:
   // views saved before layered sorting existed only have these two.
@@ -1101,6 +1099,7 @@ function describeView(view: ViewDef): string {
     'not contains': 'does not contain',
     'in': 'is one of',
     'not in': 'is not one of',
+    'equals any': 'equals any of',
     'is blank': 'is blank',
     'not blank': 'is not blank',
   };
@@ -1114,6 +1113,12 @@ function describeView(view: ViewDef): string {
         : `${label} ${op} "${f.value}"`;
     });
   if (fieldFilters.length > 0) parts.push(`Filters: ${fieldFilters.join(', ')}`);
+  if (view.filterGroups?.length) {
+    const groups = view.filterGroups.map((g) => `${g.name}: (${g.filters.map((f) =>
+      `${getReportFieldLabel(f.field)} ${OPERATOR_TEXT[f.operator]}${f.operator === 'is blank' || f.operator === 'not blank' ? '' : ` "${f.value}"`}`
+    ).join(' AND ')})`);
+    parts.push(`AND match any group: ${groups.join(' OR ')}`);
+  }
 
   return parts.join(' | ');
 }
@@ -1132,41 +1137,6 @@ const MAX_SAVED_EXCLUSIONS = 25;
 function stripGeneratedExclusions(view: ViewDef): ViewDef {
   const filters = (view.filters || []).filter((f) => !(f.operator === 'not in' && f.value.split(',').length > MAX_SAVED_EXCLUSIONS));
   return filters.length === (view.filters || []).length ? view : { ...view, filters };
-}
-
-function applyViewFilters(records: OpportunityRecord[], filters: ViewFilter[]): OpportunityRecord[] {
-  return records.filter((record) =>
-    filters.every((f) => {
-      const cellValue = (record[f.field] || '').toLowerCase().trim();
-      const filterValue = f.value.toLowerCase().trim();
-      switch (f.operator) {
-        case 'equals':
-          return cellValue === filterValue;
-        case 'not equals':
-          return cellValue !== filterValue;
-        case 'contains':
-          return cellValue.includes(filterValue);
-        case 'contains any':
-          return containsAny(cellValue, filterValue);
-        case 'not contains':
-          return !cellValue.includes(filterValue);
-        case 'in': {
-          const list = filterValue.split(',').map((s) => s.trim());
-          return list.some((item) => cellValue === item || cellValue.includes(item));
-        }
-        case 'not in': {
-          const list = filterValue.split(',').map((s) => s.trim());
-          return !list.some((item) => cellValue === item || cellValue.includes(item));
-        }
-        case 'is blank':
-          return cellValue === '';
-        case 'not blank':
-          return cellValue !== '';
-        default:
-          return true;
-      }
-    })
-  );
 }
 
 // ============================================================================
@@ -1463,6 +1433,8 @@ export default function ContractTeamReportingPage() {
   // Property = Established on the B&P view). Shown in the builder so they can
   // be removed — otherwise they'd silently carry over into the new view.
   const [builderExtraFilters, setBuilderExtraFilters] = useState<ViewFilter[]>([]);
+  const [builderFilterGroups, setBuilderFilterGroups] = useState<ViewFilterGroup[]>([]);
+  const builderGroupsError = filterGroupsError(builderFilterGroups);
   // Draft mode: started from "+ New Report" — a clean slate not tied to any view
   const [builderDraft, setBuilderDraft] = useState(false);
 
@@ -1479,6 +1451,7 @@ export default function ContractTeamReportingPage() {
     setBuilderPipelines(new Set());
     setBuilderStages(new Set());
     setBuilderExtraFilters([]);
+    setBuilderFilterGroups([]);
     setBuilderName('');
     setBuilderSection('Custom');
     setExcludedFilters({});
@@ -1559,6 +1532,7 @@ export default function ContractTeamReportingPage() {
     const inherited = activeView.filters.filter((f) => !isPipelineSelection(f) && !(f.field === 'pipelineStage' && f.operator === 'in'));
     const promoted = gridFiltersToViewFilters();
     setBuilderExtraFilters([...inherited, ...promoted]);
+    setBuilderFilterGroups(activeView.filterGroups?.map((g) => ({ ...g, filters: g.filters.map((f) => ({ ...f })) })) || []);
     if (promoted.length > 0) {
       setExcludedFilters({});
       setTextExcludeFilters({});
@@ -1601,12 +1575,15 @@ export default function ContractTeamReportingPage() {
       ...activeView,
       name: builderDraft ? (builderName.trim() || 'New Report (unsaved)') : activeView.name,
       filters: buildFiltersFromBuilder(),
+      filterGroups: builderFilterGroups,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showViewBuilder, builderDraft, activeView, builderName, builderPipelines, builderStages, builderExtraFilters]);
+  }, [showViewBuilder, builderDraft, activeView, builderName, builderPipelines, builderStages, builderExtraFilters, builderFilterGroups]);
 
   // Persist a view definition to the right store (public = Redis, personal = localStorage)
   async function persistView(view: ViewDef, scope: 'public' | 'personal'): Promise<boolean> {
+    const groupsError = filterGroupsError(view.filterGroups);
+    if (groupsError) { alert(groupsError); return false; }
     if (scope === 'public') {
       const res = await fetch('/api/contract-team-reporting/views', {
         method: 'POST',
@@ -1642,6 +1619,7 @@ export default function ContractTeamReportingPage() {
         name,
         section: builderSection,
         filters: buildFiltersFromBuilder(),
+        filterGroups: builderFilterGroups,
         columns,
         sortBy: sortLevels[0]?.column ?? 'name',
         sortDir: sortLevels[0]?.dir ?? null,
@@ -1672,6 +1650,7 @@ export default function ContractTeamReportingPage() {
         name: builderName.trim() || activeView.name,
         section: builderSection,
         filters: buildFiltersFromBuilder(),
+        filterGroups: builderFilterGroups,
         columns,
         sortBy: sortLevels[0]?.column ?? 'name',
         sortDir: sortLevels[0]?.dir ?? null,
@@ -1691,8 +1670,11 @@ export default function ContractTeamReportingPage() {
     return builderDraft
       || JSON.stringify(stripWidths(columns)) !== JSON.stringify(stripWidths(activeView.columns))
       || JSON.stringify(sortLevels) !== JSON.stringify(viewSortLevels(activeView))
-      || (showViewBuilder && JSON.stringify(effectiveView.filters) !== JSON.stringify(activeView.filters));
-  }, [columns, sortLevels, activeView, builderDraft, showViewBuilder, effectiveView.filters]);
+      || (showViewBuilder && (
+        JSON.stringify(effectiveView.filters) !== JSON.stringify(activeView.filters)
+        || JSON.stringify(effectiveView.filterGroups || []) !== JSON.stringify(activeView.filterGroups || [])
+      ));
+  }, [columns, sortLevels, activeView, builderDraft, showViewBuilder, effectiveView.filters, effectiveView.filterGroups]);
   // Reload / close tab with unsaved changes: the browser asks first (changes are only kept after Save).
   useEffect(() => {
     if (!hasUnsavedViewChanges) return;
@@ -2175,15 +2157,19 @@ export default function ContractTeamReportingPage() {
         const data = await res.json();
         alert(`Save failed: ${data.error || res.status}`);
       } else {
+        const data = await res.json();
+        // Automatic follow-on changes have their own direct GHL read-backs.
+        // Display those verified values immediately, alongside the user edit.
+        const savedValues = { ...edits, ...(data.settled?.verifiedValues || {}) };
         // Remember what was saved so background refreshes can't visually revert
         // it while GHL's search index catches up (merge with any prior saves)
         const prior = recentlySaved.current.get(recordId);
         recentlySaved.current.set(recordId, {
           at: Date.now(),
-          values: { ...(prior?.values || {}), ...edits },
+          values: { ...(prior?.values || {}), ...savedValues },
         });
         setRecords((prev) =>
-          prev.map((r) => (r.id === recordId ? ({ ...r, ...edits } as OpportunityRecord) : r))
+          prev.map((r) => (r.id === recordId ? ({ ...r, ...savedValues } as OpportunityRecord) : r))
         );
         setEditedRows((prev) => {
           const next = { ...prev };
@@ -2191,7 +2177,6 @@ export default function ContractTeamReportingPage() {
           return next;
         });
         // Settlement confirmed ticked: show what the automated update did (or would do in dry run).
-        const data = await res.json().catch(() => ({}));
         if (data.settled) {
           const steps = (data.settled.steps || []) as { step: string; result: string; before: string; after: string }[];
           alert(`Settlement confirmed saved for ${original.opportunityName || original.name}.${data.settled.dryRun ? '\nDry run: the stage and Property Record were NOT changed (switch in Admin > Automated updates).' : ''}\n\n${steps.map((s) => `${s.step}: ${s.result}\n   ${s.before} -> ${s.after}`).join('\n')}`);
@@ -2433,7 +2418,7 @@ export default function ContractTeamReportingPage() {
   const viewScopedRecords = useMemo(
     () => (oppFilter
       ? records.filter((r) => r.id === oppFilter)
-      : applyViewFilters(records, includeConstruction ? effectiveView.filters.filter((f) => !isExcludeConstruction(f)) : effectiveView.filters)),
+      : applyViewFilters(records, includeConstruction ? effectiveView.filters.filter((f) => !isExcludeConstruction(f)) : effectiveView.filters, effectiveView.filterGroups)),
     [records, effectiveView, oppFilter, includeConstruction]
   );
 
@@ -2726,6 +2711,7 @@ export default function ContractTeamReportingPage() {
           <h1 className="text-lg font-bold whitespace-nowrap" title={`Contract Team Reporting Tool (${sortedRecords.length} records)`}>
             {headerCompact >= 1 ? 'CTRT' : 'Contract Team Reporting Tool'}
           </h1>
+          <UnlinkAcks />
           {headerCompact < 4 && <span className="text-xs opacity-60">{sortedRecords.length} records</span>}
 
           {/* Edit Mode toggle (hidden — Shift+double-click logo to reveal) */}
@@ -3191,6 +3177,12 @@ export default function ContractTeamReportingPage() {
                 >
                   + Add filter
                 </button>
+
+                <div className={t.headerText}>
+                  <CtrFilterGroups groups={builderFilterGroups} onChange={setBuilderFilterGroups}
+                    fields={allAvailableKeys} label={getReportFieldLabel} options={dropdownOptions} />
+                </div>
+                {builderGroupsError && <div role="alert" className="mt-2 text-xs text-red-500">{builderGroupsError}</div>}
 
                 {/* Column colours & end states */}
                 <div className={`text-[10px] font-bold ${t.headerText} mt-3 mb-1 border-t ${t.inputBorder} pt-2`}>4. COLUMN COLOURS & END STATES</div>

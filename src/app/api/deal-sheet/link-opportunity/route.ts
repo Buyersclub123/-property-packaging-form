@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { updateCachedRecord } from '@/lib/dealSheetCache';
 import { recordDealSheetLink } from '@/lib/linkSweep';
+import { readRecordLink, writeOppMirrors, clearOppMirrors, verifyBothSides, mirrorValues, blankMirrors, integrityResponse } from '@/lib/dealSheetLinkSync';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -85,6 +86,8 @@ export async function POST(request: NextRequest) {
         properties.offer_price_build = cleanBuild;
       }
     }
+    const before = await readRecordLink(recordId);
+    if (!before) return NextResponse.json({ error: 'LINK INTEGRITY FAILURE - Property Record not found' }, { status: 404 });
     const payload = JSON.stringify({ properties });
 
     let response: Response | null = null;
@@ -114,6 +117,26 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     await recordDealSheetLink(recordId, opportunityId, 'link-opportunity');
+
+    // Both sides in one action: the opp's mirrors from the record, a previously linked opp's mirrors cleared,
+    // then both sides read back.
+    const oldOpp = before.opp && before.opp !== opportunityId ? before.opp : '';
+    try {
+      await writeOppMirrors(opportunityId, recordId, before.address);
+      if (oldOpp) await clearOppMirrors(oldOpp);
+      await verifyBothSides({
+        recordId,
+        recordOpp: opportunityId,
+        opps: [
+          { oppId: opportunityId, label: 'Linked', want: mirrorValues(opportunityId, recordId, before.address) },
+          ...(oldOpp ? [{ oppId: oldOpp, label: 'Previous', want: blankMirrors() }] : []),
+        ],
+      });
+    } catch (e) {
+      console.error('Deal Sheet link integrity (link-opportunity):', e);
+      await updateCachedRecord(recordId);
+      return NextResponse.json(integrityResponse(e), { status: 502 });
+    }
 
     // Write the edited BA back to the opportunity's Assigned BA field (F6/F9).
     // The CO write above already succeeded — a failure here is reported to the

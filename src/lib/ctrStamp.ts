@@ -1,8 +1,9 @@
 // Nightly change-date stamp (JT approved 1/11). For each tracked field it compares the current GHL value
-// with last night's snapshot. Where the value changed AND the paired change-date is blank, it writes today's
-// date. It never overwrites a date that is already set. The first sight of a record only records a baseline.
+// with last night's snapshot. Where the value changed AND the paired change-date is blank, it writes the date
+// the change was first detected (the first dry-run log row for it, else today). It never overwrites a date
+// that is already set. The first sight of a record only records a baseline.
 // Runs dry (log only) until the "apply" setting is switched on in Admin > Automated updates. Every decision is
-// logged in ctr_stamp_log.
+// logged in ctr_stamp_log. backdateStamps() is the one-off catch-up from the dry-run log (JT 17/11).
 import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
@@ -21,7 +22,7 @@ const RECORD_FIELDS: Record<string, string> = {
   status: 'status_change_date',
 };
 
-type Tracked = { object: 'opportunity' | 'property_record'; recordId: string; field: string; value: string; dateField: string; dateValue: string };
+type Tracked = { object: 'opportunity' | 'property_record'; recordId: string; name: string; field: string; value: string; dateField: string; dateValue: string };
 export type StampSummary = { runId: string; dryRun: boolean; checked: number; baselined: number; stamped: number; skippedDateSet: number; failed: number; errors: string[] };
 
 const headers = () => ({ Authorization: `Bearer ${TOKEN}`, Version: '2021-07-28', 'Content-Type': 'application/json' });
@@ -49,6 +50,9 @@ function str(v: unknown): string {
   return String(v);
 }
 
+const keyOf = (object: string, recordId: string, field: string) => `${object}|${recordId}|${field}`;
+const sydneyToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+
 async function readOpportunities(): Promise<Tracked[]> {
   const out: Tracked[] = [];
   for (const pipelineId of REPORTING_PIPELINE_IDS) {
@@ -68,13 +72,13 @@ async function readOpportunities(): Promise<Tracked[]> {
       const res = await ghlFetch(url.toString(), { headers: headers(), cache: 'no-store' }, 'ctr-stamp-opps');
       if (!res.ok) throw new Error(`GHL opportunities ${res.status}`);
       const data = await res.json();
-      const opps = (data.opportunities || []) as { id: string; customFields?: { id: string; fieldValueString?: string; fieldValueDate?: number; fieldValue?: unknown; value?: unknown }[] }[];
+      const opps = (data.opportunities || []) as { id: string; name?: string; customFields?: { id: string; fieldValueString?: string; fieldValueDate?: number; fieldValue?: unknown; value?: unknown }[] }[];
       for (const o of opps) {
         const cf = (id: string) => o.customFields?.find((c) => c.id === id);
         const v = cf(OPP_FIELD.id);
         const d = cf(OPP_FIELD.dateId);
         out.push({
-          object: 'opportunity', recordId: o.id, field: OPP_FIELD.field,
+          object: 'opportunity', recordId: o.id, name: o.name || '', field: OPP_FIELD.field,
           value: v?.fieldValueString || str(v?.fieldValue ?? v?.value),
           dateField: OPP_FIELD.dateField,
           dateValue: d?.fieldValueDate ? String(d.fieldValueDate) : str(d?.fieldValueString ?? d?.fieldValue ?? d?.value),
@@ -102,7 +106,7 @@ async function readRecords(): Promise<Tracked[]> {
       const p: Record<string, string> = {};
       for (const [k, v] of Object.entries(r.properties || {})) p[k === PROPERTY_LINK_FIELD_ID ? 'linked_opportunity_id' : k.split('.').pop() || k] = str(v);
       for (const [field, dateField] of Object.entries(RECORD_FIELDS)) {
-        out.push({ object: 'property_record', recordId: r.id, field, value: p[field] || '', dateField, dateValue: p[dateField] || '' });
+        out.push({ object: 'property_record', recordId: r.id, name: p.property_address || '', field, value: p[field] || '', dateField, dateValue: p[dateField] || '' });
       }
     }
     if (records.length < 100) break;
@@ -121,22 +125,57 @@ async function writeDate(t: Tracked, iso: string): Promise<void> {
   if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
 }
 
+function toYmd(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v === 'number') return new Date(v).toISOString().slice(0, 10);
+  const s = String(v);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  if (/^\d+$/.test(s)) return new Date(Number(s)).toISOString().slice(0, 10);
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? s : d.toISOString().slice(0, 10);
+}
+
+async function readBackDate(t: Tracked): Promise<string> {
+  if (t.object === 'opportunity') {
+    const res = await ghlFetch(`${BASE}/opportunities/${t.recordId}`, { headers: headers(), cache: 'no-store' }, 'ctr-stamp-readback-opp');
+    if (!res.ok) throw new Error(`read back HTTP ${res.status}`);
+    const cf = ((await res.json()).opportunity?.customFields || []) as { id: string; fieldValueDate?: number; fieldValueString?: string; fieldValue?: unknown; value?: unknown }[];
+    const d = cf.find((c) => c.id === OPP_FIELD.dateId);
+    return toYmd(d?.fieldValueDate ?? d?.fieldValueString ?? d?.fieldValue ?? d?.value);
+  }
+  const res = await ghlFetch(`${BASE}/objects/${PROPERTY_OBJECT_ID}/records/${t.recordId}?locationId=${LOC}`, { headers: headers(), cache: 'no-store' }, 'ctr-stamp-readback-record');
+  if (!res.ok) throw new Error(`read back HTTP ${res.status}`);
+  const props = ((await res.json()).record?.properties || {}) as Record<string, unknown>;
+  const k = Object.keys(props).find((x) => (x.split('.').pop() || x) === t.dateField);
+  return toYmd(k ? props[k] : '');
+}
+
+// First detection (Sydney date) of each still-pending change: the earliest dry-run "would write" row whose
+// old value is still the snapshot value (a dry run keeps the snapshot, so the change is logged every night).
+async function firstDetections(): Promise<Map<string, string>> {
+  const rows = (await getDb()`SELECT l.object, l.record_id, l.field, min(l.date_written) AS first
+    FROM ctr_stamp_log l JOIN ctr_stamp_snapshots s ON s.object = l.object AND s.record_id = l.record_id AND s.field = l.field AND s.value = coalesce(l.old_value, '')
+    WHERE l.dry_run AND l.result LIKE 'dry run%' AND l.date_written IS NOT NULL
+    GROUP BY 1, 2, 3`) as { object: string; record_id: string; field: string; first: string }[];
+  return new Map(rows.map((r) => [keyOf(r.object, r.record_id, r.field), r.first]));
+}
+
 export async function runStamp(opts: { forceDryRun?: boolean } = {}): Promise<StampSummary> {
   await ensureStampTables();
   const sql = getDb();
   const dryRun = opts.forceDryRun || !(await stampApplyEnabled());
   const runId = new Date().toISOString();
   const summary: StampSummary = { runId, dryRun, checked: 0, baselined: 0, stamped: 0, skippedDateSet: 0, failed: 0, errors: [] };
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
-  const iso = new Date(today).toISOString();
+  const today = sydneyToday();
+  const first = dryRun ? new Map<string, string>() : await firstDetections();
 
   const tracked = [...(await readOpportunities()), ...(await readRecords())];
   const snaps = (await sql`SELECT object, record_id, field, value FROM ctr_stamp_snapshots`) as { object: string; record_id: string; field: string; value: string }[];
-  const prev = new Map(snaps.map((s) => [`${s.object}|${s.record_id}|${s.field}`, s.value]));
+  const prev = new Map(snaps.map((s) => [keyOf(s.object, s.record_id, s.field), s.value]));
 
   for (const t of tracked) {
     summary.checked++;
-    const before = prev.get(`${t.object}|${t.recordId}|${t.field}`);
+    const before = prev.get(keyOf(t.object, t.recordId, t.field));
     if (before === undefined) summary.baselined++;
     else if (before !== t.value) {
       if (t.dateValue) {
@@ -144,12 +183,13 @@ export async function runStamp(opts: { forceDryRun?: boolean } = {}): Promise<St
         await sql`INSERT INTO ctr_stamp_log (run_id, object, record_id, field, old_value, new_value, date_field, date_written, dry_run, result)
           VALUES (${runId}, ${t.object}, ${t.recordId}, ${t.field}, ${before}, ${t.value}, ${t.dateField}, ${null}, ${dryRun}, 'skipped: date already set')`;
       } else {
+        const date = first.get(keyOf(t.object, t.recordId, t.field)) || today;
         let result = dryRun ? 'dry run: would write' : 'written';
         if (!dryRun) {
-          try { await writeDate(t, iso); summary.stamped++; } catch (e) { result = `failed: ${e instanceof Error ? e.message : String(e)}`; summary.failed++; summary.errors.push(`${t.recordId}: ${result}`); }
+          try { await writeDate(t, new Date(date).toISOString()); summary.stamped++; } catch (e) { result = `failed: ${e instanceof Error ? e.message : String(e)}`; summary.failed++; summary.errors.push(`${t.recordId}: ${result}`); }
         } else summary.stamped++;
         await sql`INSERT INTO ctr_stamp_log (run_id, object, record_id, field, old_value, new_value, date_field, date_written, dry_run, result)
-          VALUES (${runId}, ${t.object}, ${t.recordId}, ${t.field}, ${before}, ${t.value}, ${t.dateField}, ${today}, ${dryRun}, ${result})`;
+          VALUES (${runId}, ${t.object}, ${t.recordId}, ${t.field}, ${before}, ${t.value}, ${t.dateField}, ${date}, ${dryRun}, ${result})`;
         // A failed write keeps the old snapshot so the change is retried next night.
         // A dry run keeps it too, so the change is still stamped once writing is switched on.
         if (result.startsWith('failed') || dryRun) continue;
@@ -161,4 +201,54 @@ export async function runStamp(opts: { forceDryRun?: boolean } = {}): Promise<St
   await sql`INSERT INTO ctr_stamp_log (run_id, object, record_id, field, date_field, dry_run, result)
     VALUES (${runId}, 'run', '-', '-', '-', ${dryRun}, ${`summary: checked ${summary.checked}, baselined ${summary.baselined}, stamped ${summary.stamped}, date already set ${summary.skippedDateSet}, failed ${summary.failed}`})`;
   return summary;
+}
+
+export type BackdateItem = { object: string; recordId: string; name: string; field: string; from: string; to: string; dateField: string; firstDetected: string; result?: string; readBack?: string };
+export type BackdateSummary = {
+  runId: string; write: boolean; since: string;
+  counts: { pending: number; toWrite: number; written: number; failed: number; preSince: number; dateAlreadySet: number; noLongerChanged: number };
+  items: BackdateItem[]; preSince: BackdateItem[];
+};
+
+// One-off catch-up (JT 17/11): every change in the dry-run log first detected on/after `since` whose change-date
+// is still blank gets the date of first detection. Set dates are never touched. Changes first detected before
+// `since` are listed only. write=false is a dry run; write=true writes each date and reads it back from GHL.
+export async function backdateStamps(opts: { since: string; write: boolean }): Promise<BackdateSummary> {
+  await ensureStampTables();
+  const sql = getDb();
+  const runId = `backdate ${new Date().toISOString()}`;
+  const first = await firstDetections();
+  const tracked = [...(await readOpportunities()), ...(await readRecords())];
+  const snaps = (await sql`SELECT object, record_id, field, value FROM ctr_stamp_snapshots`) as { object: string; record_id: string; field: string; value: string }[];
+  const prev = new Map(snaps.map((s) => [keyOf(s.object, s.record_id, s.field), s.value]));
+  const out: BackdateSummary = { runId, write: opts.write, since: opts.since, counts: { pending: first.size, toWrite: 0, written: 0, failed: 0, preSince: 0, dateAlreadySet: 0, noLongerChanged: 0 }, items: [], preSince: [] };
+
+  for (const t of tracked) {
+    const firstDetected = first.get(keyOf(t.object, t.recordId, t.field));
+    if (!firstDetected) continue;
+    const from = prev.get(keyOf(t.object, t.recordId, t.field)) ?? '';
+    const item: BackdateItem = { object: t.object, recordId: t.recordId, name: t.name, field: t.field, from, to: t.value, dateField: t.dateField, firstDetected };
+    if (from === t.value) { out.counts.noLongerChanged++; continue; }
+    if (t.dateValue) { out.counts.dateAlreadySet++; continue; }
+    if (firstDetected < opts.since) { out.counts.preSince++; out.preSince.push(item); continue; }
+    out.counts.toWrite++;
+    out.items.push(item);
+    if (!opts.write) continue;
+    try {
+      await writeDate(t, new Date(firstDetected).toISOString());
+      item.readBack = await readBackDate(t);
+      item.result = item.readBack === firstDetected ? 'written, read back' : `read back mismatch: ${item.readBack || '(blank)'}`;
+    } catch (e) {
+      item.result = `failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    const ok = item.result === 'written, read back';
+    if (ok) out.counts.written++; else out.counts.failed++;
+    await sql`INSERT INTO ctr_stamp_log (run_id, object, record_id, field, old_value, new_value, date_field, date_written, dry_run, result)
+      VALUES (${runId}, ${t.object}, ${t.recordId}, ${t.field}, ${from}, ${t.value}, ${t.dateField}, ${firstDetected}, false, ${`backdate: ${item.result}`})`;
+    if (ok) await sql`INSERT INTO ctr_stamp_snapshots (object, record_id, field, value) VALUES (${t.object}, ${t.recordId}, ${t.field}, ${t.value})
+      ON CONFLICT (object, record_id, field) DO UPDATE SET value = EXCLUDED.value, seen_at = now()`;
+  }
+  await sql`INSERT INTO ctr_stamp_log (run_id, object, record_id, field, date_field, dry_run, result)
+    VALUES (${runId}, 'run', '-', '-', '-', ${!opts.write}, ${`backdate since ${opts.since}: to write ${out.counts.toWrite}, written ${out.counts.written}, failed ${out.counts.failed}, before ${opts.since} ${out.counts.preSince}, date already set ${out.counts.dateAlreadySet}, no longer changed ${out.counts.noLongerChanged}`})`;
+  return out;
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { HANDBACK_STAGES } from '@/lib/ghlPipelines';
 
 // ============================================================================
 // EOI Link Modal — create or edit a client link on a Deal Sheet record.
@@ -68,6 +69,8 @@ export interface EoiUpdatePayload {
   offerPriceBuild?: string;
   closingDate: string;
   transitionType: 'client_edited' | 'reassigned' | 'reverted_to_speculative' | 'client_removed';
+  handbackStageId?: string;
+  unlinkReason?: string;
   writeBaToOpportunity: boolean;
   revertStatus?: string;
   offerStatus?: string;
@@ -219,6 +222,7 @@ export default function EoiLinkModal({
   const [delinkReason, setDelinkReason] = useState('');
   const [delinkReasonOptions, setDelinkReasonOptions] = useState<string[]>([]);
   const [delinkIsOther, setDelinkIsOther] = useState(false);
+  const [handbackStageId, setHandbackStageId] = useState('');
   // D28: new price fields for Increase Offer flow
   const [newPrice, setNewPrice] = useState('');
   const [keepPriceAsIs, setKeepPriceAsIs] = useState(false);
@@ -611,10 +615,44 @@ export default function EoiLinkModal({
       transitionType: isFullRemove ? 'client_removed' : 'reverted_to_speculative',
       writeBaToOpportunity: false,
       revertStatus: isFullRemove ? revertStatus : undefined,
+      ...(record.linkedOpportunityId ? { handbackStageId, unlinkReason: delinkReason.trim() } : {}),
     });
     setSubmitting(false);
     if (!ok) setSubmitError('Failed to remove client. Try again or cancel.');
   }
+
+  // Unlink handback (JT 17/11): where the opportunity goes back to - Property Team only.
+  const renderHandback = (withReason: boolean) =>
+    record.linkedOpportunityId ? (
+      <div className="border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 rounded p-3 text-xs space-y-2 mb-3">
+        <label className="block font-semibold text-amber-900 dark:text-amber-200">Where does the opportunity go back to?</label>
+        <select
+          value={handbackStageId}
+          onChange={(e) => setHandbackStageId(e.target.value)}
+          className="w-full border rounded px-2 py-1 text-xs bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+        >
+          <option value="">Choose a Proposals band or On Hold…</option>
+          {HANDBACK_STAGES.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <div className="text-[10px] text-amber-800 dark:text-amber-300">Property Team pipeline only.</div>
+        {withReason && (
+          <input
+            value={delinkReason}
+            onChange={(e) => setDelinkReason(e.target.value)}
+            placeholder="Reason for unlinking…"
+            className="w-full border rounded px-2 py-1 text-xs bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+          />
+        )}
+      </div>
+    ) : null;
+
+  const handbackMissing = (applies: boolean) => applies && !!record.linkedOpportunityId && (!handbackStageId || !delinkReason.trim());
+
+  const handbackBullet = record.linkedOpportunityId ? (
+    <li>Write a note to the client&apos;s contact, move the opportunity to the stage chosen above and clear its Finance Status (+ date), Registered Address, Total Purchase Price, Agent/Builder Details, settlement dates and link fields</li>
+  ) : null;
 
   // D28: Edit EOI — update BA/date/price then open composer
   async function handleIncreaseConfirm(linkOnly = false) {
@@ -847,6 +885,7 @@ export default function EoiLinkModal({
         closingDate: '',
         transitionType: 'reverted_to_speculative',
         writeBaToOpportunity: false,
+        ...(record.linkedOpportunityId ? { handbackStageId, unlinkReason: delinkReason.trim() } : {}),
       });
       setSubmitting(false);
       if (!ok) { setSubmitError('Failed to update record'); return; }
@@ -1254,15 +1293,15 @@ export default function EoiLinkModal({
                 </button>
 
                 <div className={`text-[10px] font-semibold uppercase tracking-wide mt-4 ${cls.sub}`}>Unlink</div>
-                <button onClick={() => { setEditAction('unlink_lost'); setDelinkReason(''); setDelinkIsOther(false); setStep('unlink_lost'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                <button onClick={() => { setEditAction('unlink_lost'); setDelinkReason(''); setDelinkIsOther(false); setHandbackStageId(''); setStep('unlink_lost'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
                   <span className="font-medium">Unlink — change status to 06 Close Lost</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Clears offer data</span>
                 </button>
-                <button onClick={() => { setEditAction('unlink_available'); setDelinkReason(''); setDelinkIsOther(false); setStep('unlink_available'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                <button onClick={() => { setEditAction('unlink_available'); setDelinkReason(''); setDelinkIsOther(false); setHandbackStageId(''); setStep('unlink_available'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
                   <span className="font-medium">Unlink — change status to 01 Available</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Return to available — requires a reason</span>
                 </button>
-                <button onClick={() => { setEditAction('unlink_test'); setStep('unlink_test'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
+                <button onClick={() => { setEditAction('unlink_test'); setDelinkReason(''); setHandbackStageId(''); setStep('unlink_test'); }} className={`w-full text-left ${cls.btn} py-2 border border-red-300 dark:border-red-700`}>
                   <span className="font-medium">Unlink — change status to 07 Test Record</span>
                   <span className={`block text-[10px] mt-0.5 ${cls.sub}`}>Strips all linked info</span>
                 </button>
@@ -1678,6 +1717,9 @@ export default function EoiLinkModal({
                     )}
                   </div>
 
+                  {reassignIsSpeculative && renderHandback(true)}
+                  {reassignIsSpeculative && handbackBullet && <ul className={`text-xs list-disc ml-4 mb-3 ${cls.sub}`}>{handbackBullet}</ul>}
+
                   {!reassignIsSpeculative && (
                     <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2 items-center text-xs mb-3">
                       <span className={cls.label}>Assigned BA *</span>
@@ -1750,7 +1792,7 @@ export default function EoiLinkModal({
                   )}
                   <button
                     onClick={() => { setSkipComposer(true); handleReassignConfirm(true); }}
-                    disabled={submitting || (!reassignIsSpeculative && editBA.trim() === '') || !!(!reassignIsSpeculative && reassignSelected && (existingLinks[reassignSelected.id] || []).filter((r) => r.id !== record.id).length > 0 && !dupeAcknowledged)}
+                    disabled={submitting || (!reassignIsSpeculative && editBA.trim() === '') || handbackMissing(reassignIsSpeculative) || !!(!reassignIsSpeculative && reassignSelected && (existingLinks[reassignSelected.id] || []).filter((r) => r.id !== record.id).length > 0 && !dupeAcknowledged)}
                     className={cls.btnPrimary}
                   >
                     {submitting && skipComposer ? 'Saving...' : reassignIsSpeculative ? 'Confirm' : 'Confirm (link only)'}
@@ -1817,8 +1859,10 @@ export default function EoiLinkModal({
                   <li>Remove the linked opportunity, BA, price, and close date from the CO</li>
                   <li>Clear the offer price and offer status</li>
                   <li>Change the CO status to 06 Close Lost</li>
+                  {handbackBullet}
                 </ul>
               </div>
+              {renderHandback(false)}
 
               {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
             </div>
@@ -1839,6 +1883,8 @@ export default function EoiLinkModal({
                       transitionType: 'client_removed',
                       writeBaToOpportunity: false,
                       revertStatus: '06_remove_lost',
+                      handbackStageId,
+                      unlinkReason: delinkReason.trim(),
                     });
                     if (!ok) { setSubmitError('Failed to update record'); setSubmitting(false); return; }
                     try {
@@ -1864,7 +1910,7 @@ export default function EoiLinkModal({
                   }
                   setSubmitting(false);
                 }}
-                disabled={submitting || !delinkReason.trim()}
+                disabled={submitting || !delinkReason.trim() || (!!record.linkedOpportunityId && !handbackStageId)}
                 className="px-4 py-2 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {submitting ? 'Processing...' : 'Confirm — Mark as Lost'}
@@ -1929,8 +1975,10 @@ export default function EoiLinkModal({
                   <li>Remove the linked opportunity, BA, price, and close date from the CO</li>
                   <li>Clear the offer price and offer status</li>
                   <li>Change the CO status to 01 Available</li>
+                  {handbackBullet}
                 </ul>
               </div>
+              {renderHandback(false)}
 
               {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
             </div>
@@ -1951,6 +1999,8 @@ export default function EoiLinkModal({
                       transitionType: 'client_removed',
                       writeBaToOpportunity: false,
                       revertStatus: '01_available',
+                      handbackStageId,
+                      unlinkReason: delinkReason.trim(),
                     });
                     if (!ok) { setSubmitError('Failed to update record'); setSubmitting(false); return; }
                     try {
@@ -1976,7 +2026,7 @@ export default function EoiLinkModal({
                   }
                   setSubmitting(false);
                 }}
-                disabled={submitting || !delinkReason.trim()}
+                disabled={submitting || !delinkReason.trim() || (!!record.linkedOpportunityId && !handbackStageId)}
                 className="px-4 py-2 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {submitting ? 'Processing...' : 'Confirm — Return to Available'}
@@ -2008,8 +2058,10 @@ export default function EoiLinkModal({
                   <li>Remove the linked opportunity, BA, price, and close date from the CO</li>
                   <li>Clear the offer price and offer status</li>
                   <li>Change the CO status to 07 Test Record</li>
+                  {handbackBullet}
                 </ul>
               </div>
+              {renderHandback(true)}
 
               {submitError && <div className="text-[10px] text-red-400 mt-2">{submitError}</div>}
             </div>
@@ -2030,6 +2082,8 @@ export default function EoiLinkModal({
                       transitionType: 'client_removed',
                       writeBaToOpportunity: false,
                       revertStatus: '07_test_record',
+                      handbackStageId,
+                      unlinkReason: delinkReason.trim(),
                     });
                     if (!ok) { setSubmitError('Failed to update record'); setSubmitting(false); return; }
                     // Log to activity history
@@ -2055,7 +2109,7 @@ export default function EoiLinkModal({
                   }
                   setSubmitting(false);
                 }}
-                disabled={submitting}
+                disabled={submitting || (!!record.linkedOpportunityId && (!handbackStageId || !delinkReason.trim()))}
                 className="px-4 py-2 rounded text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {submitting ? 'Processing...' : 'Confirm — Move to Test'}
@@ -2318,12 +2372,14 @@ export default function EoiLinkModal({
                     </div>
                   </label>
                 </div>
+                {renderHandback(true)}
+                {handbackBullet && <ul className="list-disc ml-4 mb-3">{handbackBullet}</ul>}
                 <div className={`mb-3 ${dark ? 'text-gray-500' : 'text-gray-400'}`} style={{ fontSize: 10 }}>
                   EOI send history is retained in the database for reporting and can be viewed in the EOI composer.
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => setShowRemoveConfirm(false)} className={cls.btn}>Cancel</button>
-                  <button onClick={handleRemoveClient} disabled={submitting} className="px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <button onClick={handleRemoveClient} disabled={submitting || handbackMissing(true)} className="px-3 py-1.5 rounded text-xs font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     {submitting ? 'Removing...' : 'Confirm removal'}
                   </button>
                 </div>

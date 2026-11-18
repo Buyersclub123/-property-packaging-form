@@ -4,7 +4,7 @@ import { sendCtrAlert } from '../alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { getDb } from '@/lib/db';
 import { emailFromHeaders } from '@/lib/tileAccess';
-import { SETTLEMENT_CONFIRMED_FIELD_ID, SETTLEMENT_CONFIRMED_KEY, readOpportunity, runSettled } from '@/lib/ctrSettled';
+import { HANDOVER_STAGE, SETTLEMENT_CONFIRMED_FIELD_ID, SETTLEMENT_CONFIRMED_KEY, readOpportunity, runSettled } from '@/lib/ctrSettled';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -164,7 +164,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No changes to save' }, { status: 400 });
     }
 
-    const oppBefore = settledTicked ? await readOpportunity(opportunityId) : null;
+    // Construction stage set to handover in CTRT -> Settled (JT 17/11).
+    const handoverSet = !settledTicked && propertyProps.construction_stage === HANDOVER_STAGE;
+    const oppBefore = settledTicked || handoverSet ? await readOpportunity(opportunityId) : null;
 
     // 1. Update opportunity custom fields
     if (Object.keys(payload).length > 0) {
@@ -222,9 +224,9 @@ export async function PUT(request: NextRequest) {
       await logEdits(emailFromHeaders(request.headers), opportunityId, propertyRecordId, before, propertyProps);
     }
 
-    // 3. Settlement confirmed ticked -> Property Team > Settled + Property Record 04_settled (dry run until switched on).
-    const settled = settledTicked
-      ? await runSettled({ email: emailFromHeaders(request.headers), opportunityId, propertyRecordId: propertyRecordId || null, oppBefore, statusInSameSave: 'status' in propertyProps })
+    // 3. Settlement confirmed ticked, or Construction stage set to handover -> the Settled rule in ctrSettled (dry run until switched on).
+    const settled = settledTicked || handoverSet
+      ? await runSettled({ email: emailFromHeaders(request.headers), opportunityId, propertyRecordId: propertyRecordId || null, oppBefore, statusInSameSave: 'status' in propertyProps, trigger: settledTicked ? 'tick' : 'handover' })
       : undefined;
 
     return NextResponse.json({ success: true, settled });

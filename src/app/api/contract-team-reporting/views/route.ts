@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { emailFromHeaders } from '@/lib/tileAccess';
 import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
+import { filterGroupsError, type ViewFilterGroup } from '@/lib/ctrViewFilters';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -27,6 +28,7 @@ interface SavedView {
   name: string;
   section: 'Standard' | 'Custom' | 'Exception';
   filters: SavedViewFilter[];
+  filterGroups?: ViewFilterGroup[];
   columns: SavedColumnDef[];
   // Level-1 sort. Kept for views saved before layered sorting existed.
   sortBy: string;
@@ -72,6 +74,8 @@ export async function POST(request: NextRequest) {
     if (!view?.id || !view?.name) {
       return NextResponse.json({ error: 'view.id and view.name are required' }, { status: 400 });
     }
+    const groupsError = filterGroupsError(view.filterGroups);
+    if (groupsError) return NextResponse.json({ error: groupsError }, { status: 400 });
     const views = await loadViews();
     const idx = views.findIndex((v) => v.id === view.id);
     view.updatedAt = new Date().toISOString();

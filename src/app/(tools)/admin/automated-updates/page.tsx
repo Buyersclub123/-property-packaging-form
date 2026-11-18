@@ -16,6 +16,7 @@ const MISMATCH_LABEL: Record<string, string> = {
   hand_changed: 'Link changed by hand in GHL (not via the Deal Sheet)',
   not_pointing_back: 'Linked record no longer points back',
   opp_missing: 'Record links to a missing opportunity',
+  address_mismatch: 'Registered Address suburb/postcode differs from the record',
 };
 
 // Admin > Automated updates: every non-human write path into GHL, plus the nightly stamp's switch and log.

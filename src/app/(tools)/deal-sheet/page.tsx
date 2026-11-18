@@ -757,6 +757,13 @@ export default function DealSheetPage() {
   const [eoiModalRecord, setEoiModalRecord] = useState<DealRecord | null>(null);
   const [eoiModalMode, setEoiModalMode] = useState<'create' | 'edit'>('create');
 
+  // Link writes check both sides (record + opportunity); a miss is shown loudly, never swallowed.
+  const loudFail = async (res: Response): Promise<false> => {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; problems?: string[] };
+    alert(`${data.error || `Deal Sheet write failed (HTTP ${res.status})`}${data.problems?.length ? `\n\n- ${data.problems.join('\n- ')}` : ''}`);
+    return false;
+  };
+
   const handleEoiLink = async (payload: EoiLinkPayload): Promise<boolean> => {
     if (!eoiModalRecord) return false;
     const recordId = eoiModalRecord.id;
@@ -777,7 +784,7 @@ export default function DealSheetPage() {
           writeBaToOpportunity: payload.writeBaToOpportunity,
         }),
       });
-      if (!res.ok) return false;
+      if (!res.ok) return loudFail(res);
       const resData = await res.json();
       if (resData.baWriteBackOk !== true) {
         alert('Linked OK, but writing the Assigned BA back to the opportunity failed — update it in GHL manually.');
@@ -841,7 +848,7 @@ export default function DealSheetPage() {
             closingDate: '',
           }),
         });
-        if (!res.ok) return false;
+        if (!res.ok) return loudFail(res);
         const data = await res.json();
         recentlyUpdatedIds.current.set(recordId, Date.now());
         setRecords((prev) =>
@@ -920,8 +927,12 @@ export default function DealSheetPage() {
           ...payload,
         }),
       });
-      if (!res.ok) return false;
+      if (!res.ok) return loudFail(res);
       const data = await res.json();
+      if (data.handback) {
+        window.dispatchEvent(new Event('unlink-acks-changed'));
+        if (data.ackError) alert(`Unlinked OK, but the acknowledgement item was NOT saved: ${data.ackError}`);
+      }
       recentlyUpdatedIds.current.set(recordId, Date.now());
       const priceNum = parseFloat(payload.totalPurchasePrice);
       const priceDisplay = isNaN(priceNum) ? payload.totalPurchasePrice : '$' + priceNum.toLocaleString('en-AU');

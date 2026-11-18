@@ -49,6 +49,18 @@ export const PROPERTY_TEAM_PRICE_BRACKET_STAGE_IDS: string[] = [
   '5aaeb8c3-4680-438f-b545-21e5b9e92582', // Proposals | $800k+ | PERSONAL
 ];
 
+// Where an unlinked opportunity goes back to (JT 17/11): a Proposals price band or On Hold, Property Team only.
+export const ON_HOLD_STAGE_ID = 'cd731ab3-ef71-4889-ad1b-4990da46eefd';
+export const HANDBACK_STAGES: { id: string; name: string }[] = [
+  { id: '5178d032-35d5-4b8e-8694-48a1afb0145a', name: 'Proposals | $300k - $400k | PERSONAL' },
+  { id: '1ab3d6d1-e7cb-44c2-89ae-c32c663a4c92', name: 'Proposals | $400k - $500k | PERSONAL' },
+  { id: '25e97d2a-5001-4107-9764-4d39bf1ead00', name: 'Proposals | $500k - $600k | PERSONAL' },
+  { id: 'c050aa00-cf8a-44fe-be16-d0dc3069dd3b', name: 'Proposals | $600k - $700k | PERSONAL' },
+  { id: 'cef16f11-457a-4192-9ba2-c7a9f88b68d3', name: 'Proposals | $700k - $800k | PERSONAL' },
+  { id: '5aaeb8c3-4680-438f-b545-21e5b9e92582', name: 'Proposals | $800k+ | PERSONAL' },
+  { id: ON_HOLD_STAGE_ID, name: 'On Hold' },
+];
+
 /**
  * Given the live `/opportunities/pipelines` response, return the configured
  * pipeline IDs that GHL no longer knows about. Callers must treat a non-empty

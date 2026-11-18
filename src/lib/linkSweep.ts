@@ -1,14 +1,16 @@
 // Link reconciliation sweep (JT 16/11). The Property Record is the master: record.linked_opportunity_id.
 // The opportunity carries three mirrors (linked_property_record_id, linked_property_address,
 // property_record_ctrt_link). Blank or different mirrors are written from the record and logged.
-// Reported, never fixed: a record whose linked_opportunity_id changed outside the Deal Sheet, and an opp whose
-// linked record no longer points back. Delta every 15 min, full sweep nightly. Dry run until switched on in
-// Admin > Automated updates (switch key link_sweep_apply in ctr_stamp_settings).
+// Reports manual record-link changes, missing opportunities and Registered Address problems.
+// Clears orphan mirrors on open reporting-pipeline opportunities only when no record points back.
+// Delta every 15 min, full sweep nightly. Dry run until switched on in Admin > Automated updates
+// (switch key link_sweep_apply in ctr_stamp_settings).
 import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
 import { ensureStampTables } from '@/lib/ctrStamp';
 import { PROPERTY_OBJECT_ID, PROPERTY_LINK_FIELD_ID } from '@/app/api/contract-team-reporting/fields';
 import { sendCtrAlert } from '@/app/api/contract-team-reporting/alerts';
+import { PIPELINE_ID } from '@/lib/ghlPipelines';
 
 const BASE = process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com';
 const TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -26,16 +28,43 @@ export const MIRRORS = [
 type MirrorField = (typeof MIRRORS)[number]['field'];
 
 type Who = { source?: string; channel?: string; sourceName?: string | null; sourceId?: string; createdAt?: string };
-type Rec = { id: string; opp: string; address: string; status: string; name: string; updatedAt: string; who: Who | null };
-type Opp = { id: string; name: string; updatedAt: string; mirrors: Record<MirrorField, string> };
-type Mismatch = { kind: 'hand_changed' | 'not_pointing_back' | 'opp_missing'; recordId: string; oppId: string; oppName: string; recordName: string; detail: string; who: string; whenAt: string | null };
+type Rec = { id: string; opp: string; address: string; suburb: string; postcode: string; status: string; name: string; updatedAt: string; who: Who | null };
+type Opp = { id: string; name: string; updatedAt: string; pipelineId: string; status: string; regAddr: string; mirrors: Record<MirrorField, string> };
+type Mismatch = { kind: 'hand_changed' | 'not_pointing_back' | 'opp_missing' | 'address_mismatch'; recordId: string; oppId: string; oppName: string; recordName: string; detail: string; who: string; whenAt: string | null };
 
 export type LinkSweepSummary = {
   runId: string; mode: 'delta' | 'full'; dryRun: boolean; since: string | null; seconds: number;
   records: number; linkedRecords: number; oppsChecked: number; inSync: number;
   fixed: number; fieldsFixed: number; reported: number; newReported: number; byKind: Record<string, number>;
   baselined: number; failed: number; errors: string[];
+  oppPassChecked: number; oppPassCleared: number; addressChecked: number;
 };
+
+const REGISTERED_ADDRESS_FIELD_ID = 'PlNx1851lV5PSAotT4FT';
+// Both-sided pairs are keyed by record + opp; the rest by record.
+const mismatchKey = (m: Pick<Mismatch, 'kind' | 'recordId' | 'oppId'>) =>
+  m.kind === 'not_pointing_back' || m.kind === 'address_mismatch' ? `${m.kind}:${m.recordId}:${m.oppId}` : `${m.kind}:${m.recordId}`;
+const normText = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// A postcode only counts when it follows the state, so lot numbers and years in notes are ignored.
+const statePostcode = (v: string) => (v.match(/\b(?:QLD|NSW|VIC|SA|WA|TAS|NT|ACT)\b[\s,]*(\d{4})\b/gi) || []).map((m) => m.slice(-4)).pop() || '';
+
+// Report-only (JT 17/11): Registered Address suburb/postcode must match the linked record's address.
+function addressMismatch(o: Opp, rec: Rec): string {
+  // The field often carries notes on later lines; only the first line is the address.
+  const regLine = o.regAddr.split(/\r?\n/)[0].trim();
+  if (!regLine) return '';
+  const reg = normText(regLine);
+  const recPost = rec.postcode || statePostcode(rec.address);
+  const regPost = statePostcode(regLine);
+  const problems: string[] = [];
+  if (recPost && regPost && recPost !== regPost) problems.push(`postcode ${regPost} vs ${recPost}`);
+  // JT 17/11: a Registered Address without a suburb (no record suburb, state or postcode in it) is itself a data problem.
+  const hasState = /\b(?:QLD|NSW|VIC|SA|WA|TAS|NT|ACT)\b/i.test(regLine);
+  if (rec.suburb && !` ${reg} `.includes(` ${normText(rec.suburb)} `)) {
+    problems.push(hasState ? `suburb is not ${rec.suburb}` : `no suburb (${rec.suburb} not found, no state or postcode)`);
+  }
+  return problems.length ? `Registered Address "${regLine}" vs record "${rec.address}": ${problems.join('; ')}` : '';
+}
 
 const headers = () => ({ Authorization: `Bearer ${TOKEN}`, Version: '2021-07-28', 'Content-Type': 'application/json' });
 const str = (v: unknown): string => (v === null || v === undefined ? '' : Array.isArray(v) ? v.map(str).filter(Boolean).join(', ') : String(v));
@@ -92,6 +121,7 @@ async function readRecords(): Promise<Map<string, Rec>> {
       const get = (k: string) => str(p[k] ?? p[`custom_objects.property_reviews.${k}`]);
       out.set(r.id, {
         id: r.id, opp: (get('linked_opportunity_id') || str(p[PROPERTY_LINK_FIELD_ID])).trim(), address: get('property_address').trim(),
+        suburb: get('suburb_name').trim(), postcode: get('post_code').trim(),
         status: get('status'), name: get('property_address') || r.id, updatedAt: r.updatedAt || '', who: r.lastUpdatedBy || null,
       });
     }
@@ -102,18 +132,19 @@ async function readRecords(): Promise<Map<string, Rec>> {
   return out;
 }
 
-type RawOpp = { id: string; name?: string; updatedAt?: string; customFields?: { id: string; fieldValue?: unknown; fieldValueString?: string; value?: unknown }[] };
+type RawOpp = { id: string; name?: string; updatedAt?: string; pipelineId?: string; status?: string; customFields?: { id: string; fieldValue?: unknown; fieldValueString?: string; value?: unknown }[] };
 const toOpp = (o: RawOpp): Opp => {
   const mirrors = {} as Record<MirrorField, string>;
   for (const m of MIRRORS) {
     const c = o.customFields?.find((x) => x.id === m.id);
     mirrors[m.field] = str(c?.fieldValueString ?? c?.fieldValue ?? c?.value).trim();
   }
-  return { id: o.id, name: o.name || '', updatedAt: o.updatedAt || '', mirrors };
+  const reg = o.customFields?.find((x) => x.id === REGISTERED_ADDRESS_FIELD_ID);
+  return { id: o.id, name: o.name || '', updatedAt: o.updatedAt || '', pipelineId: o.pipelineId || '', status: o.status || '', regAddr: str(reg?.fieldValueString ?? reg?.fieldValue ?? reg?.value).trim(), mirrors };
 };
 
 // Opportunities newest-updated first; stops at `since` (delta) or reads all (full).
-async function readOpps(since: string | null): Promise<Opp[]> {
+async function readOpps(since: string | null, openPipelineId?: string): Promise<Opp[]> {
   const out: Opp[] = [];
   let startAfter: unknown, startAfterId: unknown;
   for (let page = 0; ; page++) {
@@ -122,6 +153,10 @@ async function readOpps(since: string | null): Promise<Opp[]> {
     url.searchParams.set('location_id', LOC);
     url.searchParams.set('limit', '100');
     url.searchParams.set('order', 'updated_at_desc');
+    if (openPipelineId) {
+      url.searchParams.set('pipeline_id', openPipelineId);
+      url.searchParams.set('status', 'open');
+    }
     if (startAfter !== undefined && startAfterId) { url.searchParams.set('startAfter', String(startAfter)); url.searchParams.set('startAfterId', String(startAfterId)); }
     const res = await ghlFetch(url.toString(), { headers: headers() }, 'link-sweep-opps');
     if (!res.ok) throw new Error(`GHL opportunities HTTP ${res.status}`);
@@ -182,7 +217,7 @@ export async function runLinkSweep(opts: { full: boolean; forceDryRun?: boolean 
   const mode: 'delta' | 'full' = opts.full || !last ? 'full' : 'delta';
   // 2 minutes of overlap so nothing updated during the previous run is missed.
   const since = mode === 'delta' ? new Date(new Date(last.at).getTime() - 120_000).toISOString() : null;
-  const s: LinkSweepSummary = { runId, mode, dryRun, since, seconds: 0, records: 0, linkedRecords: 0, oppsChecked: 0, inSync: 0, fixed: 0, fieldsFixed: 0, reported: 0, newReported: 0, byKind: {}, baselined: 0, failed: 0, errors: [] };
+  const s: LinkSweepSummary = { runId, mode, dryRun, since, seconds: 0, records: 0, linkedRecords: 0, oppsChecked: 0, inSync: 0, fixed: 0, fieldsFixed: 0, reported: 0, newReported: 0, byKind: {}, baselined: 0, failed: 0, errors: [], oppPassChecked: 0, oppPassCleared: 0, addressChecked: 0 };
 
   const records = await readRecords();
   s.records = records.size;
@@ -192,7 +227,16 @@ export async function runLinkSweep(opts: { full: boolean; forceDryRun?: boolean 
   for (const r of linked) recByOpp.set(r.opp, [...(recByOpp.get(r.opp) || []), r]);
 
   const opps = new Map<string, Opp>();
-  for (const o of await readOpps(since)) opps.set(o.id, o);
+  if (mode === 'full') {
+    // The opportunity pass owns open reporting-pipeline opportunities only.
+    // Other opportunities linked by a record are read explicitly below, including
+    // won/lost purchases and links in other pipelines, without scanning every lead.
+    for (const pipelineId of [PIPELINE_ID.PROPERTY_TEAM, PIPELINE_ID.FINANCE, PIPELINE_ID.CONSTRUCTION]) {
+      for (const o of await readOpps(null, pipelineId)) opps.set(o.id, o);
+    }
+  } else {
+    for (const o of await readOpps(since)) opps.set(o.id, o);
+  }
   // Records in scope: all linked (full), or updated since the last run / linked to an opp updated since then (delta).
   const scope = mode === 'full' ? linked : linked.filter((r) => (r.updatedAt && r.updatedAt >= (since as string)) || opps.has(r.opp));
   const missing = [...new Set(scope.map((r) => r.opp).filter((id) => !opps.has(id)))];
@@ -237,7 +281,7 @@ export async function runLinkSweep(opts: { full: boolean; forceDryRun?: boolean 
         await sleep(300);
         const after = await readOpp(opp.id);
         for (const f of fields) readBack[f] = after?.mirrors[f] ?? '';
-        if (fields.some((f) => readBack[f] !== w[f])) result = 'read back differs';
+        if (!after || fields.some((f) => readBack[f] !== w[f])) throw new Error('read back differs');
       } catch (e) {
         result = `failed: ${e instanceof Error ? e.message : String(e)}`;
         s.failed++;
@@ -251,21 +295,55 @@ export async function runLinkSweep(opts: { full: boolean; forceDryRun?: boolean 
     }
   }
 
-  // Opp side: an opp naming a record that doesn't point back to it.
-  const oppScope = mode === 'full' ? [...opps.values()] : [...opps.values()].filter((o) => !since || o.updatedAt >= since);
+  // Opportunity pass (JT 17/11): an open Property Team / Finance / Construction opp naming a record must have that
+  // record pointing back. If not, its three mirrors are cleared and logged; it is reported only if that did not land.
+  const oppPipelines = new Set<string>([PIPELINE_ID.PROPERTY_TEAM, PIPELINE_ID.FINANCE, PIPELINE_ID.CONSTRUCTION]);
+  const oppScope = [...opps.values()].filter((o) => (mode === 'full' || !since || o.updatedAt >= since) && o.status === 'open' && oppPipelines.has(o.pipelineId));
   for (const o of oppScope) {
     const rid = o.mirrors.linked_property_record_id;
     if (!rid) continue;
+    s.oppPassChecked++;
     checkedKeys.add(`not_pointing_back:${rid}:${o.id}`);
     const rec = records.get(rid);
-    if (rec && rec.opp === o.id) continue;
+    if (rec && rec.opp === o.id) {
+      checkedKeys.add(`address_mismatch:${rid}:${o.id}`);
+      if (o.regAddr) s.addressChecked++;
+      const detail = addressMismatch(o, rec);
+      if (detail) found.push({ kind: 'address_mismatch', recordId: rid, oppId: o.id, oppName: o.name, recordName: rec.name, detail, who: whoText(rec.who), whenAt: iso(o.updatedAt) });
+      continue;
+    }
+    // Another record points at this opp: the record pass owns its mirrors, so don't clear them here.
+    if (recByOpp.has(o.id)) continue;
+    const detail = !rec ? 'record no longer exists' : rec.opp ? `record points at another opportunity (${opps.get(rec.opp)?.name || rec.opp})${rec.status === '08_resold' ? '; record is 08 Resold' : ''}` : `record has no linked_opportunity_id${rec.status ? ` (status ${rec.status})` : ''}`;
+    const fields = MIRRORS.map((m) => m.field).filter((f) => o.mirrors[f]);
+    let result = dryRun ? 'dry run' : 'cleared';
+    const readBack: Partial<Record<MirrorField, string>> = {};
+    if (!dryRun) {
+      try {
+        await writeMirrors(o.id, { linked_property_record_id: '', linked_property_address: '', property_record_ctrt_link: '' });
+        await sleep(300);
+        const after = await readOpp(o.id);
+        for (const f of fields) readBack[f] = after?.mirrors[f] ?? '';
+        if (!after || fields.some((f) => readBack[f])) throw new Error('read back differs');
+      } catch (e) {
+        result = `failed: ${e instanceof Error ? e.message : String(e)}`;
+        s.failed++;
+        s.errors.push(`${o.name || o.id}: ${result}`);
+      }
+    }
+    if (result === 'dry run' || result === 'cleared') s.oppPassCleared++;
+    for (const f of fields) {
+      await sql`INSERT INTO link_sweep_log (run_id, opportunity_id, opportunity_name, record_id, field, old_value, new_value, read_back, record_who, record_when, opp_updated_at, dry_run, result)
+        VALUES (${runId}, ${o.id}, ${o.name}, ${rid}, ${f}, ${o.mirrors[f]}, '', ${readBack[f] ?? null}, ${whoText(rec?.who || null)}, ${iso(rec?.who?.createdAt || rec?.updatedAt)}, ${iso(o.updatedAt)}, ${dryRun}, ${`opp pass (${detail}): ${result}`})`;
+    }
+    if (result === 'cleared') continue;
     found.push({ kind: 'not_pointing_back', recordId: rid, oppId: o.id, oppName: o.name, recordName: rec?.name || '', detail: !rec ? 'record no longer exists' : rec.opp ? `record points at another opportunity (${recByOpp.get(rec.opp) ? opps.get(rec.opp)?.name || rec.opp : rec.opp})${rec.status === '08_resold' ? '; record is 08 Resold' : ''}` : `record has no linked_opportunity_id${rec.status ? ` (status ${rec.status})` : ''}`, who: whoText(rec?.who || null), whenAt: iso(rec?.who?.createdAt || rec?.updatedAt) });
   }
 
   // Store / resolve mismatches.
   const newOnes: Mismatch[] = [];
   for (const m of found) {
-    const key = m.kind === 'not_pointing_back' ? `${m.kind}:${m.recordId}:${m.oppId}` : `${m.kind}:${m.recordId}`;
+    const key = mismatchKey(m);
     const [row] = (await sql`INSERT INTO link_sweep_mismatch (key, kind, record_id, opp_id, opp_name, record_name, detail, who, when_at)
       VALUES (${key}, ${m.kind}, ${m.recordId}, ${m.oppId}, ${m.oppName}, ${m.recordName}, ${m.detail}, ${m.who}, ${m.whenAt})
       ON CONFLICT (key) DO UPDATE SET opp_id = EXCLUDED.opp_id, opp_name = EXCLUDED.opp_name, record_name = EXCLUDED.record_name, detail = EXCLUDED.detail, who = EXCLUDED.who, when_at = EXCLUDED.when_at, last_seen = now(),
@@ -276,7 +354,7 @@ export async function runLinkSweep(opts: { full: boolean; forceDryRun?: boolean 
   }
   s.reported = found.length;
   s.newReported = newOnes.length;
-  const foundKeys = new Set(found.map((m) => (m.kind === 'not_pointing_back' ? `${m.kind}:${m.recordId}:${m.oppId}` : `${m.kind}:${m.recordId}`)));
+  const foundKeys = new Set(found.map(mismatchKey));
   const open = (await sql`SELECT key FROM link_sweep_mismatch WHERE resolved_at IS NULL`) as { key: string }[];
   for (const { key } of open) {
     const kindRec = key.split(':').slice(0, 2).join(':');
@@ -297,7 +375,7 @@ export async function runLinkSweep(opts: { full: boolean; forceDryRun?: boolean 
 
   // Email new cases (never in dry run).
   if (!dryRun && newOnes.length) {
-    const label = { hand_changed: 'Link changed by hand in GHL (not via the Deal Sheet)', not_pointing_back: 'Opportunity\'s linked record no longer points back', opp_missing: 'Record links to an opportunity GHL no longer has' };
+    const label = { hand_changed: 'Link changed by hand in GHL (not via the Deal Sheet)', not_pointing_back: 'Opportunity\'s linked record no longer points back', opp_missing: 'Record links to an opportunity GHL no longer has', address_mismatch: 'Registered Address suburb/postcode differs from the linked record' };
     const rows = newOnes.map((m) => `<tr><td>${label[m.kind]}</td><td>${m.oppName || m.oppId}</td><td>${m.recordName || m.recordId}</td><td>${m.detail}</td><td>${m.who}${m.whenAt ? ` ${new Date(m.whenAt).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}` : ''}</td></tr>`).join('');
     await sendCtrAlert({
       type: `link-mismatch-${runId}`,

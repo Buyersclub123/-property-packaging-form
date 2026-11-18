@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/lib/redis';
 import { updateCachedRecord } from '@/lib/dealSheetCache';
 import { recordDealSheetLink } from '@/lib/linkSweep';
+import { writeOppMirrors, clearOppMirrors, verifyBothSides, mirrorValues, blankMirrors, integrityResponse, prepareHandback, applyHandback, handbackCheck, type Handback } from '@/lib/dealSheetLinkSync';
+import { emailFromHeaders } from '@/lib/tileAccess';
+import { whoName } from '@/lib/reviewOutcomes/contactNote';
+import { addUnlinkAck } from '@/lib/unlinkAcks';
 
 const GHL_OBJECT_ID = '692d04e3662599ed0c29edfa';
 const BEARER_TOKEN = process.env.GHL_BEARER_TOKEN || '';
@@ -97,7 +101,13 @@ export async function POST(request: NextRequest) {
     let outgoingPrice = '';
     let outgoingDate = '';
 
-    if (getRes.ok) {
+    if (!getRes.ok) {
+      return NextResponse.json(
+        { error: `LINK INTEGRITY FAILURE - could not read the Property Record before writing (GHL ${getRes.status})` },
+        { status: 502 }
+      );
+    }
+    {
       const data = await getRes.json();
       const p = data.record?.properties || data.properties || {};
       currentStatus = p.status || '';
@@ -182,6 +192,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 3b. Unlinking an opportunity hands it back (JT 17/11): contact note first, before anything is cleared.
+    let handback: Handback | null = null;
+    const email = emailFromHeaders(request.headers);
+    if (isRemove && outgoingOppId) {
+      try {
+        handback = await prepareHandback({
+          oppId: outgoingOppId,
+          address: propertyAddress,
+          stageId: String(body.handbackStageId || ''),
+          reason: String(body.unlinkReason || '').trim(),
+          by: email ? whoName(email) : 'Unknown user',
+        });
+      } catch (e) {
+        return NextResponse.json({ error: `UNLINK NOT DONE - ${e instanceof Error ? e.message : String(e)}` }, { status: 400 });
+      }
+    }
+
     // 4. Write the updated CO record.
     // If a revert status was requested (e.g. "Available", "Close Lost"), use it;
     // otherwise keep the current status.
@@ -244,6 +271,26 @@ export async function POST(request: NextRequest) {
     }
     await recordDealSheetLink(recordId, newOppId, 'update-client');
 
+    // Both sides in one action: the linked opp's mirrors from the record; the outgoing opp's mirrors cleared
+    // (reassign / unlink); then both sides read back.
+    const oldOpp = outgoingOppId && outgoingOppId !== newOppId ? outgoingOppId : '';
+    try {
+      if (newOppId) await writeOppMirrors(newOppId, recordId, propertyAddress);
+      if (oldOpp) await (handback ? applyHandback(handback) : clearOppMirrors(oldOpp));
+      await verifyBothSides({
+        recordId,
+        recordOpp: newOppId,
+        opps: [
+          ...(newOppId ? [{ oppId: newOppId, label: 'Linked', want: mirrorValues(newOppId, recordId, propertyAddress) }] : []),
+          ...(oldOpp ? [handback ? handbackCheck(handback) : { oppId: oldOpp, label: 'Previous', want: blankMirrors() }] : []),
+        ],
+      });
+    } catch (e) {
+      console.error('Deal Sheet link integrity (update-client):', e);
+      await updateCachedRecord(recordId);
+      return NextResponse.json(integrityResponse(e), { status: 502 });
+    }
+
     // 5. Write back the BA to the opportunity if it changed (reassign / client_edited).
     let baWriteBackOk = true;
     // The client compares the chosen BA against the OPPORTUNITY's current value,
@@ -280,13 +327,30 @@ export async function POST(request: NextRequest) {
       console.error('Redis recent_changes push failed (non-fatal):', redisErr);
     }
 
+    // One acknowledgement item per unlink (Deal Sheet header list).
+    let ackError = '';
+    if (handback) {
+      try {
+        await addUnlinkAck({
+          recordId, address: propertyAddress, oppId: handback.oppId, oppName: handback.oppName,
+          byEmail: email || '', byName: email ? whoName(email) : 'Unknown user', reason: String(body.unlinkReason || '').trim(),
+          stageId: handback.stageId, stageName: handback.stageName, noteId: handback.noteId,
+        });
+      } catch (e) {
+        ackError = e instanceof Error ? e.message : String(e);
+        console.error('Unlink acknowledgement item not saved:', e);
+      }
+    }
+
     // Update the record in the shared cache
     await updateCachedRecord(recordId);
 
     return NextResponse.json({
       success: true,
+      ackError,
       archiveOk,
       baWriteBackOk,
+      handback,
       record: await putRes.json(),
     });
   } catch (error) {

@@ -15,7 +15,7 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
     what: 'Fills change dates for changes made by hand in GHL',
     trigger: 'Vercel cron /api/contract-team-reporting/stamp-cron, daily 15:00 UTC (1-2am Sydney)',
     fieldsWritten: 'Opportunity finance_status_change_date; Property Record construction_stage_change_date, status_change_date',
-    rule: 'Only where the tracked field (finance_status__residential, construction_stage, status) changed since the last snapshot AND the date is blank. Never overwrites a set date. First sight of a record = baseline only. Dry run (log only) until switched on below.',
+    rule: 'Only where the tracked field (finance_status__residential, construction_stage, status) changed since the last snapshot AND the date is blank. Writes the date the change was first detected (first dry-run log row), else today. Never overwrites a set date. First sight of a record = baseline only. Dry run (log only) until switched on below.',
     log: 'Postgres ctr_stamp_log (snapshots in ctr_stamp_snapshots, switch in ctr_stamp_settings)',
   },
   {
@@ -36,11 +36,11 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
   },
   {
     name: 'Settlement confirmed -> Settled',
-    what: 'When a user ticks Settlement confirmed on an opportunity in CTRT, the opportunity moves to Property Team > Settled and the linked Property Record to 04 Settled',
-    trigger: 'Same save call as the user tick (/api/contract-team-reporting/update)',
-    fieldsWritten: 'Opportunity settlement_confirmed = Yes (the user edit); Opportunity pipeline/stage = Property Team > Settled; Property Record status = 04_settled, status_change_date = today (Sydney)',
+    what: 'When a user ticks Settlement confirmed in CTRT, the linked Property Record decides (Unconditional stage rule, JT 17/11): Established, or New single contract with no Construction stage -> opp Property Team > Settled + record 04 Settled; New split contract -> opp stays, record Construction stage Pre-BA + Land registration Registered; New with a Construction stage before handover, or blank Property/Contract type -> nothing moves, reported. Setting Construction stage to handover in CTRT -> opp Settled + record 04 Settled',
+    trigger: 'Same save call as the user tick, or the user setting Construction stage = handover (/api/contract-team-reporting/update)',
+    fieldsWritten: 'Opportunity settlement_confirmed = Yes (the user edit); Settled: opportunity pipeline/stage = Property Team > Settled, Property Record status = 04_settled, status_change_date = today (Sydney); Split: Property Record construction_stage = preba, construction_stage_change_date = today, land_registration = Registered (status unchanged)',
     rule: 'Tick only; untick writes the checkbox and nothing else. Stage skipped if already Property Team > Settled; Property Record skipped if none is linked, it is already 04_settled, or the user set Status in the same save. Stage and Property Record are dry run (log only) until switched on below.',
-    log: 'Postgres ctr_settled_log (each step before -> after with read back, plus a run row; switch in ctr_stamp_settings key settled_apply); failures emailed (CTR alerts)',
+    log: 'Postgres ctr_settled_log (rule decision, each step before -> after with read back, plus a run row; switch in ctr_stamp_settings key settled_apply); failures emailed (CTR alerts); reported cases emailed once switched on',
   },
   {
     name: 'Sales Meeting Outcomes GHL write-back',
@@ -63,7 +63,7 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
     what: 'Keeps the opportunity\'s Property Record mirrors in line with the record (the Property Record is the master: linked_opportunity_id)',
     trigger: 'Vercel cron /api/contract-team-reporting/link-sweep-cron every 15 min (records and opps updated since the last run) + /api/contract-team-reporting/link-sweep-cron/full daily 15:30 UTC (every record with linked_opportunity_id)',
     fieldsWritten: 'Opportunity linked_property_record_id, linked_property_address, property_record_ctrt_link',
-    rule: 'Writes a mirror only when it is blank or differs from the record (address never blanked; CTRT link accepted as record?id=<record> or record?opp=<opp>, written as record?opp=<opp>). Report only, never fixed: a record whose linked_opportunity_id changed outside the Deal Sheet, an opp whose linked record no longer points back, a record linked to a missing opp. Reported cases listed under Link mismatch below and emailed (CTR alerts) once. Dry run (log only, no email) until switched on below.',
+    rule: 'Copies blank or different mirrors from the linked Property Record; an empty property address never overwrites the address on a valid link. For open Property Team/Finance/Construction opportunities, clears all three mirrors when the named record is missing or does not point back, but only if no other Property Record links to that opportunity. Every write is read back; mismatches count as failures. Reports manual record-link changes, missing opportunities, failed mirror clears and Registered Address problems (including a missing suburb) in Link mismatch and emails new cases once. Registered Address itself is never changed by the sweep. Dry run (log only, no email) until switched on below.',
     log: 'Postgres link_sweep_log (each field before -> after with read back, record last changed by / when from GHL, opp updatedAt); runs in link_sweep_runs; cases in link_sweep_mismatch; Deal Sheet link writes in link_sweep_dealsheet; switch in ctr_stamp_settings key link_sweep_apply',
   },
   {
