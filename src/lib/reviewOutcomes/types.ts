@@ -257,6 +257,9 @@ export interface ReviewMeeting {
   createdByEmail: string | null;
   /** From the matched Google event's location: Meet link = Google, street address = F2F. */
   mode: MeetingMode;
+  /** Historical read-only occurrence in a departed Friday–Thursday week. The current appointment
+   *  can also be in this response with the same id but a different start. New start is ISO. */
+  movedTo?: string | null;
 }
 
 export interface ReviewViewer {

@@ -157,6 +157,11 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
           </select>
         )}
         {responded && m.outcomeSource !== 'tool' && <span className="text-[11px] text-gray-400" title={m.sourceRef || ''}>{srcLabel}</span>}
+        {m.movedTo && (
+          <span className="text-[11px] font-semibold text-amber-700" title="Rescheduled in GHL - the meeting now sits in another week">
+            moved to {new Date(m.movedTo).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+          </span>
+        )}
         {canEdit && (m.outcomeSource === 'tool' || m.outcomeSource === 'sheet') && (
           <button onClick={() => onRecord(m, null)} className="text-[11px] text-gray-400 hover:text-red-600">clear</button>
         )}
@@ -290,7 +295,7 @@ export default function ReviewOutcomesPage() {
     setSaveError(null);
     const apply = (d: ReviewData | null) => d && {
       ...d,
-      meetings: d.meetings.map((x) => (x.id === m.id ? { ...x, outcome, invalidReason: reason, outcomeSource: outcome ? ('tool' as const) : null } : x)),
+      meetings: d.meetings.map((x) => (x.id === m.id && !x.movedTo ? { ...x, outcome, invalidReason: reason, outcomeSource: outcome ? ('tool' as const) : null } : x)),
     };
     if (demo) {
       setDemoAll(apply);
@@ -312,8 +317,8 @@ export default function ReviewOutcomesPage() {
     // Update only this meeting's row from the saved copy; the list itself is not reloaded.
     try {
       const res = await fetch(`/api/review-outcomes?from=${m.ymd}&to=${m.ymd}&sync=none`, { cache: 'no-store' });
-      const row = res.ok ? ((await res.json()) as ReviewData).meetings.find((x) => x.id === m.id) : undefined;
-      if (row) setLive((d) => d && { ...d, meetings: d.meetings.map((x) => (x.id === m.id ? row : x)) });
+      const row = res.ok ? ((await res.json()) as ReviewData).meetings.find((x) => x.id === m.id && !x.movedTo) : undefined;
+      if (row) setLive((d) => d && { ...d, meetings: d.meetings.map((x) => (x.id === m.id && !x.movedTo ? row : x)) });
     } catch { /* keep the row as tapped */ }
   };
 
@@ -410,7 +415,7 @@ export default function ReviewOutcomesPage() {
     for (const m of meetings) g.set(m.ymd, [...(g.get(m.ymd) || []), m]);
     return [...g.entries()];
   }, [meetings]);
-  const canEdit = (m: ReviewMeeting) => !!data && !!m.id;
+  const canEdit = (m: ReviewMeeting) => !!data && !!m.id && !m.movedTo;
   const userNames = data?.ghlUsers?.length ? [...new Set(data.ghlUsers.map((u) => u.name))] : data?.consultants || [];
 
   return (
@@ -570,7 +575,7 @@ export default function ReviewOutcomesPage() {
             {data && byDay.map(([ymd, list]) => (
               <div key={ymd} className="mb-3 overflow-hidden rounded border bg-white">
                 <div className="bg-gray-50 px-3 py-1.5 text-sm font-semibold text-brand-charcoal">{weekday(ymd)} {dmy(ymd)} <span className="font-normal text-gray-500">· {list.length}</span></div>
-                {list.map((m) => <MeetingRow key={m.id} m={m} won={wonOf(m)} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} userName={data.viewer.name || who(data.viewer.email)} />)}
+                {list.map((m) => <MeetingRow key={`${m.id}:${m.start}`} m={m} won={wonOf(m)} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={!m.movedTo && (demo || SHOW_MORE_LIVE) ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} userName={data.viewer.name || who(data.viewer.email)} />)}
               </div>
             ))}
           </>

@@ -29,7 +29,7 @@ function MeetingTable({ rows, onOpenDay, extra }: { rows: ReviewMeeting[]; onOpe
       </thead>
       <tbody>
         {rows.map((m) => (
-          <tr key={m.id} className="border-t">
+          <tr key={`${m.id}:${m.start}`} className="border-t">
             <td className="p-1"><button onClick={() => onOpenDay(m.ymd)} className="text-blue-700 hover:underline">{dateTime(m.start)}</button></td>
             <td className="p-1">{m.contactName}</td>
             <td className="p-1">{m.consultant}</td>
@@ -230,7 +230,7 @@ export default function ListsView({ onOpenDay, demoData = null }: { onOpenDay: (
                   title={differs ? `Booked by ${bookerKey(first)} first, then ${bookerKey(next)}` : undefined}>
                   <td className="p-1">{next.contactLink ? <a href={next.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{next.contactName}</a> : next.contactName}</td>
                   {[first, next].map((m) => (
-                    <td key={m.id} className="p-1">
+                    <td key={`${m.id}:${m.start}`} className="p-1">
                       <button onClick={() => onOpenDay(m.ymd)} className="text-blue-700 hover:underline">{dateTime(m.start)}</button>
                       <span className="text-xs text-gray-600"> · {m.consultant} · {m.outcome || (m.ghlStatus === 'Cancelled' ? 'Cancelled' : 'No outcome')}</span>
                       <span className={`text-xs ${differs && m === next ? 'font-semibold text-amber-800' : 'text-gray-600'}`}> · Booker: {bookerKey(m)}</span>

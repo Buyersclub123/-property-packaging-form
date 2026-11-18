@@ -591,7 +591,7 @@ function ExceptionReports({ meetings }: { meetings: ReviewMeeting[] }) {
             <thead className="sticky top-0"><tr>{['Date', 'Client', 'Calendar', 'Consultant', ...extra.map(([h]) => h)].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
             <tbody>
               {list.map((m) => (
-                <tr key={m.id} className="odd:bg-gray-50">
+                <tr key={`${m.id}:${m.start}`} className="odd:bg-gray-50">
                   <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
                   <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
                   <td className={TDN}>{m.kind === 'PR' ? 'Portfolio Review' : 'Presentation 1'}</td>
@@ -631,7 +631,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
   const today = sydYmd(Date.now());
   const [data, setData] = useState<ReviewData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [p, setP] = useState<Period>({ kind: 'month', anchor: today });
+  const [p, setP] = useState<Period>({ kind: 'week', anchor: today });
   const [names, setNames] = useState<NameConfig>({ mode: 'all', hiddenCc: [], hiddenSales: [] });
   const [namesOpen, setNamesOpen] = useState(false);
   const [drill, setDrill] = useState<{ title: string; meetings: ReviewMeeting[] } | null>(null);
@@ -951,7 +951,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
               <thead className="sticky top-0 z-10 shadow-[0_1px_0_#d1d5db]"><tr>{['Date', 'Client', 'Meeting source', 'Consultant', 'Booker', 'Mode', 'GHL status', 'Outcome'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr></thead>
               <tbody>
                 {drill.meetings.map((m) => (
-                  <tr key={m.id} className="odd:bg-gray-50 hover:bg-blue-50">
+                  <tr key={`${m.id}:${m.start}`} className="odd:bg-gray-50 hover:bg-blue-50">
                     <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
                     <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
                     <td className={TDN} title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>{m.meetingSource || NOT_RECORDED}</td>
