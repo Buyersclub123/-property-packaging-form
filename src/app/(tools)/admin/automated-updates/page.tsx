@@ -210,10 +210,10 @@ export default function AutomatedUpdatesPage() {
           <h3 className="mb-1 font-medium">Last runs</h3>
           <table className="mb-6 w-full border-collapse border border-gray-200">
             <thead className="bg-gray-50 text-left text-gray-500">
-              <tr>{['When', 'Sweep', 'Mode', 'Linked records', 'In sync', 'Fixed', 'Reported', 'Failed'].map((h) => <th key={h} className="border border-gray-200 px-2 py-1">{h}</th>)}</tr>
+              <tr>{['When', 'Sweep', 'Mode', 'Linked records', 'In sync', 'Fixed', 'Reported', 'Failed', 'Errors'].map((h) => <th key={h} className="border border-gray-200 px-2 py-1">{h}</th>)}</tr>
             </thead>
             <tbody>
-              {data.linkSweep.runs.length === 0 && <tr><td colSpan={8} className="px-2 py-1 text-gray-500">No runs yet.</td></tr>}
+              {data.linkSweep.runs.length === 0 && <tr><td colSpan={9} className="px-2 py-1 text-gray-500">No runs yet.</td></tr>}
               {data.linkSweep.runs.map((r) => (
                 <tr key={fmt(r.run_id)}>
                   <td className="border border-gray-200 px-2 py-1">{fmt(r.at)}</td>
@@ -223,7 +223,8 @@ export default function AutomatedUpdatesPage() {
                   <td className="border border-gray-200 px-2 py-1">{String(r.summary?.inSync ?? '')}</td>
                   <td className="border border-gray-200 px-2 py-1">{fmt(r.fixed)}</td>
                   <td className="border border-gray-200 px-2 py-1">{fmt(r.reported)}</td>
-                  <td className="border border-gray-200 px-2 py-1">{fmt(r.failed)}</td>
+                  <td className={`border border-gray-200 px-2 py-1 ${r.failed ? 'font-semibold text-red-700' : ''}`}>{fmt(r.failed)}</td>
+                  <td className="max-w-xl whitespace-pre-wrap border border-gray-200 px-2 py-1 text-red-700">{Array.isArray(r.summary?.errors) ? r.summary.errors.join('\n') : ''}</td>
                 </tr>
               ))}
             </tbody>

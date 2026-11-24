@@ -32,6 +32,9 @@ function createSandbox(boundary = {}) {
       ] }],
     writes: [], alerts: [], queries: [], notes: [], acks: [], ticks: [], snapshots: [], firstDetections: [],
     links: [], dealSheetLinks: [], mismatches: [], runs: [], redis: new Map(), ignoreWrites: false, failNotes: false,
+    searchRequests: [], failSearch: false,
+    contacts: [{ id: 'testcontact', firstName: 'Release', lastName: 'Test', email: 'client@example.invalid' }],
+    pipelineStages: [{ id: 'settled', name: 'Settled' }, { id: 'conditional', name: 'Conditional' }, { id: 'price300', name: '$300k - $400k | PERSONAL' }, { id: 'price500', name: '$500k - $600k | PERSONAL' }, { id: 'price800', name: 'Proposals | $800k+ | PERSONAL' }],
   };
   const field = (id, opp = s.opps[0]) => opp.customFields.find(f => f.id === id)?.fieldValue ?? '';
   const setField = (id, value, opp = s.opps[0]) => {
@@ -44,13 +47,40 @@ function createSandbox(boundary = {}) {
     const body = options.body ? JSON.parse(options.body) : null;
     const respond = (data, status = 200) => Response.json(clone(data), { status });
     const p = u.pathname;
-    if (p === '/opportunities/pipelines') return respond({ pipelines: [{ id: PT, name: 'Property Team', stages: [{ id: 'settled', name: 'Settled' }, { id: 'conditional', name: 'Conditional' }] }] });
-    if (p === '/opportunities/search') return respond({ opportunities: s.opps.filter(o => (!u.searchParams.get('pipeline_id') || o.pipelineId === u.searchParams.get('pipeline_id')) && (!u.searchParams.get('status') || o.status === u.searchParams.get('status'))) });
-    if (p.endsWith('/records/search')) return respond({ records: s.records });
+    if (p === '/opportunities/pipelines') return respond({ pipelines: [{ id: PT, name: 'Property Team', stages: s.pipelineStages }] });
+    if (p === '/opportunities/search') {
+      s.searchRequests.push({ method, body });
+      if (s.failSearch || method === 'GET' && u.searchParams.get('order') === 'updated_at_desc') return respond({ message: 'Invalid order value' }, 422);
+      if (method === 'GET') return respond({ opportunities: s.opps.filter(o => (!u.searchParams.get('pipeline_id') || o.pipelineId === u.searchParams.get('pipeline_id')) && (!u.searchParams.get('status') || o.status === u.searchParams.get('status'))) });
+      const fieldNames = { date_updated: 'updatedAt', date_added: 'createdAt', pipeline_id: 'pipelineId', pipeline_stage_id: 'pipelineStageId', status: 'status' };
+      const rows = s.opps.filter(o => (body.filters || []).every(f => {
+        if (!fieldNames[f.field]) throw Error(`Unmocked search field: ${f.field}`);
+        const value = o[fieldNames[f.field]];
+        if (f.operator === 'range') return value >= f.value.gte;
+        if (f.operator !== 'eq') throw Error(`Unmocked search operator: ${f.operator}`);
+        return Array.isArray(f.value) ? f.value.includes(value) : value === f.value;
+      }));
+      const sort = body.sort?.[0] || { field: 'date_added', direction: 'desc' }, direction = sort.direction === 'asc' ? 1 : -1;
+      rows.sort((a, b) => direction * ((new Date(a[fieldNames[sort.field]] || 0).getTime() - new Date(b[fieldNames[sort.field]] || 0).getTime()) || a.id.localeCompare(b.id)));
+      const from = body.searchAfter ? rows.findIndex(o => o.id === body.searchAfter[1]) + 1 : 0;
+      return respond({
+        total: rows.length,
+        stageAggregations: s.pipelineStages.map(stage => ({ pipelineStageId: stage.id, totalCount: rows.filter(o => o.pipelineStageId === stage.id).length })),
+        opportunities: rows.slice(from, from + body.limit).map(o => ({ ...o, sort: [new Date(o[fieldNames[sort.field]] || 0).getTime(), o.id] })),
+      });
+    }
+    if (p.endsWith('/records/search')) {
+      const start = Number(body.searchAfter || 0);
+      return respond({ records: s.records.slice(start, start + body.pageLimit).map((r, i) => ({ ...r, searchAfter: start + i + 1 })) });
+    }
     if (/\/contacts\/[^/]+\/notes$/.test(p)) {
       if (s.failNotes) return respond({ message: 'Simulated note failure' }, 503);
       s.writes.push({ path: p, method, body }); s.notes.push(body);
       return respond({ note: { id: `note${s.notes.length}` } });
+    }
+    if (/^\/contacts\/[^/]+$/.test(p) && method === 'GET') {
+      const contact = s.contacts.find(c => c.id === p.split('/').pop());
+      return contact ? respond({ contact }) : respond({ error: 'Contact not found' }, 404);
     }
     const oppMatch = p.match(/^\/opportunities\/([^/]+)$/);
     const recordMatch = p.match(/\/records\/([^/]+)$/);
@@ -87,7 +117,14 @@ function createSandbox(boundary = {}) {
       if (row) row.value = value; else s.snapshots.push({ object, record_id, field: fieldName, value });
       return [];
     }
-    if (q.startsWith('SELECT') && q.includes('FROM link_sweep_runs')) return clone(s.runs);
+    if (q.startsWith('SELECT') && q.includes('FROM link_sweep_runs')) {
+      const rows = q.includes('WHERE failed = 0') ? s.runs.filter(r => r.failed === 0 && !r.dry_run) : s.runs;
+      return clone([...rows].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 1));
+    }
+    if (q.startsWith('INSERT INTO link_sweep_runs')) {
+      s.runs.push({ run_id: v[0], at: new Date().toISOString(), mode: v[1], dry_run: v[2], since: v[3], fixed: v[4], reported: v[5], failed: v[6], summary: JSON.parse(v[7]) });
+      return [];
+    }
     if (q.startsWith('SELECT') && q.includes('FROM link_sweep_links')) return clone(s.links);
     if (q.startsWith('SELECT') && q.includes('FROM link_sweep_dealsheet')) return clone(s.dealSheetLinks);
     if (q.startsWith('SELECT') && q.includes('FROM link_sweep_mismatch')) return [];
@@ -122,6 +159,7 @@ function createSandbox(boundary = {}) {
     '@/lib/redis': { getRedisClient: async () => ({ rPush: async () => 1, zAdd: async () => 1, get: async key => s.redis.get(key) ?? null, set: async (key, value) => s.redis.set(key, value) }) },
     '@/lib/dealSheetCache': { updateCachedRecord: async () => {} },
     '@/lib/tileAccess': { emailFromHeaders: () => 'release-test@example.invalid' },
+    '@/lib/ghlMonitorStore': { isCronAuthorised: () => true },
     '@/lib/reviewOutcomes/contactNote': { whoName: () => 'Release Test' },
     'next/server': { NextResponse: { json: (data, init) => Response.json(data, init) } },
   };

@@ -11,13 +11,13 @@ import { ensureStampTables } from '@/lib/ctrStamp';
 import { PROPERTY_OBJECT_ID, PROPERTY_LINK_FIELD_ID } from '@/app/api/contract-team-reporting/fields';
 import { sendCtrAlert } from '@/app/api/contract-team-reporting/alerts';
 import { PIPELINE_ID } from '@/lib/ghlPipelines';
+import { searchGhlOpportunities, type OpportunityFilter } from '@/lib/ghlOpportunitySearch';
 
 const BASE = process.env.GHL_BASE_URL || 'https://services.leadconnectorhq.com';
 const TOKEN = process.env.GHL_BEARER_TOKEN || '';
 const LOC = process.env.GHL_LOCATION_ID || '';
 const TOOL_URL = 'https://buyersclubtools.com.au';
 const MAX_RECORD_PAGES = 200;
-const MAX_OPP_PAGES = 1000;
 const SWITCH_KEY = 'link_sweep_apply';
 
 export const MIRRORS = [
@@ -33,6 +33,7 @@ type Opp = { id: string; name: string; updatedAt: string; pipelineId: string; st
 type Mismatch = { kind: 'hand_changed' | 'not_pointing_back' | 'opp_missing' | 'address_mismatch'; recordId: string; oppId: string; oppName: string; recordName: string; detail: string; who: string; whenAt: string | null };
 
 export type LinkSweepSummary = {
+  completed: boolean;
   runId: string; mode: 'delta' | 'full'; dryRun: boolean; since: string | null; seconds: number;
   records: number; linkedRecords: number; oppsChecked: number; inSync: number;
   fixed: number; fieldsFixed: number; reported: number; newReported: number; byKind: Record<string, number>;
@@ -107,6 +108,7 @@ export async function recordDealSheetLink(recordId: string, oppId: string, route
 
 async function readRecords(): Promise<Map<string, Rec>> {
   const out = new Map<string, Rec>();
+  const cursors = new Set<string>();
   let searchAfter: unknown;
   for (let page = 0; ; page++) {
     if (page >= MAX_RECORD_PAGES) throw new Error(`Property Records exceed ${MAX_RECORD_PAGES * 100}`);
@@ -115,8 +117,11 @@ async function readRecords(): Promise<Map<string, Rec>> {
       body: JSON.stringify({ locationId: LOC, pageLimit: 100, ...(searchAfter ? { searchAfter } : { page: 1 }) }),
     }, 'link-sweep-records');
     if (!res.ok) throw new Error(`GHL Property Records HTTP ${res.status}`);
-    const rows = ((await res.json()).records || []) as { id: string; updatedAt?: string; lastUpdatedBy?: Who; properties?: Record<string, unknown>; searchAfter?: unknown }[];
+    const data = await res.json();
+    if (!Array.isArray(data.records)) throw new Error('GHL Property Records returned no records array');
+    const rows = data.records as { id: string; updatedAt?: string; lastUpdatedBy?: Who; properties?: Record<string, unknown>; searchAfter?: unknown }[];
     for (const r of rows) {
+      if (!r?.id || !r.properties || typeof r.properties !== 'object' || Array.isArray(r.properties)) throw new Error('GHL Property Records returned an incomplete record');
       const p = r.properties || {};
       const get = (k: string) => str(p[k] ?? p[`custom_objects.property_reviews.${k}`]);
       out.set(r.id, {
@@ -127,7 +132,10 @@ async function readRecords(): Promise<Map<string, Rec>> {
     }
     if (rows.length < 100) break;
     searchAfter = rows[rows.length - 1].searchAfter;
-    if (!searchAfter) break;
+    if (!searchAfter) throw new Error('GHL Property Records returned a full page without a cursor');
+    const key = JSON.stringify(searchAfter);
+    if (cursors.has(key)) throw new Error('GHL Property Records repeated its pagination cursor');
+    cursors.add(key);
   }
   return out;
 }
@@ -143,35 +151,15 @@ const toOpp = (o: RawOpp): Opp => {
   return { id: o.id, name: o.name || '', updatedAt: o.updatedAt || '', pipelineId: o.pipelineId || '', status: o.status || '', regAddr: str(reg?.fieldValueString ?? reg?.fieldValue ?? reg?.value).trim(), mirrors };
 };
 
-// Opportunities newest-updated first; stops at `since` (delta) or reads all (full).
+// Explicit update-time filtering, not an early stop in a creation-sorted list.
 async function readOpps(since: string | null, openPipelineId?: string): Promise<Opp[]> {
-  const out: Opp[] = [];
-  let startAfter: unknown, startAfterId: unknown;
-  for (let page = 0; ; page++) {
-    if (page >= MAX_OPP_PAGES) throw new Error(`Opportunities exceed ${MAX_OPP_PAGES * 100}`);
-    const url = new URL(`${BASE}/opportunities/search`);
-    url.searchParams.set('location_id', LOC);
-    url.searchParams.set('limit', '100');
-    url.searchParams.set('order', 'updated_at_desc');
-    if (openPipelineId) {
-      url.searchParams.set('pipeline_id', openPipelineId);
-      url.searchParams.set('status', 'open');
-    }
-    if (startAfter !== undefined && startAfterId) { url.searchParams.set('startAfter', String(startAfter)); url.searchParams.set('startAfterId', String(startAfterId)); }
-    const res = await ghlFetch(url.toString(), { headers: headers() }, 'link-sweep-opps');
-    if (!res.ok) throw new Error(`GHL opportunities HTTP ${res.status}`);
-    const data = await res.json();
-    const opps = (data.opportunities || []) as RawOpp[];
-    let older = false;
-    for (const o of opps) {
-      if (since && o.updatedAt && o.updatedAt < since) { older = true; break; }
-      out.push(toOpp(o));
-    }
-    if (older || opps.length < 100 || !data.meta?.startAfterId) break;
-    startAfter = data.meta.startAfter;
-    startAfterId = data.meta.startAfterId;
-  }
-  return out;
+  const filters: OpportunityFilter[] = [];
+  if (since) filters.push({ field: 'date_updated', operator: 'range', value: { gte: since } });
+  if (openPipelineId) filters.push(
+    { field: 'pipeline_id', operator: 'eq', value: openPipelineId },
+    { field: 'status', operator: 'eq', value: 'open' },
+  );
+  return (await searchGhlOpportunities<RawOpp>(filters, 'link-sweep-opps')).map(toOpp);
 }
 
 async function readOpp(id: string): Promise<Opp | null> {
@@ -208,16 +196,50 @@ async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>): Prom
 }
 
 export async function runLinkSweep(opts: { full: boolean; forceDryRun?: boolean }): Promise<LinkSweepSummary> {
+  const t0 = Date.now();
+  const runId = new Date().toISOString();
+  const s: LinkSweepSummary = { completed: false, runId, mode: opts.full ? 'full' : 'delta', dryRun: !!opts.forceDryRun, since: null, seconds: 0, records: 0, linkedRecords: 0, oppsChecked: 0, inSync: 0, fixed: 0, fieldsFixed: 0, reported: 0, newReported: 0, byKind: {}, baselined: 0, failed: 0, errors: [], oppPassChecked: 0, oppPassCleared: 0, addressChecked: 0 };
+  try {
+    await performLinkSweep(opts, s);
+    s.completed = true;
+  } catch (error) {
+    s.failed++;
+    s.errors.push(error instanceof Error ? error.message : String(error));
+  }
+  s.seconds = Math.round((Date.now() - t0) / 1000);
+  try {
+    await getDb()`INSERT INTO link_sweep_runs (run_id, mode, dry_run, since, fixed, reported, failed, summary)
+      VALUES (${s.runId}, ${s.mode}, ${s.dryRun}, ${s.since}, ${s.fixed}, ${s.reported}, ${s.failed}, ${JSON.stringify(s)}::jsonb)`;
+  } catch (error) {
+    s.failed++;
+    s.errors.push(`Could not save sweep audit: ${error instanceof Error ? error.message : String(error)}`);
+    console.error('Link sweep audit failed:', error);
+  }
+  if (s.failed && !s.dryRun) {
+    const detail = s.errors.slice(0, 20).join('\n').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    await sendCtrAlert({
+      type: 'link-sweep-failed',
+      subject: 'Property link sweep failed',
+      reason: 'The scheduled link sweep did not complete successfully.',
+      impact: 'Some opportunity mirrors may not have been checked or repaired. The next run will retry from the last successful applied run.',
+      action: 'Check Admin > Automated updates > Link reconciliation sweep for the failed run and error details.',
+      detailsHtml: `<p>Run ${runId}; ${s.mode}; ${s.failed} failure(s).</p><pre>${detail}</pre>`,
+    });
+  }
+  return s;
+}
+
+async function performLinkSweep(opts: { full: boolean; forceDryRun?: boolean }, s: LinkSweepSummary): Promise<void> {
   await ensureLinkSweepTables();
   const sql = getDb();
-  const t0 = Date.now();
   const dryRun = opts.forceDryRun || !(await linkSweepSwitch()).apply;
-  const runId = new Date().toISOString();
-  const [last] = (await sql`SELECT at FROM link_sweep_runs ORDER BY at DESC LIMIT 1`) as { at: string }[];
+  s.dryRun = dryRun;
+  const runId = s.runId;
+  const [last] = (await sql`SELECT run_id, at FROM link_sweep_runs WHERE failed = 0 AND dry_run = false ORDER BY at DESC LIMIT 1`) as { run_id: string; at: string }[];
   const mode: 'delta' | 'full' = opts.full || !last ? 'full' : 'delta';
-  // 2 minutes of overlap so nothing updated during the previous run is missed.
-  const since = mode === 'delta' ? new Date(new Date(last.at).getTime() - 120_000).toISOString() : null;
-  const s: LinkSweepSummary = { runId, mode, dryRun, since, seconds: 0, records: 0, linkedRecords: 0, oppsChecked: 0, inSync: 0, fixed: 0, fieldsFixed: 0, reported: 0, newReported: 0, byKind: {}, baselined: 0, failed: 0, errors: [], oppPassChecked: 0, oppPassCleared: 0, addressChecked: 0 };
+  // Checkpoint at run START, with overlap for indexing. Failed/dry runs never advance it.
+  const since = mode === 'delta' ? new Date(new Date(last.run_id).getTime() - 120_000).toISOString() : null;
+  Object.assign(s, { mode, since });
 
   const records = await readRecords();
   s.records = records.size;
@@ -388,9 +410,6 @@ export async function runLinkSweep(opts: { full: boolean; forceDryRun?: boolean 
     await sql`UPDATE link_sweep_mismatch SET emailed_at = now() WHERE resolved_at IS NULL AND emailed_at IS NULL`;
   }
 
-  s.seconds = Math.round((Date.now() - t0) / 1000);
-  await sql`INSERT INTO link_sweep_runs (run_id, mode, dry_run, since, fixed, reported, failed, summary) VALUES (${runId}, ${mode}, ${dryRun}, ${since}, ${s.fixed}, ${s.reported}, ${s.failed}, ${JSON.stringify(s)}::jsonb)`;
-  return s;
 }
 
 export async function linkSweepAdminData() {
