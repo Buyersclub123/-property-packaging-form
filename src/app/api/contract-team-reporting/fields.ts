@@ -108,7 +108,7 @@ export const isOppDynamicReadOnly = (key: string) => key.startsWith(OPP_DYNAMIC_
 // Values computed by the reporting API (never written to GHL). Used by the NEW-mapping views.
 export const COMPUTED_FIELDS = [
   'financeTrack', 'constructionTrack', 'fcTrack', 'inFlight', 'inFlightNew', 'smsfConstructionDuplicate', 'testOpp',
-  'daysInFinanceStatus', 'daysInConstructionStage', 'propertyRecordCount', 'propertyRecordIds',
+  'daysInFinanceStatus', 'daysInConstructionStage', 'propertyRecordCount', 'propertyRecordIds', 'linkedProperties', 'linkedPropertyRecords',
 ] as const;
 
 // Reverse map: friendly name → field ID
@@ -3057,6 +3057,7 @@ export const CO_CHANGE_DATE_FIELDS: Record<string, string> = {
 // business-rule read-only fields (feedback items 7, 23, 29).
 // NOTE: registeredAddress was made editable on 2026-09-02 — do not re-add.
 export const READ_ONLY_FIELDS = new Set([
+  'linkedProperties', 'linkedPropertyRecords', 'propertyRecordCount', 'propertyRecordIds',
   // System / computed
   'id', 'name', 'opportunityName', 'pipelineStage', 'pipelineName', 'pipelineId', 'pipelineStageId',
   'assignedTo', 'owner', 'followers', 'daysSinceStageChange', 'stage', 'ghlLink', 'exchangeEmail', 'status',
@@ -3167,7 +3168,7 @@ export function getPropertyOptionLabel(coFieldKey: string, value: string): strin
 
 // Computed columns derived (wholly or partly) from Property Record fields: badged PR, not Opp.
 export const RECORD_DERIVED_FIELDS = new Set<string>([
-  'daysInConstructionStage', 'constructionTrack', 'fcTrack', 'inFlightNew', 'propertyRecordCount', 'propertyRecordIds',
+  'daysInConstructionStage', 'constructionTrack', 'fcTrack', 'inFlightNew', 'propertyRecordCount', 'propertyRecordIds', 'linkedProperties', 'linkedPropertyRecords',
 ]);
 /** Header badge: where a column's value actually comes from. */
 export function getColumnBadge(key: string): 'record' | 'opportunity' {
@@ -3281,6 +3282,8 @@ const OPPORTUNITY_FIELD_LABELS: Record<string, string> = {
   inFlightNew: 'In flight (new mapping)',
   daysInFinanceStatus: 'Days in Finance Status',
   daysInConstructionStage: 'Days in Construction stage',
-  propertyRecordCount: 'Active Property Records',
+  propertyRecordCount: 'Linked Property Records',
+  linkedProperties: 'Linked properties',
+  linkedPropertyRecords: 'Linked Property Record details',
   propertyRecordIds: 'Property Record IDs',
 };

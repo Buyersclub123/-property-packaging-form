@@ -85,13 +85,14 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>): Prom
 export interface GhlUser { id: string; name: string; email: string; deleted: boolean }
 let usersCache: { at: number; users: GhlUser[] } | null = null;
 
-export async function ghlUsers(): Promise<GhlUser[]> {
-  if (usersCache && Date.now() - usersCache.at < 10 * 60e3) return usersCache.users;
+export async function ghlUsers(forceLive = false): Promise<GhlUser[]> {
+  if (!forceLive && usersCache && Date.now() - usersCache.at < 10 * 60e3) return usersCache.users;
   const { locationId } = ghlEnv();
   const { body } = await ghlGet<{ users?: { id: string; name?: string; firstName?: string; lastName?: string; email?: string; deleted?: boolean }[] }>(
     `/users/?locationId=${locationId}`,
     '2021-07-28',
   );
+  if (forceLive && !Array.isArray(body?.users)) throw new Error('GHL returned no live user list');
   const users = (body?.users || []).map((u) => ({
     id: u.id,
     name: u.name || [u.firstName, u.lastName].filter(Boolean).join(' '),
@@ -239,7 +240,7 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
   return rows.length;
 }
 
-function calendarAuth() {
+export function calendarAuth() {
   const raw = process.env.GMAIL_READER_CREDENTIALS;
   if (!raw) throw new Error('GMAIL_READER_CREDENTIALS is not set (mailbox-reader service account key).');
   const key = JSON.parse(raw) as { client_email?: string; private_key?: string };

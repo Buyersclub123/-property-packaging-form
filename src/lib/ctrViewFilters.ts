@@ -9,6 +9,14 @@ export interface ViewFilterGroup {
   filters: ViewFilter[];
 }
 
+// Open is the normal population. A report must explicitly mention status and
+// permit another native status before its live read includes closed records.
+export function reportRequestsOtherStatuses(filters: ViewFilter[], groups?: ViewFilterGroup[]): boolean {
+  const statusFilters = [...filters, ...(groups || []).flatMap(g => g.filters)].filter(f => f.field === 'status');
+  return statusFilters.length > 0 && ['won', 'lost', 'abandoned'].some(status =>
+    statusFilters.some(f => matchesViewFilter({ status }, f)));
+}
+
 export function filterComplete(f: ViewFilter): boolean {
   return !!f.field.trim() && (f.operator === 'is blank' || f.operator === 'not blank' || !!f.value.trim());
 }

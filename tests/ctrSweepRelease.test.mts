@@ -26,7 +26,137 @@ test('Finance groups retain Established and Single builds but only blank-stage S
   assert.equal(mod.applyViewFilters(rows,common,[{name:'Incomplete',filters:[]}]).length,0);
   assert.match(mod.filterGroupsError([{name:'Incomplete',filters:[]}]),/at least one condition/);
   assert.equal(mod.applyViewFilters(rows,common).length,5);
+  // Existing visible reports retain their established matching behaviour.
   assert(mod.matchesViewFilter({stage:'Unconditional'},{field:'stage',operator:'in',value:'Conditional'}));
+});
+
+test('Open Property Team report retains linked seller records and all open rows across pages', async () => {
+  const h = createSandbox();
+  const seed = structuredClone(h.state.opps[0]);
+  h.state.opps = Array.from({ length: 205 }, (_, i) => ({
+    ...structuredClone(seed), id: i ? `purchase-${String(i).padStart(3, '0')}` : 'testopp',
+    status: 'open',
+    pipelineStageId: 'conditional',
+  }));
+  for (const status of ['won', 'lost', 'abandoned']) h.state.opps.push({ ...seed, id: status, status });
+  h.state.opps.push({ ...seed, id: 'finance-legacy', pipelineId: 'zgBRaMnACpskyf1wHCEV' });
+  Object.assign(h.state.records[0].properties, { status: '08_resold', reselling: 'No' });
+  h.state.redis.set('ctr:report', JSON.stringify({ fetchedAt: Date.now(), records: [{ id: 'stale' }] }));
+  const response = await h.load('src/app/api/contract-team-reporting/route.ts').GET(new Request('http://test/api?snapshot=1'));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('X-Reporting-Population'), 'property-team-open-default-v1');
+  const rows = await response.json();
+  assert.equal(rows.length, 205);
+  assert(rows.every((r:any) => r.pipelineId === PT));
+  assert(rows.every((r:any) => r.status === 'open'));
+  const seller = rows.find((r:any) => r.id === 'testopp');
+  assert.equal(seller.co_status, '08_resold');
+  assert.equal(seller.propertyRecordCount, '1');
+  assert.equal(seller.propertyRecordIds, 'testrecord');
+  const recon = await (await h.load('src/app/api/journey/reconcile/route.ts').GET()).json();
+  assert.equal(recon.pipelines.length, 1);
+  assert.equal(recon.pipelines[0].stages.reduce((sum:number, s:any) => sum + s.total, 0), 205);
+  const journey = h.load('src/app/(tools)/journey/journeyData.ts').buildJourneyData(rows, recon, false);
+  assert.equal(journey.opps.length, 205);
+  assert.equal(journey.stages.find((s:any) => s.id === 'pt-no-record').rows.some((r:any) => r.id === 'testopp'), false);
+  // These fixtures have Pending finance and blank construction fields. They
+  // remain in Progress without an invented Construction Stage tile.
+  assert(rows.every((r:any) => r.financeStatus === 'Pending finance' && !r.co_construction_stage));
+  assert.equal(journey.finance.filter((s:any) => !s.chip).length, 5);
+  assert.equal(journey.build.length, 10);
+  assert.equal(journey.finance.filter((s:any) => !s.chip).reduce((sum:number, s:any) => sum + s.rows.length, 0), 205);
+  assert.equal(journey.build.reduce((sum:number, s:any) => sum + s.rows.length, 0), 0);
+  assert(h.state.searchRequests.filter((r:any) => r.method === 'POST').length >= 3);
+  assert.equal(h.state.writes.length, 0);
+  const history = await h.load('src/app/api/contract-team-reporting/route.ts').GET(new Request('http://test/api?historical=1'));
+  assert.equal((await history.json()).length, 208);
+});
+
+test('Closed records require an explicit report status filter; visible reports are never retired by their filters', () => {
+  const h = createSandbox();
+  const { reportRequestsOtherStatuses } = h.load('src/lib/ctrViewFilters.ts');
+  assert.equal(reportRequestsOtherStatuses([]), false);
+  assert.equal(reportRequestsOtherStatuses([{field:'status',operator:'equals',value:'open'}]), false);
+  assert.equal(reportRequestsOtherStatuses([{field:'status',operator:'in',value:'open,won'}]), true);
+  const { retirementReason, RETIRED_CTR_REPORT_IDS } = h.load('src/lib/ctrReportRetirement.ts');
+  assert.equal(RETIRED_CTR_REPORT_IDS.size, 32);
+  assert.equal(retirementReason({id:'public-1786671131890', filters:[{field:'pipelineId',operator:'equals',value:'finance'}]}), null);
+  assert.equal(retirementReason({id:'builtin-fallen-deals'}), null);
+  assert.equal(retirementReason({id:'builtin-duplicate-records'}), null);
+  assert(retirementReason({id:'builtin-huntly'}));
+});
+
+test('Every report read is fresh and errors never serve the previous response', async () => {
+  const h = createSandbox();
+  const api = h.load('src/app/api/contract-team-reporting/route.ts');
+  assert.equal((await api.GET()).status, 200);
+  h.state.opps[0].name = 'Current name';
+  assert.equal((await (await api.GET()).json())[0].name, 'Current name');
+  h.state.failSchema = true;
+  const failed = await api.GET();
+  assert.equal(failed.status, 500);
+  assert.equal(Array.isArray(await failed.json()), false);
+  assert.equal(h.state.writes.length, 0);
+});
+
+test('Multiple Property Records remain explicit and no scalar record is chosen for editing', async () => {
+  const h = createSandbox();
+  const second = structuredClone(h.state.records[0]);
+  second.id = 'seller-record';
+  second.properties.status = '08_resold';
+  second.properties.property_type = 'established';
+  second.properties.contract_type = 'single_contract';
+  h.state.records.push(second);
+  const row = (await (await h.load('src/app/api/contract-team-reporting/route.ts').GET()).json())[0];
+  assert.equal(row.propertyRecordCount, '2');
+  assert.equal(row.propertyRecordIds, 'testrecord, seller-record');
+  assert.equal(row.co_record_id, '');
+  assert.equal(row.co_status, '');
+  assert.equal(JSON.parse(row.linkedPropertyRecords).length, 2);
+  const { applyViewFilters } = h.load('src/lib/ctrViewFilters.ts');
+  const filter = (field: string, value: string) => ({ field, operator: 'equals', value });
+  // Filters retain their original row-based meaning; linked records do not
+  // silently substitute a different property value during matching.
+  assert.equal(applyViewFilters([row], []).length, 1);
+  assert.equal(applyViewFilters([row], [filter('co_property_type', 'new'), filter('co_contract_type', 'split_contract')]).length, 0);
+  assert.equal(applyViewFilters([row], [filter('co_property_type', 'new'), filter('co_contract_type', 'single_contract')]).length, 0);
+});
+
+test('Live Sales batches duplicate searches while retaining name, age and email-first matching', async () => {
+  const now = new Date(Date.now() - 60_000).toISOString();
+  const older = new Date(Date.now() - 30 * 864e5).toISOString();
+  const recent = Array.from({ length: 210 }, (_, i) => ({
+    id: `new-${i}`, firstName: `Client${i}`, lastName: 'Test', email: `client${i}@example.invalid`,
+    phone: `+614${String(i).padStart(8, '0')}`, dateAdded: now,
+  }));
+  const contacts = [...recent, ...recent.filter((_, i) => i % 3 === 0).map(c => ({ ...c, id: `old-${c.id}`, dateAdded: older })),
+    { ...recent[1], id: 'different-name', firstName: 'Someone Else', dateAdded: older },
+    { ...recent[3], id: 'phone-only', email: 'different@example.invalid', dateAdded: new Date(Date.now() - 20 * 864e5).toISOString() }];
+  let reads = 0;
+  const h = createSandbox({
+    modules: {
+      '@/lib/reviewOutcomes/sync': { ghlUsers: async () => [] },
+      '@/lib/journeyLiveSales': { loadJourneySalesLive: async () => ({ meetings: [], opps: [] }) },
+    },
+    fetch: async (url: string, options: any) => {
+      assert.equal(new URL(url).pathname, '/contacts/search');
+      reads++;
+      const q = JSON.parse(options.body), f = q.filters[0];
+      const matches = contacts.filter(c => f.operator === 'range'
+        ? c.dateAdded >= f.value.gte && c.dateAdded <= f.value.lte
+        : f.value.includes((c as any)[f.field]));
+      matches.sort((a, b) => a.dateAdded.localeCompare(b.dateAdded) * (q.sort[0].direction === 'asc' ? 1 : -1));
+      return Response.json({ total: matches.length, contacts: matches.slice((q.page - 1) * q.pageLimit, q.page * q.pageLimit) });
+    },
+  });
+  const response = await h.load('src/app/api/journey/sales/route.ts').GET();
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.contacts.length, 210);
+  assert.equal(data.duplicates.length, 70);
+  assert.equal(data.duplicates.some((d:any) => d.id === 'new-1'), false);
+  assert.equal(data.duplicates.find((d:any) => d.id === 'new-3').why, 'name + email');
+  assert(reads < 20, `Expected batched reads, got ${reads}`);
 });
 
 for (const [label, props, action] of [

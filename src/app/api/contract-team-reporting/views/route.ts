@@ -3,6 +3,7 @@ import { getRedisClient } from '@/lib/redis';
 import { emailFromHeaders } from '@/lib/tileAccess';
 import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
 import { filterGroupsError, type ViewFilterGroup } from '@/lib/ctrViewFilters';
+import { retirementReason } from '@/lib/ctrReportRetirement';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -44,12 +45,9 @@ async function loadViews(): Promise<SavedView[]> {
   const redis = await getRedisClient();
   const raw = await redis.get(VIEWS_KEY);
   if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error('Saved reports are not a list');
+  return parsed;
 }
 
 async function saveViews(views: SavedView[]): Promise<void> {
@@ -60,7 +58,8 @@ async function saveViews(views: SavedView[]): Promise<void> {
 export async function GET() {
   try {
     const views = await loadViews();
-    return NextResponse.json({ views });
+    const retired = views.filter(v => retirementReason(v)).map(v => ({ id: v.id, name: v.name, reason: retirementReason(v) }));
+    return NextResponse.json({ views: views.filter(v => !retirementReason(v)), retired }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('CTR views GET error:', error);
     return NextResponse.json({ error: 'Failed to load views' }, { status: 500 });
@@ -74,6 +73,8 @@ export async function POST(request: NextRequest) {
     if (!view?.id || !view?.name) {
       return NextResponse.json({ error: 'view.id and view.name are required' }, { status: 400 });
     }
+    const reason = retirementReason(view);
+    if (reason) return NextResponse.json({ error: `${reason}. Create a Property Team report with explicit field filters.` }, { status: 400 });
     const groupsError = filterGroupsError(view.filterGroups);
     if (groupsError) return NextResponse.json({ error: groupsError }, { status: 400 });
     const views = await loadViews();

@@ -32,7 +32,7 @@ function createSandbox(boundary = {}) {
       ] }],
     writes: [], alerts: [], queries: [], notes: [], acks: [], ticks: [], snapshots: [], firstDetections: [],
     links: [], dealSheetLinks: [], mismatches: [], runs: [], redis: new Map(), ignoreWrites: false, failNotes: false,
-    searchRequests: [], failSearch: false,
+    searchRequests: [], failSearch: false, failSchema: false,
     contacts: [{ id: 'testcontact', firstName: 'Release', lastName: 'Test', email: 'client@example.invalid' }],
     pipelineStages: [{ id: 'settled', name: 'Settled' }, { id: 'conditional', name: 'Conditional' }, { id: 'price300', name: '$300k - $400k | PERSONAL' }, { id: 'price500', name: '$500k - $600k | PERSONAL' }, { id: 'price800', name: 'Proposals | $800k+ | PERSONAL' }],
   };
@@ -47,11 +47,20 @@ function createSandbox(boundary = {}) {
     const body = options.body ? JSON.parse(options.body) : null;
     const respond = (data, status = 200) => Response.json(clone(data), { status });
     const p = u.pathname;
+    if (p === '/users/') return respond({ users: [] });
+    if (/\/locations\/[^/]+\/customFields$/.test(p)) return respond({ customFields: [] }, s.failSchema ? 503 : 200);
+    if (p.startsWith('/custom-fields/object-key/')) return respond({ fields: [...new Set(s.records.flatMap(r => Object.keys(r.properties)))].map(key => ({ fieldKey: `custom_objects.property_reviews.${key}` })) }, s.failSchema ? 503 : 200);
     if (p === '/opportunities/pipelines') return respond({ pipelines: [{ id: PT, name: 'Property Team', stages: s.pipelineStages }] });
     if (p === '/opportunities/search') {
       s.searchRequests.push({ method, body });
       if (s.failSearch || method === 'GET' && u.searchParams.get('order') === 'updated_at_desc') return respond({ message: 'Invalid order value' }, 422);
-      if (method === 'GET') return respond({ opportunities: s.opps.filter(o => (!u.searchParams.get('pipeline_id') || o.pipelineId === u.searchParams.get('pipeline_id')) && (!u.searchParams.get('status') || o.status === u.searchParams.get('status'))) });
+      if (method === 'GET') {
+        const rows = s.opps.filter(o =>
+          (!u.searchParams.get('pipeline_id') || o.pipelineId === u.searchParams.get('pipeline_id')) &&
+          (!u.searchParams.get('pipeline_stage_id') || o.pipelineStageId === u.searchParams.get('pipeline_stage_id')) &&
+          (!u.searchParams.get('status') || u.searchParams.get('status') === 'all' || o.status === u.searchParams.get('status')));
+        return respond({ opportunities: rows.slice(0, Number(u.searchParams.get('limit') || 100)), meta: { total: rows.length } });
+      }
       const fieldNames = { date_updated: 'updatedAt', date_added: 'createdAt', pipeline_id: 'pipelineId', pipeline_stage_id: 'pipelineStageId', status: 'status' };
       const rows = s.opps.filter(o => (body.filters || []).every(f => {
         if (!fieldNames[f.field]) throw Error(`Unmocked search field: ${f.field}`);
@@ -162,12 +171,14 @@ function createSandbox(boundary = {}) {
     '@/lib/ghlMonitorStore': { isCronAuthorised: () => true },
     '@/lib/reviewOutcomes/contactNote': { whoName: () => 'Release Test' },
     'next/server': { NextResponse: { json: (data, init) => Response.json(data, init) } },
+    ...(boundary.modules || {}),
   };
   function load(file) {
     const absolute = path.isAbsolute(file) ? file : path.join(ROOT, file);
     if (cache.has(absolute)) return cache.get(absolute).exports;
     const mod = { exports: {} }; cache.set(absolute, mod);
-    const code = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+    const sourceKey = path.relative(ROOT, absolute).replaceAll('\\', '/');
+    const code = ts.transpileModule(boundary.sources?.[sourceKey] ?? fs.readFileSync(absolute, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
     const req = name => {
       if (mocks[name]) return mocks[name];
       const resolved = name.startsWith('@/') ? path.join(ROOT, 'src', name.slice(2)) : name.startsWith('.') ? path.resolve(path.dirname(absolute), name) : null;
@@ -176,7 +187,7 @@ function createSandbox(boundary = {}) {
       if (mocks[alias]) return mocks[alias];
       return load(fs.existsSync(resolved) && fs.statSync(resolved).isFile() ? resolved : resolved + '.ts');
     };
-    const context = vm.createContext({ module: mod, exports: mod.exports, require: req, console, URL, Response, Request, Headers,
+    const context = vm.createContext({ module: mod, exports: mod.exports, require: req, console, URL, URLSearchParams, Response, Request, Headers, AbortSignal, AbortController,
       process: { env: boundary.env || { GHL_BASE_URL: 'https://ghl.test', GHL_BEARER_TOKEN: 'test-only', GHL_LOCATION_ID: 'test-location' } },
       fetch: boundary.fetch || fetchFake, setTimeout: fn => setTimeout(fn, 0), clearTimeout });
     new vm.Script(code, { filename: absolute }).runInContext(context);

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ghlFetch } from '@/lib/ghlFetch';
 import nodemailer from 'nodemailer';
 import { getRedisClient } from '@/lib/redis';
 import { FIELD_MAP, PROPERTY_FIELD_MAP, OPP_DYNAMIC_PREFIX } from '../fields';
@@ -18,7 +19,6 @@ const ALERT_EMAIL_USER = process.env.ALERT_EMAIL_USER;
 const ALERT_EMAIL_PASSWORD = process.env.ALERT_EMAIL_PASSWORD;
 const ALERT_TO = CTR_ALERT_RECIPIENTS;
 
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 export interface SchemaField {
   id: string;
@@ -31,6 +31,7 @@ export interface SchemaField {
 }
 
 interface SchemaPayload {
+  users: Record<string, string>;
   fetchedAt: string;
   opportunityFields: SchemaField[];
   propertyFields: SchemaField[];
@@ -38,11 +39,19 @@ interface SchemaPayload {
   newPropertyFields: SchemaField[];
 }
 
-// In-memory cache (per server instance)
-let cache: { payload: SchemaPayload; at: number } | null = null;
+async function fetchUsers(): Promise<Record<string, string>> {
+  const res = await ghlFetch(`${GHL_BASE_URL}/users/?locationId=${GHL_LOCATION_ID}`, {
+    headers: { Authorization: `Bearer ${GHL_API_TOKEN}`, Version: GHL_API_VERSION }, cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`GHL users error: ${res.status}`);
+  const data = await res.json();
+  if (!Array.isArray(data.users)) throw new Error('GHL returned no user list');
+  return Object.fromEntries(data.users.map((u: { id: string; name?: string; firstName?: string; lastName?: string }) =>
+    [u.id, u.name || [u.firstName, u.lastName].filter(Boolean).join(' ')]));
+}
 
 async function fetchOpportunitySchema(): Promise<SchemaField[]> {
-  const res = await fetch(
+  const res = await ghlFetch(
     `${GHL_BASE_URL}/locations/${GHL_LOCATION_ID}/customFields?model=opportunity`,
     {
       headers: { Authorization: `Bearer ${GHL_API_TOKEN}`, Version: GHL_API_VERSION },
@@ -66,7 +75,7 @@ async function fetchOpportunitySchema(): Promise<SchemaField[]> {
 }
 
 async function fetchPropertySchema(): Promise<SchemaField[]> {
-  const res = await fetch(
+  const res = await ghlFetch(
     `${GHL_BASE_URL}/objects/${PROPERTY_OBJECT_KEY}?locationId=${GHL_LOCATION_ID}&fetchProperties=true`,
     {
       headers: { Authorization: `Bearer ${GHL_API_TOKEN}`, Version: GHL_API_VERSION },
@@ -141,13 +150,10 @@ async function alertNewFields(newOpp: SchemaField[], newProp: SchemaField[]): Pr
 
 export async function GET() {
   try {
-    if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
-      return NextResponse.json(cache.payload);
-    }
-
-    const [opportunityFields, propertyFields] = await Promise.all([
+    const [opportunityFields, propertyFields, users] = await Promise.all([
       fetchOpportunitySchema(),
       fetchPropertySchema(),
+      fetchUsers(),
     ]);
 
     // Baseline: every field ID seen when the feature first ran. Only fields
@@ -177,6 +183,7 @@ export async function GET() {
       : [];
 
     const payload: SchemaPayload = {
+      users,
       fetchedAt: new Date().toISOString(),
       opportunityFields,
       propertyFields,
@@ -184,31 +191,21 @@ export async function GET() {
       newPropertyFields,
     };
 
-    cache = { payload, at: Date.now() };
-
-    // Store latest schema so the update endpoint can write new property fields
-    try {
-      const redis = await getRedisClient();
-      await redis.set('ctr:schema-latest', JSON.stringify(payload));
-    } catch { /* Redis optional for schema serving */ }
-
     // Fire-and-forget alert for newly appeared fields
     alertNewFields(newOpportunityFields, newPropertyFields);
 
-    return NextResponse.json(payload);
+    return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('CTR schema error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     sendCtrAlert({
       type: 'schema-fetch-failed',
-      subject: 'Hourly GHL schema check failed',
+      subject: 'Live GHL schema check failed',
       reason: 'The tool tried to refresh field definitions (dropdown options, field types) from GHL and the request failed.',
-      impact: 'The tool keeps working using its last known field configuration, but any NEW dropdown values or fields added in GHL will not appear until the schema check recovers.',
+      impact: 'Field definitions could not be verified. The tool shows an error rather than old dropdown values or field definitions.',
       action: 'Check GHL API status and the GHL_BEARER_TOKEN. If GHL is fine, check Vercel function logs for /api/contract-team-reporting/schema.',
       detailsHtml: `<pre>${message.slice(0, 1000)}</pre>`,
     });
-    // Serve stale cache if we have one
-    if (cache) return NextResponse.json(cache.payload);
     return NextResponse.json({ error: 'Failed to load GHL schema' }, { status: 500 });
   }
 }

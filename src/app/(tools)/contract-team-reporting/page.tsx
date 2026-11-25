@@ -3,12 +3,13 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useCallback, useRef } from 'react';
 import UnlinkAcks from './UnlinkAcks';
 import CtrFilterGroups from '@/components/CtrFilterGroups';
-import { applyViewFilters, filterGroupsError, type ViewFilter, type ViewFilterGroup } from '@/lib/ctrViewFilters';
+import { applyViewFilters, filterGroupsError, reportRequestsOtherStatuses, type ViewFilter, type ViewFilterGroup } from '@/lib/ctrViewFilters';
+import { retirementReason } from '@/lib/ctrReportRetirement';
 import { createPortal } from 'react-dom';
 import { getUserEmail, saveUserEmail, validateUserEmail, hasValidUserEmail } from '@/lib/userAuth';
 import { useAutoRefreshPause } from '@/lib/useAutoRefreshPause';
 import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
-import { PIPELINE_ID, PIPELINE_NAMES, REPORTING_PIPELINE_IDS } from '@/lib/ghlPipelines';
+import { PIPELINE_ID, PIPELINE_NAMES } from '@/lib/ghlPipelines';
 import { STAGE_DEFINITIONS, boldSegments } from '@/lib/stageDefinitions';
 import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPERTY_FIELD_OPTION_PAIRS, getPropertyOptionLabel, CO_PREFIX, isCoFieldEditable, READ_ONLY_FIELDS, MONTH_NAMES, parseLandRegistrationMonth, formatLandRegistrationMonth, landRegistrationSortKey, completionDateSortKey, LAND_REG_PARTS, LandRegPart, getColumnBadge, OPP_DYNAMIC_PREFIX, isOppDynamicReadOnly } from '@/app/api/contract-team-reporting/fields';
 
@@ -16,35 +17,8 @@ import { getFieldLabel, getFieldSource, FieldSource, PROPERTY_FIELD_TYPES, PROPE
 // USER MAP
 // ============================================================================
 
-const USER_MAP: Record<string, string> = {
-  JagMfwQldvDP6W83tVGf: 'Adi Manek',
-  SsghxcuMYeJkvGmysQ8a: 'Ali Hallak',
-  FfsdYIF2zsNIhACa0okl: 'Bishoy Azer',
-  dnHqpE4w1NkChxz02TMD: 'Brandon Lee',
-  dEOydmLG3o6FFflc5vw2: 'Carlo Surace',
-  gNb33F7eUFCT3HLmN7hx: 'Cooper Rigg',
-  zWOSP7ToACgxvmT5DfLV: 'Ethan Willis',
-  ILt7Gfsml0W44MlMRote: 'Ethan Lipovac',
-  bet9EbE8K7ATiTIcrKDf: 'James Middleton',
-  juIYjKKpcNJTWmABI4mL: 'Jessica Khan',
-  bF4VSGTCthQ9yHVMqTLF: 'John El Hindi',
-  ivq1rs3PIhzalIlnGXLr: 'John Truscott',
-  zJeab2JyjwV6iJi9JnDY: 'Luke Czajka',
-  JZPsmIvFNg8FDbSvHT8h: 'Mahdi Shamseddin',
-  jW2P9G8d8omEDV5sUNdH: 'Mark Youssef',
-  WTbTdnLlc8xUZPHo0Y4S: 'Max Yeung',
-  v12BS3gcOJvoLC06Di8m: 'Nathan Fowler',
-  oApontRBOU2NyNq5EdoM: 'Ninos Emmanuel',
-  sHdMcNB7UEc8iA8va4xe: 'Phil H',
-  MNdbAuC6atnoW1CaLISP: 'Roy Nassar',
-  F8s1EEJ41qkj9nckze0B: 'Sachin Patel',
-  t8jdvB8kgEGOVcFxF3OX: 'Sam Singh',
-  '9TN4PVTAD0ha7XX6yhfP': 'Shayur Sumer',
-};
-
-const BA_OPTIONS = Object.entries(USER_MAP)
-  .map(([id, name]) => ({ id, name }))
-  .sort((a, b) => a.name.localeCompare(b.name));
+let USER_MAP: Record<string, string> = {};
+let BA_OPTIONS: { id: string; name: string }[] = [];
 
 // ============================================================================
 // DROPDOWN OPTIONS
@@ -101,6 +75,7 @@ let LIVE_SCHEMA: LiveSchemaRegistry | null = null;
 // Header text: Property Record columns always show their GHL label (never the raw key),
 // even in saved layouts; other columns keep their column label.
 function headerLabel(col: { key: string; label: string }): string {
+  if (col.key === 'propertyRecordCount') return 'Linked Property Records';
   if (!col.key.startsWith(CO_PREFIX) && !col.key.startsWith(OPP_DYNAMIC_PREFIX)) return col.label;
   return LIVE_SCHEMA?.labels[col.key] || getFieldLabel(col.key);
 }
@@ -672,340 +647,9 @@ const FINANCE_TRACKING_COLUMNS: ColumnDef[] = [
   { key: 'assignedBA', label: 'Assigned BA', width: 120 },
 ];
 
+const col = (key: string, width = 120): ColumnDef => ({ key, label: getFieldLabel(key), width });
+
 const PRESET_VIEWS: ViewDef[] = [
-  {
-    // Replicates the real B&P & Finance tool default view:
-    // Finance pipeline | Type: Established | Stage ≠ Settled
-    id: 'builtin-bp',
-    name: 'B&P',
-    section: 'Standard' as ViewSection,
-    builtin: true,
-    columns: DEFAULT_COLUMNS,
-    filters: [
-      { field: 'pipelineId', operator: 'equals', value: FINANCE_PIPELINE_ID },
-      { field: 'typeOfProperty', operator: 'equals', value: 'Established' },
-      { field: 'pipelineStage', operator: 'not equals', value: 'Settled' },
-    ],
-    // Sorted by B&P Due Date at the contract team's request. This deliberately
-    // differs from the old config sheet, which sorted by Confirmed Settlement Date.
-    sortBy: 'bpDueDate',
-    sortDir: 'asc',
-  },
-  {
-    id: 'builtin-full-fc',
-    name: 'Full F&C',
-    section: 'Standard' as ViewSection,
-    builtin: true,
-    columns: FULL_FC_COLUMNS,
-    // Full F&C = Finance + Construction. Matches the old extract: Settled is
-    // dropped API-side, HANDOVER is included.
-    filters: [
-      { field: 'pipelineId', operator: 'in', value: `${CONSTRUCTION_PIPELINE_ID},${FINANCE_PIPELINE_ID}` },
-    ],
-    sortBy: 'confirmedSettlementDate',
-    sortDir: 'asc',
-  },
-  {
-    id: 'builtin-settlement',
-    name: 'Settlement Tracking',
-    section: 'Standard' as ViewSection,
-    builtin: true,
-    columns: SETTLEMENT_COLUMNS,
-    filters: [
-      { field: 'pipelineId', operator: 'equals', value: FINANCE_PIPELINE_ID },
-    ],
-    // Two-level sort, as per the original config sheet.
-    sortBy: 'confirmedSettlementDate',
-    sortDir: 'asc',
-    sorts: [
-      { column: 'confirmedSettlementDate', dir: 'asc' },
-      { column: 'daysSinceStageChange', dir: 'asc' },
-    ],
-  },
-  {
-    id: 'builtin-ocean-rise',
-    name: 'Ocean Rise',
-    section: 'Custom' as ViewSection,
-    builtin: true,
-    columns: PROJECT_COLUMNS,
-    filters: [
-      { field: 'registeredAddress', operator: 'contains', value: 'ocean rise' },
-    ],
-    sortBy: 'registeredAddress',
-    sortDir: 'asc',
-  },
-  {
-    id: 'builtin-build-deposit',
-    name: 'Build Deposit Status',
-    section: 'Standard' as ViewSection,
-    builtin: true,
-    columns: BUILD_DEPOSIT_COLUMNS,
-    // Original report = Construction (incl. HANDOVER) + Finance (excl. Settled).
-    filters: [
-      { field: 'pipelineId', operator: 'in', value: `${CONSTRUCTION_PIPELINE_ID},${FINANCE_PIPELINE_ID}` },
-    ],
-    sortBy: 'confirmedSettlementDate',
-    sortDir: 'asc',
-  },
-  {
-    id: 'builtin-uncon',
-    name: 'Uncon Tracking',
-    section: 'Standard' as ViewSection,
-    builtin: true,
-    columns: UNCON_COLUMNS,
-    filters: [
-      { field: 'pipelineId', operator: 'equals', value: FINANCE_PIPELINE_ID },
-    ],
-    sortBy: 'daysSinceStageChange',
-    sortDir: 'asc',
-  },
-  {
-    id: 'builtin-pm-intro',
-    name: 'PM Intro Tracking',
-    section: 'Standard' as ViewSection,
-    builtin: true,
-    columns: PM_INTRO_COLUMNS,
-    // Per the original config sheet: Construction pipeline, minus HANDOVER.
-    filters: [
-      { field: 'pipelineId', operator: 'equals', value: CONSTRUCTION_PIPELINE_ID },
-      { field: 'pipelineStage', operator: 'not contains', value: 'Handover' },
-    ],
-    // Two-level sort, as per the original config sheet.
-    sortBy: 'pipelineStage',
-    sortDir: 'desc',
-    sorts: [
-      { column: 'pipelineStage', dir: 'desc' },
-      { column: 'daysSinceStageChange', dir: 'desc' },
-    ],
-  },
-  {
-    id: 'builtin-huntly',
-    name: 'Huntly VIC',
-    section: 'Custom' as ViewSection,
-    builtin: true,
-    columns: PROJECT_COLUMNS,
-    filters: [
-      { field: 'registeredAddress', operator: 'contains', value: 'huntly' },
-      { field: 'name', operator: 'not contains', value: 'Bilal Darwich' },
-      { field: 'name', operator: 'not contains', value: 'Cooper Rigg' },
-    ],
-    sortBy: 'registeredAddress',
-    sortDir: 'asc',
-  },
-  {
-    id: 'builtin-golden-horizon',
-    name: 'Golden Horizon Bundaberg',
-    section: 'Custom' as ViewSection,
-    builtin: true,
-    columns: PROJECT_COLUMNS,
-    filters: [
-      { field: 'registeredAddress', operator: 'contains', value: 'Golden Horizon' },
-    ],
-    sortBy: 'registeredAddress',
-    sortDir: 'asc',
-  },
-  {
-    id: 'builtin-finance-tracking',
-    name: 'Finance Tracking',
-    section: 'Standard' as ViewSection,
-    builtin: true,
-    columns: FINANCE_TRACKING_COLUMNS,
-    filters: [
-      { field: 'pipelineId', operator: 'equals', value: FINANCE_PIPELINE_ID },
-    ],
-    sortBy: 'financeDueDate',
-    sortDir: 'asc',
-  },
-];
-
-// ----------------------------------------------------------------------------
-// NEW-mapping copies (JT 1/11): every preset again as "<name> NEW", built on Finance Status,
-// Construction stage and Property Record fields instead of the Finance / Construction pipelines.
-// Counts must match the original once the in-flight load is done. Computed fields come from the API:
-// financeTrack / constructionTrack / fcTrack / inFlightNew exclude Deal Fallen Over and Property Team Settled.
-// ----------------------------------------------------------------------------
-// Every property fact in a NEW view comes from the linked Property Record (co_), never the Opportunity.
-// Rulebook: recreate the old view exactly; only fields whose information MOVED are re-pointed.
-// Stage, Exchange / Unconditional / Confirmed Settlement dates, B&P, deposits and contacts stay on the Opportunity.
-const NEW_COLUMN_SWAP: Record<string, string[]> = {
-  registeredAddress: ['co_property_address'],
-  settlementDate: ['settlementDate', 'co_settlement_date_mined'],
-  smsfName: ['purchasingEntityName', 'purchasingEntityType'],
-  personalName: ['purchasingEntityName', 'purchasingEntityType'],
-  trustName: ['purchasingEntityName', 'purchasingEntityType'],
-  opp_trust_entity_name: ['purchasingEntityName', 'purchasingEntityType'],
-  opp_entity_type: ['purchasingEntityType'],
-  typeOfProperty: ['co_property_type'],
-  opp_contract_type: ['co_contract_type'],
-  registration: ['co_land_registration'],
-  registrationDateETA: ['co_land_registration'],
-  estimatedRegistrationDate: ['co_land_registration'],
-  agentBuilderDetails: ['co_builder_mined'],
-  opp_total_purchase_price: ['co_closing_price', 'co_closing_price_land', 'co_closing_price_build'],
-};
-// Which pipeline the old view read: its Stage / Pipeline / days columns move to that pipeline's new field.
-type NewScope = 'finance' | 'construction' | 'mixed';
-const VIEW_SCOPE: Record<string, NewScope> = {
-  'builtin-bp': 'finance', 'builtin-settlement': 'finance', 'builtin-uncon': 'finance', 'builtin-finance-tracking': 'finance',
-  'builtin-pm-intro': 'construction',
-};
-const STAGE_SWAP: Record<NewScope, Record<string, string[]>> = {
-  finance: { pipelineName: ['financeStatus'], pipelineStage: ['financeStatus', 'pipelineStage'], daysSinceStageChange: ['daysInFinanceStatus'] },
-  construction: { pipelineName: ['co_construction_stage'], pipelineStage: ['co_construction_stage', 'pipelineStage'], daysSinceStageChange: ['daysInConstructionStage'] },
-  mixed: { pipelineName: ['financeStatus'], pipelineStage: ['co_construction_stage', 'pipelineStage'], daysSinceStageChange: ['daysInFinanceStatus', 'daysInConstructionStage'] },
-};
-// MINED copies: each mined Property Record value sits beside the Opportunity field it could update.
-const MINED_PAIRS: Record<string, string[]> = {
-  confirmedSettlementDate: ['confirmedSettlementDate', 'co_settlement_date_mined'],
-  exchangeDate: ['exchangeDate', 'co_land_contract_date_mined'],
-  agentBuilderDetails: ['agentBuilderDetails', 'co_builder_mined'],
-  opp_total_purchase_price: ['opp_total_purchase_price', 'co_closing_price', 'co_closing_price_land', 'co_closing_price_build'],
-};
-const MINED_KEYS = new Set([
-  'co_settlement_date_mined', 'co_land_contract_date_mined', 'co_build_contract_date_mined', 'co_builder_mined',
-  'co_closing_price', 'co_closing_price_land', 'co_closing_price_build',
-]);
-// Gmail message id the miner took a value from, stored on the Property Record as <field>_source_message_id.
-function minedSourceMessageId(record: object, key: string): string {
-  return (record as Record<string, string | undefined>)[`${key}_source_message_id`] || '';
-}
-// NEW / MINED views never show a blank cell; this is the muted placeholder text.
-function emptyCellLabel(record: object, key: string): string {
-  const r = record as Record<string, string | undefined>;
-  if (key.startsWith(CO_PREFIX) && !r.propertyRecordIds) return 'No record';
-  if (key === 'co_construction_stage' || key === 'daysInConstructionStage') {
-    if (!r.propertyRecordIds) return 'No record';
-    if (r.co_property_type === 'established') return 'Not applicable';
-    return 'Not started';
-  }
-  return 'Not set';
-}
-// Blank-cell placeholders apply on any view built from the new mapping - judged by its columns, not its name or id -
-// so copies such as "B&P (JT)" behave exactly like the built-in NEW views.
-const NEW_MAPPING_KEYS = new Set(['financeStatus', 'daysInFinanceStatus', 'daysInConstructionStage', 'purchasingEntityName', 'purchasingEntityType']);
-const isNewOrMinedView = (view: ViewDef) =>
-  view.id.endsWith('-new') || view.id.endsWith('-mined') || view.columns.some((c) => c.key.startsWith(CO_PREFIX) || NEW_MAPPING_KEYS.has(c.key));
-
-// Finance NEW views leave out Construction-pipeline opps unless "include deals in construction" is ticked (JT, parity 1/11).
-const EXCLUDE_CONSTRUCTION: ViewFilter = { field: 'pipelineId', operator: 'not equals', value: CONSTRUCTION_PIPELINE_ID };
-const isExcludeConstruction = (f: ViewFilter) =>
-  f.field === EXCLUDE_CONSTRUCTION.field && f.operator === EXCLUDE_CONSTRUCTION.operator && f.value === EXCLUDE_CONSTRUCTION.value;
-const IN_FLIGHT_NEW: ViewFilter = { field: 'inFlightNew', operator: 'equals', value: 'Yes' };
-
-const NEW_VIEW_FILTERS: Record<string, ViewFilter[]> = {
-  'builtin-bp': [
-    { field: 'financeTrack', operator: 'equals', value: 'Yes' },
-    { field: 'co_property_type', operator: 'equals', value: 'established' },
-    EXCLUDE_CONSTRUCTION,
-  ],
-  'builtin-full-fc': [{ field: 'fcTrack', operator: 'equals', value: 'Yes' }],
-  'builtin-build-deposit': [{ field: 'fcTrack', operator: 'equals', value: 'Yes' }],
-  'builtin-settlement': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
-  'builtin-uncon': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
-  'builtin-finance-tracking': [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
-  // Project views filter on the Property Record project_name (picked from Deal Sheet → Project names), not address text.
-  'builtin-ocean-rise': [{ field: 'co_project_name', operator: 'in', value: 'ocean rise' }, IN_FLIGHT_NEW],
-  'builtin-huntly': [
-    { field: 'co_project_name', operator: 'in', value: 'huntly, harlowe' },
-    { field: 'name', operator: 'not contains', value: 'Bilal Darwich' },
-    { field: 'name', operator: 'not contains', value: 'Cooper Rigg' },
-    IN_FLIGHT_NEW,
-  ],
-  'builtin-golden-horizon': [{ field: 'co_project_name', operator: 'in', value: 'golden horizon' }, IN_FLIGHT_NEW],
-  'builtin-pm-intro': [
-    { field: 'constructionTrack', operator: 'equals', value: 'Yes' },
-    { field: 'co_construction_stage', operator: 'not equals', value: 'handover' },
-  ],
-};
-
-// Column labels that differ in the NEW views.
-const NEW_LABELS: Record<string, string> = { settlementDate: 'Settlement terms', name: 'Opportunity Name' };
-
-function toNewColumns(cols: ColumnDef[], scope: NewScope, mined: boolean): ColumnDef[] {
-  const out: ColumnDef[] = [];
-  const seen = new Set<string>();
-  for (const c of cols) {
-    const keys = (mined && MINED_PAIRS[c.key]) || STAGE_SWAP[scope][c.key] || NEW_COLUMN_SWAP[c.key] || [c.key];
-    for (const key of keys) {
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(key === c.key ? { ...c, label: NEW_LABELS[key] ?? c.label } : { key, label: getFieldLabel(key), width: c.width });
-    }
-  }
-  return out;
-}
-
-// ZZZ / test opps never appear in NEW / MINED views (JT 1/11), so counts compare like for like.
-const NOT_TEST_OPP: ViewFilter = { field: 'testOpp', operator: 'not equals', value: 'Yes' };
-
-function toNewView(v: ViewDef, mined = false): ViewDef {
-  const scope = VIEW_SCOPE[v.id] ?? 'mixed';
-  const swapSort = (col: string) =>
-    col === 'daysSinceStageChange' ? (scope === 'construction' ? 'daysInConstructionStage' : 'daysInFinanceStatus')
-      : col === 'pipelineStage' ? (scope === 'finance' ? 'financeStatus' : 'co_construction_stage')
-      : col === 'registeredAddress' ? 'co_property_address' : col;
-  const filters = NEW_VIEW_FILTERS[v.id]
-    // Project views keep their address / name filters (address read from the Property Record) and add the in-flight scope.
-    ?? [
-      ...v.filters.filter((f) => f.field !== 'pipelineId')
-        .map((f) => (f.field === 'registeredAddress' ? { ...f, field: 'co_property_address' } : f)),
-      { field: 'inFlightNew', operator: 'equals' as const, value: 'Yes' },
-    ];
-  return {
-    ...v,
-    id: `${v.id}-${mined ? 'mined' : 'new'}`,
-    name: `${v.name} ${mined ? 'MINED' : 'NEW'}`,
-    columns: toNewColumns(v.columns, scope, mined),
-    filters: [...filters, NOT_TEST_OPP],
-    sortBy: swapSort(v.sortBy),
-    sorts: v.sorts?.map((s) => ({ ...s, column: swapSort(s.column) })),
-  };
-}
-
-const col = (key: string, width = 120): ColumnDef => ({ key, label: NEW_LABELS[key] ?? getFieldLabel(key), width });
-
-PRESET_VIEWS.push(
-  ...PRESET_VIEWS.map((v) => toNewView(v)),
-  ...PRESET_VIEWS.map((v) => toNewView(v, true)),
-  {
-    id: 'builtin-valuation-access',
-    name: 'Valuation access',
-    section: 'Standard',
-    builtin: true,
-    columns: [
-      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('co_property_address', 220), col('assignedBA'),
-      col('financeStatus'), col('daysInFinanceStatus', 80), col('valuationAccessEstimate'), col('valuationAccessAvailable', 90),
-      col('valuationExpectedAccessDate'), col('valuationRequested', 90), col('valuationRequestedDate'), col('valuationBookedDate'),
-      col('valuationAttended', 90), col('valuationAttendedDate'), col('valuationOutcome'), col('valuationAmountResidential'),
-      col('valuationShortfall', 90), col('valuationNotes', 250), col('financeDueDate'), col('confirmedSettlementDate'), col('latestStatusUpdate', 250),
-    ],
-    filters: [{ field: 'financeTrack', operator: 'equals', value: 'Yes' }, EXCLUDE_CONSTRUCTION],
-    sortBy: 'valuationExpectedAccessDate',
-    sortDir: 'asc',
-  },
-  {
-    // Val tracking (JT 3/11): B&P-style tracking of valuation access. Population = every in-flight purchase that still needs
-    // a valuation (new single, new split, established). "No val access" = land not yet Registered, so Land registration leads,
-    // then the scheduled access, then each valuation step in order.
-    id: 'builtin-val-tracking',
-    name: 'Val tracking',
-    section: 'Standard',
-    builtin: true,
-    columns: [
-      { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('co_property_address', 220), col('assignedBA'),
-      col('co_property_type', 100), col('co_contract_type', 90), col('co_construction_stage', 150), col('co_land_registration', 150), col('valuationAccessEstimate', 130),
-      col('valuationAccessAvailable', 90), col('valuationExpectedAccessDate', 120), col('valuationRequested', 90), col('valuationRequestedDate', 110),
-      col('valuationBookedDate', 110), col('valuationAttended', 90), col('valuationAttendedDate', 110), col('valuationOutcome', 110),
-      col('valuationAmountResidential', 120), col('valuationShortfall', 90), col('financeStatus'), col('valuationNotes', 250),
-    ],
-    // Every in-flight purchase that still needs a valuation: new single / new split / established, finance not yet approved or not tracked.
-    filters: [
-      { field: 'financeStatus', operator: 'not equals', value: 'Formally approved' },
-      { field: 'financeStatus', operator: 'not equals', value: 'Not Tracked' },
-    ],
-    sortBy: 'co_land_registration',
-    sortDir: 'asc',
-  },
   {
     id: 'builtin-fallen-deals',
     name: 'Fallen deals',
@@ -1029,12 +673,38 @@ PRESET_VIEWS.push(
       { key: 'ghlLink', label: 'GHL', width: 50 }, col('name', 220), col('co_property_address', 220), col('pipelineName', 100),
       { key: 'pipelineStage', label: 'Stage', width: 140 }, col('propertyRecordCount', 90), col('propertyRecordIds', 260), col('co_status'),
     ],
-    // More than one active record (not Reselling, not 05/06/07/08) linked to the same opportunity.
     filters: [{ field: 'propertyRecordIds', operator: 'contains', value: ',' }],
     sortBy: 'name',
     sortDir: 'asc',
   },
-);
+];
+
+const MINED_KEYS = new Set([
+  'co_settlement_date_mined', 'co_land_contract_date_mined', 'co_build_contract_date_mined', 'co_builder_mined',
+  'co_closing_price', 'co_closing_price_land', 'co_closing_price_build',
+]);
+// Gmail message id the miner took a value from, stored on the Property Record as <field>_source_message_id.
+function minedSourceMessageId(record: object, key: string): string {
+  return (record as Record<string, string | undefined>)[`${key}_source_message_id`] || '';
+}
+// NEW / MINED views never show a blank cell; this is the muted placeholder text.
+function emptyCellLabel(record: object, key: string): string {
+  const r = record as Record<string, string | undefined>;
+  if (key.startsWith(CO_PREFIX) && Number(r.propertyRecordCount) > 1) return 'Multiple linked records — see Linked properties';
+  if (key.startsWith(CO_PREFIX) && !r.propertyRecordIds) return 'No record';
+  if (key === 'co_construction_stage' || key === 'daysInConstructionStage') {
+    if (!r.propertyRecordIds) return 'No record';
+    if (r.co_property_type === 'established') return 'Not applicable';
+    return 'Not started';
+  }
+  return 'Not set';
+}
+// Blank-cell placeholders apply on any view built from the new mapping - judged by its columns, not its name or id -
+// so copies such as "B&P (JT)" behave exactly like the built-in NEW views.
+const NEW_MAPPING_KEYS = new Set(['financeStatus', 'daysInFinanceStatus', 'daysInConstructionStage', 'purchasingEntityName', 'purchasingEntityType']);
+const isNewOrMinedView = (view: ViewDef) =>
+  view.id.endsWith('-new') || view.id.endsWith('-mined') || view.columns.some((c) => c.key.startsWith(CO_PREFIX) || NEW_MAPPING_KEYS.has(c.key));
+
 
 // Label helper for the report builder — prefers explicit column labels, then
 // the API field label map (opportunity + property fields), then title-case.
@@ -1053,15 +723,10 @@ function getReportFieldLabel(key: string): string {
 // it can never drift from what the view actually does.
 // ----------------------------------------------------------------------------
 
-const ALL_PIPELINES: { id: string; name: string }[] = REPORTING_PIPELINE_IDS.map((id) => ({
+const ALL_PIPELINES: { id: string; name: string }[] = [PIPELINE_ID.PROPERTY_TEAM].map((id) => ({
   id,
   name: PIPELINE_NAMES[id],
 }));
-
-// Stage exclusions baked into the API (route.ts) — keyed by pipeline id.
-const API_STAGE_EXCLUSIONS: Record<string, string> = {
-  [FINANCE_PIPELINE_ID]: 'Settled',
-};
 
 function describeView(view: ViewDef): string {
   // 1. Which pipelines does this view actually include?
@@ -1082,13 +747,9 @@ function describeView(view: ViewDef): string {
 
   const parts: string[] = [];
   parts.push(`Pipelines: ${pipelines.map((p) => p.name).join(', ') || 'none'}`);
-  parts.push('Status: open only');
-
-  // 2. API-level stage exclusions — only mention those relevant to the included pipelines
-  const stageExclusions = pipelines
-    .filter((p) => API_STAGE_EXCLUSIONS[p.id])
-    .map((p) => `${API_STAGE_EXCLUSIONS[p.id]} (${p.name})`);
-  if (stageExclusions.length > 0) parts.push(`Stages excluded: ${stageExclusions.join(', ')}`);
+  parts.push(reportRequestsOtherStatuses(view.filters, view.filterGroups)
+    ? 'Opportunity statuses: explicitly selected by this report'
+    : 'Opportunity status: Open');
 
   // 3. Remaining view filters (everything except pipelineId, already covered)
   const OPERATOR_TEXT: Record<ViewFilter['operator'], string> = {
@@ -1195,7 +856,6 @@ export default function ContractTeamReportingPage() {
   const [activePreset, setActivePreset] = useState<PresetFilter>('none');
   // ?opp=<id> (from Pipeline Journey "Open in CTRT"): show only that opportunity until cleared.
   const [oppFilter, setOppFilter] = useState('');
-  const [includeConstruction, setIncludeConstruction] = useState(false);
   // "Project" quick filter (Deal Sheet → Admin → Projects; matches the record's project name or an alias)
   const [projectFilter, setProjectFilter] = useState('');
   const [projectList, setProjectList] = useState<{ name: string; aliases: string }[]>([]);
@@ -1227,7 +887,8 @@ export default function ContractTeamReportingPage() {
     if (typeof window !== 'undefined') {
       // Saved layout is only reused for the view it was saved on; otherwise a refresh on a NEW view
       // would show the previous view's columns.
-      const viewId = localStorage.getItem('ctr-view-id') || 'builtin-bp';
+      const savedViewId = localStorage.getItem('ctr-view-id');
+      const viewId = (savedViewId === 'property-team-all' ? null : savedViewId) || 'builtin-bp';
       const preset = PRESET_VIEWS.find((v) => v.id === viewId);
       try {
         const saved = localStorage.getItem('ctr-columns');
@@ -1370,13 +1031,18 @@ export default function ContractTeamReportingPage() {
 
   // Views: built-in presets + saved public (Redis) + saved personal (localStorage)
   const [publicViews, setPublicViews] = useState<ViewDef[]>([]);
+  const [viewLoadError, setViewLoadError] = useState<string | null>(null);
   const [personalViews, setPersonalViews] = useState<ViewDef[]>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('ctr-personal-views');
         if (saved) {
           const parsed = JSON.parse(saved) as ViewDef[];
-          if (Array.isArray(parsed)) return parsed.map(stripGeneratedExclusions);
+          if (Array.isArray(parsed)) {
+            const retired = parsed.filter(v => retirementReason(v));
+            if (retired.length) localStorage.setItem('ctr-retired-personal-reports', JSON.stringify(retired));
+            return parsed.filter(v => !retirementReason(v)).map(stripGeneratedExclusions);
+          }
         }
       } catch { /* ignore */ }
     }
@@ -1401,11 +1067,12 @@ export default function ContractTeamReportingPage() {
   const [activeViewId, setActiveViewId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ctr-view-id');
-      if (saved) return saved;
+      if (saved && saved !== 'property-team-all') return saved;
     }
     return 'builtin-bp';
   });
   const activeView = allViews.find((v) => v.id === activeViewId) ?? allViews[0] ?? PRESET_VIEWS[0];
+  const reportAllStatuses = reportRequestsOtherStatuses(activeView.filters, activeView.filterGroups);
   activeViewRef.current = activeView;
   const [showViewMenu, setShowViewMenu] = useState(false);
   const [viewBarCollapsed, setViewBarCollapsed] = useState(false);
@@ -1828,18 +1495,21 @@ export default function ContractTeamReportingPage() {
 
   const fetchPublicViews = useCallback(async () => {
     try {
-      const res = await fetch('/api/contract-team-reporting/views');
-      if (!res.ok) return;
+      const res = await fetch('/api/contract-team-reporting/views', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to load saved report definitions');
       const data = await res.json();
       if (Array.isArray(data.views)) {
         const views = data.views.map(stripGeneratedExclusions) as ViewDef[];
         setPublicViews(views);
+        setViewLoadError(null);
         // On load, the remembered view's saved definition (columns, sort, filters) is applied in full,
         // exactly as if it had just been picked from the menu - the browser never overrides the server.
         const current = views.find((v) => v.id === (localStorage.getItem('ctr-view-id') || ''));
         if (current) selectView(current);
       }
-    } catch { /* server views unavailable — personal + builtin still work */ }
+    } catch (e) {
+      setViewLoadError(e instanceof Error ? e.message : 'Failed to load saved report definitions');
+    }
   }, [selectView]);
   useEffect(() => { fetchPublicViews(); }, [fetchPublicViews]);
 
@@ -1942,47 +1612,43 @@ export default function ContractTeamReportingPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Grace period: GHL's search API is eventually consistent, so a background
-  // refresh shortly after a save can return STALE values and visually revert
-  // the change (even though the write succeeded). We remember what was saved
-  // per record and overlay it on refreshed data for a grace window.
-  const SAVE_GRACE_MS = 120000; // 2 minutes
-  const recentlySaved = useRef<Map<string, { at: number; values: Partial<OpportunityRecord> }>>(new Map());
-
   // Fetch data
   const [refreshing, setRefreshing] = useState(false);
+  const reportRequest = useRef(0);
   const fetchData = useCallback(async (isBackground = false, forceFresh = false) => {
+    const request = ++reportRequest.current;
     if (!isBackground) setLoading(true);
     setRefreshing(true);
     try {
-      const res = await fetch(forceFresh ? '/api/contract-team-reporting?fresh=1' : '/api/contract-team-reporting');
+      const [res, schema] = await Promise.all([
+        fetch(`/api/contract-team-reporting${reportAllStatuses ? '?historical=1' : ''}`, { cache: 'no-store' }),
+        fetchSchema(),
+      ]);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const fetchedAtHeader = parseInt(res.headers.get('X-Fetched-At') || '', 10);
       const data = await res.json();
-      let incoming: OpportunityRecord[] = Array.isArray(data) ? data : [];
-      // Overlay recently saved values so stale GHL search results can't revert them
-      const now = Date.now();
-      for (const [id, entry] of Array.from(recentlySaved.current.entries())) {
-        if (now - entry.at > SAVE_GRACE_MS) {
-          recentlySaved.current.delete(id);
-        }
-      }
-      if (recentlySaved.current.size > 0) {
-        incoming = incoming.map((r) => {
-          const entry = recentlySaved.current.get(r.id);
-          return entry ? ({ ...r, ...entry.values } as OpportunityRecord) : r;
-        });
-      }
-      setRecords(incoming);
+      if (!Array.isArray(data)) throw new Error('GHL reporting response is incomplete');
+      if (request !== reportRequest.current) return;
+      const { users, ...registry } = schema;
+      LIVE_SCHEMA = registry;
+      USER_MAP = users;
+      BA_OPTIONS = Object.entries(users).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+      setSchemaInfo({ fetchedAt: registry.fetchedAt, newFieldCount: registry.newFieldCount });
+      setRecords(data);
       setLastRefresh(fetchedAtHeader > 0 ? new Date(fetchedAtHeader) : new Date());
       setError(null);
     } catch (err: any) {
+      if (request !== reportRequest.current) return;
+      LIVE_SCHEMA = null;
+      USER_MAP = {};
+      BA_OPTIONS = [];
+      setSchemaInfo(null);
+      setRecords([]);
       setError(err.message || 'Failed to load');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (request === reportRequest.current) { setLoading(false); setRefreshing(false); }
     }
-  }, []);
+  }, [reportAllStatuses]);
 
   // Pause auto-refresh when the tab is hidden or the user is idle 30+ min
   // (saves Vercel compute / GHL rate limit overnight). Resuming triggers a
@@ -2025,13 +1691,11 @@ export default function ContractTeamReportingPage() {
     };
   }, [fetchData]);
 
-  // Live GHL schema — fetched on load and re-checked hourly, so new dropdown
-  // values / field types picked up in GHL flow into the tool automatically.
+  // Definitions and users are read live with each report load.
   const [schemaInfo, setSchemaInfo] = useState<{ fetchedAt: string; newFieldCount: number } | null>(null);
-  const fetchSchema = useCallback(async () => {
-    try {
-      const res = await fetch('/api/contract-team-reporting/schema');
-      if (!res.ok) return;
+  async function fetchSchema(): Promise<LiveSchemaRegistry & { users: Record<string, string> }> {
+      const res = await fetch('/api/contract-team-reporting/schema', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to load live GHL field definitions');
       const data = await res.json();
       const types: Record<string, string> = {};
       const options: Record<string, OptionPair[] | null> = {};
@@ -2049,18 +1713,9 @@ export default function ContractTeamReportingPage() {
         if (f.name) labels[`co_${f.key}`] = f.name;
       }
       const newFieldCount = (data.newOpportunityFields?.length || 0) + (data.newPropertyFields?.length || 0);
-      LIVE_SCHEMA = { fetchedAt: data.fetchedAt, types, options, labels, newFieldCount };
-      setSchemaInfo({ fetchedAt: data.fetchedAt, newFieldCount });
-    } catch { /* fall back to baked-in maps */ }
-  }, []);
-
-  useEffect(() => {
-    fetchSchema();
-    const schemaInterval = setInterval(() => {
-      if (!isPausedRef.current) fetchSchema();
-    }, 60 * 60 * 1000);
-    return () => clearInterval(schemaInterval);
-  }, [fetchSchema]);
+      if (!data.users || typeof data.users !== 'object') throw new Error('Live GHL users were not returned');
+      return { fetchedAt: data.fetchedAt, types, options, labels, newFieldCount, users: data.users };
+  }
 
   // Persist column layout (keys, order, widths)
   useEffect(() => {
@@ -2158,19 +1813,7 @@ export default function ContractTeamReportingPage() {
         alert(`Save failed: ${data.error || res.status}`);
       } else {
         const data = await res.json();
-        // Automatic follow-on changes have their own direct GHL read-backs.
-        // Display those verified values immediately, alongside the user edit.
-        const savedValues = { ...edits, ...(data.settled?.verifiedValues || {}) };
-        // Remember what was saved so background refreshes can't visually revert
-        // it while GHL's search index catches up (merge with any prior saves)
-        const prior = recentlySaved.current.get(recordId);
-        recentlySaved.current.set(recordId, {
-          at: Date.now(),
-          values: { ...(prior?.values || {}), ...savedValues },
-        });
-        setRecords((prev) =>
-          prev.map((r) => (r.id === recordId ? ({ ...r, ...savedValues } as OpportunityRecord) : r))
-        );
+        await fetchData(true, true);
         setEditedRows((prev) => {
           const next = { ...prev };
           delete next[recordId];
@@ -2418,8 +2061,8 @@ export default function ContractTeamReportingPage() {
   const viewScopedRecords = useMemo(
     () => (oppFilter
       ? records.filter((r) => r.id === oppFilter)
-      : applyViewFilters(records, includeConstruction ? effectiveView.filters.filter((f) => !isExcludeConstruction(f)) : effectiveView.filters, effectiveView.filterGroups)),
-    [records, effectiveView, oppFilter, includeConstruction]
+      : applyViewFilters(records, effectiveView.filters, effectiveView.filterGroups)),
+    [records, effectiveView, oppFilter]
   );
 
   // Values offered in a column's filter dropdown. Scoped to the view's own data —
@@ -2684,12 +2327,12 @@ export default function ContractTeamReportingPage() {
     );
   }
 
-  if (error && records.length === 0) {
+  if (viewLoadError || (error && records.length === 0)) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900">
         <div className="text-center">
-          <p className="text-red-400 text-lg mb-4">Error: {error}</p>
-          <button onClick={() => fetchData(false, true)} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry</button>
+          <p className="text-red-400 text-lg mb-4">Error: {viewLoadError || error}</p>
+          <button onClick={() => { void fetchPublicViews(); void fetchData(false, true); }} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry</button>
         </div>
       </div>
     );
@@ -3462,7 +3105,7 @@ export default function ContractTeamReportingPage() {
                         )}
                       </>
                     ) : (
-                      <span className="opacity-60">using baked-in config (live fetch unavailable)</span>
+                      <span className="opacity-60">Live field definitions unavailable</span>
                     )}
                   </div>
                 </div>
@@ -3492,12 +3135,6 @@ export default function ContractTeamReportingPage() {
         >
           {viewBarCollapsed ? '▶' : '▼'}
         </button>
-        {effectiveView.filters.some(isExcludeConstruction) && (
-          <label className="shrink-0 mr-2 flex items-center gap-1 opacity-100 font-medium">
-            <input type="checkbox" checked={includeConstruction} onChange={(e) => setIncludeConstruction(e.target.checked)} />
-            include deals in construction
-          </label>
-        )}
         {viewBarCollapsed ? (
           <span className="font-medium truncate min-w-0">
             View: {effectiveView.name}
@@ -3769,7 +3406,7 @@ export default function ContractTeamReportingPage() {
                     const rawValue = record[col.key] || '';
                     const displayValue = getDisplayValue(record, col.key);
                     // Property Record fields are per row: an opp with no linked Property Record has nothing to edit.
-                    const noPropertyRecord = col.key.startsWith(CO_PREFIX) && !record.propertyRecordIds;
+                    const noPropertyRecord = col.key.startsWith(CO_PREFIX) && (!record.co_record_id || Number(record.propertyRecordCount) !== 1);
                     const isEditable = editMode && isSelected && !noPropertyRecord && !READ_ONLY_FIELDS.has(col.key) && !isOppDynamicReadOnly(col.key) && !(col.key.startsWith(CO_PREFIX) && !isCoFieldEditable(col.key));
                     const currentValue = isEditable ? getEditValue(record.id, col.key) : rawValue;
                     let cellClass = `border ${t.cellBorder} px-1.5 py-1 overflow-hidden break-words`;

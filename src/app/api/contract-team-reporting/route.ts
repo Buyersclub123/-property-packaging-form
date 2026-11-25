@@ -8,33 +8,11 @@ import {
 } from './fields';
 import { sendCtrAlert } from './alerts';
 import { ghlFetch } from '@/lib/ghlFetch';
-import { getRedisClient } from '@/lib/redis';
-import {
-  REPORTING_PIPELINE_IDS as PIPELINE_IDS,
-  PIPELINE_NAMES,
-  PIPELINE_ID,
-  findMissingPipelines,
-} from '@/lib/ghlPipelines';
-
-// Shared fetch: one GHL pull per window, served to every open tab.
-// Freshness matches the page's own 60s auto-refresh so nobody sees older data than today.
-const SHARED_KEY = 'ctr:report';
-const SHARED_LOCK = 'ctr:report:lock';
-const SHARED_TTL_SEC = 60;
-// Longer-lived copy for quick snapshots (/journey uses ?snapshot=1): up to 15 minutes old.
-const SNAPSHOT_KEY = 'ctr:records:snapshot';
-const SNAPSHOT_TTL_SEC = 15 * 60;
-// Last good copy for ?snapshot=1 (Pipeline Journey): opens instantly from it, then refreshes in the background.
-const LAST_KEY = 'ctr:records:last';
-const LAST_TTL_SEC = 24 * 60 * 60;
-const LOCK_TTL_SEC = 30;
-const WAIT_FOR_LOCK_MS = 15000;
-const WAIT_POLL_MS = 400;
+import { PIPELINE_NAMES, PIPELINE_ID } from '@/lib/ghlPipelines';
+import { searchGhlOpportunities } from '@/lib/ghlOpportunitySearch';
 // Safety limit only: hitting it fails the load loudly instead of returning a truncated report.
 const MAX_PAGES = 200;
 const PROPERTY_OBJECT_KEY = 'custom_objects.property_reviews';
-// Property Record statuses that never count as the opportunity's live record.
-const INACTIVE_RECORD_STATUSES = new Set(['05_remove_no_interest', '06_remove_lost', '07_test_record', '08_resold']);
 let lastBuildMs = 0;
 
 // Always run at request time, never pre-render at build (data must be live)
@@ -117,10 +95,6 @@ interface ReportRecord extends Record<string, string> {
   ghlLink: string;
 }
 
-const FALLBACK_USER_MAP: Record<string, string> = {
-  ZTfbfK0bOGIDsla2JJ2d: 'Will Eaton',
-};
-
 let userMapCache: Record<string, string> = {};
 
 let stageNameCache: Record<string, string> = {};
@@ -139,7 +113,7 @@ async function fetchUsers(): Promise<void> {
       },
       'ctr-users'
     );
-    if (!response.ok) return;
+    if (!response.ok) throw new Error(`GHL users HTTP ${response.status}`);
     const data = await response.json();
     const users = data.users || [];
     const map: Record<string, string> = {};
@@ -148,9 +122,10 @@ async function fetchUsers(): Promise<void> {
         map[user.id] = user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
       }
     }
-    userMapCache = { ...FALLBACK_USER_MAP, ...map };
+    userMapCache = map;
   } catch (e) {
     console.error('Failed to fetch GHL users:', e);
+    throw e;
   }
 }
 
@@ -167,7 +142,7 @@ async function fetchPipelineStages(): Promise<void> {
       },
       'ctr-stages'
     );
-    if (!response.ok) return;
+    if (!response.ok) throw new Error(`GHL pipelines HTTP ${response.status}`);
     const data = await response.json();
     if (data.pipelines) {
       // Replace, don't merge: stages deleted in GHL must not linger.
@@ -182,7 +157,8 @@ async function fetchPipelineStages(): Promise<void> {
       // A pipeline this tool is configured for no longer exists in GHL
       // (e.g. deleted/restructured by someone in GHL). Alert and fail loudly —
       // never report on a partial set of pipelines as if it were complete.
-      const missing = findMissingPipelines(data.pipelines);
+      const missing = data.pipelines.some((p: { id: string }) => p.id === PIPELINE_ID.PROPERTY_TEAM)
+        ? [] : [PIPELINE_ID.PROPERTY_TEAM];
       if (missing.length > 0) {
         const names = missing.map((id) => `${PIPELINE_NAMES[id] || 'Unknown'} (${id})`).join(', ');
         sendCtrAlert({
@@ -194,10 +170,10 @@ async function fetchPipelineStages(): Promise<void> {
         });
         throw new Error(`Configured pipeline(s) missing from GHL: ${names}`);
       }
-    }
+    } else throw new Error('GHL returned no pipeline definitions');
   } catch (e) {
     console.error('Failed to fetch pipeline stages:', e);
-    if (e instanceof Error && e.message.startsWith('Configured pipeline(s) missing')) throw e;
+    throw e;
   }
 }
 
@@ -303,7 +279,7 @@ async function fetchPropertyRecords(): Promise<{ records: GHLPropertyRecord[]; k
 }
 
 // Opportunity custom fields the tool has no friendly name for, keyed opp_<GHL key>, from the live schema:
-// new Opportunity fields appear as (read-only) columns without a code change. A schema failure only hides them.
+// New Opportunity fields appear as columns; a failed schema read fails the load.
 async function fetchOpportunityDynamicKeys(): Promise<Map<string, string>> {
   const keys = new Map<string, string>();
   try {
@@ -320,7 +296,8 @@ async function fetchOpportunityDynamicKeys(): Promise<Map<string, string>> {
       if (short) keys.set(f.id, `${OPP_DYNAMIC_PREFIX}${short}`);
     }
   } catch (e) {
-    console.error('CTR opportunity schema error (dynamic Opportunity columns hidden):', e);
+    console.error('CTR opportunity schema error:', e);
+    throw e;
   }
   return keys;
 }
@@ -365,15 +342,11 @@ function daysSinceDay(value: string): string {
   return String(Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / DAY_MS));
 }
 
-// Property Team stages that count as in flight (lower case).
-const PT_IN_FLIGHT_STAGES = new Set(['deal closed', 'contract review', 'exchange wip', 'conditional', 'unconditional']);
-
 function transformOpportunity(
   opp: GHLOpportunity,
   propertyByOppId: Map<string, Record<string, string>>,
   allPropertyKeys: Set<string>,
-  oppDynamicKeys: Map<string, string>,
-  financeContactsWithRecord: Set<string>
+  oppDynamicKeys: Map<string, string>
 ): ReportRecord {
   const customFieldValues: Record<string, string> = {};
   if (opp.customFields) {
@@ -504,29 +477,11 @@ function transformOpportunity(
   }
   base.propertyRecordCount = propertyValues?.__count ?? '0';
   base.propertyRecordIds = propertyValues?.__ids ?? '';
+  base.linkedProperties = propertyValues?.__summary ?? '';
+  base.linkedPropertyRecords = propertyValues?.__records ?? '[]';
 
-  // New-mapping computed values (Finance Status / Construction stage instead of pipelines).
-  // In flight = run sheet rule D45, used by every NEW view and Pipeline Journey: open AND (Property Team at
-  // Deal Closed / Contract Review / Exchange WIP / Conditional / Unconditional, OR Finance except Settled, OR
-  // Construction except Handover). SMSF Construction duplicates (no record of their own, same contact has a
-  // Finance opp with the record) are flagged in smsfConstructionDuplicate but still counted, as D45 does.
-  const stageLower = stageName.toLowerCase();
-  const fallen = !!base.dealFallenOver;
+  // Dates describe the fields; there are no synthetic population/duplicate masks.
   const constructionStage = base.co_construction_stage || '';
-  const contactKey = String((opp as unknown as { contactId?: string }).contactId || '');
-  const smsfDuplicate = opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !propertyValues && !!contactKey && financeContactsWithRecord.has(contactKey);
-  const inFlight = opp.status === 'open' && !fallen && (
-    (opp.pipelineId === PIPELINE_ID.PROPERTY_TEAM && PT_IN_FLIGHT_STAGES.has(stageLower)) ||
-    (opp.pipelineId === PIPELINE_ID.FINANCE && stageLower !== 'settled') ||
-    (opp.pipelineId === PIPELINE_ID.CONSTRUCTION && !stageLower.includes('handover')));
-  base.smsfConstructionDuplicate = smsfDuplicate ? 'Yes' : '';
-  // Test / ZZZ opps: excluded from every NEW / MINED view so counts compare like for like.
-  base.testOpp = /^\s*zzz|\btest\b/i.test(String(base.opportunityName || opp.name || '')) ? 'Yes' : '';
-  base.inFlight = inFlight ? 'Yes' : '';
-  base.inFlightNew = base.inFlight;
-  base.financeTrack = inFlight && base.financeStatus ? 'Yes' : '';
-  base.constructionTrack = inFlight && constructionStage ? 'Yes' : '';
-  base.fcTrack = base.financeTrack || base.constructionTrack ? 'Yes' : '';
   base.daysInFinanceStatus = base.financeStatus ? daysSinceDay(base.financeStatusChangeDate) : '';
   base.daysInConstructionStage = constructionStage ? daysSinceDay(base.co_construction_stage_change_date || '') : '';
 
@@ -538,7 +493,7 @@ function buildPropertyLookup(
   allKeys: Set<string>
 ): { propertyByOppId: Map<string, Record<string, string>>; allPropertyKeys: Set<string> } {
   const propertyByOppId = new Map<string, Record<string, string>>();
-  const candidates = new Map<string, { values: Record<string, string>; active: boolean; updatedAt: string }[]>();
+  const candidates = new Map<string, Record<string, string>[]>();
 
   for (const record of records) {
     const props = record.properties || {};
@@ -561,29 +516,28 @@ function buildPropertyLookup(
     }
 
     if (linkedOppId) {
-      // Reselling (seller's old record) and removed/test/resold records never count as the live record.
-      const active = !INACTIVE_RECORD_STATUSES.has(values['status'] || '') && !values['reselling'];
       const list = candidates.get(linkedOppId) || [];
-      list.push({ values, active, updatedAt: record.updatedAt || '' });
+      list.push(values);
       candidates.set(linkedOppId, list);
     }
   }
 
-  // Deterministic pick: latest-updated active record, else latest-updated of any.
+  // A record exists regardless of lifecycle status. Multiple links are exposed,
+  // never resolved by silently choosing the latest/active record.
   for (const [oppId, list] of candidates) {
-    const active = list.filter((c) => c.active);
-    const pool = (active.length ? active : list).slice().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const linked = [...new Map(list.map((values) => [values.record_id, values])).values()];
     propertyByOppId.set(oppId, {
-      ...pool[0].values,
-      __count: String(active.length),
-      __ids: active.map((c) => c.values['record_id']).join(', '),
+      ...(linked.length === 1 ? linked[0] : {}),
+      __count: String(linked.length),
+      __ids: linked.map((values) => values.record_id).join(', '),
+      __summary: linked.map((values) => `${values.property_address || '(address not set)'} · ${values.status || '(status not set)'}`).join('\n'),
+      __records: JSON.stringify(linked),
     });
   }
 
   return { propertyByOppId, allPropertyKeys: allKeys };
 }
 
-// historical = every status (won / lost / abandoned too) and Finance Settled kept: used by the Journey "Show historical" button.
 async function buildReport(historical = false): Promise<ReportRecord[]> {
   const started = Date.now();
   const [opportunityData, propertyData, schemaKeys, oppDynamicKeys] = await Promise.all([
@@ -598,67 +552,24 @@ async function buildReport(historical = false): Promise<ReportRecord[]> {
   for (const k of schemaKeys) allPropertyKeys.add(k);
   const { propertyByOppId } = buildPropertyLookup(propertyRecords, allPropertyKeys);
 
-  // Contacts with an open, not-settled Finance opp that has a Property Record (SMSF Construction duplicates count via it).
-  const financeContactsWithRecord = new Set(
-    allOpportunities
-      .filter((o) => o.status === 'open' && o.pipelineId === PIPELINE_ID.FINANCE && propertyByOppId.has(o.id))
-      .map((o) => String((o as unknown as { contactId?: string }).contactId || ''))
-      .filter(Boolean)
-  );
   const report = allOpportunities
-    .filter((opp) => historical || opp.status === 'open')
-    .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys, oppDynamicKeys, financeContactsWithRecord))
-    .filter((r) => {
-      if (historical) return true;
-      if (r.pipelineId === PIPELINE_ID.FINANCE && r.pipelineStage.toLowerCase() === 'settled') return false;
-      // Construction HANDOVER is NOT excluded here: Build Deposit Status has to
-      // include it to match the original report. Views that should leave it out
-      // (PM Intro Tracking, Full F&C) carry their own stage filter.
-      return true;
-    })
+    .map((opp) => transformOpportunity(opp, propertyByOppId, allPropertyKeys, oppDynamicKeys))
     .sort((a, b) => {
       const dateA = a.confirmedSettlementDate || '9999-12-31';
       const dateB = b.confirmedSettlementDate || '9999-12-31';
       return new Date(dateA).getTime() - new Date(dateB).getTime();
     });
-  markSmsfConstructionDuplicates(report);
   lastBuildMs = Date.now() - started;
   return report;
 }
 
-// SMSF Construction duplicates (JT 1/11): a Construction opp pairs with a Finance opp that has the same
-// normalised name (client + entity + IP) or the same Registered Address. Not keyed on the word "Duplicate".
-const dupName = (s: string) => s.toLowerCase()
-  .replace(/\b(duplicate|dup|copy|construction|finance|build)\b/g, ' ')
-  .replace(/\band\b/g, '&').replace(/\b(smsf|pers?)\s*(?:ip\s*)?(\d+)\b/g, '$1ip$2').replace(/[^a-z0-9&]/g, '');
-const dupAddr = (s: string) => s.split(/\r?\n/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-
-function markSmsfConstructionDuplicates(report: ReportRecord[]) {
-  const names = new Set<string>(), addrs = new Set<string>();
-  for (const r of report) {
-    if (r.pipelineId !== PIPELINE_ID.FINANCE || r.status !== 'open' || r.pipelineStage.toLowerCase() === 'settled') continue;
-    const n = dupName(String(r.opportunityName || r.name || '')); if (n) names.add(n);
-    const a = dupAddr(String(r.registeredAddress || '')); if (a.length >= 8) addrs.add(a);
-  }
-  for (const r of report) {
-    // A resold seller's opp shares its address with the buyer's Finance opp; that is not a duplicate.
-    if (r.pipelineId !== PIPELINE_ID.CONSTRUCTION || r.smsfConstructionDuplicate === 'Yes' || r.co_status === '08_resold') continue;
-    const a = dupAddr(String(r.registeredAddress || ''));
-    // A name match only counts when the Construction opp has no record of its own (else it is a separate property).
-    const byName = !r.propertyRecordIds && names.has(dupName(String(r.opportunityName || r.name || '')));
-    if (byName || (a.length >= 8 && addrs.has(a))) r.smsfConstructionDuplicate = 'Yes';
-  }
-}
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function respond(records: ReportRecord[], fetchedAt: number, served: 'shared' | 'live') {
+function respond(records: ReportRecord[], fetchedAt: number, served: 'live', historical: boolean) {
   return NextResponse.json(records, {
     headers: {
       'X-Fetched-At': String(fetchedAt),
       'X-Served-From': served,
+      'X-Reporting-Population': 'property-team-open-default-v1',
+      'X-Opportunity-Status-Scope': historical ? 'all' : 'open',
       'X-Build-Ms': served === 'live' ? String(lastBuildMs) : '',
       'X-Record-Count': String(records.length),
       'Cache-Control': 'no-store',
@@ -675,84 +586,16 @@ export async function GET(request: Request) {
       );
     }
 
-    const fresh = new URL(request.url).searchParams.get('fresh') === '1';
-    // Historical (all statuses) is built live every time and never written to the shared cache.
-    if (new URL(request.url).searchParams.get('historical') === '1') {
-      const records = await buildReport(true);
-      return respond(records, Date.now(), 'live');
-    }
-    let redis: Awaited<ReturnType<typeof getRedisClient>> | null = null;
-    try {
-      redis = await getRedisClient();
-    } catch (e) {
-      console.warn('CTR: Redis unavailable, falling back to live fetch:', e);
-    }
-    const saveShared = async (now: number, records: ReportRecord[]) => {
-      if (!redis) return;
-      const body = JSON.stringify({ fetchedAt: now, records });
-      await redis.set(SHARED_KEY, body, { EX: SHARED_TTL_SEC });
-      await redis.set(SNAPSHOT_KEY, body, { EX: SNAPSHOT_TTL_SEC });
-      await redis.set(LAST_KEY, body, { EX: LAST_TTL_SEC });
-    };
-    if (redis && !fresh && new URL(request.url).searchParams.get('snapshot') === '1') {
-      const snap = (await redis.get(SHARED_KEY)) || (await redis.get(SNAPSHOT_KEY)) || (await redis.get(LAST_KEY));
-      if (snap) {
-        const { fetchedAt, records } = JSON.parse(snap) as { fetchedAt: number; records: ReportRecord[] };
-        return respond(records, fetchedAt, 'shared');
-      }
-    }
-
-    // Manual refresh or no Redis → straight to GHL
-    if (fresh || !redis) {
-      const records = await buildReport();
-      const now = Date.now();
-      await saveShared(now, records);
-      return respond(records, now, 'live');
-    }
-
-    // 1. Shared result still fresh? Serve it.
-    const cached = await redis.get(SHARED_KEY);
-    if (cached) {
-      const { fetchedAt, records } = JSON.parse(cached) as { fetchedAt: number; records: ReportRecord[] };
-      return respond(records, fetchedAt, 'shared');
-    }
-
-    // 2. Expired. Try to be the one caller that refreshes it.
-    const gotLock = await redis.set(SHARED_LOCK, '1', { NX: true, EX: LOCK_TTL_SEC });
-    if (gotLock) {
-      try {
-        const records = await buildReport();
-        const now = Date.now();
-        await saveShared(now, records);
-        return respond(records, now, 'live');
-      } finally {
-        await redis.del(SHARED_LOCK).catch(() => {});
-      }
-    }
-
-    // 3. Someone else is fetching — wait for their result rather than hitting GHL too.
-    const deadline = Date.now() + WAIT_FOR_LOCK_MS;
-    while (Date.now() < deadline) {
-      await sleep(WAIT_POLL_MS);
-      const ready = await redis.get(SHARED_KEY);
-      if (ready) {
-        const { fetchedAt, records } = JSON.parse(ready) as { fetchedAt: number; records: ReportRecord[] };
-        return respond(records, fetchedAt, 'shared');
-      }
-    }
-
-    // 4. Waited too long (the fetcher probably failed) — fetch ourselves.
-    const records = await buildReport();
-    const now = Date.now();
-    await saveShared(now, records);
-    return respond(records, now, 'live');
+    const historical = request ? new URL(request.url).searchParams.get('historical') === '1' : false;
+    const records = await buildReport(historical);
+    return respond(records, Date.now(), 'live', historical);
   } catch (err) {
     console.error('Contract Team Reporting API error:', err);
     const message = err instanceof Error ? err.message : 'Unknown error';
     sendCtrAlert({
       type: 'report-data-fetch-failed',
       subject: 'Report data failed to load from GHL',
-      reason: 'The main data fetch (opportunities across the 4 pipelines) failed while a user was loading the report.',
+      reason: 'The live Property Team data fetch failed while a user was loading the report.',
       impact: 'Users see an error instead of the report until GHL recovers or the issue is fixed.',
       action: 'Check GHL API status. If GHL is up, check the GHL_BEARER_TOKEN is valid and the Vercel function logs for details.',
       detailsHtml: `<pre>${message.slice(0, 1000)}</pre>`,
@@ -761,76 +604,10 @@ export async function GET(request: Request) {
   }
 }
 
-async function fetchAllOpportunities(historical = false): Promise<GHLOpportunity[]> {
-  const allOpportunities: GHLOpportunity[] = [];
-
-  for (const pipelineId of PIPELINE_IDS) {
-    let hasMore = true;
-    let startAfter: number | undefined;
-    let startAfterId: string | undefined;
-    let pageCount = 0;
-
-    while (hasMore) {
-      const url = new URL(`${GHL_BASE_URL}/opportunities/search`);
-      url.searchParams.set('location_id', GHL_LOCATION_ID);
-      url.searchParams.set('pipeline_id', pipelineId);
-      url.searchParams.set('limit', '100');
-      url.searchParams.set('status', historical ? 'all' : 'open');
-      if (startAfter !== undefined && startAfterId) {
-        url.searchParams.set('startAfter', String(startAfter));
-        url.searchParams.set('startAfterId', startAfterId);
-      }
-
-      const response = await ghlFetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${GHL_API_TOKEN}`,
-          Version: GHL_API_VERSION,
-        },
-        cache: 'no-store',
-      }, 'ctr-opportunities');
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`GHL Opportunities API error (pipeline ${pipelineId}, page ${pageCount}):`, response.status, errorText);
-        throw new Error(`GHL API error: ${response.status} ${errorText}`);
-      }
-
-      const data: GHLSearchResponse = await response.json();
-
-      if (data.opportunities && data.opportunities.length > 0) {
-        allOpportunities.push(...data.opportunities);
-        pageCount++;
-
-        if (data.meta?.startAfter && data.meta?.startAfterId) {
-          startAfter = data.meta.startAfter;
-          startAfterId = data.meta.startAfterId;
-        } else {
-          hasMore = false;
-        }
-
-        if (data.opportunities.length < 100) {
-          hasMore = false;
-        }
-        if (data.meta?.nextPage === null) {
-          hasMore = false;
-        }
-      } else {
-        hasMore = false;
-      }
-
-      if (hasMore && pageCount > MAX_PAGES) {
-        sendCtrAlert({
-          type: 'page-limit-reached',
-          subject: 'Opportunities exceeded the tool\'s page limit',
-          reason: `Pipeline ${PIPELINE_NAMES[pipelineId] || pipelineId} returned more than ${MAX_PAGES * 100} open opportunities.`,
-          impact: 'The report did not load (it never shows a partial set).',
-          action: 'Raise MAX_PAGES in src/app/api/contract-team-reporting/route.ts.',
-        });
-        throw new Error(`Open opportunities in ${PIPELINE_NAMES[pipelineId] || pipelineId} exceed ${MAX_PAGES * 100}; report not loaded.`);
-      }
-    }
-  }
-
-  return allOpportunities;
+async function fetchAllOpportunities(historical: boolean): Promise<GHLOpportunity[]> {
+  return searchGhlOpportunities<GHLOpportunity>(
+    [{ field: 'pipeline_id', operator: 'eq', value: PIPELINE_ID.PROPERTY_TEAM },
+      ...(!historical ? [{ field: 'status', operator: 'eq' as const, value: 'open' }] : [])],
+    'ctr-property-team',
+  );
 }

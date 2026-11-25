@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { emailFromHeaders, isAdmin, loadAccess } from '@/lib/tileAccess';
 import { canDeleteAnyView } from '@/lib/ctrViewDeleters';
+import { RETIRED_CTR_REPORT_IDS } from '@/lib/ctrReportRetirement';
 
 // Always run at request time, never pre-render at build (data must be live)
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,9 @@ export async function POST(request: NextRequest) {
   if (!email) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
   try {
     const { id, name, hidden } = await request.json();
+    if (RETIRED_CTR_REPORT_IDS.has(id)) {
+      return NextResponse.json({ error: 'This obsolete report has been removed from the application and cannot be restored.' }, { status: 410 });
+    }
     if (!id || typeof id !== 'string' || !id.startsWith('builtin-')) {
       return NextResponse.json({ error: 'Only built-in views can be hidden.' }, { status: 400 });
     }
