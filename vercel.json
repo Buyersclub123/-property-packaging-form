@@ -59,6 +59,10 @@
     {
       "path": "/api/contract-team-reporting/link-sweep-cron/full",
       "schedule": "30 15 * * *"
+    },
+    {
+      "path": "/api/sam-singh-autoreply/cron",
+      "schedule": "* * * * *"
     }
   ]
 }

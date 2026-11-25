@@ -17,7 +17,7 @@ export type GmailSendResult =
   | { status: 'no_credentials'; error: string }
   | { status: 'failed'; error: string };
 
-function parseCredentials(raw: string) {
+export function parseCredentials(raw: string) {
   let credentials;
   try {
     credentials = JSON.parse(raw.trim().replace(/^'|'$/g, ''));
