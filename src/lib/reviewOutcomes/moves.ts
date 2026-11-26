@@ -1,5 +1,5 @@
 import { weekStart } from './stats';
-import { sydYmd } from './types';
+import { sydYmd, type ReviewMeeting } from './types';
 
 interface MeetingMove {
   appointmentId: string;

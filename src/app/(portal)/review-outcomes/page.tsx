@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, MIN_YMD, NOTE_NEXT_ACTIONS, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
+import { addDays, KIND_LABEL, MIN_YMD, NOTE_NEXT_ACTIONS, RESCHEDULE_VIA_GHL, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
 import { demoData } from '@/lib/reviewOutcomes/demo';
 import { meetingSourceTitle } from '@/lib/reviewOutcomes/meetingSource';
 import MorePanel from '@/components/reviewOutcomes/MorePanel';
@@ -79,6 +79,7 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
   onNote: (m: ReviewMeeting, note: string | null, next: string | null) => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
+  const [ghlHint, setGhlHint] = useState(false);
   const noteLine = latestLine(m.note) || (m.noteNextAction ? `Next action: ${m.noteNextAction}` : '');
   const [src, ...camp] = (m.meetingSource || '').split(' · ');
   const campaign = camp.join(' · ');
@@ -97,7 +98,7 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
           {m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-brand-charcoal hover:underline">{m.contactName || '(no name)'}</a> : m.contactName}
         </div>
         <div className="text-xs text-gray-700">
-          <span className="text-gray-400">Type: </span>{m.kind === 'NL' ? 'Presentation 1' : 'Portfolio Review'}
+          <span className="text-gray-400">Type: </span>{KIND_LABEL[m.kind]}
           {!!won?.length && <span data-testid="existing-client" className="ml-2 rounded bg-purple-100 px-1 text-[11px] font-semibold text-purple-800" title={`Won / Settled in GHL: ${won.join('; ')}. ${EXISTING_CAVEAT}`}>Existing client</span>}
         </div>
       </div>
@@ -132,7 +133,8 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
         {settings.outcomes.map((o) => {
           const on = m.outcome === o;
           return (
-            <button key={o} disabled={!canEdit} onClick={() => !on && onRecord(m, o)}
+            <button key={o} disabled={!canEdit} title={o === 'Rescheduled' ? RESCHEDULE_VIA_GHL : undefined}
+              onClick={() => { if (on) return; if (o === 'Rescheduled') { setGhlHint(true); return; } onRecord(m, o); }}
               className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${on ? outcomeStyle(o).on : `bg-white ${outcomeStyle(o).off}`} disabled:cursor-default`}>
               {o}
             </button>
@@ -149,6 +151,12 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
         {onMore && <button onClick={() => onMore(m)} className="rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>}
        </div>
        <div className="mt-1 flex flex-wrap items-center gap-2 empty:hidden md:justify-end">
+        {ghlHint && (
+          <div role="status" data-testid="reschedule-hint" className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-800">
+            <span>{RESCHEDULE_VIA_GHL}</span>
+            <button onClick={() => setGhlHint(false)} className="rounded px-1.5 py-0.5 font-medium text-blue-700 hover:bg-blue-100">Got it</button>
+          </div>
+        )}
         {isInvalid && (
           <select value={m.invalidReason || ''} disabled={!canEdit} onChange={(e) => onRecord(m, m.outcome, e.target.value || null)}
             className="rounded border px-1 py-0.5 text-xs" aria-label="Invalid reason">
@@ -180,6 +188,8 @@ const WON_MAX_CONTACTS = 600;
 let loadSeq = 0;
 /** JT: More (property checks) is demo-only until the historical data is loaded; set true to show it on live meetings. */
 const SHOW_MORE_LIVE = false;
+// After an outcome / TLC save: rewrite the CC PAYS AUTOMATED tabs the save flagged. Not awaited; the hourly cron retries.
+const refreshCcPays = () => { void fetch('/api/review-outcomes/cc-pays/refresh', { method: 'POST', keepalive: true }).catch(() => undefined); };
 
 export default function ReviewOutcomesPage() {
   const today = sydYmd(Date.now());
@@ -189,12 +199,12 @@ export default function ReviewOutcomesPage() {
   const [q, setQ] = useState('');
   const [consultant, setConsultant] = useState('');
   const [booker, setBooker] = useState('');
-  const [kinds, setKinds] = useState<'PR' | 'NL' | 'both'>('both');
+  const [kinds, setKinds] = useState<'PR' | 'NL' | 'CF' | 'both'>('both');
   useEffect(() => {
     const k = localStorage.getItem('review-outcomes-kinds');
-    if (k === 'PR' || k === 'NL' || k === 'both') setKinds(k);
+    if (k === 'PR' || k === 'NL' || k === 'CF' || k === 'both') setKinds(k);
   }, []);
-  const pickKinds = (k: 'PR' | 'NL' | 'both') => {
+  const pickKinds = (k: 'PR' | 'NL' | 'CF' | 'both') => {
     setKinds(k);
     try { localStorage.setItem('review-outcomes-kinds', k); } catch { /* storage unavailable */ }
   };
@@ -311,6 +321,7 @@ export default function ReviewOutcomesPage() {
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       if (body.ghlError) setSaveError(`${m.contactName}: ${body.ghlError}`);
+      refreshCcPays();
     } catch (e) {
       setSaveError(`${m.contactName}: ${(e as Error).message}`);
     }
@@ -342,7 +353,7 @@ export default function ReviewOutcomesPage() {
   const tlcRow = (m: ReviewMeeting, on: boolean) => {
     setSaveError(null);
     patchRow(m.id, { tlc: on, tlcBy: on ? data?.viewer.email || null : null });
-    void postRow(m, { tlc: on });
+    void postRow(m, { tlc: on }).then((r) => { if (r) refreshCcPays(); });
   };
   const confirmRow = (m: ReviewMeeting, on: boolean) => {
     setSaveError(null);
@@ -427,7 +438,7 @@ export default function ReviewOutcomesPage() {
           {!demo && <div className="ml-auto"><AsAtRefresh asAt={lr.asAt} refreshing={lr.refreshing} onRefresh={lr.refreshNow} /></div>}
         </div>
         <p className="mb-4 text-[13px] text-[#7A7575]">
-          Source: GHL Calendars - Portfolio Review Meeting (2nd meetings aren't recorded) and Presentation Meeting One. Outcomes are saved to our database{data?.settings.writeTarget === 'db+ghl' ? ' and the GHL appointment status' : ' only'}.
+          Source: GHL Calendars - Portfolio Review Meeting (2nd meetings aren't recorded), Presentation Meeting One and Cashflow Club Induction Call. Outcomes are saved to our database{data?.settings.writeTarget === 'db+ghl' ? ' and the GHL appointment status' : ' only'}.
         </p>
 
         <div className="mb-4 inline-flex overflow-hidden rounded border border-gray-200 text-sm" role="tablist">
@@ -479,7 +490,7 @@ export default function ReviewOutcomesPage() {
               </div>
               <span className="text-[11px] text-gray-500" data-testid="week-rule">{WEEK_RULE}</span>
               <div className="inline-flex overflow-hidden rounded border border-gray-200 text-xs" role="group" aria-label="Meeting type">
-                {([['PR', 'Portfolio Review'], ['NL', 'Presentation Meeting 1'], ['both', 'Both']] as const).map(([k, label]) => (
+                {([['PR', 'Portfolio Review'], ['NL', 'Presentation Meeting 1'], ['CF', 'Cashflow Club'], ['both', 'All']] as const).map(([k, label]) => (
                   <button key={k} onClick={() => pickKinds(k)}
                     className={`px-2 py-1 font-semibold ${kinds === k ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
                     {label}

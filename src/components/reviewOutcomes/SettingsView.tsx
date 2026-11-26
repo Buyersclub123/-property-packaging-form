@@ -89,7 +89,7 @@ function AliasEditor({ aliases, onChange, disabled }: { aliases: Record<string, 
   };
   return (
     <div className="rounded border bg-white p-3">
-      <div className="mb-1 text-sm font-semibold text-brand-charcoal">Tracking sheet names (Sales / Stats Sold)</div>
+      <div className="mb-1 text-sm font-semibold text-brand-charcoal">Tracking sheet names (legacy: not used, Sold now comes from GHL)</div>
       <div className="mb-2 text-xs text-gray-500">
         One per line: <code>name in the sheet = name to show</code>, e.g. <code>Aadi = Adi Manek</code>. Consultant and CC names are otherwise matched
         to GHL users and the Call Centre list automatically (e.g. &quot;Phil Harker&quot; = &quot;Phil H&quot;).

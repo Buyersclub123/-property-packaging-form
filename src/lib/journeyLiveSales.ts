@@ -1,8 +1,7 @@
 import { google } from 'googleapis';
 import { ghlFetch } from './ghlFetch';
 import { getDb } from './db';
-import { PIPELINE_ID } from './ghlPipelines';
-import { searchGhlOpportunities } from './ghlOpportunitySearch';
+import { loadAllSignups } from './reviewOutcomes/signups';
 import { calendarAuth, REVIEW_CALENDARS, type GhlUser } from './reviewOutcomes/sync';
 import { matchMeetings, prepareGcal, type RawGcal } from './reviewOutcomes/match';
 import { meetingSourceOf, meetingSourceTitle, type Attribution } from './reviewOutcomes/meetingSource';
@@ -61,15 +60,14 @@ export async function loadJourneySalesLive(start: Date, end: Date, users: GhlUse
     }));
     return contacts.get(id)!;
   };
-  const [calendars, opportunities, fields] = await Promise.all([
+  const [calendars, allSignups] = await Promise.all([
     each(REVIEW_CALENDARS, async cal => {
       const query = new URLSearchParams({ locationId: location, calendarId: cal.id, startTime: String(start.getTime()), endTime: String(end.getTime()) });
       const data = await ghl<{ events: Appointment[] }>(`/calendars/events?${query}`, '2021-04-15');
       if (!Array.isArray(data.events)) throw new Error(`GHL returned no event list for ${cal.name}`);
       return data.events.filter(e => !e.deleted).map(e => ({ ...e, calendarId: cal.id, calendarName: cal.name }));
     }),
-    searchGhlOpportunities<Opportunity>([{ field: 'pipeline_id', operator: 'eq', value: PIPELINE_ID.PROPERTY_TEAM }], 'journey-signups'),
-    ghl<{ customFields: { id: string; fieldKey?: string }[] }>(`/locations/${location}/customFields?model=opportunity`),
+    loadAllSignups(),
   ]);
   const events = calendars.flat();
   const entered = await staffOutcomes(events.map(e => e.id));
@@ -131,28 +129,21 @@ export async function loadJourneySalesLive(start: Date, end: Date, users: GhlUse
     })),
   ];
 
-  const signedId = fields.customFields?.find(f => f.fieldKey === 'opportunity.date_signed_up')?.id;
-  if (!signedId) throw new Error('GHL Date signed up field is missing');
-  const signups = new Map<string, { opp: Opportunity; signed: string }>();
-  for (const opp of opportunities) {
-    const f = opp.customFields?.find(f => f.id === signedId);
-    const raw = String(f?.fieldValueDate ?? f?.fieldValue ?? f?.value ?? '');
-    const signed = /^\d+$/.test(raw) ? new Date(Number(raw)).toISOString().slice(0, 10) : raw.slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(signed) || signed < sydYmd(start) || signed > sydYmd(end)) continue;
-    const key = `${opp.contactId || opp.id}|${signed}`;
-    if (!signups.has(key)) signups.set(key, { opp, signed });
-  }
-  const opps = await each([...signups.values()], async ({ opp, signed }) => {
+  // Sold: the shared GHL sign-ups (post-sale pipeline with "Date signed up"), as on Stats and Sales.
+  const reported = new Set(REVIEW_CALENDARS.map(c => c.id));
+  const signups = allSignups.signups.filter(s => s.signed >= sydYmd(start) && s.signed <= sydYmd(end))
+    .map(s => ({ opp: { id: s.oppId, name: s.name, contactId: s.contactId, assignedTo: s.assignedTo } as Opportunity, signed: s.signed, consultant: s.consultant }));
+  const opps = await each(signups, async ({ opp, signed, consultant }) => {
     const c = opp.contactId ? await contact(opp.contactId) : undefined;
     const data = opp.contactId ? await ghl<{ events: Appointment[] }>(`/contacts/${encodeURIComponent(opp.contactId)}/appointments`) : { events: [] };
     if (!Array.isArray(data.events)) throw new Error('GHL returned no contact appointment list');
     const entered = await staffOutcomes(data.events.map(e => e.id));
-    const sat = data.events.filter(e => !e.deleted && e.calendarId === 'OfHMBFJUzIEMAx7UGZrR' && sydYmd(e.startTime) <= signed
+    const sat = data.events.filter(e => !e.deleted && reported.has(e.calendarId || '') && sydYmd(e.startTime) <= signed
       && !['No-show', 'Cancelled', 'Invalid'].includes(outcome(entered.get(e.id) || e.appointmentStatus || e.appoinmentStatus || '')))
       .map(e => sydYmd(e.startTime)).sort().pop() || '';
     const source = c ? meetingSourceOf(c.lastAttributionSource, c.attributionSource, c.source || null) : null;
     return { id: opp.id, created: signed, name: opp.name || '', client: contactName(c), contactId: opp.contactId || '',
-      consultant: userNames.get(opp.assignedTo || '') || '', sat, meetingSource: source?.label || '' };
+      consultant: consultant || userNames.get(opp.assignedTo || '') || '', sat, meetingSource: source?.label || '' };
   });
   return { meetings: meetingRows, opps };
 }

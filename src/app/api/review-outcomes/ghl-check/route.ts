@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   const out: Record<string, { total: number; agree: number; grid: Record<string, Record<string, number>> }> = {};
   for (const m of meetings) {
     if (!m.outcome || m.outcomeSource === 'ghl') continue;
-    const k = m.kind === 'PR' ? 'Portfolio Review' : 'Presentation Meeting 1';
+    const k = m.kind === 'PR' ? 'Portfolio Review' : m.kind === 'CF' ? 'Cashflow Club' : 'Presentation Meeting 1';
     const o = sheetNorm(m.outcome);
     const g = ghlNorm(m.ghlStatus || '');
     const t = (out[k] ||= { total: 0, agree: 0, grid: {} });

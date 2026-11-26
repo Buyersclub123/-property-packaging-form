@@ -8,7 +8,7 @@ export const maxDuration = 120;
 
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 
-// Sales from the Buyers Club Tracking sheet (read-only copy, refreshed hourly; ?refresh=1 forces it).
+// Sales from GHL opportunities (read-only, cached 15 min; ?refresh=1 forces a re-read).
 // Review recorders see every sale; everyone else only sales where they are the consultant.
 export async function GET(request: NextRequest) {
   const access = await reviewAccess(request.headers);

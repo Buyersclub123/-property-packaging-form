@@ -13,6 +13,8 @@ export const REVIEW_CALENDARS = [
   { id: 'ziiNfM0fl5q8iWL5MDtF', name: 'Portfolio Review Meeting' },
   // New Lead / Referral meetings (JT: Presentation Meeting One only).
   { id: 'OfHMBFJUzIEMAx7UGZrR', name: 'Presentation Meeting One' },
+  // Cashflow Club (JT 26/11): its own meeting type, counted from CASHFLOW_CLUB_FROM.
+  { id: 'qmizFGxloa0uIBhJTRIv', name: 'Cashflow Club Induction Call' },
 ];
 /** 2nd / follow-up meetings aren't recorded in Review Outcomes (JT); older synced rows are filtered out on load. */
 export const SECOND_MEETING_CALENDAR_ID = 'fQPvq7ujG1HHvrPs0dfU';

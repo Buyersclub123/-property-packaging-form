@@ -1,19 +1,20 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDays, dataSourceLines, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type SalesData, type StatTarget } from '@/lib/reviewOutcomes/types';
+import { addDays, dataSourceLines, KIND_LABEL, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type SalesData, type StatTarget } from '@/lib/reviewOutcomes/types';
 import { emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sumSold } from '@/lib/reviewOutcomes/salesStats';
 import { dmy, weekday } from './ui';
 import type { Signup, SignupsData } from '@/lib/reviewOutcomes/signups';
 import type { OpenOpp, OpenOppsData } from '@/lib/reviewOutcomes/openOpps';
 import CcPaysPanel from './CcPaysPanel';
 import { MEETING_SOURCE_LEVEL_LABEL, meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from '@/lib/reviewOutcomes/meetingSource';
-import { emptyTypeRow, isPR, sumTypes, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
+import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
 import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, WEEK_RULE, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
 
 // Item 15: CC Stats (left) and Sales Stats (right) for one shared period, laid out like the team's STATS sheet.
 // PR = Portfolio Review meetings; Presentation 1 = Presentation Meeting One (no New Lead / Referral split;
-// Meeting source replaces it); Sold / Revenue from the Tracking sheet. Marketing stays a placeholder.
+// Meeting source replaces it); Cashflow Club = Cashflow Club Induction Call. Sold / Cancelled / Revenue from GHL
+// opportunities. Marketing stays a placeholder.
 
 
 const n0 = (n: number) => (n ? String(n) : '');
@@ -22,6 +23,14 @@ const TH = 'border border-gray-300 bg-gray-100 px-1 py-0.5 text-center text-[11p
 const TD = 'border border-gray-200 px-1 py-0.5 text-center text-[12px]';
 const TDN = 'border border-gray-200 px-1 py-0.5 text-left text-[12px] whitespace-nowrap';
 const SHADE = 'bg-gray-50';
+// Colour per meeting type, as in the Stats mock-up (JT 26/11): blue = Presentation 1, green = PR, yellow = Cashflow Club.
+type Tint = 'nl' | 'pr' | 'cf';
+const TINTS: Tint[] = ['nl', 'pr', 'cf'];
+const TD_BG: Record<Tint, string> = { nl: 'bg-blue-50', pr: 'bg-green-50', cf: 'bg-amber-50' };
+const TH_BG: Record<Tint, string> = { nl: 'bg-blue-100', pr: 'bg-green-100', cf: 'bg-amber-200' };
+const THT = (k: Tint) => TH.replace('bg-gray-100', TH_BG[k]);
+const tint = (k: Tint, total: boolean) => (total ? '' : TD_BG[k]);
+const tc = (k: Tint, total: boolean) => `${TD} ${tint(k, total)}`;
 
 function V({ children }: { children: React.ReactNode }) {
   return <span className="inline-block leading-tight">{children}</span>;
@@ -32,7 +41,7 @@ const sourceKey = (m: ReviewMeeting) => m.meetingSource || NOT_RECORDED;
 const LEVELS: MeetingSourceLevel[] = ['last', 'first', 'lead'];
 
 function MeetingSourceTable({ list, signups, signupsErr, from, to, pick }: { list: ReviewMeeting[]; signups: Signup[] | null; signupsErr: string | null; from: string; to: string; pick: (title: string, meetings: ReviewMeeting[]) => void }) {
-  const nl = list.filter((m) => m.kind === 'NL');
+  const nl = list.filter((m) => m.kind === 'NL' || m.kind === 'CF');
   const groups = new Map<string, ReviewMeeting[]>();
   for (const m of nl) {
     const k = sourceKey(m);
@@ -44,7 +53,7 @@ function MeetingSourceTable({ list, signups, signupsErr, from, to, pick }: { lis
   const signedBy = new Map<string, string[]>();
   for (const s of signups || []) {
     if (s.contactId) signedBy.set(s.contactId, [...(signedBy.get(s.contactId) || []), s.signed]);
-    if (s.signed < from || s.signed > to) continue;
+    if (s.signed < from || s.signed > to || s.source === 'PR') continue;
     const k = s.meetingSource || NOT_RECORDED;
     sold.set(k, (sold.get(k) || 0) + 1);
     if (!groups.has(k)) groups.set(k, []);
@@ -76,9 +85,9 @@ function MeetingSourceTable({ list, signups, signupsErr, from, to, pick }: { lis
     <div className="min-w-0 overflow-x-auto rounded border bg-white">
       <Title>Meeting Source Stats</Title>
       <div className="px-2 py-1 text-xs text-gray-700">
-        Presentation Meeting One only, by Meeting source: the GHL contact&apos;s latest attribution, else first attribution, else Lead Source (hover a source for the split).{' '}
+        Presentation 1 and Cashflow Club meetings, by Meeting source: the GHL contact&apos;s latest attribution, else first attribution, else Lead Source (hover a source for the split).{' '}
         <span className={missing ? 'font-semibold text-red-700' : ''}>No meeting source in GHL: {missing} of {nl.length} ({pct(missing, nl.length)}).</span>{' '}
-        Sold = GHL sign-ups (Date signed up) in the period, by the source of the client&apos;s last Presentation Meeting One before signing; Sold from these meetings = clients met in the period who have signed up since.
+        Sold = GHL sign-ups (Date signed up) in the period, by the source of the client&apos;s last Presentation 1 or Cashflow Club meeting before signing (sales after a PR are left out); Sold from these meetings = clients met in the period who have signed up since.
         {signupsErr && <span className="text-red-700"> Sign-ups not loaded: {signupsErr}</span>}
       </div>
       <table className="w-full border-collapse">
@@ -106,9 +115,9 @@ function Delta({ v, pv }: { v: number; pv: number }) {
   return <span className={`ml-0.5 text-[10px] ${d > 0 ? 'text-green-700' : d < 0 ? 'text-red-700' : 'text-gray-400'}`}>{d > 0 ? '\u25b2' : d < 0 ? '\u25bc' : '='}{d ? Math.abs(d) : ''}</span>;
 }
 
-function NumCell({ v, total, onClick, pv = null }: { v: number; total: boolean; onClick: () => void; pv?: number | null }) {
+function NumCell({ v, total, onClick, pv = null, cls = '' }: { v: number; total: boolean; onClick: () => void; pv?: number | null; cls?: string }) {
   return (
-    <td className={TD}>
+    <td className={`${TD} ${cls}`}>
       {v || total ? <button onClick={onClick} className="text-blue-700 hover:underline" title="Show these meetings">{v}</button> : ''}
       {pv !== null && (v || pv) ? <Delta v={v} pv={pv} /> : null}
     </td>
@@ -144,41 +153,51 @@ type SoldOf = (name: string) => SoldRow;
 type TypeOf = (name: string) => TypeRow;
 type PickT = (name: string, f: Field, t: TypeKey) => void;
 
+/** Equal-width number columns after the Name column (JT 26/11). */
+function Cols({ n }: { n: number }) {
+  return <colgroup><col className="w-[150px]" />{Array.from({ length: n }, (_, i) => <col key={i} />)}</colgroup>;
+}
+
+const allSatOf = (r: Row, t: TypeRow) => r.sat + t.nl.sat + t.cf.sat;
+const allBookedOf = (r: Row, t: TypeRow) => r.booked + t.nl.booked + t.cf.booked;
+
 function CcTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: Row[]; total: Row }; pick: OnPick; prevOf: PrevOf; soldOf: SoldOf; typeOf: TypeOf; pickT: PickT }) {
   const line = (r: Row, total = false) => {
     const s = soldOf(total ? 'TOTAL' : r.name);
     const t = typeOf(total ? 'TOTAL' : r.name);
-    const exS = t.nl.sat;
-    const T = (v: number, f: Field) => <NumCell v={v} total={total} onClick={() => pickT(r.name, f, 'nl')} />;
+    const T = (k: TypeKey, f: Field) => <NumCell v={t[k][f]} total={total} onClick={() => pickT(r.name, f, k)} cls={tint(k, total)} />;
     return (
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
-        <td className={TDN}>{r.name}</td>
-        {T(t.nl.booked, 'booked')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked + t.nl.booked}</td>
-        {T(t.nl.sat, 'sat')}{T(t.nl.dnq, 'dnq')}<td className={TD}>{n0(s.nl + s.ref)}</td><td className={`${TD} ${SHADE}`}>{pct(t.nl.sat, t.nl.booked)}</td>
-        <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td>
-        <td className={`${TD} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
-        <td className={`${TD} ${SHADE}`} title="SOLD / Sat (all meeting types)">{pct(s.total, r.sat + exS)}</td>
+        <td className={`${TDN} truncate`} title={r.name}>{r.name}</td>
+        {T('nl', 'booked')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} cls={tint('pr', total)} />{T('cf', 'booked')}<td className={`${TD} ${SHADE}`}>{allBookedOf(r, t)}</td>
+        {T('nl', 'sat')}{T('nl', 'dnq')}<td className={tc('nl', total)}>{n0(s.nl)}</td><td className={tc('nl', total)}>{pct(t.nl.sat, t.nl.booked)}</td>
+        <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} cls={tint('pr', total)} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} cls={tint('pr', total)} /><td className={tc('pr', total)}>{n0(s.pr)}</td><td className={tc('pr', total)}>{pct(r.sat, r.booked)}</td>
+        {T('cf', 'sat')}{T('cf', 'dnq')}<td className={tc('cf', total)}>{n0(s.cf)}</td><td className={tc('cf', total)}>{pct(t.cf.sat, t.cf.booked)}</td>
+        <td className={`${TD} font-semibold`} title={s.none ? `Includes ${s.none} with no reported meeting before signing` : undefined}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
+        <td className={`${TD} ${SHADE}`} title="SOLD / Sat (all meeting types)">{pct(s.total, allSatOf(r, t))}</td>
       </tr>
     );
   };
   return (
-    <table className="w-full border-collapse">
+    <table className="w-full table-fixed border-collapse">
+      <Cols n={19} />
       <thead>
         <tr>
           <th className={TH} rowSpan={3}>Name</th>
-          <th className={TH} colSpan={3}>Booked</th>
-          <th className={TH} colSpan={7}>Sat</th>
+          <th className={TH} colSpan={4}>Booked</th>
+          <th className={TH} colSpan={12}>Sat</th>
           <th className={TH} rowSpan={3}>SOLD</th>
           <th className={TH} rowSpan={3}><V>Cancelled</V></th>
           <th className={TH} rowSpan={3}><V>Sold %</V></th>
         </tr>
         <tr>
-          {['Presentation 1', 'PR', 'TOTAL'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
-          <th className={TH} colSpan={4}>Presentation 1</th>
-          <th className={TH} colSpan={3}>PR</th>
+          {['Presen\u00ADtation 1', 'PR', 'Cashflow Club', 'TOTAL'].map((h, i) => <th key={h} className={`${i < 3 ? THT(TINTS[i]) : TH} break-words hyphens-manual`} rowSpan={2}><V>{h}</V></th>)}
+          <th className={THT('nl')} colSpan={4}>Presentation 1</th>
+          <th className={THT('pr')} colSpan={4}>PR</th>
+          <th className={THT('cf')} colSpan={4}>Cashflow Club</th>
         </tr>
         <tr>
-          {['Sat', 'DNQ', 'Sold', 'Sat %', 'Sat', 'DNQ', 'Sold'].map((h, i) => <th key={i} className={TH}>{h}</th>)}
+          {[0, 1, 2].flatMap((g) => ['Sat', 'DNQ', 'Sold', 'Sat %'].map((h) => <th key={`${g}${h}`} className={THT(TINTS[g])}>{h}</th>))}
         </tr>
       </thead>
       <tbody>
@@ -193,41 +212,44 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT, selfOf, pickSel
   const line = (r: Row, total = false) => {
     const s = soldOf(total ? 'TOTAL' : r.name);
     const t = typeOf(total ? 'TOTAL' : r.name);
-    const exB = t.nl.booked;
-    const allSat = r.sat + t.nl.sat;
-    const T = (v: number, f: Field) => <NumCell v={v} total={total} onClick={() => pickT(r.name, f, 'nl')} />;
+    const allSat = allSatOf(r, t);
+    const T = (k: TypeKey, f: Field) => <NumCell v={t[k][f]} total={total} onClick={() => pickT(r.name, f, k)} cls={tint(k, total)} />;
     return (
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
-        <td className={TDN}>{r.name}</td>
-        {T(t.nl.booked, 'booked')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} /><td className={`${TD} ${SHADE}`}>{r.booked + t.nl.booked}</td>
+        <td className={`${TDN} truncate`} title={r.name}>{r.name}</td>
+        {T('nl', 'booked')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} cls={tint('pr', total)} />{T('cf', 'booked')}<td className={`${TD} ${SHADE}`}>{allBookedOf(r, t)}</td>
         <NumCell v={selfOf(total ? 'TOTAL' : r.name)} total={total} onClick={() => pickSelf(total ? 'TOTAL' : r.name)} />
-        {T(t.nl.sat, 'sat')}{T(t.nl.dnq, 'dnq')}<td className={TD}>{n0(s.nl + s.ref)}</td><td className={`${TD} ${SHADE}`}>{pct(s.nl + s.ref, t.nl.sat)}</td>
-        <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} /><td className={TD}>{n0(s.pr)}</td><td className={`${TD} ${SHADE}`}>{pct(s.pr, r.sat)}</td>
-        <td className={TD}>{n0(s.selfGen)}</td><td className={TD}>{n0(s.repeat)}</td><td className={`${TD} ${SHADE} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
-        <td className={`${TD} ${SHADE}`}>{pct(allSat, r.booked + exB)}</td><td className={`${TD} ${SHADE}`} title="Sold / Sat (all meeting types)">{pct(s.total, allSat)}</td>
+        {T('nl', 'sat')}{T('nl', 'dnq')}<td className={tc('nl', total)}>{n0(s.nl)}</td><td className={tc('nl', total)}>{pct(s.nl, t.nl.sat)}</td>
+        <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} cls={tint('pr', total)} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} cls={tint('pr', total)} /><td className={tc('pr', total)}>{n0(s.pr)}</td><td className={tc('pr', total)}>{pct(s.pr, r.sat)}</td>
+        {T('cf', 'sat')}{T('cf', 'dnq')}<td className={tc('cf', total)}>{n0(s.cf)}</td><td className={tc('cf', total)}>{pct(s.cf, t.cf.sat)}</td>
+        <td className={TD}>{n0(s.none)}</td><td className={`${TD} ${SHADE} font-semibold`}>{n0(s.total)}</td><td className={`${TD} text-red-700`}>{n0(s.cancelled)}</td>
+        <td className={`${TD} ${SHADE}`}>{pct(allSat, allBookedOf(r, t))}</td><td className={`${TD} ${SHADE}`} title="Sold / Sat (all meeting types)">{pct(s.total, allSat)}</td>
       </tr>
     );
   };
   return (
-    <table className="w-full border-collapse">
+    <table className="w-full table-fixed border-collapse">
+      <Cols n={22} />
       <thead>
         <tr>
           <th className={TH} rowSpan={3}>Name</th>
-          <th className={TH} colSpan={4}>BOOKED</th>
-          <th className={TH} colSpan={8}>Sat</th>
-          <th className={TH} colSpan={4}>Sold</th>
+          <th className={TH} colSpan={5}>BOOKED</th>
+          <th className={TH} colSpan={12}>Sat</th>
+          <th className={TH} colSpan={3}>Sold</th>
           <th className={TH} rowSpan={3}><V>Overall Sat %</V></th>
           <th className={TH} rowSpan={3}><V>Overall Sold %</V></th>
         </tr>
         <tr>
-          {['Presentation 1', 'PR', 'TOTAL'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
+          {['Presen\u00ADtation 1', 'PR', 'Cashflow Club', 'TOTAL'].map((h, i) => <th key={h} className={`${i < 3 ? THT(TINTS[i]) : TH} break-words hyphens-manual`} rowSpan={2}><V>{h}</V></th>)}
           <th className={TH} rowSpan={2} title="Created in GHL by the consultant themselves (included in TOTAL)"><V>Self-booked</V></th>
-          <th className={TH} colSpan={4}>Presentation 1</th>
-          <th className={TH} colSpan={4}>PR</th>
-          {['Self Gen', 'Repeat', 'Total', 'Cancelled'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
+          <th className={THT('nl')} colSpan={4}>Presentation 1</th>
+          <th className={THT('pr')} colSpan={4}>PR</th>
+          <th className={THT('cf')} colSpan={4}>Cashflow Club</th>
+          <th className={TH} rowSpan={2} title="Signed with no reported meeting on or before signing"><V>No meeting</V></th>
+          {['Total', 'Cancelled'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
         </tr>
         <tr>
-          {[0, 1].flatMap((g) => ['Sat', 'DNQ', 'Sold', 'Sold %'].map((h) => <th key={`${g}${h}`} className={TH}>{h}</th>))}
+          {[0, 1, 2].flatMap((g) => ['Sat', 'DNQ', 'Sold', 'Sold %'].map((h) => <th key={`${g}${h}`} className={THT(TINTS[g])}>{h}</th>))}
         </tr>
       </thead>
       <tbody>
@@ -280,26 +302,27 @@ const ratio = (n: number, d: number) => (d ? n / d : 0);
 /** Download the period in the STATS sheet's column order; only the PR columns are filled for now. */
 async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, ccSold: SoldOf, salesSold: SoldOf, ccT: TypeOf, salesT: TypeOf, selfOf: (name: string) => number) {
   const XLSX = await import('xlsx');
-  const ccHead = ['Name', 'Booked Presentation 1', 'Booked PR', 'Booked TOTAL', 'Pres 1 Sat', 'Pres 1 DNQ', 'Pres 1 Sold', 'Pres 1 Sat %',
-    'PR Sat', 'PR DNQ', 'PR Sold', 'SOLD', 'Cancelled', 'Sold %'];
+  const ccHead = ['Name', 'Booked Presentation 1', 'Booked PR', 'Booked Cashflow Club', 'Booked TOTAL', 'Pres 1 Sat', 'Pres 1 DNQ', 'Pres 1 Sold', 'Pres 1 Sat %',
+    'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sat %', 'CF Sat', 'CF DNQ', 'CF Sold', 'CF Sat %', 'SOLD', 'Cancelled', 'Sold %'];
   const ccRow = (r: Row) => {
     const s = ccSold(r.name);
     const t = ccT(r.name);
-    return [r.name, t.nl.booked, r.booked, r.booked + t.nl.booked, t.nl.sat, t.nl.dnq, s.nl + s.ref, ratio(t.nl.sat, t.nl.booked), r.sat, r.dnq, s.pr, s.total, s.cancelled, ratio(s.total, r.sat + t.nl.sat)];
+    return [r.name, t.nl.booked, r.booked, t.cf.booked, allBookedOf(r, t), t.nl.sat, t.nl.dnq, s.nl, ratio(t.nl.sat, t.nl.booked), r.sat, r.dnq, s.pr, ratio(r.sat, r.booked),
+      t.cf.sat, t.cf.dnq, s.cf, ratio(t.cf.sat, t.cf.booked), s.total, s.cancelled, ratio(s.total, allSatOf(r, t))];
   };
-  const salesHead = ['Name', 'Booked Presentation 1', 'Booked PR', 'Booked TOTAL', 'Self-booked', 'Pres 1 Sat', 'Pres 1 DNQ', 'Pres 1 Sold', 'Pres 1 Sold %',
-    'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'Self Gen', 'Repeat', 'Sold Total', 'Cancelled', 'Overall Sat %', 'Overall Sold %'];
+  const salesHead = ['Name', 'Booked Presentation 1', 'Booked PR', 'Booked Cashflow Club', 'Booked TOTAL', 'Self-booked', 'Pres 1 Sat', 'Pres 1 DNQ', 'Pres 1 Sold', 'Pres 1 Sold %',
+    'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'CF Sat', 'CF DNQ', 'CF Sold', 'CF Sold %', 'Sold no meeting', 'Sold Total', 'Cancelled', 'Overall Sat %', 'Overall Sold %'];
   const salesRow = (r: Row) => {
     const s = salesSold(r.name);
     const t = salesT(r.name);
-    const exB = t.nl.booked;
-    const allSat = r.sat + t.nl.sat;
-    return [r.name, t.nl.booked, r.booked, r.booked + exB, selfOf(r.name), t.nl.sat, t.nl.dnq, s.nl + s.ref, ratio(s.nl + s.ref, t.nl.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat), s.selfGen, s.repeat, s.total, s.cancelled, ratio(allSat, r.booked + exB), ratio(s.total, allSat)];
+    const allSat = allSatOf(r, t);
+    return [r.name, t.nl.booked, r.booked, t.cf.booked, allBookedOf(r, t), selfOf(r.name), t.nl.sat, t.nl.dnq, s.nl, ratio(s.nl, t.nl.sat), r.sat, r.dnq, s.pr, ratio(s.pr, r.sat),
+      t.cf.sat, t.cf.dnq, s.cf, ratio(s.cf, t.cf.sat), s.none, s.total, s.cancelled, ratio(allSat, allBookedOf(r, t)), ratio(s.total, allSat)];
   };
   const aoa: unknown[][] = [
     [`Sales Meeting Outcomes stats - ${label}`],
-    ['PR and Presentation 1 (Presentation Meeting One) meetings. No New Lead / Referral split: see Meeting Source Stats.'],
-    ['Sold and Cancelled: Buyers Club Tracking sheet, all lead sources.'],
+    ['PR, Presentation 1 (Presentation Meeting One) and Cashflow Club meetings. No New Lead / Referral split: see Meeting Source Stats.'],
+    ['Sold: GHL "Date signed up" (moved to Sale Administration), credited to the last meeting before signing. Cancelled: GHL Lost with a Refund reason.'],
     [],
     ['CC Stats'], ccHead, ...cc.rows.map(ccRow), ccRow(cc.total),
     [],
@@ -309,7 +332,7 @@ async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, 
     ...[...modes.rows, modes.total].map((x) => [x.name, x.booked, x.name === 'TOTAL' ? null : ratio(x.booked, modes.total.booked), x.sat, null, null, null]),
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 24 }, ...Array.from({ length: 24 }, () => ({ wch: 10 }))];
+  ws['!cols'] = [{ wch: 24 }, ...Array.from({ length: 30 }, () => ({ wch: 10 }))];
   for (const [addr, cell] of Object.entries(ws)) {
     if (addr.startsWith('!') || typeof (cell as { v?: unknown }).v !== 'number') continue;
     const v = (cell as { v: number }).v;
@@ -450,7 +473,7 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
     .map((r) => {
       const t = typeOf(r.name);
       const s = soldOf(r.name);
-      const sat = r.sat + t.nl.sat;
+      const sat = allSatOf(r, t);
       return { name: r.name, sat, sold: s.total, cancelled: s.cancelled };
     })
     .filter((x) => x.sat || x.sold || x.cancelled)
@@ -479,7 +502,7 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
           </tbody>
         </table>
       )}
-      <div className="px-3 py-1 text-xs text-gray-500">Sat counts PR and Presentation 1 meetings; Sold and Cancelled come from the Tracking sheet (by date signed). Revenue is only on Sales (Work in Progress). A high cancel rate means clients sign but don&apos;t go through.</div>
+      <div className="px-3 py-1 text-xs text-gray-500">Sat counts PR, Presentation 1 and Cashflow Club meetings; Sold and Cancelled come from GHL opportunities (by date signed). Revenue is only on Sales (Work in Progress). A high cancel rate means clients sign but don&apos;t go through.</div>
     </div>
   );
 }
@@ -594,7 +617,7 @@ function ExceptionReports({ meetings }: { meetings: ReviewMeeting[] }) {
                 <tr key={`${m.id}:${m.start}`} className="odd:bg-gray-50">
                   <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
                   <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
-                  <td className={TDN}>{m.kind === 'PR' ? 'Portfolio Review' : 'Presentation 1'}</td>
+                  <td className={TDN}>{KIND_LABEL[m.kind]}</td>
                   <td className={TDN}>{m.consultant}</td>
                   {extra.map(([h, f]) => <td key={h} className={TDN}>{f(m)}</td>)}
                 </tr>
@@ -808,10 +831,10 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
     const key = side === 'cc' ? bookerKey : (m: ReviewMeeting) => m.consultant;
     const meetings = list
       .filter((m) => name === 'TOTAL' || key(m) === name)
-      .filter((m) => (type === 'PR' ? isPR(m) : !isPR(m)))
+      .filter((m) => (type === 'PR' ? isPR(m) : typeKeyOf(m) === type))
       .filter((m) => (f === 'sat' ? isSat(m) : f === 'dnq' ? isDnq(m) : true))
       .sort((a, b) => a.start.localeCompare(b.start));
-    setDrill({ title: `${name === 'TOTAL' ? (side === 'cc' ? 'Call Centre total' : 'Sales total') : name} - ${f === 'booked' ? 'Booked' : f === 'sat' ? 'Sat' : 'DNQ'} - ${type === 'PR' ? 'PR' : 'Presentation 1'} - ${r.label}`, meetings });
+    setDrill({ title: `${name === 'TOTAL' ? (side === 'cc' ? 'Call Centre total' : 'Sales total') : name} - ${f === 'booked' ? 'Booked' : f === 'sat' ? 'Sat' : 'DNQ'} - ${type === 'PR' ? 'PR' : type === 'nl' ? 'Presentation 1' : 'Cashflow Club'} - ${r.label}`, meetings });
   };
 
   if (error) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>;
@@ -824,7 +847,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         {data.settings && (
           <ul className="mb-1 mt-1 list-disc pl-5">{dataSourceLines(data.settings).map((l) => <li key={l}>{l}</li>)}</ul>
         )}
-        Presentation 1 is not split into New Lead / Referral: see Meeting Source Stats. Comparisons and targets are PR only. Sold % = PR Sold / PR Sat.
+        Presentation 1 is not split into New Lead / Referral: see Meeting Source Stats. Comparisons and targets are PR only. Sold % = Sold / Sat over all meeting types. Reschedule by moving the appointment in GHL: a cancelled meeting and a new booking count as two meetings.
       </details>
       {!demoData && salesErr && <div className="mb-3 text-sm text-red-700">Sales not loaded: {salesErr}</div>}
       {noOutcome > 0 && (

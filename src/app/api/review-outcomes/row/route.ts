@@ -4,6 +4,7 @@ import { meetingOwner, saveConfirmed, saveRowNote, saveTlc } from '@/lib/reviewO
 import { NOTE_NEXT_ACTIONS } from '@/lib/reviewOutcomes/types';
 import { postContactNote } from '@/lib/reviewOutcomes/contactNote';
 import { runConfirm } from '@/lib/reviewOutcomes/confirm';
+import { markCcPaysDirty } from '@/lib/reviewOutcomes/ccPays';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
     const tlc = (b as { tlc?: unknown }).tlc;
     if (typeof tlc === 'boolean') {
       const err = await saveTlc(access.viewer.email, b.appointmentId, tlc);
+      if (!err) await markCcPaysDirty(b.appointmentId).catch((e) => console.error('[review-outcomes] cc pays flag failed:', e));
       return err ? json({ error: err }, 409) : json({ ok: true });
     }
     if (typeof b.confirmed === 'boolean') {

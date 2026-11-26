@@ -6,8 +6,8 @@ import { KINDS, MONTHS, periodRange, shift, WEEK_RULE, weekStart, type Period } 
 import { aud, itemsIn, saleItems, soldBy, type SaleItem, type SoldRow } from '@/lib/reviewOutcomes/salesStats';
 import { dmy } from './ui';
 
-// Sales from the Buyers Club Tracking sheet (read-only copy): one row per signed client, sliceable by period, office,
-// consultant, CC member, Meeting source, broker and SMSF. Revenue = paid + balance.
+// Sales from GHL (read-only): one row per signed client, sliceable by period, meeting type, consultant, CC member,
+// Meeting source, pipeline and stage. Revenue = GHL Total Fee.
 
 const FIRST = '2018-01-01';
 // Revenue lives only here, by Month / Quarter / YTD - no weekly view (JT 12/11).
@@ -17,9 +17,9 @@ const TH = 'border border-gray-300 bg-gray-100 px-1 py-0.5 text-center text-[11p
 const TD = 'border border-gray-200 px-1 py-0.5 text-center text-[12px]';
 const TDN = 'border border-gray-200 px-1 py-0.5 text-left text-[12px] whitespace-nowrap';
 
-type FilterKey = 'office' | 'consultant' | 'cc' | 'meetingSource' | 'broker' | 'smsf';
-const FILTERS: [FilterKey, string][] = [['office', 'Office'], ['consultant', 'Consultant'], ['cc', 'CC member'], ['meetingSource', 'Meeting source'], ['broker', 'Broker'], ['smsf', 'SMSF']];
-const NO_FILTERS: Record<FilterKey, string> = { office: '', consultant: '', cc: '', meetingSource: '', broker: '', smsf: '' };
+type FilterKey = 'source' | 'consultant' | 'cc' | 'meetingSource' | 'pipeline' | 'stage';
+const FILTERS: [FilterKey, string][] = [['source', 'Meeting type'], ['consultant', 'Consultant'], ['cc', 'CC member'], ['meetingSource', 'Meeting source'], ['pipeline', 'Pipeline'], ['stage', 'Stage']];
+const NO_FILTERS: Record<FilterKey, string> = { source: '', consultant: '', cc: '', meetingSource: '', pipeline: '', stage: '' };
 const BLANK = '(blank)';
 const val = (it: SaleItem, k: FilterKey) => String(it[k] || '') || BLANK;
 
@@ -49,7 +49,7 @@ function Breakdown({ title, rows, total }: { title: string; rows: SoldRow[]; tot
       <div className="bg-brand-charcoal py-1 text-center text-sm font-bold text-white">{title}</div>
       <table className="w-full border-collapse">
         <thead>
-          <tr>{['Name', 'Sold', 'New Lead', 'Referral', 'PR', 'Self Gen', 'Repeat', 'Other / Unknown', 'Cancelled', 'Revenue $'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>
+          <tr>{['Name', 'Sold', 'Presentation 1', 'PR', 'Cashflow Club', 'No meeting', 'Cancelled', 'Revenue $'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>
         </thead>
         <tbody>
           {[...rows, total].map((r) => (
@@ -57,11 +57,9 @@ function Breakdown({ title, rows, total }: { title: string; rows: SoldRow[]; tot
               <td className={TDN}>{r.name}</td>
               <td className={TD}>{r.total || ''}</td>
               <td className={TD}>{r.nl || ''}</td>
-              <td className={TD}>{r.ref || ''}</td>
               <td className={TD}>{r.pr || ''}</td>
-              <td className={TD}>{r.selfGen || ''}</td>
-              <td className={TD}>{r.repeat || ''}</td>
-              <td className={TD}>{r.other || ''}</td>
+              <td className={TD}>{r.cf || ''}</td>
+              <td className={TD}>{r.none || ''}</td>
               <td className={`${TD} text-red-700`}>{r.cancelled || ''}</td>
               <td className={TD}>{aud(r.revenue)}</td>
             </tr>
@@ -116,14 +114,14 @@ async function exportXlsx(label: string, list: SaleItem[]) {
   const XLSX = await import('xlsx');
   const aoa: unknown[][] = [
     [`Sales - ${label}`],
-    ['Source: Buyers Club Tracking sheet (read-only). Revenue = paid + balance.'],
+    ['Source: GHL (read-only). Sold = "Date signed up"; Cancelled = Lost with a Refund reason; Revenue = Total Fee.'],
     [],
-    ['Signed', 'Client', 'Office', 'Consultant', 'CC member', 'Meeting source', 'Broker', 'SMSF', 'Revenue $', 'Paid $', 'Status', 'Cancel reason'],
-    ...list.map((it) => [dmy(it.signed), it.client, it.office, it.consultant, it.cc, it.meetingSource, it.broker, it.smsf, it.removed ? null : it.fee, it.removed ? null : it.paid,
-      it.removed ? 'Cancelled (not in sales tab)' : it.cancelled ? 'Cancelled' : 'Active', it.cancel?.reason || '']),
+    ['Signed', 'Client', 'Meeting type', 'Consultant', 'CC member', 'Meeting source', 'Pipeline', 'Stage', 'Revenue $', 'Status', 'Lost reason'],
+    ...list.map((it) => [dmy(it.signed), it.client, it.source, it.consultant, it.cc, it.meetingSource, it.pipeline, it.stage, it.fee || null,
+      it.cancelled ? 'Cancelled' : 'Active', it.lostReason]),
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [12, 36, 14, 18, 16, 12, 16, 14, 12, 12, 24, 40].map((wch) => ({ wch }));
+  ws['!cols'] = [12, 36, 16, 18, 16, 16, 20, 24, 12, 12, 30].map((wch) => ({ wch }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sales');
   XLSX.writeFile(wb, `Sales - ${label.replace(/[\\/:*?"<>|]/g, '-')}.xlsx`);
@@ -178,8 +176,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
     [items, r.from, r.to, filters],
   );
   const total = useMemo(() => soldBy(inPeriod, () => 'x', net).total, [inPeriod, net]);
-  const counted = useMemo(() => inPeriod.filter((it) => !it.removed && !(net && it.cancelled)), [inPeriod, net]);
-  const paid = counted.reduce((a, it) => a + it.paid, 0);
+  const counted = useMemo(() => inPeriod.filter((it) => !(net && it.cancelled)), [inPeriod, net]);
   const breakdown = (k: FilterKey) => {
     const s = soldBy(inPeriod, (it) => val(it, k), net);
     return { rows: [...s.by.values()].sort((a, b) => b.total - a.total || b.cancelled - a.cancelled), total: s.total };
@@ -200,7 +197,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
         const pt = by.get(bucketKey(it.signed, b));
         if (!pt) continue;
         pt.sold++;
-        pt.revenue += it.removed ? 0 : it.fee;
+        pt.revenue += it.fee;
       }
       return [...by.values()];
     };
@@ -209,9 +206,9 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
     return { cur: build(r.from, end, inPeriod), ly: lyItems.length ? build(lyFrom, lyTo, lyItems) : [] };
   }, [items, inPeriod, net, p.kind, r.from, r.to, filters]);
 
-  if (demo) return <div className="rounded border bg-white p-4 text-sm text-gray-600">Sales come from the live Tracking sheet, so they aren&apos;t shown in demo mode.</div>;
+  if (demo) return <div className="rounded border bg-white p-4 text-sm text-gray-600">Sales come from live GHL, so they aren&apos;t shown in demo mode.</div>;
   if (error && !data) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>;
-  if (!data) return <div className="rounded border bg-white p-4 text-sm text-gray-600">Reading the Tracking sheet…</div>;
+  if (!data) return <div className="rounded border bg-white p-4 text-sm text-gray-600">Reading GHL…</div>;
 
   const years = Array.from({ length: Number(today.slice(0, 4)) - 2017 }, (_, i) => 2018 + i);
   const canShift = p.kind !== 'ytd' && p.kind !== 'all';
@@ -223,9 +220,9 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
   return (
     <div>
       <div className="mb-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-brand-charcoal">
-        Source: Buyers Club Tracking sheet (office sales tabs and CANCELLATIONS), read-only. Revenue = paid + balance.
-        Meeting source = the GHL source of the client&apos;s last Presentation Meeting One on or before signing (client matched by phone, else name).
-        {data.syncedAt && <span className="text-gray-600"> Copied {new Date(data.syncedAt).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}.</span>}
+        Source: GHL, read-only. Sold = opportunity moved to Sale Administration (&quot;Date signed up&quot;); Cancelled = Lost with a Refund reason; Revenue = Total Fee.
+        Each sale counts for the client&apos;s last Presentation 1, PR or Cashflow Club meeting on or before signing; Meeting source is that meeting&apos;s source.
+        {data.syncedAt && <span className="text-gray-600"> Read {new Date(data.syncedAt).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}.</span>}
         <button onClick={() => load(true)} disabled={busy} className="ml-2 rounded border bg-white px-2 py-0.5 text-xs hover:bg-gray-50 disabled:opacity-50">
           {busy ? 'Refreshing…' : 'Refresh now'}
         </button>
@@ -277,7 +274,6 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
         <Card label={net ? 'Sold (net)' : 'Sold (gross)'} value={total.total} />
         <Card label="Cancelled" value={total.cancelled} sub={total.cancelledRevenue ? `${aud(total.cancelledRevenue)} known fees` : undefined} />
         <Card label="Revenue" value={aud(total.revenue) || '$0'} sub={net ? 'net of cancellations' : 'gross'} />
-        <Card label="Paid to date" value={aud(paid) || '$0'} />
         <Card label="Average fee" value={aud(counted.length ? counted.reduce((a, it) => a + it.fee, 0) / counted.length : 0) || '-'} />
       </div>
 
@@ -287,7 +283,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
       </div>
 
       <div className="mb-3 grid gap-3 xl:grid-cols-2">
-        <Breakdown title="By office" {...breakdown('office')} />
+        <Breakdown title="By meeting type" {...breakdown('source')} />
         <Breakdown title="By meeting source" {...breakdown('meetingSource')} />
         <Breakdown title="By consultant" {...breakdown('consultant')} />
         <Breakdown title="By CC member" {...breakdown('cc')} />
@@ -297,23 +293,22 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
         <div className="bg-brand-charcoal py-1 text-center text-sm font-bold text-white">Sales ({list.length})</div>
         <table className="w-full border-collapse">
           <thead>
-            <tr>{['Signed', 'Client', 'Office', 'Consultant', 'CC member', 'Meeting source', 'Broker', 'SMSF', 'Revenue $', 'Paid $', 'Status'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>
+            <tr>{['Signed', 'Client', 'Meeting type', 'Consultant', 'CC member', 'Meeting source', 'Pipeline', 'Stage', 'Revenue $', 'Status'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {shown.map((it) => (
               <tr key={it.id} className={it.cancelled ? 'text-gray-400' : ''}>
                 <td className={TDN}>{dmy(it.signed)}</td>
                 <td className={TDN}>{it.client}</td>
-                <td className={TDN}>{it.office}</td>
-                <td className={TDN} title={it.sale?.consultantRaw}>{it.consultant}</td>
-                <td className={TDN} title={it.sale?.ccRaw}>{it.cc}</td>
+                <td className={TDN} title={it.sale.meetingYmd ? `Meeting ${dmy(it.sale.meetingYmd)}` : 'No reported meeting on or before signing'}>{it.source}</td>
+                <td className={TDN}>{it.consultant}</td>
+                <td className={TDN}>{it.cc}</td>
                 <td className={TDN} title={it.meetingSourceTip}>{it.meetingSource}</td>
-                <td className={TDN}>{it.broker}</td>
-                <td className={TDN}>{it.smsf}</td>
-                <td className={TD}>{it.removed ? '' : aud(it.fee)}</td>
-                <td className={TD}>{it.removed ? '' : aud(it.paid)}</td>
-                <td className={TDN} title={it.cancel?.reason || ''}>
-                  {it.removed ? <span className="text-red-700">Cancelled (not in sales tab)</span> : it.cancelled ? <span className="text-red-700">Cancelled</span> : 'Active'}
+                <td className={TDN}>{it.pipeline}</td>
+                <td className={TDN}>{it.stage}</td>
+                <td className={TD}>{aud(it.fee)}</td>
+                <td className={TDN} title={it.lostReason}>
+                  {it.cancelled ? <span className="text-red-700">Cancelled</span> : 'Active'}
                 </td>
               </tr>
             ))}

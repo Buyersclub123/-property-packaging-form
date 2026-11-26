@@ -4,7 +4,7 @@ import { ghlLocationId, ghlUsers, SECOND_MEETING_CALENDAR_ID } from './sync';
 import { matchMeetings, prepareGcal, type RawGcal } from './match';
 import { rescheduledWeeks } from './moves';
 import { weekStart } from './stats';
-import { addDays, MIN_YMD, NEW_LEAD_CALENDAR_ID, sydYmd, utcCover, type GcalEvent, type MeetingMode, type ScheduleInfo, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
+import { addDays, CASHFLOW_CLUB_FROM, kindOfCalendar, MIN_YMD, sydYmd, utcCover, type GcalEvent, type MeetingMode, type ScheduleInfo, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
 
 // Reads meetings for Sydney days from..to from the cache, with recorded outcomes and the matching Google event.
 
@@ -89,13 +89,17 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
   });
   const eventById = new Map(prepared.map((e) => [e.id, e]));
 
+  const kindOf = (r: Record<string, unknown>) => kindOfCalendar(String(r.calendar_id));
+  const isNl = (r: Record<string, unknown>) => kindOf(r) === 'NL';
+  // Cashflow Club counts from its start week only (JT 26/11).
+  const kindOk = (r: Record<string, unknown>, ymd: string) => kindOf(r) !== 'CF' || ymd >= CASHFLOW_CLUB_FROM;
   const base = rows.map((r) => {
     const startIso = iso(r.start_at);
     return { r, startIso, t: Date.parse(startIso), ymd: sydYmd(startIso), name: String(r.contact_name || r.title || '') };
-  });
-  const isNl = (r: Record<string, unknown>) => String(r.calendar_id) === NEW_LEAD_CALENDAR_ID;
+  }).filter((b) => kindOk(b.r, b.ymd));
+  // Google invite matching is for Portfolio Review; Presentation 1 and Cashflow Club take Google/F2F from the GHL appointment.
   const matches = matchMeetings(
-    base.filter((b) => !isNl(b.r)).map((b) => ({ id: String(b.r.appointment_id), t: b.t, ymd: b.ymd, name: b.name, email: String(b.r.contact_email || ''), phones: (b.r.phones as string[]) || [] })),
+    base.filter((b) => kindOf(b.r) === 'PR').map((b) => ({ id: String(b.r.appointment_id), t: b.t, ymd: b.ymd, name: b.name, email: String(b.r.contact_email || ''), phones: (b.r.phones as string[]) || [] })),
     prepared,
   );
 
@@ -121,12 +125,13 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
       const status = String(r.ghl_status || '');
       const dbOutcome = r.outcome && (r.source !== 'sheet' || sheetOk(ymd)) ? String(r.outcome) : null;
       const ghlOutcome = GHL_OUTCOME[status] || null;
-      const nl = isNl(r);
+      const kind = kindOf(r);
+      const nl = kind === 'NL';
       const snap = nl ? snapByAppt.get(String(r.appointment_id)) : undefined;
       const sr = snap?.schedule || undefined;
       const schedOutcome = snap?.outcome || null;
       const outcomeSource: OutcomeSource | null = dbOutcome ? (r.source === 'sheet' ? 'sheet' : 'tool') : schedOutcome ? 'schedule' : ghlOutcome ? 'ghl' : null;
-      const m = nl ? undefined : matches.get(String(r.appointment_id));
+      const m = kind === 'PR' ? matches.get(String(r.appointment_id)) : undefined;
       const ev = m ? eventById.get(m.eventId) : undefined;
       const consEmail = userEmail.get(String(r.assigned_user_id || ''));
       // Booker (JT 3/11). GHL appointments carry no guests, so on the GHL side it is the user who created the appointment,
@@ -144,7 +149,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
       return {
         id: String(r.appointment_id),
         calendar: String(r.calendar_name),
-        kind: nl ? ('NL' as const) : ('PR' as const),
+        kind,
         schedule: sr ? { tab: sr.tab, lead: sr.lead, sat: sr.sat, outcome: sr.outcome, agent: sr.agent, location: sr.location } : null,
         start: startIso,
         ymd,
@@ -186,7 +191,8 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
         bookerEmail: createdName ? createdEmail || null : bookerEmail,
         bookerFrom: createdName ? (ghlBooker ? 'ghl' : selfBooked ? 'self' : 'created') : inviteBooker ? 'invite' : sheetBooker ? 'sheet' : null,
         createdByEmail: createdEmail || null,
-        mode: nl ? (snap?.mode && snap.mode !== 'Unknown' ? snap.mode : meetingMode(String(r.address || ''))) : ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown',
+        mode: kind === 'PR' ? (ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown')
+          : snap?.mode && snap.mode !== 'Unknown' ? snap.mode : meetingMode(String(r.address || '')),
       };
     });
 
@@ -203,7 +209,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
     WHERE mv.old_start >= ${wStart.toISOString()}::timestamptz AND mv.old_start < ${wEnd.toISOString()}::timestamptz
       AND m.calendar_id IS DISTINCT FROM ${SECOND_MEETING_CALENDAR_ID}
     ORDER BY mv.seen_at, mv.id`;
-  const movedWeeks = rescheduledWeeks(moveRows.map((r) => ({
+  const movedWeeks = rescheduledWeeks(moveRows.filter((r) => kindOk(r, sydYmd(iso(r.old_start)))).map((r) => ({
     r, appointmentId: String(r.appointment_id), oldStart: iso(r.old_start), currentStart: iso(r.new_start),
   })), from, to);
   for (const { r } of movedWeeks) {
@@ -212,7 +218,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
     const createdEmail = (userEmail.get(String(r.created_by || '')) || '').toLowerCase();
     const createdName = r.created_by ? userName.get(String(r.created_by)) || (createdEmail ? emailName(createdEmail) : null) : null;
     meetings.push({
-      id, calendar: String(r.calendar_name), kind: isNl(r) ? 'NL' : 'PR', schedule: null, start: startIso, ymd, past: Date.parse(startIso) <= now,
+      id, calendar: String(r.calendar_name), kind: kindOf(r), schedule: null, start: startIso, ymd, past: Date.parse(startIso) <= now,
       contactId: String(r.contact_id || ''), contactName: String(r.contact_name || r.title || '(no name)'), contactEmail: String(r.contact_email || ''),
       leadSource: null, referrer: null, meetingSource: (r.meeting_source as string | null) || null,
       meetingSourceLevel: (r.meeting_source_level as ReviewMeeting['meetingSourceLevel']) || null, meetingSourceDetail: (r.meeting_source_detail as string | null) || null,
