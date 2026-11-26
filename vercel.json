@@ -3,9 +3,7 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "regions": [
-    "syd1"
-  ],
+  "regions": ["syd1"],
   "git": {
     "deploymentEnabled": false
   },
@@ -67,8 +65,13 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/inbox-mining/lag-sheet/cron",
+      "schedule": "30 15 * * *"
+    },
+    {
       "path": "/api/inbox-mining/lag/cron",
       "schedule": "0 16 * * *"
     }
   ]
 }
+
