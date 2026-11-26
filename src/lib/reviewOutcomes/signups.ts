@@ -219,7 +219,7 @@ export async function loadAllSignups(force = false): Promise<SignupsData> {
   return data;
 }
 
-export async function loadSignups(viewer: ReviewViewer, force = false): Promise<SignupsData> {
-  const data = await loadAllSignups(force);
-  return viewer.recorder ? data : { ...data, signups: data.signups.filter((s) => viewer.consultantIds.includes(s.consultantId || s.assignedTo)) };
+// Every viewer sees every sign-up, as with meetings; the viewer is kept for the signature.
+export async function loadSignups(_viewer: ReviewViewer, force = false): Promise<SignupsData> {
+  return loadAllSignups(force);
 }

@@ -9,7 +9,7 @@ export const maxDuration = 120;
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 
 // Sales from GHL opportunities (read-only, cached 15 min; ?refresh=1 forces a re-read).
-// Review recorders see every sale; everyone else only sales where they are the consultant.
+// Everyone with access sees every sale.
 export async function GET(request: NextRequest) {
   const access = await reviewAccess(request.headers);
   if (!access.ok) return json({ error: access.error }, access.status);

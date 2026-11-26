@@ -5,7 +5,8 @@ import type { ReviewViewer, Sale, SalesData } from './types';
 // Sold = an opportunity in a post-sale pipeline with "Date signed up"; Cancelled = Lost with a Refund lost reason.
 // Revenue = the opportunity's Total Fee. Each sale counts for the client's last reported meeting on or before signing.
 
-export async function loadSales(viewer: ReviewViewer, force = false): Promise<SalesData> {
+// Every viewer sees every sale, as with meetings; the viewer is kept for the signature.
+export async function loadSales(_viewer: ReviewViewer, force = false): Promise<SalesData> {
   const warnings: string[] = [];
   const data = await loadAllSignups(force);
   const sales: Sale[] = data.signups.map((s) => ({
@@ -29,6 +30,5 @@ export async function loadSales(viewer: ReviewViewer, force = false): Promise<Sa
   }));
   const noFee = sales.filter((s) => !s.cancelled && !s.fee).length;
   if (noFee) warnings.push(`${noFee} sale${noFee === 1 ? ' has' : 's have'} no Total Fee in GHL, so ${noFee === 1 ? 'it adds' : 'they add'} nothing to Revenue.`);
-  const visible = viewer.recorder ? sales : sales.filter((s) => viewer.consultantIds.includes(s.consultantId));
-  return { sales: visible, syncedAt: data.at, warnings };
+  return { sales, syncedAt: data.at, warnings };
 }

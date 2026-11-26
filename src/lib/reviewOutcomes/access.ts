@@ -1,13 +1,13 @@
 import { teams } from '@/lib/portalConfig';
-import { canSee, emailFromHeaders, groupsOf, isAdmin, loadAccess, teamKey, toolKey } from '@/lib/tileAccess';
+import { canSee, emailFromHeaders, loadAccess, teamKey, toolKey } from '@/lib/tileAccess';
 import { ensureReviewTables } from './store';
 import { ghlUsers } from './sync';
-import { RECORDERS_GROUP, TOOL_HREF, type ReviewViewer } from './types';
+import { TOOL_HREF, type ReviewViewer } from './types';
 
 // Server-side access for the review-outcomes page and APIs (Tile access only hides tiles, so the API checks too).
-// Everyone with access sees and records every meeting (JT 11/11). 'Review recorders' (and Admin) also get Settings, full sync and the stats email.
+// Everyone with access sees and records every meeting (JT 11/11) and gets Settings, full sync, the stats email and CC PAYS (JT 27/11).
 
-// JT: always see every meeting and Settings, without relying on Tile access groups.
+// JT: always open the tool, without relying on Tile access.
 const FULL_VIEW_EMAILS = ['john.t@buyersclub.com.au', 'john.e@buyersclub.com.au', 'ali.h@buyersclub.com.au', 'samara@buyersclub.com.au'];
 
 export type ReviewAccess = { ok: true; viewer: ReviewViewer } | { ok: false; status: number; error: string };
@@ -24,7 +24,7 @@ export async function reviewAccess(h: Headers): Promise<ReviewAccess> {
     if (!fullView && team && tool && !canSee(email, toolKey(team, tool), teamKey(team), data)) {
       return { ok: false, status: 403, error: 'Sales Meeting Outcomes is not available to you (Tile access).' };
     }
-    const recorder = fullView || groupsOf(email, data).has(RECORDERS_GROUP) || isAdmin(email, data);
+    const recorder = true;
     const users = await ghlUsers().catch(() => []);
     const mine = users.filter((u) => u.email === email);
     return { ok: true, viewer: { email, recorder, consultantIds: mine.map((u) => u.id), name: mine[0]?.name || null } };
