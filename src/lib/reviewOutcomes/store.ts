@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { ensureTileAccessTables, logChange } from '@/lib/tileAccess';
-import { DEFAULT_SETTINGS, DEFAULT_STATS_EMAIL, RECORDERS_GROUP, type ReviewSettings, type StatsEmailSettings, type StatTarget } from './types';
+import { DEFAULT_SETTINGS, DEFAULT_STATS_EMAIL, RECORDERS_GROUP, RETIRED_OUTCOME, type ReviewSettings, type StatsEmailSettings, type StatTarget } from './types';
 
 // App-DB tables for the Portfolio Review outcomes tool (item 14). GHL / Google data is cached here read-only;
 // outcomes and property checks are the only things users write. Nothing is written to GHL, Calendar or the sheet.
@@ -120,7 +120,7 @@ async function create(): Promise<void> {
   )`;
   // GHL appointment location: a Google Meet link = Google, an address = F2F (JT 12/11).
   await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS address TEXT`;
-  // GHL keeps the same appointment when it is moved; each sync records a changed start time here (= Rescheduled).
+  // GHL keeps the same appointment when it is moved; each sync records a changed start time here ("Moved from" label).
   await sql`CREATE TABLE IF NOT EXISTS review_meeting_moves (
     id SERIAL PRIMARY KEY,
     appointment_id TEXT NOT NULL,
@@ -131,6 +131,8 @@ async function create(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS review_meeting_moves_appt ON review_meeting_moves (appointment_id)`;
   // GHL createdBy.userId: equal to the assigned consultant = self-booked (still needs an outcome; no call-centre credit).
   await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS created_by TEXT`;
+  // GHL createdBy.source: booking_widget = the client booked online through a booking link (JT 27/11: no CC credit).
+  await sql`ALTER TABLE review_meetings ADD COLUMN IF NOT EXISTS created_source TEXT`;
   await sql`ALTER TABLE review_contacts ADD COLUMN IF NOT EXISTS lead_source TEXT, ADD COLUMN IF NOT EXISTS referrer TEXT, ADD COLUMN IF NOT EXISTS source_fetched_at TIMESTAMPTZ`;
   // GHL attribution (last / first touch) and the Meeting source captured from it at sync.
   await sql`ALTER TABLE review_contacts ADD COLUMN IF NOT EXISTS last_attr JSONB, ADD COLUMN IF NOT EXISTS first_attr JSONB, ADD COLUMN IF NOT EXISTS attr_fetched_at TIMESTAMPTZ`;
@@ -200,7 +202,7 @@ export async function loadSettings(): Promise<ReviewSettings> {
   const rows = await getDb()`SELECT key, value FROM review_settings WHERE key IN ('outcomes', 'invalid_reasons', 'call_centre', 'targets', 'sales_aliases', 'write_target', 'ghl_only_from')`;
   const get = (k: string) => rows.find((r) => r.key === k)?.value as string[] | undefined;
   return {
-    outcomes: get('outcomes') ?? DEFAULT_SETTINGS.outcomes,
+    outcomes: (get('outcomes') ?? DEFAULT_SETTINGS.outcomes).filter((o) => o !== RETIRED_OUTCOME),
     invalidReasons: get('invalid_reasons') ?? DEFAULT_SETTINGS.invalidReasons,
     callCentre: get('call_centre') ?? DEFAULT_SETTINGS.callCentre,
     targets: (rows.find((r) => r.key === 'targets')?.value as Record<string, StatTarget> | undefined) ?? DEFAULT_SETTINGS.targets,

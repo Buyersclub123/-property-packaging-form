@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, KIND_LABEL, MIN_YMD, NOTE_NEXT_ACTIONS, RESCHEDULE_VIA_GHL, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
+import { addDays, KIND_LABEL, MIN_YMD, NOTE_NEXT_ACTIONS, sydYmd, type ReviewData, type ReviewMeeting, type ReviewSettings } from '@/lib/reviewOutcomes/types';
 import { demoData } from '@/lib/reviewOutcomes/demo';
 import { meetingSourceTitle } from '@/lib/reviewOutcomes/meetingSource';
 import MorePanel from '@/components/reviewOutcomes/MorePanel';
@@ -9,7 +9,7 @@ import ListsView from '@/components/reviewOutcomes/ListsView';
 import SettingsView from '@/components/reviewOutcomes/SettingsView';
 import StatsView from '@/components/reviewOutcomes/StatsView';
 import SalesView from '@/components/reviewOutcomes/SalesView';
-import { dmy, outcomeStyle, Stat, time, weekday } from '@/components/reviewOutcomes/ui';
+import { dmy, HelpDot, outcomeStyle, Stat, time, weekday } from '@/components/reviewOutcomes/ui';
 import BackLink from '@/components/BackLink';
 import AsAtRefresh, { asAtLabel } from '@/components/AsAtRefresh';
 import { useLiveRefresh } from '@/lib/useLiveRefresh';
@@ -22,7 +22,7 @@ const GHL_NOTE_LABEL = "Posted to the client's contact notes (shows under the li
 const CONFIRM_TOAST = 'Demo: would set GHL status = confirmed and prefix the invite title with CONFIRMED (not written in demo)';
 const who = (email: string | null) => (email ? email.split('@')[0].replace(/[._]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
 const longDate = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const needsNextAction = (outcome: string | null) => /^(cancelled|rescheduled)$/i.test(outcome || '');
+const needsNextAction = (outcome: string | null) => /^cancelled$/i.test(outcome || '');
 
 /** First non-blank line = the latest comment (Next Comment inserts at the top, as on CTRT). */
 const latestLine = (note: string | null) => (note || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
@@ -79,7 +79,6 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
   onNote: (m: ReviewMeeting, note: string | null, next: string | null) => void;
 }) {
   const [noteOpen, setNoteOpen] = useState(false);
-  const [ghlHint, setGhlHint] = useState(false);
   const noteLine = latestLine(m.note) || (m.noteNextAction ? `Next action: ${m.noteNextAction}` : '');
   const [src, ...camp] = (m.meetingSource || '').split(' · ');
   const campaign = camp.join(' · ');
@@ -133,8 +132,8 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
         {settings.outcomes.map((o) => {
           const on = m.outcome === o;
           return (
-            <button key={o} disabled={!canEdit} title={o === 'Rescheduled' ? RESCHEDULE_VIA_GHL : undefined}
-              onClick={() => { if (on) return; if (o === 'Rescheduled') { setGhlHint(true); return; } onRecord(m, o); }}
+            <button key={o} disabled={!canEdit}
+              onClick={() => { if (!on) onRecord(m, o); }}
               className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${on ? outcomeStyle(o).on : `bg-white ${outcomeStyle(o).off}`} disabled:cursor-default`}>
               {o}
             </button>
@@ -151,12 +150,6 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
         {onMore && <button onClick={() => onMore(m)} className="rounded border px-1.5 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50">More</button>}
        </div>
        <div className="mt-1 flex flex-wrap items-center gap-2 empty:hidden md:justify-end">
-        {ghlHint && (
-          <div role="status" data-testid="reschedule-hint" className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-800">
-            <span>{RESCHEDULE_VIA_GHL}</span>
-            <button onClick={() => setGhlHint(false)} className="rounded px-1.5 py-0.5 font-medium text-blue-700 hover:bg-blue-100">Got it</button>
-          </div>
-        )}
         {isInvalid && (
           <select value={m.invalidReason || ''} disabled={!canEdit} onChange={(e) => onRecord(m, m.outcome, e.target.value || null)}
             className="rounded border px-1 py-0.5 text-xs" aria-label="Invalid reason">
@@ -164,14 +157,24 @@ function MeetingRow({ m, settings, canEdit, userName, won, onRecord, onMore, onC
             {settings.invalidReasons.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         )}
-        {responded && m.outcomeSource !== 'tool' && <span className="text-[11px] text-gray-400" title={m.sourceRef || ''}>{srcLabel}</span>}
-        {m.movedTo && (
-          <span className="text-[11px] font-semibold text-amber-700" title="Rescheduled in GHL - the meeting now sits in another week">
-            moved to {new Date(m.movedTo).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+        {responded && m.outcomeSource !== 'tool' && (
+          <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-400" title={m.sourceRef || ''}>
+            {srcLabel}
+            <HelpDot text={m.outcomeSource === 'ghl'
+              ? "This is the appointment's status in GHL. To change it, press another outcome (GHL is updated too) or change it in GHL."
+              : `Not set in this tool (${srcLabel}). Press another outcome to change it, or "clear" to remove it.`} />
+          </span>
+        )}
+        {m.movedFrom && (
+          <span data-testid="moved-from" className="text-[11px] text-amber-700" title="Moved in GHL: this is the date it was booked for before. It counts once, here.">
+            Moved from {new Date(m.movedFrom).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short', day: 'numeric', month: 'short' })}
           </span>
         )}
         {canEdit && (m.outcomeSource === 'tool' || m.outcomeSource === 'sheet') && (
-          <button onClick={() => onRecord(m, null)} className="text-[11px] text-gray-400 hover:text-red-600">clear</button>
+          <span className="inline-flex items-center gap-0.5">
+            <button onClick={() => onRecord(m, null)} className="text-[11px] text-gray-400 hover:text-red-600">clear</button>
+            <HelpDot text="Removes this outcome here and in GHL: the GHL appointment goes back to Confirmed (if ticked) or New." />
+          </span>
         )}
         {m.noteGhlError && <span className="text-[11px] font-medium text-red-600" title={m.noteGhlError}>Note not posted to GHL ({m.noteGhlError})</span>}
        </div>
@@ -305,7 +308,7 @@ export default function ReviewOutcomesPage() {
     setSaveError(null);
     const apply = (d: ReviewData | null) => d && {
       ...d,
-      meetings: d.meetings.map((x) => (x.id === m.id && !x.movedTo ? { ...x, outcome, invalidReason: reason, outcomeSource: outcome ? ('tool' as const) : null } : x)),
+      meetings: d.meetings.map((x) => (x.id === m.id ? { ...x, outcome, invalidReason: reason, outcomeSource: outcome ? ('tool' as const) : null } : x)),
     };
     if (demo) {
       setDemoAll(apply);
@@ -328,8 +331,8 @@ export default function ReviewOutcomesPage() {
     // Update only this meeting's row from the saved copy; the list itself is not reloaded.
     try {
       const res = await fetch(`/api/review-outcomes?from=${m.ymd}&to=${m.ymd}&sync=none`, { cache: 'no-store' });
-      const row = res.ok ? ((await res.json()) as ReviewData).meetings.find((x) => x.id === m.id && !x.movedTo) : undefined;
-      if (row) setLive((d) => d && { ...d, meetings: d.meetings.map((x) => (x.id === m.id && !x.movedTo ? row : x)) });
+      const row = res.ok ? ((await res.json()) as ReviewData).meetings.find((x) => x.id === m.id) : undefined;
+      if (row) setLive((d) => d && { ...d, meetings: d.meetings.map((x) => (x.id === m.id ? row : x)) });
     } catch { /* keep the row as tapped */ }
   };
 
@@ -426,7 +429,7 @@ export default function ReviewOutcomesPage() {
     for (const m of meetings) g.set(m.ymd, [...(g.get(m.ymd) || []), m]);
     return [...g.entries()];
   }, [meetings]);
-  const canEdit = (m: ReviewMeeting) => !!data && !!m.id && !m.movedTo;
+  const canEdit = (m: ReviewMeeting) => !!data && !!m.id;
   const userNames = data?.ghlUsers?.length ? [...new Set(data.ghlUsers.map((u) => u.name))] : data?.consultants || [];
 
   return (
@@ -586,7 +589,7 @@ export default function ReviewOutcomesPage() {
             {data && byDay.map(([ymd, list]) => (
               <div key={ymd} className="mb-3 overflow-hidden rounded border bg-white">
                 <div className="bg-gray-50 px-3 py-1.5 text-sm font-semibold text-brand-charcoal">{weekday(ymd)} {dmy(ymd)} <span className="font-normal text-gray-500">· {list.length}</span></div>
-                {list.map((m) => <MeetingRow key={`${m.id}:${m.start}`} m={m} won={wonOf(m)} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={!m.movedTo && (demo || SHOW_MORE_LIVE) ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} userName={data.viewer.name || who(data.viewer.email)} />)}
+                {list.map((m) => <MeetingRow key={`${m.id}:${m.start}`} m={m} won={wonOf(m)} settings={data.settings} canEdit={canEdit(m)} onRecord={record} onMore={demo || SHOW_MORE_LIVE ? setMore : undefined} onConfirm={confirmRow} onTlc={tlcRow} onNote={noteRow} userName={data.viewer.name || who(data.viewer.email)} />)}
               </div>
             ))}
           </>

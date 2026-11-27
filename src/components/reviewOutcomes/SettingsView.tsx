@@ -191,7 +191,7 @@ export default function SettingsView({ settings, recorder, demo = false, names =
         </div>
         <div className="mt-1 text-xs text-gray-500">
           With DB + GHL, clicking an outcome also sets the GHL appointment status: Showed = showed, No show / Not sat = noshow,
-          Invalid (DNQ) = invalid, Cancelled = cancelled. Rescheduled and clearing leave GHL unchanged; DNQ reasons stay in the DB.
+          Invalid (DNQ) = invalid, Cancelled = cancelled. Clearing leaves GHL unchanged; DNQ reasons stay in the DB.
           Values filled from the calendar schedule sheet are never written. Demo never writes. Click Save settings to apply.
         </div>
       </div>

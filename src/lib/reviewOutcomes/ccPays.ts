@@ -104,7 +104,7 @@ export async function buildCcPays(p: CcPeriod): Promise<CcPays> {
     // Self-booked: the creator is the consultant; only paid when they have their own CC PAYS block (e.g. MARK - VIC).
     const self = m.bookerFrom === 'self';
     const booker = self ? m.consultant : m.booker;
-    if (!booker) { skipped.push({ client, ymd: m.ymd, reason: 'No booker found' }); continue; }
+    if (!booker) { skipped.push({ client, ymd: m.ymd, reason: m.bookerFrom === 'online' ? 'Booked online (no CC credit)' : 'No booker found' }); continue; }
     let b = blocks.find((x) => !x.old && matches(x.header, booker)) || (self ? undefined : blocks.find((x) => matches(x.header, booker)));
     if (!b && self) { skipped.push({ client, ymd: m.ymd, reason: `Self-booked by ${booker} (no CC PAYS block)` }); continue; }
     const sold = soldMeetings.has(m.id);

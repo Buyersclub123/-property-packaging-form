@@ -1,4 +1,4 @@
-import { addDays, MIN_YMD, type ReviewMeeting, type StatsKind } from './types';
+import { addDays, MIN_YMD, NO_MEETING_SALE, type ReviewMeeting, type StatsKind } from './types';
 
 // Item 15 stats maths, shared by the Stats tab and the weekly stats email. PR meetings only for now.
 
@@ -8,11 +8,14 @@ export interface Period { kind: Kind; anchor: string }
 export const KINDS: [Kind, string][] = [['day', 'Day'], ['week', 'Week (Fri–Thu)'], ['month', 'Month'], ['quarter', 'Quarter'], ['ytd', 'YTD'], ['year', 'Year'], ['all', 'All']];
 export const NO_BOOKER = 'No booker found';
 export const SELF_BOOKED = 'Self-booked';
-/** Booker rows sort by name, with Self-booked then No booker found last. */
-export const bookerOrder = (a: string, b: string) => {
-  const w = (n: string) => (n === SELF_BOOKED ? 1 : n === NO_BOOKER ? 2 : 0);
-  return w(a) - w(b) || a.localeCompare(b);
-};
+/** The client booked through a GHL booking link (GHL createdBy.source = booking_widget): no CC credit (JT 27/11). */
+export const BOOKED_ONLINE = 'Booked online';
+/** Names that aren't people always sort below the people, in this order (JT 27/11). */
+const NON_PERSON = [SELF_BOOKED, BOOKED_ONLINE, NO_BOOKER, NO_MEETING_SALE, '(unassigned)', 'Unassigned', 'Unknown', 'Not recorded in GHL', 'No Presentation Meeting One before signing', '(blank)'];
+/** 0 for a person, else 1, 2, ... in NON_PERSON order. */
+export const nonPersonRank = (n: string) => NON_PERSON.indexOf(n) + 1;
+/** Rows sort by name, with the non-person names last. */
+export const bookerOrder = (a: string, b: string) => nonPersonRank(a) - nonPersonRank(b) || a.localeCompare(b);
 export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export const pad = (n: number) => String(n).padStart(2, '0');
@@ -162,7 +165,7 @@ export function sumTypes(rows: TypeRow[]): TypeRow {
   return t;
 }
 
-export const bookerKey = (m: ReviewMeeting) => (m.bookerFrom === 'self' ? SELF_BOOKED : m.booker || NO_BOOKER);
+export const bookerKey = (m: ReviewMeeting) => (m.bookerFrom === 'self' ? SELF_BOOKED : m.booker || (m.bookerFrom === 'online' ? BOOKED_ONLINE : NO_BOOKER));
 export const consultantKey = (m: ReviewMeeting) => m.consultant;
 export const inRange = (list: ReviewMeeting[], from: string, to: string) => list.filter((m) => m.ymd >= from && m.ymd <= to);
 export const pct = (n: number, d: number) => (d ? `${((n / d) * 100).toFixed(2)}%` : '0.00%');

@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const g = ghlNorm(m.ghlStatus || '');
     const t = (out[k] ||= { total: 0, agree: 0, grid: {} });
     t.total++;
-    if (o === g || (o === 'Rescheduled' && g === 'Confirmed / other')) t.agree++;
+    if (o === g) t.agree++;
     (t.grid[o] ||= {})[g] = (t.grid[o][g] || 0) + 1;
   }
   const moves = await getDb()`SELECT COUNT(*)::int AS n, COUNT(DISTINCT appointment_id)::int AS appts, MIN(seen_at) AS first FROM review_meeting_moves`;

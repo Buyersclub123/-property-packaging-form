@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from '@/lib/db';
 import { reviewAccess } from '@/lib/reviewOutcomes/access';
 import { loadMeetings } from '@/lib/reviewOutcomes/load';
 import { markCcPaysDirty } from '@/lib/reviewOutcomes/ccPays';
@@ -6,7 +7,7 @@ import { meetingOwner, saveOutcome } from '@/lib/reviewOutcomes/record';
 import { lastSync, loadSettings, logReview } from '@/lib/reviewOutcomes/store';
 import { GHL_STATUS_FOR, ghlSetStatus } from '@/lib/reviewOutcomes/sync';
 import { gcalCalendars, syncRange } from '@/lib/reviewOutcomes/sync';
-import { isYmd, RESCHEDULE_VIA_GHL, sydYmd, type ReviewData } from '@/lib/reviewOutcomes/types';
+import { isYmd, sydYmd, type ReviewData } from '@/lib/reviewOutcomes/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -61,16 +62,22 @@ export async function POST(request: NextRequest) {
     const settings = await loadSettings();
     const outcome = b.outcome ?? null;
     if (outcome !== null && !settings.outcomes.includes(outcome)) return json({ error: `Unknown outcome "${outcome}".` }, 400);
-    if (outcome === 'Rescheduled') return json({ error: RESCHEDULE_VIA_GHL }, 400);
     const reason = outcome && /^invalid/i.test(outcome) ? b.invalidReason ?? null : null;
     if (reason !== null && !settings.invalidReasons.includes(reason)) return json({ error: `Unknown reason "${reason}".` }, 400);
+    // Clear (JT 27/11: GHL is the single source of truth): the GHL status this tool set goes back to Confirmed (ticked) or
+    // New. A status changed directly in GHL since (no longer the cleared outcome's status) is left alone.
+    let status = outcome ? GHL_STATUS_FOR[outcome] : undefined;
+    if (!outcome) {
+      const [prev] = await getDb()`SELECT o.outcome, o.confirmed, m.ghl_status FROM review_meetings m
+        LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id WHERE m.appointment_id = ${b.appointmentId}`;
+      if (prev?.outcome && GHL_STATUS_FOR[String(prev.outcome)] === prev.ghl_status) status = prev.confirmed ? 'confirmed' : 'new';
+    }
     await saveOutcome(access.viewer.email, b.appointmentId, outcome, reason);
     // CC PAYS: flag the AUTOMATED tabs covering this meeting; the page then calls /cc-pays/refresh (cron is the back-up).
     await markCcPaysDirty(b.appointmentId).catch((e) => console.error('[review-outcomes] cc pays flag failed:', e));
     // Phase 2: a deliberate save in the tool always writes the mapped status to GHL (correcting it if set wrong there).
-    // The DB save stands even if GHL fails; Rescheduled / cleared outcomes leave GHL unchanged. DNQ reasons stay DB-only.
+    // The DB save stands even if GHL fails. DNQ reasons stay DB-only.
     let ghl: string | null = null;
-    const status = outcome ? GHL_STATUS_FOR[outcome] : undefined;
     if (settings.writeTarget === 'db+ghl' && status) {
       try {
         await ghlSetStatus(b.appointmentId, status);

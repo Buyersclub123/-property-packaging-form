@@ -5,7 +5,7 @@ import { ensureReviewTables } from './store';
 import { customValue, ghlUsers, REVIEW_CALENDARS } from './sync';
 import { CASHFLOW_CLUB_FROM, kindOfCalendar, MIN_YMD, SALE_SOURCE_OF_KIND, sydYmd, type ReviewViewer, type SaleSource } from './types';
 import { meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from './meetingSource';
-import { NO_BOOKER, SELF_BOOKED } from './stats';
+import { BOOKED_ONLINE, NO_BOOKER, SELF_BOOKED } from './stats';
 
 // Read-only: client sign-ups from GHL, the one Sold source (Stats, Sales, Meeting Source, CC PAYS, Pipeline Journey).
 // GHL keeps one opportunity per client and moves it across pipelines, so a sign-up = an opportunity in a post-sale
@@ -19,7 +19,7 @@ export interface Signup {
   fee: number;
   pipeline: string; stage: string;
   cancelled: boolean; lostReason: string;
-  /** Type of the attributed meeting; 'No meeting' = none on the reported calendars on or before signing. */
+  /** Type of the attributed meeting; 'No meeting Sale' = none on the reported calendars on or before signing. */
   source: SaleSource;
   meetingId: string | null; meetingYmd: string | null;
   /** Attributed meeting's Team member (else the opportunity owner) and booker (Self-booked / No booker found). */
@@ -30,7 +30,7 @@ export interface SignupsData { at: string; signups: Signup[] }
 const POST_SALE = /SALE ADMIN|PROPERTY TEAM|FINANCE|CONSTRUCTION|SMSF SETUP|PORTFOLIO REVIEW|ACTIVE CLIENTS/i;
 /** Lost reasons that mean the sale was cancelled ("Client Relations - Refund", "Property Team - Refund"). */
 export const REFUND_REASON = /refund/i;
-const CACHE_KEY = 'review:signups:v4';
+const CACHE_KEY = 'review:signups:v5';
 const CACHE_SEC = 15 * 60;
 const MAX_CONTACT_FETCH = 400;
 
@@ -106,7 +106,7 @@ async function build(): Promise<SignupsData> {
         byKey.set(key, {
           oppId: o.id, name: o.name || '', contactId, client: o.contact?.name || o.name || '', signed, assignedTo: o.assignedTo || '',
           leadSource: null, referrer: null, meetingSource: null, meetingSourceTip: '', fee, pipeline: p.name, stage: stageName.get(o.pipelineStageId || '') || '',
-          cancelled: false, lostReason: refunded ? reason : '', source: 'No meeting', meetingId: null, meetingYmd: null, consultant: '', consultantId: '', cc: '',
+          cancelled: false, lostReason: refunded ? reason : '', source: 'No meeting Sale', meetingId: null, meetingYmd: null, consultant: '', consultantId: '', cc: '',
         });
       }
       if (list.length < 100 || !j?.meta?.startAfterId) break;
@@ -156,7 +156,7 @@ async function build(): Promise<SignupsData> {
   const calendarIds = REVIEW_CALENDARS.map((c) => c.id);
   const [met, users] = await Promise.all([
     ids.length
-      ? sql`SELECT m.appointment_id, m.calendar_id, m.contact_id, m.start_at, m.assigned_user_id, m.created_by,
+      ? sql`SELECT m.appointment_id, m.calendar_id, m.contact_id, m.start_at, m.assigned_user_id, m.created_by, m.created_source,
             m.meeting_source, m.meeting_source_level, m.meeting_source_detail
           FROM review_meetings m LEFT JOIN review_outcomes o ON o.appointment_id = m.appointment_id
           WHERE NOT m.deleted AND m.calendar_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(calendarIds)}::jsonb))
@@ -166,7 +166,7 @@ async function build(): Promise<SignupsData> {
     ghlUsers().catch(() => []),
   ]);
   const userName = new Map(users.map((u) => [u.id, u.name]));
-  type Met = { id: string; ymd: string; kind: ReturnType<typeof kindOfCalendar>; consultantId: string; createdBy: string; src: string | null; tip: string };
+  type Met = { id: string; ymd: string; kind: ReturnType<typeof kindOfCalendar>; consultantId: string; createdBy: string; createdSource: string; src: string | null; tip: string };
   const meetings = new Map<string, Met[]>();
   for (const r of met) {
     const kind = kindOfCalendar(String(r.calendar_id));
@@ -174,7 +174,7 @@ async function build(): Promise<SignupsData> {
     if (kind === 'CF' && ymd < CASHFLOW_CLUB_FROM) continue;
     const k = String(r.contact_id);
     meetings.set(k, [...(meetings.get(k) || []), {
-      id: String(r.appointment_id), ymd, kind, consultantId: String(r.assigned_user_id || ''), createdBy: String(r.created_by || ''),
+      id: String(r.appointment_id), ymd, kind, consultantId: String(r.assigned_user_id || ''), createdBy: String(r.created_by || ''), createdSource: String(r.created_source || ''),
       src: (r.meeting_source as string | null) || null,
       tip: meetingSourceTitle((r.meeting_source_level as MeetingSourceLevel | null) || null, (r.meeting_source_detail as string | null) || null),
     }]);
@@ -198,7 +198,7 @@ async function build(): Promise<SignupsData> {
     s.meetingSourceTip = last.tip;
     s.consultantId = last.consultantId;
     s.consultant = userName.get(last.consultantId) || '(unassigned)';
-    s.cc = last.createdBy && last.createdBy === last.consultantId ? SELF_BOOKED : userName.get(last.createdBy) || NO_BOOKER;
+    s.cc = last.createdBy && last.createdBy === last.consultantId ? SELF_BOOKED : userName.get(last.createdBy) || (last.createdSource === 'booking_widget' ? BOOKED_ONLINE : NO_BOOKER);
   }
   return { at: new Date().toISOString(), signups };
 }

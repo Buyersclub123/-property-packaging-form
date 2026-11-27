@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 // Hourly read-only refresh of GHL appointments (and Google invites) for the last 7 days to 60 days ahead, so moved
-// appointments are recorded in review_meeting_moves (counted as Rescheduled) even when nobody opens the tool.
+// appointments are recorded in review_meeting_moves (and their saved outcome cleared) even when nobody opens the tool.
 export async function GET(request: NextRequest) {
   if (!isCronAuthorised(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const today = sydYmd(Date.now());

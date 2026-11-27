@@ -24,8 +24,8 @@ export default function GhlMonitor({ demo }: { demo: boolean }) {
       <h3 className="font-semibold text-brand-charcoal">GHL refresh and status check (FYI)</h3>
       <ul className="list-disc space-y-1 pl-5 text-gray-700">
         <li>Every hour (at :15) the tool re-reads GHL appointments and Google invites for the last 7 days to 60 days ahead. It only reads; nothing is written to GHL or Google.</li>
-        <li>Moving an appointment in GHL keeps the same appointment, so each refresh compares its time with the last one seen. A changed time is logged as a move (= Rescheduled). Moves before tracking started can&apos;t be recovered.</li>
-        <li>&quot;Not sat&quot; counts as No show. GHL has no Rescheduled status.</li>
+        <li>Moving an appointment in GHL keeps the same appointment, so each refresh compares its time with the last one seen. A changed time is logged as a move: the meeting shows only at its new date, with &quot;Moved from …&quot;, and an outcome saved before a move to another day is cleared. Moves before tracking started can&apos;t be recovered.</li>
+        <li>&quot;Not sat&quot; counts as No show.</li>
         <li>* A client name with an asterisk means GHL wouldn&apos;t return that contact (probably deleted or merged), so the name comes from the appointment title and there&apos;s no phone.</li>
       </ul>
       {demo ? <p className="text-gray-500">Not available in demo.</p> : err ? <p className="text-red-700">{err}</p> : !data ? <p className="text-gray-500">Loading…</p> : (

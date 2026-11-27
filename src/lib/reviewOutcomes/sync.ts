@@ -1,13 +1,14 @@
 import { google } from 'googleapis';
 import { getDb } from '@/lib/db';
 import { ghlFetch } from '@/lib/ghlFetch';
-import { ensureReviewTables } from './store';
+import { ensureReviewTables, loadSettings, logReview } from './store';
+import { stripConfirmed } from './confirm';
 import { MIN_YMD, utcCover, type GcalCalendarCheck } from './types';
 import { meetingSourceOf, type Attribution } from './meetingSource';
 
 // Read-only refresh of the review-outcomes cache: GHL calendar events + contacts (GET only) and Google Calendar
 // 'Portfolio Review' events read as info@ (calendar.readonly) from info@'s calendar list plus the calendars of the GHL users
-// assigned to the appointments in range. Nothing is written to GHL or Google.
+// assigned to the appointments in range. Nothing is written to Google. The one GHL write: an appointment moved in GHL (another day or time) is set back to New, unconfirmed (JT 27/11).
 
 export const REVIEW_CALENDARS = [
   { id: 'ziiNfM0fl5q8iWL5MDtF', name: 'Portfolio Review Meeting' },
@@ -42,7 +43,7 @@ async function ghlGet<T>(path: string, version: string): Promise<{ status: numbe
   return { status: res.status, body: (await res.json()) as T };
 }
 
-/** Tool outcome -> GHL appointment status. Rescheduled has no GHL status; JT: Not sat = No show. */
+/** Tool outcome -> GHL appointment status. JT: Not sat = No show. */
 export const GHL_STATUS_FOR: Record<string, string> = {
   Showed: 'showed', 'No show': 'noshow', 'Not sat': 'noshow', 'Invalid (DNQ)': 'invalid', Cancelled: 'cancelled',
 };
@@ -150,26 +151,92 @@ async function syncGhl(start: Date, end: Date, syncStart: string): Promise<numbe
       byId.set(x.id, {
         id: x.id, cal_id: cal.id, cal_name: cal.name, contact_id: x.contactId || null, user_id: x.assignedUserId || null,
         start_at: new Date(t).toISOString(), status: x.appointmentStatus || x.appoinmentStatus || '', title: x.title || '', deleted: !!x.deleted,
-        created_by: x.createdBy?.userId || null, address: x.address || null,
+        created_by: x.createdBy?.userId || null, created_source: x.createdBy?.source || null, address: x.address || null,
       });
     }
   });
   const rows = [...byId.values()];
   const sql = getDb();
-  // Move tracking: a known appointment whose start time changed was rescheduled (GHL keeps the same id).
+  // Move tracking: a known appointment whose start time changed was moved in GHL (GHL keeps the same id).
+  const movedDay: string[] = [];
   for (let i = 0; i < rows.length; i += 500) {
-    await sql`INSERT INTO review_meeting_moves (appointment_id, old_start, new_start)
+    const moved = await sql`INSERT INTO review_meeting_moves (appointment_id, old_start, new_start)
       SELECT m.appointment_id, m.start_at, r.start_at::timestamptz
       FROM jsonb_to_recordset(${JSON.stringify(rows.slice(i, i + 500).map((r) => ({ id: r.id, start_at: r.start_at })))}::jsonb) AS r(id text, start_at text)
       JOIN review_meetings m ON m.appointment_id = r.id
-      WHERE m.start_at <> r.start_at::timestamptz`;
+      WHERE m.start_at <> r.start_at::timestamptz
+      RETURNING appointment_id`;
+    movedDay.push(...moved.map((m) => String(m.appointment_id)));
+  }
+  // Moved, to another day or only another time (JT 27/11): an outcome saved for the old slot doesn't carry to the new one.
+  if (movedDay.length) {
+    const cleared = await sql`WITH b AS (SELECT appointment_id, outcome, invalid_reason, source, source_ref, recorded_by FROM review_outcomes
+        WHERE outcome IS NOT NULL AND appointment_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(movedDay)}::jsonb)))
+      UPDATE review_outcomes o SET outcome = NULL, invalid_reason = NULL, source = 'tool', source_ref = NULL, recorded_by = 'GHL move', recorded_at = NOW(), updated_at = NOW()
+      FROM b WHERE o.appointment_id = b.appointment_id
+      RETURNING b.appointment_id, b.outcome, b.invalid_reason, b.source, b.source_ref, b.recorded_by`;
+    for (const c of cleared) {
+      await logReview('GHL move', String(c.appointment_id), 'outcome_clear', {
+        before: { outcome: c.outcome, invalid_reason: c.invalid_reason, source: c.source, source_ref: c.source_ref, recorded_by: c.recorded_by },
+        after: { outcome: null, invalidReason: null }, reason: 'Appointment moved in GHL',
+      });
+    }
+  }
+  // GHL's status was for the old date too (JT 27/11): it goes back to New and Confirmed is undone (tick, status and the
+  // "CONFIRMED " title prefix). New / Cancelled are left alone. Each write is read back and logged.
+  const reset = movedDay.map((id) => byId.get(id)).filter((r): r is Record<string, unknown> => !!r && !r.deleted && !['', 'new', 'cancelled'].includes(String(r.status)));
+  if (reset.length && (await loadSettings()).writeTarget === 'db+ghl') {
+    const { token, base } = ghlEnv();
+    await sql`ALTER TABLE review_outcomes ADD COLUMN IF NOT EXISTS confirm_prev_status TEXT`;
+    for (const r of reset) {
+      const id = String(r.id);
+      const before = { status: String(r.status), title: String(r.title) };
+      const after = { status: 'new', title: stripConfirmed(before.title) };
+      let result = 'applied';
+      try {
+        const res = await ghlFetch(`${base}/calendars/events/appointments/${id}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, Version: '2021-04-15', Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appointmentStatus: after.status, title: after.title, toNotify: false }),
+          signal: AbortSignal.timeout(30_000),
+        }, 'review-outcomes');
+        if (!res.ok) throw new Error(`GHL returned HTTP ${res.status}`);
+        const { body } = await ghlGet<{ appointment?: GhlEvent; event?: GhlEvent }>(`/calendars/events/appointments/${id}`, '2021-04-15');
+        const back = body?.appointment || body?.event;
+        const readBack = { status: back?.appointmentStatus ?? '(could not read)', title: back?.title ?? '(could not read)' };
+        if (readBack.status !== after.status || readBack.title !== after.title) result = 'read back does not match';
+        if (back) { r.status = readBack.status; r.title = readBack.title; }
+        await sql`UPDATE review_outcomes SET confirmed = FALSE, confirmed_by = NULL, confirmed_at = NULL, confirm_prev_status = NULL WHERE appointment_id = ${id}`;
+        await logReview('GHL move', id, 'ghl_move_reset', { before, after, readBack, result, reason: 'Appointment moved in GHL' });
+      } catch (e) {
+        await logReview('GHL move', id, 'ghl_move_reset', { before, after, result: `failed: ${(e as Error).message}`, reason: 'Appointment moved in GHL' });
+      }
+    }
+  }
+  // GHL is the single source of truth (JT 27/11): a status changed directly in GHL since the last sync replaces a saved
+  // outcome that no longer matches it, so the meeting shows GHL's status. The tool's own GHL writes update ghl_status at once.
+  for (let i = 0; i < rows.length; i += 500) {
+    const changed = await sql`SELECT o.appointment_id, m.ghl_status AS old_status, r.status AS new_status, o.outcome, o.invalid_reason, o.source, o.source_ref, o.recorded_by
+      FROM jsonb_to_recordset(${JSON.stringify(rows.slice(i, i + 500).map((r) => ({ id: r.id, status: r.status })))}::jsonb) AS r(id text, status text)
+      JOIN review_meetings m ON m.appointment_id = r.id
+      JOIN review_outcomes o ON o.appointment_id = r.id
+      WHERE o.outcome IS NOT NULL AND COALESCE(m.ghl_status, '') <> r.status`;
+    for (const c of changed.filter((c) => GHL_STATUS_FOR[String(c.outcome)] !== c.new_status)) {
+      const id = String(c.appointment_id);
+      await sql`UPDATE review_outcomes SET outcome = NULL, invalid_reason = NULL, source = 'tool', source_ref = NULL, recorded_by = 'GHL change',
+        recorded_at = NOW(), updated_at = NOW() WHERE appointment_id = ${id}`;
+      await logReview('GHL change', id, 'outcome_clear', {
+        before: { outcome: c.outcome, invalid_reason: c.invalid_reason, source: c.source, source_ref: c.source_ref, recorded_by: c.recorded_by },
+        after: { outcome: null, invalidReason: null }, reason: `Status changed in GHL from ${c.old_status || '(none)'} to ${c.new_status || '(none)'}`,
+      });
+    }
   }
   for (let i = 0; i < rows.length; i += 500) {
-    await sql`INSERT INTO review_meetings (appointment_id, calendar_id, calendar_name, contact_id, assigned_user_id, start_at, ghl_status, title, deleted, created_by, address, synced_at)
-      SELECT r.id, r.cal_id, r.cal_name, r.contact_id, r.user_id, r.start_at::timestamptz, r.status, r.title, r.deleted, r.created_by, r.address, ${syncStart}::timestamptz
+    await sql`INSERT INTO review_meetings (appointment_id, calendar_id, calendar_name, contact_id, assigned_user_id, start_at, ghl_status, title, deleted, created_by, created_source, address, synced_at)
+      SELECT r.id, r.cal_id, r.cal_name, r.contact_id, r.user_id, r.start_at::timestamptz, r.status, r.title, r.deleted, r.created_by, r.created_source, r.address, ${syncStart}::timestamptz
       FROM jsonb_to_recordset(${JSON.stringify(rows.slice(i, i + 500))}::jsonb)
-        AS r(id text, cal_id text, cal_name text, contact_id text, user_id text, start_at text, status text, title text, deleted boolean, created_by text, address text)
-      ON CONFLICT (appointment_id) DO UPDATE SET calendar_id = EXCLUDED.calendar_id, created_by = EXCLUDED.created_by, calendar_name = EXCLUDED.calendar_name,
+        AS r(id text, cal_id text, cal_name text, contact_id text, user_id text, start_at text, status text, title text, deleted boolean, created_by text, created_source text, address text)
+      ON CONFLICT (appointment_id) DO UPDATE SET calendar_id = EXCLUDED.calendar_id, created_by = EXCLUDED.created_by, created_source = EXCLUDED.created_source, calendar_name = EXCLUDED.calendar_name,
         contact_id = EXCLUDED.contact_id, assigned_user_id = EXCLUDED.assigned_user_id, start_at = EXCLUDED.start_at,
         ghl_status = EXCLUDED.ghl_status, title = EXCLUDED.title, deleted = EXCLUDED.deleted, address = EXCLUDED.address, synced_at = EXCLUDED.synced_at`;
   }

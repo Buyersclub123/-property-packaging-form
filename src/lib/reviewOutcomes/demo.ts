@@ -12,7 +12,7 @@ const CALL_CENTRE = ['Demo Booker 1', 'Demo Booker 2', 'Demo Booker 3'];
 const MEET = 'https://meet.google.com/abc-defg-hij';
 const OFFICE = 'Level 3, 1G Homebush Bay Dr, Rhodes NSW';
 const SUBURBS = ['Ipswich QLD', 'Geelong VIC', 'Elizabeth SA', 'Logan QLD', 'Penrith NSW', 'Armadale WA'];
-const PAST_OUTCOMES: (string | null)[] = ['Showed', null, 'No show', 'Showed', 'Invalid (DNQ)', null, 'Cancelled', 'Showed', 'Not sat', null, 'Rescheduled'];
+const PAST_OUTCOMES: (string | null)[] = ['Showed', null, 'No show', 'Showed', 'Invalid (DNQ)', null, 'Cancelled', 'Showed', 'Not sat', null, 'Showed'];
 
 function at(ymd: string, hour: number, min = 0): string {
   return new Date(`${ymd}T${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:00+10:00`).toISOString();

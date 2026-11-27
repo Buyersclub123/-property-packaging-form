@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDays, dataSourceLines, KIND_LABEL, MIN_YMD, sydYmd, type ReviewData, type ReviewMeeting, type SalesData, type StatTarget } from '@/lib/reviewOutcomes/types';
 import { emptySold, itemsIn, saleItems, type SaleItem, soldBy, type SoldRow, sumSold } from '@/lib/reviewOutcomes/salesStats';
-import { dmy, weekday } from './ui';
+import { dmy, Label, weekday } from './ui';
 import type { Signup, SignupsData } from '@/lib/reviewOutcomes/signups';
 import type { OpenOpp, OpenOppsData } from '@/lib/reviewOutcomes/openOpps';
 import CcPaysPanel from './CcPaysPanel';
 import { MEETING_SOURCE_LEVEL_LABEL, meetingSourceTitle, NO_MEETING_SOURCE, type MeetingSourceLevel } from '@/lib/reviewOutcomes/meetingSource';
 import { emptyTypeRow, isPR, sumTypes, typeKeyOf, typeTally, type TypeKey, type TypeRow } from '@/lib/reviewOutcomes/stats';
-import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, pct, periodRange, shift, sumRows, tally, WEEK_RULE, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
+import { bookerKey, canCompare, compareRange, type CompareBase, consultantKey, emptyRow, inRange, isDnq, isSat, KINDS, MONTHS, bookerOrder, nonPersonRank, pct, periodRange, shift, sumRows, tally, WEEK_RULE, weekStart, type Kind, type Period, type Row, type Tally } from '@/lib/reviewOutcomes/stats';
 
 // Item 15: CC Stats (left) and Sales Stats (right) for one shared period, laid out like the team's STATS sheet.
 // PR = Portfolio Review meetings; Presentation 1 = Presentation Meeting One (no New Lead / Referral split;
@@ -70,7 +70,7 @@ function MeetingSourceTable({ list, signups, signupsErr, from, to, pick }: { lis
     const sat = ms.filter(isSat).length;
     return (
       <tr key={name} className={cls}>
-        <td className={TDN} title={levelSplit(ms) || undefined}>{name}</td>
+        <td className={TDN} title={levelSplit(ms) || undefined}><Label name={name} /></td>
         <td className={TD}><button className="text-blue-700 hover:underline" onClick={() => pick(`Meeting source: ${name}`, ms)}>{ms.length}</button></td>
         <td className={TD}>{pct(ms.length, nl.length)}</td>
         <td className={TD}>{sat}</td>
@@ -130,7 +130,7 @@ function CompareBox({ title, rows, total, prev, prevLabel }: { title: string; ro
     const p = prev.get(r.name) || emptyRow(r.name);
     return (
       <tr key={r.name} className={bold ? 'font-semibold' : ''}>
-        <td className={TDN}>{r.name}</td>
+        <td className={TDN}><Label name={r.name} /></td>
         <td className={TD}>{r.booked}<Delta v={r.booked} pv={p.booked} /></td>
         <td className={TD}>{r.sat}<Delta v={r.sat} pv={p.sat} /></td>
         <td className={TD}>{pct(r.sat, r.booked)}</td>
@@ -168,7 +168,7 @@ function CcTable({ data, pick, prevOf, soldOf, typeOf, pickT }: { data: { rows: 
     const T = (k: TypeKey, f: Field) => <NumCell v={t[k][f]} total={total} onClick={() => pickT(r.name, f, k)} cls={tint(k, total)} />;
     return (
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
-        <td className={`${TDN} truncate`} title={r.name}>{r.name}</td>
+        <td className={`${TDN} truncate`} title={r.name}><Label name={r.name} /></td>
         {T('nl', 'booked')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} cls={tint('pr', total)} />{T('cf', 'booked')}<td className={`${TD} ${SHADE}`}>{allBookedOf(r, t)}</td>
         {T('nl', 'sat')}{T('nl', 'dnq')}<td className={tc('nl', total)}>{n0(s.nl)}</td><td className={tc('nl', total)}>{pct(t.nl.sat, t.nl.booked)}</td>
         <NumCell v={r.sat} total={total} onClick={() => pick(r.name, 'sat')} pv={prevOf(r.name, 'sat')} cls={tint('pr', total)} /><NumCell v={r.dnq} total={total} onClick={() => pick(r.name, 'dnq')} pv={prevOf(r.name, 'dnq')} cls={tint('pr', total)} /><td className={tc('pr', total)}>{n0(s.pr)}</td><td className={tc('pr', total)}>{pct(r.sat, r.booked)}</td>
@@ -216,7 +216,7 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT, selfOf, pickSel
     const T = (k: TypeKey, f: Field) => <NumCell v={t[k][f]} total={total} onClick={() => pickT(r.name, f, k)} cls={tint(k, total)} />;
     return (
       <tr key={r.name} className={total ? 'bg-gray-100 font-bold' : ''}>
-        <td className={`${TDN} truncate`} title={r.name}>{r.name}</td>
+        <td className={`${TDN} truncate`} title={r.name}><Label name={r.name} /></td>
         {T('nl', 'booked')}<NumCell v={r.booked} total={total} onClick={() => pick(r.name, 'booked')} pv={prevOf(r.name, 'booked')} cls={tint('pr', total)} />{T('cf', 'booked')}<td className={`${TD} ${SHADE}`}>{allBookedOf(r, t)}</td>
         <NumCell v={selfOf(total ? 'TOTAL' : r.name)} total={total} onClick={() => pickSelf(total ? 'TOTAL' : r.name)} />
         {T('nl', 'sat')}{T('nl', 'dnq')}<td className={tc('nl', total)}>{n0(s.nl)}</td><td className={tc('nl', total)}>{pct(s.nl, t.nl.sat)}</td>
@@ -241,11 +241,11 @@ function SalesTable({ data, pick, prevOf, soldOf, typeOf, pickT, selfOf, pickSel
         </tr>
         <tr>
           {['Presen\u00ADtation 1', 'PR', 'Cashflow Club', 'TOTAL'].map((h, i) => <th key={h} className={`${i < 3 ? THT(TINTS[i]) : TH} break-words hyphens-manual`} rowSpan={2}><V>{h}</V></th>)}
-          <th className={TH} rowSpan={2} title="Created in GHL by the consultant themselves (included in TOTAL)"><V>Self-booked</V></th>
+          <th className={TH} rowSpan={2} ><V><Label name="Self-booked" /></V></th>
           <th className={THT('nl')} colSpan={4}>Presentation 1</th>
           <th className={THT('pr')} colSpan={4}>PR</th>
           <th className={THT('cf')} colSpan={4}>Cashflow Club</th>
-          <th className={TH} rowSpan={2} title="Signed with no reported meeting on or before signing"><V>No meeting</V></th>
+          <th className={TH} rowSpan={2} ><V><Label name="No meeting Sale" /></V></th>
           {['Total', 'Cancelled'].map((h) => <th key={h} className={TH} rowSpan={2}><V>{h}</V></th>)}
         </tr>
         <tr>
@@ -269,7 +269,7 @@ function BookingsTable({ data }: { data: { rows: Row[]; total: Row } }) {
       <tbody>
         {[...data.rows, data.total].map((x) => (
           <tr key={x.name} className={x.name === 'TOTAL' ? 'bg-gray-100 font-bold' : ''}>
-            <td className={TDN}>{x.name}</td>
+            <td className={TDN}><Label name={x.name} /></td>
             <td className={TD}>{x.booked}</td>
             <td className={TD}>{x.name === 'TOTAL' ? '' : pct(x.booked, data.total.booked)}</td>
             <td className={TD}>{n0(x.sat)}</td>
@@ -311,7 +311,7 @@ async function exportXlsx(label: string, cc: Tally, sales: Tally, modes: Tally, 
       t.cf.sat, t.cf.dnq, s.cf, ratio(t.cf.sat, t.cf.booked), s.total, s.cancelled, ratio(s.total, allSatOf(r, t))];
   };
   const salesHead = ['Name', 'Booked Presentation 1', 'Booked PR', 'Booked Cashflow Club', 'Booked TOTAL', 'Self-booked', 'Pres 1 Sat', 'Pres 1 DNQ', 'Pres 1 Sold', 'Pres 1 Sold %',
-    'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'CF Sat', 'CF DNQ', 'CF Sold', 'CF Sold %', 'Sold no meeting', 'Sold Total', 'Cancelled', 'Overall Sat %', 'Overall Sold %'];
+    'PR Sat', 'PR DNQ', 'PR Sold', 'PR Sold %', 'CF Sat', 'CF DNQ', 'CF Sold', 'CF Sold %', 'No meeting Sale', 'Sold Total', 'Cancelled', 'Overall Sat %', 'Overall Sold %'];
   const salesRow = (r: Row) => {
     const s = salesSold(r.name);
     const t = salesT(r.name);
@@ -386,9 +386,9 @@ function TargetsTable({ targets, factor, rows }: { targets: Record<string, StatT
 }
 
 interface ViewPrefs { includeHidden: boolean; compare: 'off' | 'box' | 'cells'; base: CompareBase; baseYear: number; net: boolean }
-const NO_CC = 'No CC member (sales)';
+const NO_CC = 'No meeting Sale';
 const ccKey = (it: SaleItem) => it.cc || NO_CC;
-const consKey = (it: SaleItem) => it.consultant || 'No consultant (sales)';
+const consKey = (it: SaleItem) => it.consultant || '(unassigned)';
 const VIEW_KEY = 'review-outcomes-stats-view';
 
 /** Drop hidden names; the TOTAL keeps them unless includeHidden is off. */
@@ -477,7 +477,7 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
       return { name: r.name, sat, sold: s.total, cancelled: s.cancelled };
     })
     .filter((x) => x.sat || x.sold || x.cancelled)
-    .sort((a, b) => b.sold - a.sold || b.sat - a.sat);
+    .sort((a, b) => nonPersonRank(a.name) - nonPersonRank(b.name) || b.sold - a.sold || b.sat - a.sat);
   return (
     <div className="min-w-0 overflow-x-auto rounded border bg-white">
       <Title>Consultant leaderboard - conversion and cancellations</Title>
@@ -490,7 +490,7 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
               return (
                 <tr key={x.name}>
                   <td className={TD}>{i + 1}</td>
-                  <td className={TDN}>{x.name}</td>
+                  <td className={TDN}><Label name={x.name} /></td>
                   <td className={TD}>{x.sat || ''}</td>
                   <td className={TD}>{x.sold || ''}</td>
                   <td className={TD}>{pct(x.sold, x.sat)}</td>
@@ -508,7 +508,7 @@ function Leaderboard({ rows, typeOf, soldOf, net }: { rows: Row[]; typeOf: TypeO
 }
 
 function BarChart({ rows }: { rows: Row[] }) {
-  const list = rows.filter((r) => r.name !== 'TOTAL' && r.booked > 0).sort((a, b) => b.booked - a.booked);
+  const list = rows.filter((r) => r.name !== 'TOTAL' && r.booked > 0).sort((a, b) => nonPersonRank(a.name) - nonPersonRank(b.name) || b.booked - a.booked);
   const max = Math.max(1, ...list.map((r) => r.booked));
   if (!list.length) return <div className="text-sm text-gray-500">No meetings in this period.</div>;
   return (
@@ -533,7 +533,7 @@ function DataCompleteness({ list, pick }: { list: ReviewMeeting[]; pick: (title:
     ['no-source', 'No Meeting source (no latest attribution in GHL; Lead Source not used)', list.filter((m) => m.meetingSourceLevel !== 'last'), list],
     ['no-referrer', 'No referrer name (GHL Referrer blank)', list.filter((m) => !m.referrer?.trim()), list],
     ['no-outcome', 'No outcome (past meetings, incl. self-booked)', past.filter((m) => !m.outcome), past],
-    ['no-booker', 'No booker (no GHL creator)', list.filter((m) => !m.booker), list],
+    ['no-booker', 'No booker (no GHL creator)', list.filter((m) => !m.booker && m.bookerFrom !== 'online'), list],
   ];
   return (
     <div className="min-w-0 overflow-x-auto rounded border bg-white" data-testid="completeness">
@@ -642,7 +642,7 @@ function ExceptionReports({ meetings }: { meetings: ReviewMeeting[] }) {
         ['Opportunities (pipeline > stage, owner)', (m) => oppText(rows.of(m)) || 'None open'],
       ], 'exc-count')}
       {table('Exceptions (b) - opportunity owner is not the consultant', rows.owner, [
-        ['Opportunity owner', (m) => <span className="font-semibold text-amber-800">{[...new Set(rows.of(m).map((o) => o.owner || 'Unassigned'))].join(', ')}</span>],
+        ['Opportunity owner', (m) => <span className="font-semibold text-amber-800">{[...new Set(rows.of(m).map((o) => o.owner || 'Unassigned'))].map((n, i) => <span key={n}>{i ? ', ' : ''}<Label name={n} /></span>)}</span>],
         ['Opportunities (pipeline > stage, owner)', (m) => oppText(rows.of(m))],
       ], 'exc-owner')}
       <div className="text-xs text-gray-500">Meetings in this period (cancelled left out). Open opportunities read live from GHL for this period's contacts (read-only, cached 10 minutes).</div>
@@ -847,7 +847,7 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
         {data.settings && (
           <ul className="mb-1 mt-1 list-disc pl-5">{dataSourceLines(data.settings).map((l) => <li key={l}>{l}</li>)}</ul>
         )}
-        Presentation 1 is not split into New Lead / Referral: see Meeting Source Stats. Comparisons and targets are PR only. Sold % = Sold / Sat over all meeting types. Reschedule by moving the appointment in GHL: a cancelled meeting and a new booking count as two meetings.
+        Presentation 1 is not split into New Lead / Referral: see Meeting Source Stats. Comparisons and targets are PR only. Sold % = Sold / Sat over all meeting types. Reschedule by moving the appointment in GHL: it counts once, at its new date. A cancelled meeting and a new booking count as two meetings.
       </details>
       {!demoData && salesErr && <div className="mb-3 text-sm text-red-700">Sales not loaded: {salesErr}</div>}
       {noOutcome > 0 && (
@@ -977,9 +977,9 @@ export default function StatsView({ demoData = null }: { demoData?: ReviewData |
                   <tr key={`${m.id}:${m.start}`} className="odd:bg-gray-50 hover:bg-blue-50">
                     <td className={TDN}>{weekday(m.ymd)} {dmy(m.ymd)}</td>
                     <td className={TDN}>{m.contactLink ? <a href={m.contactLink} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">{m.contactName}</a> : m.contactName}</td>
-                    <td className={TDN} title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}>{m.meetingSource || NOT_RECORDED}</td>
+                    <td className={TDN} title={meetingSourceTitle(m.meetingSourceLevel, m.meetingSourceDetail)}><Label name={m.meetingSource || NOT_RECORDED} /></td>
                     <td className={TDN}>{m.consultant}</td>
-                    <td className={TDN} title={m.bookerFrom ? `Booker from ${m.bookerFrom === 'ghl' || m.bookerFrom === 'created' ? 'GHL (created the appointment)' : m.bookerFrom === 'invite' ? 'the Google invite attendees' : m.bookerFrom === 'self' ? 'GHL: the consultant created it (self-booked)' : 'the calendar schedule snapshot'}` : m.createdByEmail ? `No Call Centre booker; GHL creator ${m.createdByEmail}` : undefined}>{m.booker || ''}</td>
+                    <td className={TDN} title={m.bookerFrom ? `Booker from ${m.bookerFrom === 'ghl' || m.bookerFrom === 'created' ? 'GHL (created the appointment)' : m.bookerFrom === 'invite' ? 'the Google invite attendees' : m.bookerFrom === 'self' ? 'GHL: the consultant created it (self-booked)' : m.bookerFrom === 'online' ? 'GHL: the client booked online (booking link)' : 'the calendar schedule snapshot'}` : m.createdByEmail ? `No Call Centre booker; GHL creator ${m.createdByEmail}` : undefined}><Label name={m.booker || (m.bookerFrom === 'online' ? 'Booked online' : '')} /></td>
                     <td className={TDN}>{m.mode}</td>
                     <td className={TDN}>{m.ghlStatus}</td>
                     <td className={TDN}>{m.outcome || 'No outcome'}{m.invalidReason ? ` - ${m.invalidReason}` : ''}</td>

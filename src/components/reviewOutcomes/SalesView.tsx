@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDays, sydYmd, type SalesData } from '@/lib/reviewOutcomes/types';
-import { KINDS, MONTHS, periodRange, shift, WEEK_RULE, weekStart, type Period } from '@/lib/reviewOutcomes/stats';
+import { addDays, NO_MEETING_SALE, sydYmd, type SalesData } from '@/lib/reviewOutcomes/types';
+import { KINDS, MONTHS, nonPersonRank, periodRange, shift, WEEK_RULE, weekStart, type Period } from '@/lib/reviewOutcomes/stats';
 import { aud, itemsIn, saleItems, soldBy, type SaleItem, type SoldRow } from '@/lib/reviewOutcomes/salesStats';
-import { dmy } from './ui';
+import { dmy, Label } from './ui';
 
 // Sales from GHL (read-only): one row per signed client, sliceable by period, meeting type, consultant, CC member,
 // Meeting source, pipeline and stage. Revenue = GHL Total Fee.
@@ -21,7 +21,7 @@ type FilterKey = 'source' | 'consultant' | 'cc' | 'meetingSource' | 'pipeline' |
 const FILTERS: [FilterKey, string][] = [['source', 'Meeting type'], ['consultant', 'Consultant'], ['cc', 'CC member'], ['meetingSource', 'Meeting source'], ['pipeline', 'Pipeline'], ['stage', 'Stage']];
 const NO_FILTERS: Record<FilterKey, string> = { source: '', consultant: '', cc: '', meetingSource: '', pipeline: '', stage: '' };
 const BLANK = '(blank)';
-const val = (it: SaleItem, k: FilterKey) => String(it[k] || '') || BLANK;
+const val = (it: SaleItem, k: FilterKey) => String(it[k] || '') || (k === 'cc' ? NO_MEETING_SALE : BLANK);
 
 function rangeOf(p: Period, today: string) {
   return p.kind === 'all' ? { from: FIRST, to: '9999-12-31', label: `All sales (since ${dmy(FIRST)})` } : periodRange(p, today);
@@ -49,12 +49,12 @@ function Breakdown({ title, rows, total }: { title: string; rows: SoldRow[]; tot
       <div className="bg-brand-charcoal py-1 text-center text-sm font-bold text-white">{title}</div>
       <table className="w-full border-collapse">
         <thead>
-          <tr>{['Name', 'Sold', 'Presentation 1', 'PR', 'Cashflow Club', 'No meeting', 'Cancelled', 'Revenue $'].map((h) => <th key={h} className={TH}>{h}</th>)}</tr>
+          <tr>{['Name', 'Sold', 'Presentation 1', 'PR', 'Cashflow Club', NO_MEETING_SALE, 'Cancelled', 'Revenue $'].map((h) => <th key={h} className={TH}><Label name={h} /></th>)}</tr>
         </thead>
         <tbody>
           {[...rows, total].map((r) => (
             <tr key={r.name} className={r.name === 'TOTAL' ? 'bg-gray-100 font-bold' : ''}>
-              <td className={TDN}>{r.name}</td>
+              <td className={TDN}><Label name={r.name} /></td>
               <td className={TD}>{r.total || ''}</td>
               <td className={TD}>{r.nl || ''}</td>
               <td className={TD}>{r.pr || ''}</td>
@@ -117,7 +117,7 @@ async function exportXlsx(label: string, list: SaleItem[]) {
     ['Source: GHL (read-only). Sold = "Date signed up"; Cancelled = Lost with a Refund reason; Revenue = Total Fee.'],
     [],
     ['Signed', 'Client', 'Meeting type', 'Consultant', 'CC member', 'Meeting source', 'Pipeline', 'Stage', 'Revenue $', 'Status', 'Lost reason'],
-    ...list.map((it) => [dmy(it.signed), it.client, it.source, it.consultant, it.cc, it.meetingSource, it.pipeline, it.stage, it.fee || null,
+    ...list.map((it) => [dmy(it.signed), it.client, it.source, it.consultant, it.cc || NO_MEETING_SALE, it.meetingSource, it.pipeline, it.stage, it.fee || null,
       it.cancelled ? 'Cancelled' : 'Active', it.lostReason]),
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -168,7 +168,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
   const r = rangeOf(p, today);
   const options = useMemo(() => {
     const o = {} as Record<FilterKey, string[]>;
-    for (const [k] of FILTERS) o[k] = [...new Set(items.map((it) => val(it, k)))].sort((a, b) => (a === BLANK ? 1 : b === BLANK ? -1 : a.localeCompare(b)));
+    for (const [k] of FILTERS) o[k] = [...new Set(items.map((it) => val(it, k)))].sort((a, b) => nonPersonRank(a) - nonPersonRank(b) || a.localeCompare(b));
     return o;
   }, [items]);
   const inPeriod = useMemo(
@@ -179,7 +179,7 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
   const counted = useMemo(() => inPeriod.filter((it) => !(net && it.cancelled)), [inPeriod, net]);
   const breakdown = (k: FilterKey) => {
     const s = soldBy(inPeriod, (it) => val(it, k), net);
-    return { rows: [...s.by.values()].sort((a, b) => b.total - a.total || b.cancelled - a.cancelled), total: s.total };
+    return { rows: [...s.by.values()].sort((a, b) => nonPersonRank(a.name) - nonPersonRank(b.name) || b.total - a.total || b.cancelled - a.cancelled), total: s.total };
   };
   const trend = useMemo(() => {
     const b = bucketOf(p.kind);
@@ -300,10 +300,10 @@ export default function SalesView({ demo = false }: { demo?: boolean }) {
               <tr key={it.id} className={it.cancelled ? 'text-gray-400' : ''}>
                 <td className={TDN}>{dmy(it.signed)}</td>
                 <td className={TDN}>{it.client}</td>
-                <td className={TDN} title={it.sale.meetingYmd ? `Meeting ${dmy(it.sale.meetingYmd)}` : 'No reported meeting on or before signing'}>{it.source}</td>
-                <td className={TDN}>{it.consultant}</td>
-                <td className={TDN}>{it.cc}</td>
-                <td className={TDN} title={it.meetingSourceTip}>{it.meetingSource}</td>
+                <td className={TDN} title={it.sale.meetingYmd ? `Meeting ${dmy(it.sale.meetingYmd)}` : 'No reported meeting on or before signing'}><Label name={it.source} /></td>
+                <td className={TDN}><Label name={it.consultant} /></td>
+                <td className={TDN}><Label name={it.cc || NO_MEETING_SALE} /></td>
+                <td className={TDN} title={it.meetingSourceTip}><Label name={it.meetingSource} /></td>
                 <td className={TDN}>{it.pipeline}</td>
                 <td className={TDN}>{it.stage}</td>
                 <td className={TD}>{aud(it.fee)}</td>

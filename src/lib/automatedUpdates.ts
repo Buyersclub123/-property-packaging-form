@@ -47,7 +47,7 @@ export const AUTOMATED_UPDATES: AutomatedUpdate[] = [
     what: 'Writes the meeting outcome a user clicks to the GHL appointment',
     trigger: 'User clicks an outcome in /review-outcomes, when Settings > "Write outcomes to" = DB + GHL appointment status',
     fieldsWritten: 'Calendar appointment status (showed / noshow / invalid / cancelled)',
-    rule: 'Deliberate clicks only; schedule-sheet values never written; Rescheduled and clearing leave GHL unchanged; Demo never writes.',
+    rule: 'Deliberate clicks only; schedule-sheet values never written; clear puts the GHL status the tool set back to confirmed (ticked) or new; a meeting moved in GHL (another day or only another time) has its saved outcome cleared and, by the sync, its GHL status set back to new with Confirmed undone (tick, status, CONFIRMED title prefix; new / cancelled left alone; read back, logged as ghl_move_reset); Demo never writes.',
     log: 'Postgres review_outcome_log',
   },
   {

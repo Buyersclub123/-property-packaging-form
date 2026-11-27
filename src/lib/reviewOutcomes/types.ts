@@ -15,8 +15,8 @@ export type MeetingMode = 'Google' | 'F2F' | 'Unknown';
 export type MeetingKind = 'PR' | 'NL' | 'CF';
 export const NEW_LEAD_CALENDAR_ID = 'OfHMBFJUzIEMAx7UGZrR';
 export const CASHFLOW_CLUB_CALENDAR_ID = 'qmizFGxloa0uIBhJTRIv';
-/** Cashflow Club meetings count from the stats week starting Fri 20/11/2026 (JT 26/11: "start from this week"). */
-export const CASHFLOW_CLUB_FROM = '2026-11-20';
+/** Cashflow Club meetings count from the first call in GHL, Mon 26/10/2026 (JT 27/11). */
+export const CASHFLOW_CLUB_FROM = '2026-10-26';
 export const MEETING_KINDS: MeetingKind[] = ['NL', 'PR', 'CF'];
 export const KIND_LABEL: Record<MeetingKind, string> = { NL: 'Presentation 1', PR: 'Portfolio Review', CF: 'Cashflow Club' };
 export const kindOfCalendar = (calendarId: string): MeetingKind =>
@@ -79,9 +79,11 @@ export interface ReviewSettings {
   ghlOnlyFrom: string | null;
 }
 
-/** Type of the client's last reported meeting on or before signing (GHL); 'No meeting' = none on the reported calendars. */
-export type SaleSource = 'Presentation 1' | 'PR' | 'Cashflow Club' | 'No meeting';
-export const SALE_SOURCES: SaleSource[] = ['Presentation 1', 'PR', 'Cashflow Club', 'No meeting'];
+/** Type of the client's last reported meeting on or before signing (GHL); 'No meeting Sale' = none on the reported calendars. */
+export type SaleSource = 'Presentation 1' | 'PR' | 'Cashflow Club' | 'No meeting Sale';
+/** A sale with no Presentation 1, PR or Cashflow Club meeting on or before signing (JT 27/11). */
+export const NO_MEETING_SALE: SaleSource = 'No meeting Sale';
+export const SALE_SOURCES: SaleSource[] = ['Presentation 1', 'PR', 'Cashflow Club', NO_MEETING_SALE];
 export const SALE_SOURCE_OF_KIND: Record<MeetingKind, SaleSource> = { NL: 'Presentation 1', PR: 'PR', CF: 'Cashflow Club' };
 
 /** A GHL sign-up: an opportunity in a post-sale pipeline with "Date signed up" set (= moved to Sale Administration). */
@@ -98,7 +100,7 @@ export interface Sale {
   /** Consultant of the attributed meeting, else the opportunity owner. */
   consultant: string;
   consultantId: string;
-  /** Booker of the attributed meeting: 'Self-booked', 'No booker found', or blank when there is no meeting. */
+  /** Booker of the attributed meeting: 'Self-booked', 'Booked online', 'No booker found', or blank when there is no meeting. */
   cc: string;
   source: SaleSource;
   /** Attributed meeting (last reported meeting on or before signing). */
@@ -117,14 +119,14 @@ export interface SalesData {
   warnings: string[];
 }
 
-/** Rescheduled can't be picked by hand: the tool records it when the appointment is moved in GHL. */
-export const RESCHEDULE_VIA_GHL = 'To reschedule, just move the appointment in GHL. It will show here as Rescheduled within the hour.';
+/** No longer an outcome (JT 27/11): a meeting moved in GHL simply sits at its new date. Saved values are hidden. */
+export const RETIRED_OUTCOME = 'Rescheduled';
 
-export const NOTE_REASONS = ["Can't afford", 'Timing', 'Went elsewhere', 'Rescheduling', 'Other'];
+export const NOTE_REASONS = ["Can't afford", 'Timing', 'Went elsewhere', 'Other'];
 export const NOTE_NEXT_ACTIONS = ['Call to rebook', 'Nurture', 'No action'];
 
 export const DEFAULT_SETTINGS: ReviewSettings = {
-  outcomes: ['Showed', 'No show', 'Invalid (DNQ)', 'Cancelled', 'Rescheduled', 'Not sat'],
+  outcomes: ['Showed', 'No show', 'Invalid (DNQ)', 'Cancelled', 'Not sat'],
   invalidReasons: ["Can't afford to buy again", 'Not ready', 'Waiting on a sale', 'Restructure', 'Divorce'],
   // Seeded from staff seen on Portfolio Review invites (JT 31/10: Carmen is a referrer, not Call Centre).
   callCentre: [
@@ -159,12 +161,12 @@ export function dataSourceLines(s: Pick<ReviewSettings, 'ghlOnlyFrom'>): string[
   return [
     dataSourceText(s),
     `Meetings, date, consultant and GHL status: GHL Portfolio Review Meeting, Presentation Meeting One and Cashflow Club Induction Call calendars (Cashflow Club from ${dmyOf(CASHFLOW_CLUB_FROM)}; follow-up meetings excluded).`,
-    'Rescheduled: a meeting moved in GHL keeps its appointment and booker and shows as Rescheduled in the week it left. A meeting cancelled and rebooked instead counts as two meetings (one Cancelled, one Booked), so reschedule by moving the appointment in GHL.',
-    `Booker: the user who created the GHL appointment, else a Call Centre person on the Google invite (only when GHL has no creator), else the Agent on ${copy}${until}. Self-booked = the consultant created it in GHL: it needs an outcome and gets no CC credit.`,
+    'Moved meetings: to reschedule, move the appointment in GHL. It keeps its booker, shows only at its new date ("Moved from …") and counts once there; when it moves (another day or only another time), an outcome already saved is cleared and GHL goes back to New, unconfirmed. A meeting cancelled and rebooked instead counts as two meetings (one Cancelled, one Booked).',
+    `Booker: the user who created the GHL appointment, else a Call Centre person on the Google invite (only when GHL has no creator), else the Agent on ${copy}${until}. Self-booked = the consultant created it in GHL: it needs an outcome and gets no CC credit. Booked online = no booker, and the client booked through a GHL booking link: no CC credit.`,
     `Sat / DNQ: the outcome recorded in this tool, else ${copy}'s Sat? column for Presentation Meeting One${until}, else the GHL status. Some Portfolio Review outcomes${until} come from a one-off import of the sheet.`,
     `Google Meet vs face-to-face (Presentation Meeting One): ${copy}${until} for Mar-Nov 2026; otherwise the GHL appointment location (Google Meet link = Google, an address = F2F). There is no New Lead / Referral split: Meeting source replaces it.`,
     'Meeting Source Stats (all three meeting types): the GHL contact\'s latest attribution (session source · campaign), else its first attribution, else its Lead Source field; the tooltip shows which. Captured on the meeting at the first sync after it is booked; meetings already cached when this was added use the attribution as read then. "Not recorded in GHL" = none of these. "Sold" = sign-ups dated in the period, by the Meeting source of the client\'s last meeting on or before signing; "Sold from these meetings" = clients met in the period who have signed up since.',
-    'Sold: GHL only. A sale = an opportunity moved to Sale Administration (post-sale pipelines) with "Date signed up" set, counted on that date. It counts for the client\'s last meeting on or before signing (Presentation 1, PR or Cashflow Club): consultant = that meeting\'s Team member, CC credit = its booker (none if self-booked). "No meeting" = no reported meeting before signing.',
+    'Sold: GHL only. A sale = an opportunity moved to Sale Administration (post-sale pipelines) with "Date signed up" set, counted on that date. It counts for the client\'s last meeting on or before signing (Presentation 1, PR or Cashflow Club): consultant = that meeting\'s Team member, CC credit = its booker (none if self-booked or booked online). "No meeting" = no reported meeting before signing.',
     'Cancelled: GHL opportunity status Lost with a Refund lost reason. Revenue: the opportunity\'s Total Fee (period views only, not in the weekly stats). The Tracking sheet is not read. Targets: Settings.',
   ];
 }
@@ -246,14 +248,14 @@ export interface ReviewMeeting {
   booker: string | null;
   bookerEmail: string | null;
   /** 'self' = created in GHL by the consultant, with no Call Centre person on the invite. */
-  bookerFrom: 'ghl' | 'invite' | 'self' | 'sheet' | 'created' | null;
+  /** 'online' = no booker, and the client booked through a GHL booking link. */
+  bookerFrom: 'ghl' | 'invite' | 'self' | 'sheet' | 'created' | 'online' | null;
   /** Who created the appointment in GHL (email), whether or not they are Call Centre. */
   createdByEmail: string | null;
   /** From the matched Google event's location: Meet link = Google, street address = F2F. */
   mode: MeetingMode;
-  /** Historical read-only occurrence in a departed Friday–Thursday week. The current appointment
-   *  can also be in this response with the same id but a different start. New start is ISO. */
-  movedTo?: string | null;
+  /** Start (ISO) the appointment had before it was last moved to another day in GHL. */
+  movedFrom?: string | null;
 }
 
 export interface ReviewViewer {

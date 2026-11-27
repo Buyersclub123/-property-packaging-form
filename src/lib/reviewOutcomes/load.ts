@@ -2,9 +2,7 @@ import { getDb } from '@/lib/db';
 import { ensureReviewTables } from './store';
 import { ghlLocationId, ghlUsers, SECOND_MEETING_CALENDAR_ID } from './sync';
 import { matchMeetings, prepareGcal, type RawGcal } from './match';
-import { rescheduledWeeks } from './moves';
-import { weekStart } from './stats';
-import { addDays, CASHFLOW_CLUB_FROM, kindOfCalendar, MIN_YMD, sydYmd, utcCover, type GcalEvent, type MeetingMode, type ScheduleInfo, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
+import { addDays, CASHFLOW_CLUB_FROM, kindOfCalendar, MIN_YMD, RETIRED_OUTCOME, sydYmd, utcCover, type GcalEvent, type MeetingMode, type ScheduleInfo, type OutcomeSource, type ReviewMeeting, type ReviewViewer } from './types';
 
 // Reads meetings for Sydney days from..to from the cache, with recorded outcomes and the matching Google event.
 
@@ -48,7 +46,7 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
 
   const { start, end } = utcCover(addDays(from, -3), addDays(to, 3));
   const rows = await sql`SELECT m.appointment_id, m.calendar_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.start_at, m.ghl_status, m.title,
-      m.created_by, m.address, m.meeting_source, m.meeting_source_level, m.meeting_source_detail, c.name AS contact_name, c.email AS contact_email, c.phones, c.lead_source, c.referrer,
+      m.created_by, m.created_source, m.address, m.meeting_source, m.meeting_source_level, m.meeting_source_detail, c.name AS contact_name, c.email AS contact_email, c.phones, c.lead_source, c.referrer,
       o.outcome, o.invalid_reason, o.note, o.source, o.source_ref, o.recorded_by, o.recorded_at,
       o.confirmed, o.confirmed_by, o.tlc, o.tlc_by, o.note_reason, o.note_next_action, o.note_by, o.note_at, o.note_ghl_id, o.note_ghl_error
     FROM review_meetings m
@@ -118,18 +116,38 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
     schedule: (s.schedule as ScheduleInfo | null) || null,
   }]));
 
+  // A meeting moved in GHL shows only at its current date (JT 27/11); "Moved from" = its start before the last move to another day.
+  const inRange = base.filter((b) => b.ymd >= from && b.ymd <= to);
+  const moveRows = inRange.length
+    ? await sql`SELECT appointment_id, old_start FROM review_meeting_moves
+        WHERE appointment_id IN (SELECT jsonb_array_elements_text(${JSON.stringify(inRange.map((b) => String(b.r.appointment_id)))}::jsonb)) ORDER BY seen_at DESC, id DESC`
+    : [];
+  const movedFrom = new Map<string, string>();
+  const ymdOf = new Map(inRange.map((b) => [String(b.r.appointment_id), b.ymd]));
+  for (const r of moveRows) {
+    const id = String(r.appointment_id); const old = iso(r.old_start);
+    if (!movedFrom.has(id) && sydYmd(old) !== ymdOf.get(id)) movedFrom.set(id, old);
+  }
+
   const now = Date.now();
-  const meetings: ReviewMeeting[] = base
-    .filter((b) => b.ymd >= from && b.ymd <= to)
+  const meetings: ReviewMeeting[] = inRange
+    // Rescheduled is retired (JT 27/11): a meeting saved as Rescheduled is left out of the list and Stats, unless it was
+    // moved to another day in GHL, when it shows at its new date with no outcome.
+    .filter((b) => {
+      const id = String(b.r.appointment_id);
+      const saved = b.r.outcome || snapByAppt.get(id)?.outcome;
+      return saved !== RETIRED_OUTCOME || movedFrom.has(id);
+    })
     .map(({ r, startIso, t, ymd, name }) => {
       const status = String(r.ghl_status || '');
-      const dbOutcome = r.outcome && (r.source !== 'sheet' || sheetOk(ymd)) ? String(r.outcome) : null;
-      const ghlOutcome = GHL_OUTCOME[status] || null;
+      const dbOutcome = r.outcome && r.outcome !== RETIRED_OUTCOME && (r.source !== 'sheet' || sheetOk(ymd)) ? String(r.outcome) : null;
+      // A meeting still to come can't have showed / no-showed: such a GHL status is left over from before a move.
+      const ghlOutcome = t > now && (status === 'showed' || status === 'noshow') ? null : GHL_OUTCOME[status] || null;
       const kind = kindOf(r);
       const nl = kind === 'NL';
       const snap = nl ? snapByAppt.get(String(r.appointment_id)) : undefined;
       const sr = snap?.schedule || undefined;
-      const schedOutcome = snap?.outcome || null;
+      const schedOutcome = snap?.outcome && snap.outcome !== RETIRED_OUTCOME ? snap.outcome : null;
       const outcomeSource: OutcomeSource | null = dbOutcome ? (r.source === 'sheet' ? 'sheet' : 'tool') : schedOutcome ? 'schedule' : ghlOutcome ? 'ghl' : null;
       const m = kind === 'PR' ? matches.get(String(r.appointment_id)) : undefined;
       const ev = m ? eventById.get(m.eventId) : undefined;
@@ -189,53 +207,14 @@ export async function loadMeetings(_viewer: ReviewViewer, from: string, to: stri
         gcal: m && ev ? { event: toEvent(ev), basis: m.basis, minutesApart: m.minutesApart } : null,
         booker: autoBooker,
         bookerEmail: createdName ? createdEmail || null : bookerEmail,
-        bookerFrom: createdName ? (ghlBooker ? 'ghl' : selfBooked ? 'self' : 'created') : inviteBooker ? 'invite' : sheetBooker ? 'sheet' : null,
+        bookerFrom: createdName ? (ghlBooker ? 'ghl' : selfBooked ? 'self' : 'created') : inviteBooker ? 'invite' : sheetBooker ? 'sheet'
+          : r.created_source === 'booking_widget' ? 'online' : null,
         createdByEmail: createdEmail || null,
         mode: kind === 'PR' ? (ev ? meetingMode(locationOf.get(ev.id) || '') : 'Unknown')
           : snap?.mode && snap.mode !== 'Unknown' ? snap.mode : meetingMode(String(r.address || '')),
+        movedFrom: movedFrom.get(String(r.appointment_id)) || null,
       };
     });
-
-  // Reporting weeks, not the fetch range, determine historical reschedule rows.
-  // Stats loads all dates; it must contain the same weekly occurrences as Meetings.
-  // Include the start of the first week so day requests select the same original slot.
-  const { start: wStart, end: wEnd } = utcCover(weekStart(from), to);
-  const moveRows = await sql`SELECT mv.appointment_id, mv.old_start, m.start_at AS new_start,
-      m.calendar_id, m.calendar_name, m.contact_id, m.assigned_user_id, m.ghl_status, m.title, m.created_by, m.address,
-      m.meeting_source, m.meeting_source_level, m.meeting_source_detail, c.name AS contact_name, c.email AS contact_email
-    FROM review_meeting_moves mv
-    JOIN review_meetings m ON m.appointment_id = mv.appointment_id
-    LEFT JOIN review_contacts c ON c.contact_id = m.contact_id
-    WHERE mv.old_start >= ${wStart.toISOString()}::timestamptz AND mv.old_start < ${wEnd.toISOString()}::timestamptz
-      AND m.calendar_id IS DISTINCT FROM ${SECOND_MEETING_CALENDAR_ID}
-    ORDER BY mv.seen_at, mv.id`;
-  const movedWeeks = rescheduledWeeks(moveRows.filter((r) => kindOk(r, sydYmd(iso(r.old_start)))).map((r) => ({
-    r, appointmentId: String(r.appointment_id), oldStart: iso(r.old_start), currentStart: iso(r.new_start),
-  })), from, to);
-  for (const { r } of movedWeeks) {
-    const id = String(r.appointment_id);
-    const startIso = iso(r.old_start); const ymd = sydYmd(startIso);
-    const createdEmail = (userEmail.get(String(r.created_by || '')) || '').toLowerCase();
-    const createdName = r.created_by ? userName.get(String(r.created_by)) || (createdEmail ? emailName(createdEmail) : null) : null;
-    meetings.push({
-      id, calendar: String(r.calendar_name), kind: kindOf(r), schedule: null, start: startIso, ymd, past: Date.parse(startIso) <= now,
-      contactId: String(r.contact_id || ''), contactName: String(r.contact_name || r.title || '(no name)'), contactEmail: String(r.contact_email || ''),
-      leadSource: null, referrer: null, meetingSource: (r.meeting_source as string | null) || null,
-      meetingSourceLevel: (r.meeting_source_level as ReviewMeeting['meetingSourceLevel']) || null, meetingSourceDetail: (r.meeting_source_detail as string | null) || null,
-      selfBooked: !!r.created_by && r.created_by === r.assigned_user_id,
-      contactLink: r.contact_id && loc ? `https://app.gohighlevel.com/v2/location/${loc}/contacts/detail/${r.contact_id}` : '',
-      consultantId: String(r.assigned_user_id || ''), consultant: userName.get(String(r.assigned_user_id || '')) || '(unassigned)',
-      ghlStatus: GHL_STATUS[String(r.ghl_status || '')] || String(r.ghl_status || ''), title: String(r.title || ''),
-      outcome: 'Rescheduled', outcomeSource: 'ghl', invalidReason: null, note: null, noteReason: null, noteNextAction: null, noteBy: null, noteAt: null,
-      confirmed: false, confirmedBy: null, noteGhlId: null, noteGhlError: null, tlc: false, tlcBy: null,
-      sourceRef: `Moved in GHL to ${iso(r.new_start)}`, recordedBy: null, recordedAt: null, gcal: null,
-      booker: createdName, bookerEmail: createdEmail || null,
-      bookerFrom: createdName ? (r.created_by === r.assigned_user_id ? 'self' : cc.has(createdEmail) ? 'ghl' : 'created') : null,
-      createdByEmail: createdEmail || null,
-      mode: meetingMode(String(r.address || '')), movedTo: iso(r.new_start),
-    });
-  }
-  meetings.sort((a, b) => a.start.localeCompare(b.start));
 
   const matchedIds = new Set([...matches.values()].map((m) => m.eventId));
   const lo = from < MIN_YMD ? MIN_YMD : from;
